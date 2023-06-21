@@ -1,4 +1,4 @@
-# ApacheCN 深度学习译文集
+# 飞龙的深度学习译文集
 
 > 协议：[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/)
 > 
