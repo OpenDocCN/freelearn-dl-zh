@@ -107,6 +107,6 @@ apachecn-dl-zh <port>
 *   发邮件到 Email: `apachecn@163.com`.
 *   在我们的 [组织学习交流群](http://www.apachecn.org/organization/348.html) 中联系群主/管理员即可.
 
-## 赞助我们
+## 赞助我
 
-![](http://data.apachecn.org/img/about/donate.jpg)
+![](https://img-blog.csdnimg.cn/20200112005920729.png)
