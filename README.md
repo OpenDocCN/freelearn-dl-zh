@@ -6,22 +6,22 @@
 > 
 > 不要担心自己的形象，只关心如何实现目标。——《原则》，生活原则 2.3.c
 
-* [在线阅读](https://dl.apachecn.org)
+* [在线阅读](https://dl.flygon.net)
 ## 下载
 
 ### Docker
 
 ```
-docker pull apachecn0/apachecn-dl-zh
-docker run -tid -p <port>:80 apachecn0/apachecn-dl-zh
+docker pull apachecn0/flygon-dl-zh
+docker run -tid -p <port>:80 apachecn0/flygon-dl-zh
 # 访问 http://localhost:{port} 查看文档
 ```
 
 ### NPM
 
 ```
-npm install -g apachecn-dl-zh
-apachecn-dl-zh <port>
+npm install -g flygon-dl-zh
+flygon-dl-zh <port>
 # 访问 http://localhost:{port} 查看文档
 ```
 
