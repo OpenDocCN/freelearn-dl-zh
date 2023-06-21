@@ -7,10 +7,6 @@
 > 不要担心自己的形象，只关心如何实现目标。——《原则》，生活原则 2.3.c
 
 * [在线阅读](https://dl.apachecn.org)
-* [在线阅读（Gitee）](https://apachecn.gitee.io/apachecn-dl-zh/)
-* [ApacheCN 翻译校对兼职群 713436582](https://jq.qq.com/?_wv=1027&k=VSNtgpjb)
-* [ApacheCN 学习资源](http://www.apachecn.org/)
-
 ## 目录
 
 +   [Sklearn 与 TensorFlow 机器学习实用指南第二版](docs/hands-on-ml-2e-zh/SUMMARY.md)
@@ -69,14 +65,6 @@ docker run -tid -p <port>:80 apachecn0/apachecn-dl-zh
 # 访问 http://localhost:{port} 查看文档
 ```
 
-### PYPI
-
-```
-pip install apachecn-dl-zh
-apachecn-dl-zh <port>
-# 访问 http://localhost:{port} 查看文档
-```
-
 ### NPM
 
 ```
@@ -85,27 +73,11 @@ apachecn-dl-zh <port>
 # 访问 http://localhost:{port} 查看文档
 ```
 
-## 贡献指南
-
-为了不断改进翻译质量，我们特此启动了【翻译、校对、笔记整理活动】，开设了多个校对项目。贡献者校对一章之后可以领取千字2\~4元的奖励。进行中的校对活动请见[活动列表](https://home.apachecn.org/#/docs/activity/docs-activity)。更多详情请联系飞龙（Q562826179，V:wizardforcel）。
-
 ## DOCX：开放共享科研记录行动倡议
 
 我们积极响应[科研开源计划（DOCX）](https://mmcheng.net/docx/)。如今开源不仅仅是开放源码，还包括数据集、模型、教程和实验记录。我们也在探讨其它类别的开源方案和协议。
 
 希望大家了解这个倡议，把这个倡议与自己的兴趣点结合，做点力所能及的事情。每个人的微小的贡献，汇聚在一起就是整个开源生态。
-
-## 联系方式
-
-### 负责人
-
-* [飞龙](https://github.com/wizardforcel): 562826179
-
-### 其他
-
-*   在我们的 [apachecn/apachecn-tf-zh](https://github.com/apachecn/apachecn-tf-zh) github 上提 issue.
-*   发邮件到 Email: `apachecn@163.com`.
-*   在我们的 [组织学习交流群](http://www.apachecn.org/organization/348.html) 中联系群主/管理员即可.
 
 ## 赞助我
 
