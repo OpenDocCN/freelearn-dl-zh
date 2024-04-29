@@ -1,4 +1,4 @@
-# 飞龙的深度学习译文集
+# FreeLearning 深度学习译文集
 
 > 协议：[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/)
 > 
@@ -6,22 +6,22 @@
 > 
 > 不要担心自己的形象，只关心如何实现目标。——《原则》，生活原则 2.3.c
 
-* [在线阅读](https://dl.flygon.net)
+* [在线阅读](https://fldl.flygon.net)
 ## 下载
 
 ### Docker
 
 ```
-docker pull apachecn0/flygon-dl-zh
-docker run -tid -p <port>:80 apachecn0/flygon-dl-zh
+docker pull apachecn0/freelearn-dl-zh
+docker run -tid -p <port>:80 apachecn0/freelearn-dl-zh
 # 访问 http://localhost:{port} 查看文档
 ```
 
 ### NPM
 
 ```
-npm install -g flygon-dl-zh
-flygon-dl-zh <port>
+npm install -g freelearn-dl-zh
+freelearn-dl-zh <port>
 # 访问 http://localhost:{port} 查看文档
 ```
 
