@@ -1,0 +1,1018 @@
+- en: '14'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '14'
+- en: Explaining Graph Neural Networks
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 解释图神经网络
+- en: 'One of the most common criticisms of NNs is that their outputs are difficult
+    to understand. Unfortunately, GNNs are not immune to this limitation: in addition
+    to explaining which features are important, it is necessary to consider neighboring
+    nodes and connections. In response to this issue, the area of **explainability**
+    (in the form of **explainable AI** or **XAI**) has developed many techniques to
+    better understand the reasons behind a prediction or the general behavior of a
+    model. Some of these techniques have been translated to GNNs, while others take
+    advantage of the graph structure to offer more precise explanations.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 神经网络（NN）最常见的批评之一是它们的输出难以理解。不幸的是，GNN也不例外：除了解释哪些特征很重要外，还必须考虑邻接节点和连接。为了应对这一问题，**可解释性**（以**可解释人工智能**或**XAI**的形式）领域开发了许多技术，以更好地理解预测背后的原因或模型的总体行为。部分技术已经被转移到GNN上，另一些则利用图结构提供更精确的解释。
+- en: 'In this chapter, we will explore some explanation techniques to understand
+    why a given prediction has been made. We will see different families of techniques
+    and focus on two of the most popular: `MUTAG` dataset. Then, we will introduce
+    `Captum`, a Python library that offers many explanation techniques. Finally, using
+    the Twitch social network, we will implement integrated gradients to explain the
+    model’s outputs on a node classification task.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨一些解释技术，了解为什么给定的预测会被做出。我们将看到不同的技术类型，并重点介绍两种最流行的：`MUTAG`数据集。接着，我们将介绍`Captum`，一个提供多种解释技术的Python库。最后，利用Twitch社交网络，我们将实现集成梯度技术，解释节点分类任务中的模型输出。
+- en: By the end of this chapter, you will be able to understand and implement several
+    XAI techniques on GNNs. More specifically, you will learn how to use GNNExplainer
+    and the `Captum` library (with integrated gradients) for graph and node classification
+    tasks.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将能够理解并实施几种XAI技术在GNN上的应用。更具体地说，你将学习如何使用GNNExplainer和`Captum`库（结合集成梯度）来进行图形和节点分类任务。
+- en: 'In this chapter, we will cover the following main topics:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主要主题：
+- en: Introducing explanation techniques
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 介绍解释技术
+- en: Explaining GNNs with GNNExplainer
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用GNNExplainer解释GNN
+- en: Explaining GNNs with Captum
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Captum解释GNN
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: All the code examples from this chapter can be found on GitHub at [https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter14](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter14).
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的所有代码示例可以在GitHub上找到：[https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter14](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter14)。
+- en: Installation steps required to run the code on your local machine can be found
+    in the *Preface* of this book.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的*前言*中可以找到在本地计算机上运行代码所需的安装步骤。
+- en: Introducing explanation techniques
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 介绍解释技术
+- en: GNN explanation is a recent field that is heavily inspired by other XAI techniques
+    [1]. We divide it into local explanations on a per-prediction basis and global
+    explanations for entire models. While understanding the behavior of a GNN model
+    is desirable, we will focus on local explanations that are more popular and essential
+    to get insight into a prediction.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GNN解释是一个最近的领域，深受其他XAI技术的启发[1]。我们将其分为基于单次预测的局部解释和针对整个模型的全局解释。虽然理解GNN模型的行为是有意义的，但我们将重点关注更受欢迎和本质的局部解释，以便深入了解预测结果。
+- en: 'In this chapter, we distinguish between “interpretable” and “explainable” models.
+    A model is called “interpretable” if it is human-understandable by design, such
+    as a decision tree. On the other hand, it is “explainable” when it acts as a black
+    box whose predictions can only be retroactively understood using explanation techniques.
+    This is typically the case with NNs: their weights and biases do not provide clear
+    rules like a decision tree, but their results can be explained indirectly.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们区分了“可解释”和“可解释性”模型。如果一个模型是“可解释的”，则意味着它从设计上就可以被人类理解，例如决策树。另一方面，当一个模型作为黑箱工作，其预测只能通过解释技术事后理解时，才称之为“可解释性”。这通常适用于神经网络（NN）：它们的权重和偏置不像决策树那样提供明确的规则，但其结果可以通过间接方式解释。
+- en: 'There are four main categories of local explanation techniques:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本地解释技术有四种主要类别：
+- en: '**Gradient-based methods** analyze gradients of the output to estimate attribution
+    scores (for example, **integrated gradients**)'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**基于梯度的方法**分析输出的梯度，以估计归因分数（例如，**集成梯度**）'
+- en: '**Perturbation-based methods** mask or modify input features to measure changes
+    in the output (for example, **GNNExplainer**)'
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**基于扰动的方法**遮盖或修改输入特征，以测量输出的变化（例如，**GNNExplainer**）'
+- en: '**Decomposition methods** decompose the model’s predictions into several terms
+    to gauge their importance (for example, graph neural network **layer-wise relevance**
+    **propagation** (**GNN-LRP**))'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**分解方法**将模型的预测分解为多个项，以衡量它们的重要性（例如，图神经网络**逐层相关性传播**（**GNN-LRP**））'
+- en: '**Surrogate methods** use a simple and interpretable model to approximate the
+    original model’s prediction around an area (for example, **GraphLIME**)'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**替代方法**使用简单且可解释的模型，来近似原始模型在某一区域的预测（例如，**GraphLIME**）'
+- en: 'These techniques are complementary: they sometimes disagree on the contribution
+    of edges and features, which can be used to refine the explanation of a prediction
+    further. Explanation techniques are traditionally evaluated using metrics such
+    as the following:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些技术是互补的：它们有时在边和特征的贡献上存在分歧，这可以用于进一步细化预测的解释。传统上，解释技术使用以下指标进行评估：
+- en: '**Fidelity**, which compares the prediction probabilities of ![](img/Formula_B19153_14_001.png)
+    between the original graph ![](img/Formula_B19153_14_002.png) and a modified graph
+    ![](img/Formula_B19153_14_003.png). The modified graph only keeps the most important
+    features (nodes, edges, node features) of ![](img/Formula_B19153_14_003.png),
+    based on an explanation of ![](img/Formula_B19153_14_005.png). In other words,
+    fidelity measures the extent to which the features identified as important are
+    sufficient to obtain the correct prediction. It is formally defined as follows:'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**保真度**，比较原始图像![](img/Formula_B19153_14_002.png)与修改后的图像![](img/Formula_B19153_14_003.png)之间的预测概率![](img/Formula_B19153_14_001.png)。修改后的图像仅保留基于![](img/Formula_B19153_14_005.png)的最重要特征（节点、边、节点特征）。换句话说，保真度衡量的是被认为重要的特征在获得正确预测方面的充分程度。它的正式定义如下：'
+- en: '![](img/Formula_B19153_14_006.jpg)'
+  id: totrans-22
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_14_006.jpg)'
+- en: '**Sparsity**, which measures the fraction of features (nodes, edges, node features)
+    that are considered important. Explanations that are too lengthy are more challenging
+    to understand, which is why sparsity is encouraged. It is computed as follows:'
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**稀疏性**，衡量被认为重要的特征（节点、边、节点特征）所占的比例。过长的解释更难理解，这也是鼓励稀疏性的原因。它的计算方式如下：'
+- en: '![](img/Formula_B19153_14_007.jpg)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_14_007.jpg)'
+- en: Here, ![](img/Formula_B19153_14_008.png) is the number of important input features
+    and ![](img/Formula_B19153_14_009.png) is the total number of features.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，![](img/Formula_B19153_14_008.png)是重要输入特征的数量，![](img/Formula_B19153_14_009.png)是特征的总数量。
+- en: In addition to the traditional graphs we saw in previous chapters, explanation
+    techniques are often evaluated on synthetic datasets, such as `BA-Shapes`, `BA-Community`,
+    `Tree-Cycles`, and `Tree-Grid` [2]. These datasets were generated using graph
+    generation algorithms to create specific patterns. We will not use them in this
+    chapter, but they are an interesting alternative that is easy to implement and
+    understand.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了我们在前几章看到的传统图形外，解释技术通常在合成数据集上进行评估，如`BA-Shapes`、`BA-Community`、`Tree-Cycles`和`Tree-Grid`
+    [2]。这些数据集是通过图生成算法生成的，用于创建特定的模式。我们在本章中不会使用它们，但它们是一个有趣的替代方案，易于实现和理解。
+- en: In the following sections, we will describe a gradient-based method (integrated
+    gradients) and a perturbation-based technique (GNNExplainer).
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将描述一种基于梯度的方法（集成梯度）和一种基于扰动的技术（GNNExplainer）。
+- en: Explaining GNNs with GNNExplainer
+  id: totrans-28
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用GNNExplainer解释GNN
+- en: In this section, we will introduce our first XAI technique with GNNExplainer.
+    We will use it to understand the predictions produced by a GIN model on the `MUTAG`
+    dataset.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将介绍我们的第一个XAI技术——GNNExplainer。我们将用它来理解GIN模型在`MUTAG`数据集上产生的预测。
+- en: Introducing GNNExplainer
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入GNNExplainer
+- en: 'Introduced in 2019 by Ying et al. [2], GNNExplainer is a GNN architecture designed
+    to explain predictions from another GNN model. With tabular data, we want to know
+    which features are the most important to a prediction. However, this is not enough
+    with graph data: we also need to know which nodes are the most influential. GNNExplainer
+    generates explanations with these two components by providing a subgraph ![](img/Formula_B19153_14_010.png)
+    and a subset of node features ![](img/Formula_B19153_14_011.png). The following
+    figure illustrates an explanation provided by GNNExplainer for a given node:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GNNExplainer 是由 Ying 等人于 2019 年提出的 [2]，它是一种旨在解释来自其他 GNN 模型预测的 GNN 架构。在表格数据中，我们希望知道哪些特征对预测最为重要。然而，在图数据中，这还不够：我们还需要知道哪些节点最具影响力。GNNExplainer
+    通过提供一个子图 ![](img/Formula_B19153_14_010.png) 和一组节点特征 ![](img/Formula_B19153_14_011.png)，生成包含这两个组件的解释。下图展示了
+    GNNExplainer 为给定节点提供的解释：
+- en: '![Figure 14.1 – Explanation for node ￼’s label with ￼ in green and non-excluded
+    node features ￼](img/B19153_14_001.jpg)'
+  id: totrans-32
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 14.1 – 节点￼标签的解释，绿色表示￼，非排除节点特征￼](img/B19153_14_001.jpg)'
+- en: Figure 14.1 – Explanation for node ![](img/Formula_B19153_14_012.png)’s label
+    with ![](img/Formula_B19153_14_013.png) in green and non-excluded node features
+    ![](img/Formula_B19153_14_014.png)
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 14.1 – 节点 ![](img/Formula_B19153_14_012.png) 的标签解释，绿色表示 ![](img/Formula_B19153_14_013.png)，非排除节点特征
+    ![](img/Formula_B19153_14_014.png)
+- en: To predict ![](img/Formula_B19153_14_015.png) and ![](img/Formula_B19153_14_016.png),
+    GNNExplainer implements an edge mask (to hide connections) and a feature mask
+    (to hide node features). If a connection or a feature is important, removing it
+    should drastically change the prediction. On the other hand, if the prediction
+    does not change, it means that this information was redundant or simply irrelevant.
+    This principle is at the core of perturbation-based techniques such as GNNExplainer.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了预测 ![](img/Formula_B19153_14_015.png) 和 ![](img/Formula_B19153_14_016.png)，GNNExplainer
+    实现了边掩码（用于隐藏连接）和特征掩码（用于隐藏节点特征）。如果一个连接或特征很重要，删除它应该会显著改变预测。另一方面，如果预测没有变化，说明这个信息是冗余的或完全不相关的。这个原理是基于扰动的技术，如
+    GNNExplainer 的核心。
+- en: In practice, we must carefully craft a loss function to find the best masks
+    possible. GNNExplainer measures the mutual dependence between the predicted label
+    distribution ![](img/Formula_B19153_14_017.png) and ![](img/Formula_B19153_14_018.png),
+    also called **mutual information** (**MI**). Our goal is to maximize the MI, which
+    is equivalent to minimizing the conditional cross-entropy. GNNExplainer is trained
+    to find the variables ![](img/Formula_B19153_14_019.png) and ![](img/Formula_B19153_14_020.png)
+    that maximize the probability of a prediction ![](img/Formula_B19153_14_021.png).
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实践中，我们必须仔细设计损失函数，以找到最好的掩码。GNNExplainer 测量预测标签分布 ![](img/Formula_B19153_14_017.png)
+    和 ![](img/Formula_B19153_14_018.png) 之间的互依性，也叫做**互信息** (**MI**)。我们的目标是最大化 MI，这等同于最小化条件交叉熵。GNNExplainer
+    通过找到变量 ![](img/Formula_B19153_14_019.png) 和 ![](img/Formula_B19153_14_020.png)，最大化预测
+    ![](img/Formula_B19153_14_021.png) 的概率来进行训练。
+- en: In addition to this optimization framework, GNNExplainer learns a binary feature
+    mask and implements several regularization techniques. The most important technique
+    is a term used to minimize the size of the explanation (sparsity). It is computed
+    as the sum of all elements of the mask parameters and added to the loss function.
+    It creates more user-friendly and concise explanations that are easier to understand
+    and interpret.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了这个优化框架，GNNExplainer 还学习了一个二进制特征掩码，并实现了几种正则化技术。最重要的技术是一个项，用于最小化解释的大小（稀疏性）。它是通过求和掩码参数的所有元素并将其添加到损失函数中来计算的。这样可以生成更具用户友好性和简洁性的解释，便于理解和解释。
+- en: GNNExplainer can be applied to most GNN architectures and different tasks such
+    as node classification, link prediction, or graph classification. It can also
+    generate explanations of a class label or an entire graph. When classifying a
+    graph, the model considers the union of adjacency matrices for all nodes in the
+    graph instead of a single one. In the next section, we will apply it to explain
+    graph classifications.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GNNExplainer 可以应用于大多数 GNN 架构以及不同的任务，如节点分类、链接预测或图分类。它还可以生成类标签或整个图的解释。在进行图分类时，模型会考虑图中所有节点的邻接矩阵的并集，而不是单一的矩阵。在下一节中，我们将应用它来解释图分类。
+- en: Implementing GNNExplainer
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现 GNNExplainer
+- en: In this example, we will explore the `MUTAG` dataset [3]. Each of the 188 graphs
+    in this dataset represents a chemical compound, where nodes are atoms (seven possible
+    atoms), and edges are chemical bonds (four possible bonds). Node and edge features
+    represent one-hot encodings of the atom and edge types, respectively. The goal
+    is to classify each compound into two classes according to their mutagenic effect
+    on the bacteria *Salmonella typhimurium*.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本例中，我们将探索`MUTAG`数据集[3]。该数据集中的188张图每一张代表一个化学化合物，节点表示原子（有七种可能的原子），边表示化学键（有四种可能的化学键）。节点和边的特征分别表示原子和化学键类型的独热编码。目标是根据化合物对细菌*沙门氏菌*的致突变效应，将每个化合物分类为两类。
+- en: 'We will reuse the GIN model introduced in [*Chapter 9*](B19153_09.xhtml#_idTextAnchor106)
+    for protein classification. In [*Chapter 9*](B19153_09.xhtml#_idTextAnchor106),
+    we visualized correct and incorrect classifications made by the model. However,
+    we could not explain the predictions made by the GNN. This time, we’ll use GNNExplainer
+    to understand the most important subgraph and node features to explain a classification.
+    In this example, we will ignore the edge features for ease of use. Here are the
+    steps:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将重用[*第9章*](B19153_09.xhtml#_idTextAnchor106)中介绍的GIN模型进行蛋白质分类。在[*第9章*](B19153_09.xhtml#_idTextAnchor106)中，我们可视化了模型的正确和错误分类。然而，我们无法解释GNN做出的预测。这一次，我们将使用GNNExplainer来理解最重要的子图和节点特征，从而解释分类结果。在此示例中，为了简便起见，我们将忽略边特征。以下是步骤：
+- en: 'We import the required classes from PyTorch and PyTorch Geometric:'
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们从PyTorch和PyTorch Geometric中导入所需的类：
+- en: '[PRE0]'
+  id: totrans-42
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We load the `MUTAG` dataset and shuffle it:'
+  id: totrans-43
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们加载`MUTAG`数据集并进行洗牌：
+- en: '[PRE1]'
+  id: totrans-44
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We create training, validation, and test sets:'
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建训练集、验证集和测试集：
+- en: '[PRE2]'
+  id: totrans-46
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We create data loaders to implement mini-batching:'
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建数据加载器以实现小批量训练：
+- en: '[PRE3]'
+  id: totrans-48
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'We create a GIN model with 32 hidden dimensions using code from [*Chapter 9*](B19153_09.xhtml#_idTextAnchor106):'
+  id: totrans-49
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用[*第9章*](B19153_09.xhtml#_idTextAnchor106)中的代码创建一个具有32个隐藏维度的GIN模型：
+- en: '[PRE4]'
+  id: totrans-50
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'We train this model for 100 epochs and test it using code from [*Chapter 9*](B19153_09.xhtml#_idTextAnchor106):'
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们训练此模型100轮，并使用[*第9章*](B19153_09.xhtml#_idTextAnchor106)中的代码进行测试：
+- en: '[PRE5]'
+  id: totrans-52
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Our GIN model is trained and achieved a high accuracy score (`84.21%`). Now,
+    let’s create a GNNExplainer model using the `GNNExplainer` class from PyTorch
+    Geometric. We will train it for 100 epochs:'
+  id: totrans-53
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们的GIN模型已经训练完成，并取得了较高的准确率（`84.21%`）。现在，让我们使用PyTorch Geometric中的`GNNExplainer`类创建一个GNNExplainer模型，并进行100轮训练：
+- en: '[PRE6]'
+  id: totrans-54
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'GNNExplainer can be used to explain the prediction made for a node (`.explain_node()`)
+    or an entire graph (`.explain_graph()`). In this case, we will use it on the last
+    graph of the test set:'
+  id: totrans-55
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: GNNExplainer可用于解释节点的预测（`.explain_node()`）或整个图的预测（`.explain_graph()`）。在本例中，我们将其应用于测试集中的最后一张图：
+- en: '[PRE7]'
+  id: totrans-56
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The last step returned the feature and edge masks. Let’s print the feature
+    mask to see the most important values:'
+  id: totrans-57
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后一步返回了特征和边掩码。让我们打印特征掩码，查看最重要的值：
+- en: '[PRE8]'
+  id: totrans-58
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The values are normalized between 0 (less important) and 1 (more important).
+    These seven values correspond to the seven atoms we find in the dataset in the
+    following order: carbon (C), nitrogen (N), oxygen (O), fluorine (F), iodine (I),
+    chlorine (Cl), and bromine (Br). Features have similar importance: the most useful
+    is the last one, representing bromine (Br), and the least important is the fifth
+    one, representing iodine (I).'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些值被标准化到0（较不重要）和1（较重要）之间。这七个值对应于数据集中按以下顺序找到的七种原子：碳（C）、氮（N）、氧（O）、氟（F）、碘（I）、氯（Cl）和溴（Br）。特征具有类似的重要性：最有用的是最后一个，表示溴（Br），而最不重要的是第五个，表示碘（I）。
+- en: 'Instead of printing the edge mask, we can plot it on the graph using the `.visualize_graph()`
+    method. The arrows’ opacity represents the importance of each connection:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以通过`.visualize_graph()`方法将边掩码绘制在图形上，而不是直接打印出来。箭头的透明度表示每个连接的重要性：
+- en: '[PRE9]'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: This gives us *Figure 14**.2*.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这给出了*图14.2*。
+- en: '![Figure 14.2 – Graph representation of a chemical compound: the edge opacity
+    represents the importance of each connection](img/B19153_14_002.jpg)'
+  id: totrans-63
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图14.2 – 化学化合物的图表示：边的透明度表示每个连接的重要性](img/B19153_14_002.jpg)'
+- en: 'Figure 14.2 – Graph representation of a chemical compound: the edge opacity
+    represents the importance of each connection'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图14.2 – 化学化合物的图表示：边的透明度表示每个连接的重要性
+- en: The last plot shows the connections that contributed the most to the prediction.
+    In this case, the GIN model correctly classified the graph. We can see that the
+    links between nodes `data.edge_attr` to obtain the label associated with their
+    chemical bonds (aromatic, single, double, or triple). In this example, it corresponds
+    to edges **16** to **19**, which all are either single or double bonds.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一张图展示了对预测贡献最大的连接。在这种情况下，GIN 模型正确地对图进行了分类。我们可以看到节点之间的连接 `data.edge_attr`，以获取与其化学键（芳香键、单键、双键或三键）相关的标签。在此示例中，它对应的是
+    **16** 到 **19** 的边，这些边都是单键或双键。
+- en: By printing `data.x`, we can also look at nodes **6**, **7**, and **8** to gain
+    more information. Node **6** represents an atom of nitrogen, while nodes **7**
+    and **8** are two atoms of oxygen. These results should be reported to people
+    with the right domain knowledge to get feedback on our model.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过打印 `data.x`，我们还可以查看节点 **6**、**7** 和 **8** 来获取更多信息。节点 **6** 代表氮原子，而节点 **7**
+    和 **8** 代表两个氧原子。这些结果应该报告给具备相关领域知识的人，以便对我们的模型进行反馈。
+- en: GNNExplainer does not provide precise rules about the decision-making process
+    but gives insights into what the GNN model focused on to make its prediction.
+    Human expertise is still needed to ensure that these ideas are coherent and correspond
+    to traditional domain knowledge.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GNNExplainer 并没有提供关于决策过程的精确规则，而是提供了对 GNN 模型在做出预测时关注的内容的洞察。仍然需要人类的专业知识来确保这些观点是连贯的，并且与传统领域知识相符。
+- en: In the next section, we will use Captum to explain node classifications on a
+    new social network.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一节中，我们将使用 Captum 来解释新社交网络上的节点分类。
+- en: Explaining GNNs with Captum
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 Captum 解释 GNN
+- en: In this section, we will first introduce Captum and the integrated gradients
+    technique applied to graph data. Then, we will implement it using a PyTorch Geometric
+    model on the Twitch social network.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将首先介绍 Captum 和应用于图数据的集成梯度技术。然后，我们将在 Twitch 社交网络上使用 PyTorch Geometric
+    模型实现这一技术。
+- en: Introducing Captum and integrated gradients
+  id: totrans-71
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 介绍 Captum 和集成梯度
+- en: '`Captum` ([captum.ai](http://captum.ai)) is a Python library that implements
+    many state-of-the-art explanation algorithms for PyTorch models. This library
+    is not dedicated to GNNs: it can also be applied to text, images, tabular data,
+    and so on. It is particularly useful because it allows users to quickly test various
+    techniques and compare different explanations for the same prediction. In addition,
+    `Captum` implements popular algorithms such as LIME and Gradient SHAP for primary,
+    layer, and neuron attributions.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Captum` ([captum.ai](http://captum.ai)) 是一个 Python 库，实施了许多用于 PyTorch 模型的最先进的解释算法。这个库并非专门针对
+    GNN：它也可以应用于文本、图像、表格数据等。它特别有用，因为它允许用户快速测试各种技术，并比较对同一预测的不同解释。此外，`Captum` 实现了如 LIME
+    和 Gradient SHAP 等流行算法，用于主特征、层和神经元的归因。'
+- en: In this section, we will use it to apply a graph version of integrated gradients
+    [4]. This technique aims to assign an attribution score to every input feature.
+    To this end, it uses gradients with respect to the model’s inputs. Specifically,
+    it uses an input ![](img/Formula_B19153_14_022.png) and a baseline input ![](img/Formula_B19153_14_023.png)
+    (all edges have zero weight in our case). It computes the gradients at all points
+    along the path between ![](img/Formula_B19153_14_024.png) and ![](img/Formula_B19153_14_025.png)
+    and accumulates them.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将使用它来应用图版本的集成梯度 [4]。这一技术旨在为每个输入特征分配一个归因分数。为此，它使用相对于模型输入的梯度。具体来说，它使用输入
+    ![](img/Formula_B19153_14_022.png) 和基线输入 ![](img/Formula_B19153_14_023.png)（在我们的情况下，所有边的权重为零）。它计算沿着
+    ![](img/Formula_B19153_14_024.png) 和 ![](img/Formula_B19153_14_025.png) 之间路径的所有点的梯度，并对其进行累加。
+- en: 'Formally, the integrated gradient along the ![](img/Formula_B19153_14_026.png)
+    dimension for an input ![](img/Formula_B19153_14_027.png) is defined as follows:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从形式上看，沿着 ![](img/Formula_B19153_14_026.png) 维度的集成梯度，对于输入 ![](img/Formula_B19153_14_027.png)
+    的定义如下：
+- en: '![](img/Formula_B19153_14_028.jpg)'
+  id: totrans-75
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_14_028.jpg)'
+- en: In practice, instead of directly calculating this integral, we approximate it
+    with a discrete sum.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，我们并不是直接计算这个积分，而是通过离散求和来近似它。
+- en: 'Integrated gradients is model-agnostic and based on two axioms:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集成梯度是与模型无关的，并基于两个公理：
+- en: '**Sensitivity**: Every input contributing to the prediction must receive a
+    nonzero attribution'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**敏感性**：每个对预测有贡献的输入必须获得非零的归因'
+- en: '**Implementation invariance**: Two NNs whose outputs are equal for all inputs
+    (these networks are called functionally equivalent) must have identical attributions'
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**实现不变性**：对于所有输入输出相等的两个神经网络（这些网络被称为功能上等效的），它们的归因必须完全相同。'
+- en: 'The graph version we will employ is slightly different: it considers nodes
+    and edges *instead of* features. As a result, you can see that the output differs
+    from GNNExplainer, which considers node features *and* edges. This is why these
+    two approaches can be complementary.'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用的图版本稍有不同：它考虑节点和边*而非*特征。因此，您可以看到输出与GNNExplainer不同，后者同时考虑节点特征*和*边。这就是为什么这两种方法可以互为补充的原因。
+- en: Let’s now implement this technique and visualize the results.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们实现这个技术并可视化结果。
+- en: Implementing integrated gradients
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现集成梯度
+- en: 'We will implement integrated gradients on a new dataset: the Twitch social
+    networks dataset (English version) [5]. It represents a user-user graph, where
+    nodes correspond to Twitch streamers and connections to mutual friendships. The
+    128 node features represent information such as streaming habits, location, games
+    liked, and so on. The goal is to determine whether a streamer uses explicit language
+    (binary classification).'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在一个新的数据集上实现集成梯度：Twitch社交网络数据集（英文版）[5]。该数据集表示一个用户-用户图，其中节点代表Twitch主播，连接代表相互友谊。128个节点特征表示诸如直播习惯、地点、喜欢的游戏等信息。目标是判断一个主播是否使用过激语言（二分类任务）。
+- en: 'We will implement a simple two-layer GCN with PyTorch Geometric for this task.
+    We will then convert our model to Captum to use the integrated gradients algorithm
+    and explain our results. Here are the steps:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用PyTorch Geometric实现一个简单的两层GCN来完成此任务。然后我们将模型转换为Captum，使用集成梯度算法并解释我们的结果。以下是步骤：
+- en: 'We install the `captum` library:'
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们安装`captum`库：
+- en: '[PRE10]'
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We import the required libraries:'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们导入所需的库：
+- en: '[PRE11]'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Let’s fix the random seeds to make computations deterministic:'
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们固定随机种子，以使计算具有确定性：
+- en: '[PRE12]'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'We load the Twitch gamer network dataset (English version):'
+  id: totrans-91
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们加载Twitch玩家网络数据集（英文版）：
+- en: '[PRE13]'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'This time, we will use a simple two-layer GCN with `dropout`:'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这次，我们将使用一个简单的两层GCN，并加上`dropout`：
+- en: '[PRE14]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'We try to train the model on a GPU—if one is available—using the `Adam` optimizer:'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们尝试在有GPU的情况下使用`Adam`优化器训练模型：
+- en: '[PRE15]'
+  id: totrans-96
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We train the model for 200 epochs using the negative log-likelihood loss function:'
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用负对数似然损失函数训练模型200个周期：
+- en: '[PRE16]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We test the trained model. Note that we did not specify any test, so we will
+    evaluate the GCN’s accuracy on the training set in this case:'
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们测试训练好的模型。请注意，我们没有指定任何测试，因此在这种情况下我们将评估GCN在训练集上的准确度：
+- en: '[PRE17]'
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The model achieved an accuracy score of `79.75%`, which is relatively low considering
+    that it was evaluated on the training set.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型达到了`79.75%`的准确率，考虑到它是在训练集上评估的，这个分数相对较低。
+- en: 'We can now start implementing the explanation method we chose: the integrated
+    gradients. First, we must specify the node we want to explain (node `0` in this
+    example) and convert the PyTorch Geometric model to `Captum`. Here, we also specify
+    we want to use a feature and an edge mask with `mask_type=node_and_feature`:'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们可以开始实现我们选择的解释方法：集成梯度。首先，我们必须指定我们想要解释的节点（在本例中为节点`0`），并将PyTorch Geometric模型转换为`Captum`。在这里，我们还指定我们想使用特征和边掩码，`mask_type=node_and_feature`：
+- en: '[PRE18]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Let’s create the integrated gradients object using `Captum`. We give it the
+    result of the previous step as input:'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们使用`Captum`创建集成梯度对象。我们将上一步的结果作为输入：
+- en: '[PRE19]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'We already have the node mask we need to pass to `Captum` (`data.x`), but we
+    need to create a tensor for the edge mask. In this example, we want to consider
+    every edge in the graph, so initialize a tensor of ones with size `data.num_edges`:'
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们已经拥有需要传递给`Captum`的节点掩码（`data.x`），但我们需要为边掩码创建一个张量。在这个例子中，我们希望考虑图中的每一条边，因此初始化一个大小为`data.num_edges`的全1张量：
+- en: '[PRE20]'
+  id: totrans-107
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The `.attribute()` method takes a specific format of inputs for the node and
+    edge masks (hence the use of `.unsqueeze(0)` to reformat these tensors). The target
+    corresponds to the class of our target node. Finally, we pass the adjacency matrix
+    (`data.edge_index`) as an additional forward argument:'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`.attribute()`方法对节点和边掩码的输入格式有特定要求（因此使用`.unsqueeze(0)`来重新格式化这些张量）。目标对应于我们目标节点的类别。最后，我们将邻接矩阵（`data.edge_index`）作为额外的前向参数传递：'
+- en: '[PRE21]'
+  id: totrans-109
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We scale the attribution scores between `0` and `1`:'
+  id: totrans-110
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将归一化归因分数，使其范围在`0`到`1`之间：
+- en: '[PRE22]'
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Using PyTorch Geometric’s `Explainer` class, we visualize a graph representation
+    of these attributions:'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用PyTorch Geometric的`Explainer`类，我们可视化这些归因的图形表示：
+- en: '[PRE23]'
+  id: totrans-113
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This gives us the following output:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这给我们带来了以下输出：
+- en: '![Figure 14.3 – Explanation for node 0’s classification with edge and node
+    attribution scores represented with different opacity values](img/B19153_14_003.jpg)'
+  id: totrans-115
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 14.3 – 节点 0 分类的解释，边和节点归因分数以不同的透明度值表示](img/B19153_14_003.jpg)'
+- en: Figure 14.3 – Explanation for node 0’s classification with edge and node attribution
+    scores represented with different opacity values
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 14.3 – 节点 0 分类的解释，边和节点归因分数以不同的透明度值表示
+- en: 'Node **0**’s subgraph comprises blue nodes, which share the same class. We
+    can see that node **82** is the most important node (other than 0) and the connection
+    between these two nodes is the most critical edge. This is a straightforward explanation:
+    we have a group of four streamers using the same language. The mutual friendship
+    between nodes **0** and **82** is a good argument for this prediction.'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点 **0** 的子图由蓝色节点组成，这些节点属于同一类别。我们可以看到，节点 **82** 是最重要的节点（除了 0 以外），这两个节点之间的连接是最关键的边。这是一个直接的解释：我们有一组使用相同语言的四个直播者。节点
+    **0** 和 **82** 之间的互相友谊是这一预测的有力依据。
+- en: 'Let’s now look at another graph illustrated in *Figure 14**.4*, the explanation
+    for node **101**’s classification:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看一下图 **14.4** 中展示的另一个图，节点 **101** 分类的解释：
+- en: '![Figure 14.4 – Explanation for node 101’s classification with edge and node
+    attribution scores represented with different opacity values](img/B19153_14_004.jpg)'
+  id: totrans-119
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 14.4 – 节点 101 分类的解释，边和节点归因分数以不同的透明度值表示](img/B19153_14_004.jpg)'
+- en: Figure 14.4 – Explanation for node 101’s classification with edge and node attribution
+    scores represented with different opacity values
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 14.4 – 节点 101 分类的解释，边和节点归因分数以不同的透明度值表示
+- en: In this case, our target node is connected to neighbors with different classes
+    (nodes **5398** and **2849**). Integrated gradients give greater importance to
+    the node that shares the same class as node **101**. We also see that their connection
+    is the one that contributed the most to this classification. This subgraph is
+    richer; you can see that even two-hop neighbors contribute a little.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，我们的目标节点与不同类别的邻居（节点 **5398** 和 **2849**）相连。集成梯度赋予与节点 **101** 同类别的节点更大的重要性。我们还看到，它们的连接是对该分类贡献最大的部分。这个子图更丰富；你可以看到，甚至两跳邻居也有一定的贡献。
+- en: However, these explanations should not be considered a silver bullet. Explainability
+    in AI is a rich topic that often involves people with different backgrounds. Thus,
+    communicating the results and getting regular feedback is particularly important.
+    Knowing the importance of edges, nodes, and features is essential, but it should
+    only be the start of a discussion. Experts from other fields can exploit or refine
+    these explanations, and even find issues that can lead to architectural changes.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这些解释不应被视为灵丹妙药。AI 的可解释性是一个复杂的话题，通常涉及不同背景的人。因此，沟通结果并获得定期反馈尤为重要。了解边、节点和特征的重要性至关重要，但这应该只是讨论的开始。来自其他领域的专家可以利用或完善这些解释，甚至发现可能导致架构变化的问题。
+- en: Summary
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we explored the field of XAI applied to GNNs. Explainability
+    is a key component in many areas and can help us to build better models. We saw
+    different techniques to provide local explanations and focused on GNNExplainer
+    (a perturbation-based method) and integrated gradients (a gradient-based method).
+    We implemented them on two different datasets using PyTorch Geometric and Captum
+    to obtain explanations for graph and node classification. Finally, we visualized
+    and discussed the results of these techniques.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们探讨了应用于图神经网络（GNN）的可解释性人工智能（XAI）领域。可解释性是许多领域的关键组成部分，有助于我们构建更好的模型。我们看到了提供局部解释的不同技术，并重点介绍了
+    GNNExplainer（一种基于扰动的方法）和集成梯度（一种基于梯度的方法）。我们在两个不同的数据集上使用 PyTorch Geometric 和 Captum
+    实现了这些方法，以获得图和节点分类的解释。最后，我们对这些技术的结果进行了可视化和讨论。
+- en: In [*Chapter 15*](B19153_15.xhtml#_idTextAnchor179), *Forecasting Traffic Using
+    A3T-GCN*, we will revisit temporal GNNs to predict future traffic on a road network.
+    In this practical application, we will see how to translate roads into graphs
+    and apply a recent GNN architecture to forecast short-term traffic accurately.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [*第 15 章*](B19153_15.xhtml#_idTextAnchor179)，*使用 A3T-GCN 预测交通流量* 中，我们将重新审视时序
+    GNN，以预测道路网络上的未来交通。在这个实际应用中，我们将看到如何将道路转化为图，并应用一种最新的 GNN 架构来准确预测短期交通。
+- en: Further reading
+  id: totrans-126
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '[1] H. Yuan, H. Yu, S. Gui, and S. Ji. *Explainability in Graph Neural Networks:
+    A Taxonomic Survey*. arXiv, 2020\. DOI: 10.48550/ARXIV.2012.15445\. Available
+    at [https://arxiv.org/abs/2012.15445](https://arxiv.org/abs/2012.15445).'
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[1] H. Yuan, H. Yu, S. Gui, 和 S. Ji。*图神经网络中的可解释性：一项分类调查*。arXiv，2020。DOI: 10.48550/ARXIV.2012.15445。可在[https://arxiv.org/abs/2012.15445](https://arxiv.org/abs/2012.15445)获取。'
+- en: '[2] R. Ying, D. Bourgeois, J. You, M. Zitnik, and J. Leskovec. *GNNExplainer:
+    Generating Explanations for Graph Neural Networks*. arXiv, 2019\. DOI: 10.48550/ARXIV.1903.03894\.
+    Available at [https://arxiv.org/abs/1903.03894](https://arxiv.org/abs/1903.03894).'
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[2] R. Ying, D. Bourgeois, J. You, M. Zitnik, 和 J. Leskovec。*GNNExplainer：为图神经网络生成解释*。arXiv，2019。DOI:
+    10.48550/ARXIV.1903.03894。可在[https://arxiv.org/abs/1903.03894](https://arxiv.org/abs/1903.03894)获取。'
+- en: '[3] Debnath, A. K., Lopez de Compadre, R. L., Debnath, G., Shusterman, A. J.,
+    and Hansch, C. (1991). *Structure-activity relationship of mutagenic aromatic
+    and heteroaromatic nitro compounds. Correlation with molecular orbital energies
+    and hydrophobicity*. DOI: 10.1021/jm00106a046\. *Journal of Medicinal Chemistry*,
+    34(2), 786–797\. Available at [https://doi.org/10.1021/jm00106a046](https://doi.org/10.1021/jm00106a046).'
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[3] Debnath, A. K., Lopez de Compadre, R. L., Debnath, G., Shusterman, A. J.,
+    和 Hansch, C.（1991）。*突变性芳香族和杂芳香族硝基化合物的结构-活性关系。与分子轨道能量和疏水性的相关性*。DOI: 10.1021/jm00106a046。*药物化学杂志*，34(2)，786–797。可在[https://doi.org/10.1021/jm00106a046](https://doi.org/10.1021/jm00106a046)获取。'
+- en: '[4] M. Sundararajan, A. Taly, and Q. Yan. *Axiomatic Attribution for Deep Networks*.
+    arXiv, 2017\. DOI: 10.48550/ARXIV.1703.01365\. Available at [https://arxiv.org/abs/1703.01365](https://arxiv.org/abs/1703.01365).'
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[4] M. Sundararajan, A. Taly, 和 Q. Yan。*深度网络的公理化归因*。arXiv，2017。DOI: 10.48550/ARXIV.1703.01365。可在[https://arxiv.org/abs/1703.01365](https://arxiv.org/abs/1703.01365)获取。'
+- en: '[5] B. Rozemberczki, C. Allen, and R. Sarkar. *Multi-Scale Attributed Node
+    Embedding*. *arXiv*, *2019*. DOI: 10.48550/ARXIV.1909.13021\. Available at [https://arxiv.org/pdf/1909.13021.pdf](https://arxiv.org/pdf/1909.13021.pdf).'
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[5] B. Rozemberczki, C. Allen, 和 R. Sarkar。*多尺度属性节点嵌入*。*arXiv*，*2019*。DOI:
+    10.48550/ARXIV.1909.13021。可在[https://arxiv.org/pdf/1909.13021.pdf](https://arxiv.org/pdf/1909.13021.pdf)获取。'
+- en: 'Part 4: Applications'
+  id: totrans-132
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第四部分：应用
+- en: In this fourth and final part of the book, we delve into the development of
+    comprehensive applications that utilize real-world data. Our focus will be on
+    encompassing aspects previously omitted in previous chapters, such as exploratory
+    data analysis and data processing. We aim to provide an exhaustive overview of
+    the machine learning pipeline, from raw data to model output analysis. We will
+    also highlight the strengths and limitations of the techniques discussed.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的第四部分，也是最后一部分，我们深入探讨了利用真实世界数据开发全面应用的过程。我们将重点关注前几章中未涉及的方面，如探索性数据分析和数据处理。我们的目标是提供关于机器学习管道的详尽概述，从原始数据到模型输出分析。我们还将强调所讨论技术的优点和局限性。
+- en: The projects in this section have been designed to be adaptable and customizable,
+    enabling readers to apply them to other datasets and tasks with ease. This makes
+    it an ideal resource for readers who wish to build a portfolio of applications
+    and showcase their work on GitHub.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节中的项目设计为适应性强且可定制，使读者能够轻松地将其应用于其他数据集和任务。这使其成为希望构建应用程序组合并展示自己工作（如在GitHub上的工作）的读者的理想资源。
+- en: By the end of this part, you will know how to implement GNNs for traffic forecasting,
+    anomaly detection, and recommender systems. These projects have been selected
+    to demonstrate the versatility and potential of GNNs in solving real-world problems.
+    The knowledge and skills gained from these projects will prepare readers for developing
+    their own applications and contributing to the field of graph learning.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本部分结束时，你将学会如何实现GNNs用于交通预测、异常检测和推荐系统。这些项目的选择旨在展示GNNs在解决现实问题中的多样性和潜力。通过这些项目获得的知识和技能将为读者开发自己的应用程序并为图学习领域作出贡献做好准备。
+- en: 'This part comprises the following chapters:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本部分包括以下章节：
+- en: '[*Chapter 15*](B19153_15.xhtml#_idTextAnchor179)*, Forecasting Traffic Using
+    A3T-GCN*'
+  id: totrans-137
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第15章*](B19153_15.xhtml#_idTextAnchor179)*，使用A3T-GCN预测交通流量*'
+- en: '[*Chapter 16*](B19153_16.xhtml#_idTextAnchor187)*, Detecting Anomalies Using
+    Heterogeneous Graph Neural Networks*'
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第16章*](B19153_16.xhtml#_idTextAnchor187)*，使用异质图神经网络检测异常*'
+- en: '[*Chapter 17*](B19153_17.xhtml#_idTextAnchor195)*, Recommending Books Using
+    LightGCN*'
+  id: totrans-139
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第17章*](B19153_17.xhtml#_idTextAnchor195)*，使用LightGCN推荐书籍*'
+- en: '[*Chapter 18*](B19153_18.xhtml#_idTextAnchor203)*, Unlocking the Potential
+    of Graph Neural Networks for Real-Word Applications*'
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第18章*](B19153_18.xhtml#_idTextAnchor203)*，解锁图神经网络在现实世界应用中的潜力*'

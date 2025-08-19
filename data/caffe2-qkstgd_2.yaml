@@ -1,0 +1,1138 @@
+- en: Composing Networks
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建网络
+- en: In this chapter, we will learn about Caffe2 operators and how we can compose
+    networks using these operators. To learn how to use operators, we will start off
+    by building a simple computation graph from scratch. After that, we will solve
+    a real computer vision problem called MNIST (by building a genuine neural network
+    with trained parameters) and use it for inference.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将了解 Caffe2 操作符，并学习如何使用这些操作符构建网络。为了学习如何使用操作符，我们将从零开始构建一个简单的计算图。然后，我们将解决一个实际的计算机视觉问题——MNIST（通过构建一个带有训练参数的真实神经网络）并用于推理。
+- en: 'This chapter covers the following topics:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖以下主题：
+- en: Introduction to Caffe2 operators
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Caffe2 操作符简介
+- en: The difference between operators and layers
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 操作符与层的区别
+- en: How to use operators to compose a network
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用操作符构建网络
+- en: Introduction to the MNIST problem
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MNIST 问题简介
+- en: Composing a network for the MNIST problem
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为 MNIST 问题构建网络
+- en: Inference through a Caffe2 network
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过 Caffe2 网络进行推理
+- en: Operators
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 操作符
+- en: In Caffe2, a neural network can be thought of as a directed graph, where the
+    nodes are operators and the edges represent the flow of data between operators.
+    Operators are the basic units of computation in a Caffe2 network. Every operator
+    is defined with a certain number of inputs and a certain number of outputs. When
+    the operator is executed, it reads its inputs, performs the computation it is
+    associated with, and writes the results to its outputs.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Caffe2 中，神经网络可以被看作是一个有向图，其中节点是操作符，边表示操作符之间数据流的传递。操作符是 Caffe2 网络中的基本计算单元。每个操作符都定义了一定数量的输入和输出。当操作符被执行时，它读取输入，执行与之相关的计算，并将结果写入输出。
+- en: To obtain the best possible performance, Caffe2 operators are typically implemented
+    in C++ for execution on CPUs and implemented in CUDA for execution on GPUs. All
+    operators in Caffe2 are derived from a common interface. You can see this common
+    interface defined in the `caffe2/proto/caffe2.proto` file in the Caffe2 source
+    code.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了获得最佳性能，Caffe2 操作符通常用 C++ 实现，以便在 CPU 上执行，并用 CUDA 实现，以便在 GPU 上执行。Caffe2 中的所有操作符都来自一个通用接口。你可以在
+    Caffe2 源代码中的 `caffe2/proto/caffe2.proto` 文件中看到这个通用接口的定义。
+- en: 'The following is the Caffe2 operator interface found in my `caffe2.proto` file:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是我在 `caffe2.proto` 文件中找到的 Caffe2 操作符接口：
+- en: '[PRE0]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The preceding code snippet is a definition in the **Google Protocol Buffers**
+    (**ProtoBuf**) format. ProtoBuf is used by applications that need a mechanism
+    to serialize and deserialize structured data. ProtoBuf's serialization and deserialization
+    mechanisms are supported in most popular languages and across most popular platforms.
+    Caffe2 uses ProtoBuf so that all of its structures, such as operators and networks,
+    can be accessed easily through many programming languages, across different operating
+    systems and CPU architectures.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述代码片段是**Google 协议缓冲区**（**ProtoBuf**）格式的定义。ProtoBuf 是一种用于需要序列化和反序列化结构化数据的应用程序的机制。ProtoBuf
+    的序列化和反序列化机制被大多数流行语言和平台所支持。Caffe2 使用 ProtoBuf，使得它的所有结构，如操作符和网络，都可以通过多种编程语言、不同操作系统和
+    CPU 架构轻松访问。
+- en: From the preceding operator definition, we can see that an operator in Caffe2
+    is defined to have `input` and, `output` blobs and has a `name`, a `type`, a `device`
+    that it executes on (such as CPU or GPU), an execution `engine`, and other information.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从上面的操作符定义中，我们可以看到，Caffe2 中的操作符定义了 `input` 和 `output` 数据块，并具有 `name`（名称）、`type`（类型）、`device`（执行设备，如
+    CPU 或 GPU）、`engine`（执行引擎）以及其他信息。
+- en: One of the compelling features of Caffe2 is that it has a large collection of
+    hundreds of operators that are already defined and optimized for you. The advantage
+    of this is that you have a large catalog of operators to compose your own networks
+    with and there is a high probability that networks you borrow from elsewhere will
+    be supported fully in Caffe2\. This reduces the need for you to define your own
+    operators. You can find a comprehensive list of Caffe2 operators and their documentation
+    in the Caffe2 operators catalog at [https://caffe2.ai/docs/operators-catalogue.html](https://caffe2.ai/docs/operators-catalogue.html).
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Caffe2 的一大亮点是，它拥有大量已经定义并为你优化的操作符，数量多达数百个。这样做的好处是，你可以使用丰富的操作符来构建自己的网络，并且你从其他地方借用的网络很可能在
+    Caffe2 中得到完全支持。这减少了你定义自己操作符的需求。你可以在 Caffe2 操作符目录中找到 Caffe2 操作符的完整列表及其文档，网址为 [https://caffe2.ai/docs/operators-catalogue.html](https://caffe2.ai/docs/operators-catalogue.html)。
+- en: Example – the MatMul operator
+  id: totrans-17
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 示例——MatMul 操作符
+- en: 'As an example of a Caffe2 operator, consider the **MatMul** operator, which
+    can be used to perform **matrix multiplication**. This linear algebra operation
+    is hugely important in deep learning and lies at the heart of the implementation
+    of important types of neural network layers, such as fully connected and convolution
+    layers. (We will study these layers later in this chapter and in [Chapter 3](3c2dd7d3-b762-49a3-a5d6-0b791eadadb2.xhtml),
+    *Training Networks*, respectively.) The matrix multiplication operation is depicted
+    in Figure 2.1:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为Caffe2操作符的一个例子，考虑**MatMul**操作符，它可用于执行**矩阵乘法**。这一线性代数操作在深度学习中至关重要，并且是许多重要神经网络层（如全连接层和卷积层）实现的核心。我们将在本章稍后以及[第3章](3c2dd7d3-b762-49a3-a5d6-0b791eadadb2.xhtml)《训练网络》中分别学习这些层。矩阵乘法操作如图2.1所示：
+- en: '![](img/819e1c45-1973-4989-a6e5-8c7e5f30b1bc.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/819e1c45-1973-4989-a6e5-8c7e5f30b1bc.png)'
+- en: 'Figure 2.1: Matrix multiplication'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.1：矩阵乘法
+- en: 'If we look up the MatMul operator in the Caffe2 operators catalog, we find
+    the documentation shown in Figure 2.2:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们查阅Caffe2操作符目录中的MatMul操作符，我们将找到如图2.2所示的文档：
+- en: '![](img/85026d02-25c7-447c-87a4-2c992d9e495b.png)'
+  id: totrans-22
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/85026d02-25c7-447c-87a4-2c992d9e495b.png)'
+- en: 'Figure 2.2: Documentation of the MatMul operator in Caffe2'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.2：Caffe2中MatMul操作符的文档
+- en: 'In the documentation of the MatMul operator in *Figure 2.2*, we can see a description
+    of what the operator does. In the Interface section, we see that it has two inputs:
+    2D matrices A and B, of sizes M×K and K×N, respectively. It performs matrix multiplication
+    of A and B, and produces a single 2D matrix C, of size M×N. We can also see that
+    it has some optional arguments to specify if either or both A and B have an exclusive
+    axis and are transposed matrices. Finally, we also see that the Caffe2 documentation
+    helpfully points us to the actual C++ source code that defines the `MatMul` operator.
+    The documentation of all operators in Caffe2 has the following useful structure:
+    definition, inputs, outputs, optional arguments, and a pointer to the source code.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在图2.2中的MatMul操作符文档中，我们可以看到操作符的功能描述。在接口部分，我们看到它有两个输入：分别为大小为M×K和K×N的二维矩阵A和B。它执行矩阵A和B的乘法，并生成一个大小为M×N的二维矩阵C。我们还可以看到它有一些可选参数，用来指定A和B是否有专属轴，或者它们是否是转置矩阵。最后，我们还看到Caffe2文档贴心地为我们指向了定义`MatMul`操作符的实际C++源代码。Caffe2中所有操作符的文档都有以下有用结构：定义、输入、输出、可选参数，以及源代码指针。
+- en: 'Having learned the definition of the `MatMul` operator, here is a code snippet
+    to create a model and add a `MatMul` operator to it:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习了`MatMul`操作符的定义后，下面是一个代码片段，用于创建模型并向其中添加`MatMul`操作符：
+- en: '[PRE1]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: In the preceding code, we first create a model named `"MatMul model"` using
+    the `ModelHelper` class of the Caffe2 `model_helper` module. A **model** is the
+    structure used to hold a network, and the **network** is a directed graph of operators.
+    `model_helper` is a high-level Caffe2 Python module, and its `ModelHelper` class
+    can be used to create and manage models easily. The `model` object we created
+    previously holds a network definition in its `net` member.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们首先使用Caffe2 `model_helper`模块中的`ModelHelper`类创建一个名为“`MatMul model`”的模型。**模型**是用于承载网络的结构，**网络**是一个由操作符组成的有向图。`model_helper`是一个高级的Caffe2
+    Python模块，其`ModelHelper`类可以轻松创建和管理模型。我们之前创建的`model`对象在其`net`成员中持有网络定义。
+- en: We add a `MatMul` operator to this model by calling the `MatMul` method on the
+    model's network definition. Note the two arguments to the `MatMul` operator. The
+    first argument is a list consisting of the names of the two matrices that need
+    to be multiplied. Here, `"A"` and `"B"` are the names of blobs that hold the matrix
+    elements in the Caffe2 workspace. (We will learn about the Caffe2 workspace later
+    in this chapter.) Similarly, the second argument, `"C"`, indicates the output
+    matrix blob in the workspace.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过调用模型网络定义中的`MatMul`方法将`MatMul`操作符添加到这个模型中。请注意`MatMul`操作符的两个参数。第一个参数是一个列表，包含需要乘法的两个矩阵的名称。在这里，“`A`”和“`B`”是Caffe2工作空间中存储矩阵元素的blob的名称。（我们将在本章稍后学习Caffe2工作空间的内容。）同样，第二个参数“`C`”表示工作空间中的输出矩阵blob。
+- en: Difference between layers and operators
+  id: totrans-29
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 层与操作符的区别
+- en: Older deep learning frameworks, such as Caffe, did not have operators. Instead,
+    their basic units of computation were called **layers**. These older frameworks
+    chose the name *layer* inspired by the layers in neural networks.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 旧版的深度学习框架，如Caffe，并没有操作符。相反，它们的基本计算单元被称为**层**。这些旧框架选择使用“*层*”这一名称，灵感来源于神经网络中的层。
+- en: However, contemporary frameworks, such as Caffe2, TensorFlow, and PyTorch, prefer
+    to use the term *operator* for their basic units of computation. There is a subtle
+    difference between operators and layers. A layer in older frameworks, such as
+    Caffe, was composed of both the computation function of that layer and the trained
+    parameters of that layer. In contrast to this, an operator in Caffe2 only holds
+    the computation function. Both the trained parameters and the inputs are external
+    to the operator and need to be fed to it explicitly.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，现代框架如Caffe2、TensorFlow和PyTorch更倾向于使用术语*操作符*来表示它们的基本计算单元。操作符和层之间存在细微的差别。在早期的框架中，比如Caffe，一个层由该层的计算函数和该层的训练参数组成。与此不同，Caffe2中的操作符仅包含计算函数。训练参数和输入是外部的，需要显式地提供给操作符。
+- en: Example – a fully connected operator
+  id: totrans-32
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 示例 – 一个全连接操作符
+- en: 'To illustrate the difference between layers and operators, consider the **fully
+    connected** (**FC**) operator in Caffe2\. The fully connected layer is the most
+    traditional layer in neural networks. Early neural networks were mostly composed
+    of an input layer, one or more fully connected layers, and an output layer:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明层和操作符之间的区别，考虑Caffe2中的**全连接**（**FC**）操作符。全连接层是神经网络中最传统的层。早期的神经网络大多由一个输入层、一个或多个全连接层以及一个输出层组成：
+- en: '![](img/f57894a0-1e4c-4c06-81dd-9a6630a1769b.png)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f57894a0-1e4c-4c06-81dd-9a6630a1769b.png)'
+- en: 'Figure 2.3: Interface documentation of the FC operator from the Caffe2 operators''
+    catalog'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.3：Caffe2操作符目录中的FC操作符接口文档
+- en: 'Input X to an FC operator is expected to be of size M×K. Here, M is the batch
+    size. This means that if we fed 10 different inputs to the neural network as a
+    **batch**, M would be the batch size value, 10\. Hence, each input actually appears
+    as a vector of size 1×K to this operator. We can see that, unlike the `MatMul`
+    operator introduced earlier, which had no trained parameters, the FC operator
+    has inputs that are trained parameters: W and b. The trained parameter W is a
+    2D matrix of size K×N of weight values, and the trained parameter b is a 1D vector
+    of bias values. The FC operator computes the output Y as X×W+b. This means that
+    each input vector of size 1×K produces an output of size 1×N after being processed
+    by this operator. And indeed, this explains the fully connected layer''s name:
+    each of the 1×K inputs is fully connected to each of the 1×N outputs:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入X到FC操作符的大小应为M×K。这里，M是批次大小。这意味着，如果我们将10个不同的输入作为一个**批次**输入神经网络，M将是批次大小的值，即10。因此，每个输入实际上是一个1×K的向量传递给该操作符。我们可以看到，与之前介绍的没有训练参数的`MatMul`操作符不同，FC操作符有输入的训练参数：W和b。训练参数W是一个K×N的二维矩阵，表示权重值；训练参数b是一个一维向量，表示偏置值。FC操作符将输出Y计算为X×W+b。这意味着，每个1×K的输入向量在经过该操作符处理后会产生一个1×N的输出。事实上，这也解释了全连接层的名称：每个1×K的输入都与每个1×N的输出完全连接：
+- en: '![](img/d54f3fd3-68a1-4e18-9832-157c8919903b.png)'
+  id: totrans-37
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d54f3fd3-68a1-4e18-9832-157c8919903b.png)'
+- en: 'Figure 2.4: Difference between the Caffe layer and the Caffe2 operator'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.4：Caffe层和Caffe2操作符之间的区别
+- en: In older frameworks such as Caffe, the weight and bias trained parameters of
+    the fully connected layer were stored along with the layer. In contrast, in Caffe2,
+    the FC operator does not store any parameters. Both the trained parameters and
+    the inputs are fed to the operator. *Figure 2.4* shows the difference between
+    a Caffe layer and Caffe2 operator, using the fully connected layer as an example.
+    Since most deep learning literature still refers to these entities as layers,
+    we will use the words *layer* and *operator* interchangeably throughout the rest
+    of this book.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在像Caffe这样的旧框架中，全连接层的权重和偏置训练参数与层一同存储。相比之下，在Caffe2中，FC操作符不存储任何参数。训练参数和输入会被传递给操作符。*图2.4*展示了Caffe层与Caffe2操作符之间的区别，以全连接层为例。由于大多数深度学习文献仍将这些实体称为层，因此我们将在本书的其余部分中交替使用*层*和*操作符*这两个词。
+- en: Building a computation graph
+  id: totrans-40
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建计算图
+- en: 'In this section, we will learn how to build a network in Caffe2 using `model_helper`.
+    (`model_helper` was introduced earlier in this chapter.) To maintain the simplicity
+    of this example, we use mathematical operators that require no trained parameters.
+    So, our network is a computation graph rather than a neural network because it
+    has no trained parameters that were learned from training data. The network we
+    will build is illustrated by the graph shown in Figure 2.5:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将学习如何使用`model_helper`在Caffe2中构建一个网络。（`model_helper`在本章前面已经介绍过。）为了保持这个例子的简单性，我们使用不需要训练参数的数学操作符。所以，我们的网络是一个计算图，而不是神经网络，因为它没有从训练数据中学习的训练参数。我们将构建的网络由图2.5所示：
+- en: '![](img/eb8244e8-c488-453c-bf1f-ac9bc71f22a9.png)'
+  id: totrans-42
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/eb8244e8-c488-453c-bf1f-ac9bc71f22a9.png)'
+- en: 'Figure 2.5: Our simple computation graph with three operators'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.5：我们的简单计算图，包含三个操作符
+- en: 'As you can see, we provide two inputs to the network: a matrix, **A**, and
+    a vector, **B**. A `MatMul` operator is applied to **A** and **B** and its result
+    is fed to a `Sigmoid` function, designated by **σ** in Figure 2.5\. The result
+    of the `Sigmoid` function is fed to a `SoftMax` function. (We will learn a bit
+    more about the `Sigmoid` and `SoftMax` operators next in this section.) Output
+    **E** of the `Sigmoid` function is the output of the network.'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，我们向网络提供了两个输入：一个矩阵**A**和一个向量**B**。对**A**和**B**应用`MatMul`操作符，并将其结果传递给`Sigmoid`函数，在图2.5中由**σ**表示。`Sigmoid`函数的结果被传递给`SoftMax`函数。（接下来我们将进一步了解`Sigmoid`和`SoftMax`操作符。）`Sigmoid`函数的输出**E**即为网络的输出。
+- en: 'Here is the Python code to build the preceding graph, feed it inputs, and obtain
+    its output:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是构建上述图形、提供输入并获取输出的Python代码：
+- en: '[PRE2]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'This program can be broken down into four stages:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该程序可以分为四个阶段：
+- en: Initializing Caffe2
+  id: totrans-48
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化Caffe2
+- en: Composing the model network
+  id: totrans-49
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建模型网络
+- en: Adding input blobs to the workspace
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 向工作区添加输入数据
+- en: Running the model's network in the workspace and obtaining the output
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在工作区中运行模型的网络并获取输出
+- en: You could use a similar structure in your own programs that compose a network
+    and use it for inference.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在自己的程序中使用类似的结构来组成网络并将其用于推理。
+- en: Let's examine the Python code of each of these stages in detail.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们详细查看每个阶段的Python代码。
+- en: Initializing Caffe2
+  id: totrans-54
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 初始化Caffe2
+- en: 'Before we call any Caffe2 methods, we need to import the Caffe2 Python modules
+    that we might need:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在调用任何Caffe2方法之前，我们需要导入可能需要的Caffe2 Python模块：
+- en: 'First, import the `workspace` and `module_helper` modules:'
+  id: totrans-56
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，导入`workspace`和`module_helper`模块：
+- en: '[PRE3]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This step also imports the `numpy` module so that we can create matrices and
+    vectors easily in our program. **NumPy** is a popular Python library that provides
+    multi-dimensional arrays (including vectors and matrices) and a large collection
+    of mathematical operations that can be applied to such arrays.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一步骤还导入了`numpy`模块，以便我们可以在程序中轻松创建矩阵和向量。**NumPy**是一个流行的Python库，提供多维数组（包括向量和矩阵）以及一大堆可以应用于这些数组的数学操作。
+- en: 'Next, initialize the default Caffe2 workspace using this call:'
+  id: totrans-59
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，使用以下调用初始化默认的Caffe2工作区：
+- en: '[PRE4]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The workspace is where all the data is created, read from, and written to in
+    Caffe2\. This means that we will use the workspace to load our inputs, the trained
+    parameters of our network, intermediate results between operators, and the final
+    outputs from our network. We also use the workspace to execute our network during
+    inference.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 工作区是Caffe2中所有数据创建、读取和写入的地方。这意味着我们将使用工作区加载输入、网络的训练参数、操作符之间的中间结果以及网络的最终输出。我们还使用工作区在推理过程中执行网络。
+- en: 'We created the default workspace of Caffe2 earlier. We could create other workspaces
+    with unique names too. For example, to create a second workspace and switch to
+    it, execute the following code: `workspace.SwitchWorkspace("Second Workspace",
+    True)`'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们之前已经创建了Caffe2的默认工作区。我们也可以创建其他具有独特名称的工作区。例如，要创建第二个工作区并切换到它，可以执行以下代码：`workspace.SwitchWorkspace("Second
+    Workspace", True)`
+- en: Composing the model network
+  id: totrans-63
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建模型网络
+- en: 'We use the `ModelHelper` class (described earlier in this chapter) to create
+    an empty model name it `Math model`:'
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用`ModelHelper`类（在本章前面描述）来创建一个空的模型并命名为`Math model`：
+- en: '[PRE5]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Next, we add our first operator, `MatMul`, to the network of this model:'
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将第一个操作符`MatMul`添加到该模型的网络中：
+- en: '[PRE6]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: The `MatMul` operator was described earlier in this chapter. We indicate the
+    names of the input blobs `["A", "B"]` and output blob `"C"` in the call. A **blob**
+    is an N-dimensional array with a name, and it holds values of the same type. For
+    example, we could represent a matrix of floating point values as a two-dimensional
+    blob. A blob differs from most Python data structures, such as `list` and `dict`,
+    because all the values in it have to be of the same data type (such as `float`
+    or `int`). All input data, output data, and trained parameters used in neural
+    networks are stored as blobs in Caffe2.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MatMul`运算符在本章前面有描述。我们在调用中指明了输入blob`["A", "B"]`和输出blob`"C"`的名称。**Blob**是一个具有名称的N维数组，存储相同类型的值。例如，我们可以将浮动点值矩阵表示为二维blob。Blob不同于大多数Python数据结构，如`list`和`dict`，因为它其中的所有值必须具有相同的数据类型（如`float`或`int`）。神经网络中使用的所有输入数据、输出数据和训练参数都以blob的形式存储在Caffe2中。'
+- en: We have not yet created these blobs in the workspace. We are adding the operator
+    to the network and informing Caffe2 that blobs of these names will be available
+    in the workspace by the time the network is actually used.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还没有在工作区创建这些blob。我们将运算符添加到网络中，并告知Caffe2，在网络实际使用时，这些名称的blob将会出现在工作区。
+- en: 'After that, we add our next operator, `Sigmoid`, to the network:'
+  id: totrans-70
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 之后，我们将下一个运算符`Sigmoid`添加到网络中：
+- en: '[PRE7]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Sigmoid operator
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Sigmoid运算符
+- en: 'The `Sigmoid` operator implements the **Sigmoid function**. This function is
+    popular in neural networks, and is also known as the **logistic function**. It
+    is defined as follows:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Sigmoid`运算符实现了**Sigmoid函数**。这个函数在神经网络中非常流行，也被称为**逻辑函数**。其定义如下：'
+- en: '![](img/f4c4fc53-e1db-45cf-a21a-048fd26572bf.png)'
+  id: totrans-74
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f4c4fc53-e1db-45cf-a21a-048fd26572bf.png)'
+- en: 'Figure 2.6 shows a plot of this function:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.6展示了该函数的图形：
+- en: '![](img/9ff419f8-cc9c-4386-bb2c-d0c0c42c460e.png)'
+  id: totrans-76
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/9ff419f8-cc9c-4386-bb2c-d0c0c42c460e.png)'
+- en: 'Figure 2.6: A plot of the Sigmoid function'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.6：Sigmoid函数的图形
+- en: '`Sigmoid` is a non-linear function that is typically used in neural networks
+    as an activation function. An **activation function** is a common layer that is
+    introduced between one or more sequences of layers. It converts its input into
+    an activation, which decides whether a neuron in the following layer is activated
+    (or fired) or not. Activation functions typically introduce non-linear characteristics
+    into a network.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Sigmoid`是一个非线性函数，通常在神经网络中作为激活函数使用。**激活函数**是引入在一个或多个层序列之间的常见层。它将输入转换为激活值，决定接下来层中的神经元是否被激活（或触发）。激活函数通常会向网络中引入非线性特性。'
+- en: Note how the Sigmoid looks like the letter *S*. It looks like a smoothed step
+    function, and its outputs are bounded by 0 and 1\. So, for example, it could be
+    used to classify any input value to determine whether it belongs to a class (value
+    **1.0**) or not (value **0.0**).
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意*Sigmoid*的形状像字母*S*。它看起来像一个平滑的阶跃函数，其输出被限制在0和1之间。例如，它可以用于将任何输入值分类，判断该值是否属于某个类别（值为**1.0**）或不属于（值为**0.0**）。
+- en: The Sigmoid function in Caffe2 is an **elementwise operator**. This means that
+    it is applied individually to each element of the input. In our preceding code
+    snippet, we are informing Caffe2 that this operator that we added to the network
+    will take an input blob of name `"C"` from the workspace and write its output
+    to blob `"D"` in the workspace.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Caffe2中的Sigmoid函数是一个**逐元素运算符**。这意味着它会单独应用于输入的每一个元素。在我们之前的代码片段中，我们告知Caffe2，网络中添加的这个运算符将从工作区获取名为`"C"`的输入blob，并将输出写入工作区中的`"D"`
+    blob。
+- en: 'As a final and third operator, we add the `Softmax` operator to the network:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为最终的第三个运算符，我们将`Softmax`运算符添加到网络中：
+- en: '[PRE8]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Softmax operator
+  id: totrans-83
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Softmax运算符
+- en: 'The `Softmax` operator implements the **SoftMax function**. This function takes
+    a vector as input and normalizes the elements of the vector in a probability distribution.
+    It is defined on each element of a vector as follows:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Softmax`运算符实现了**SoftMax函数**。该函数接受一个向量作为输入，并将该向量的元素标准化为概率分布。它在每个向量元素上的定义如下：'
+- en: '![](img/50468955-feae-4b46-8d76-bc2adad2cadb.png)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/50468955-feae-4b46-8d76-bc2adad2cadb.png)'
+- en: The output values of a `SoftMax` function have nice properties. Every output
+    value ![](img/0d596984-ff51-4b0e-92f7-90409504d308.png) is bounded by ![](img/502a1524-8112-4aac-8832-921a38ed97a3.png),
+    and all the values of the output vector total 1\. Due to these characteristics,
+    this function is typically used as the last layer in a neural network used for
+    classification.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SoftMax` 函数的输出值具有良好的特性。每个输出值 ![](img/0d596984-ff51-4b0e-92f7-90409504d308.png)
+    都被限制在 ![](img/502a1524-8112-4aac-8832-921a38ed97a3.png) 之间，并且输出向量的所有值总和为 1。由于这些特性，该函数通常作为分类神经网络中的最后一层使用。'
+- en: In the preceding code snippet, we added a `Softmax` operator to the network
+    that will use a blob named `"D"` as input and write output to a blob named `"E"`.
+    The `axis` parameter is used to indicate the axis along which the input N-dimensional
+    array is split apart and coerced into a 2D array. Typically, `axis=1` is used
+    to indicate that the first axis of the blob is the batch dimension and that the
+    rest should be coerced into a vector. Since we are using a single input in our
+    example, we use `axis=0` here to indicate that the entire input should be coerced
+    into a 1D vector for `Softmax`.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的代码片段中，我们向网络添加了一个 `Softmax` 操作符，该操作符将使用名为 `"D"` 的 Blob 作为输入，并将输出写入名为 `"E"`
+    的 Blob。`axis` 参数用于指示沿哪个轴将输入的 N 维数组拆分并强制转换为二维数组。通常，`axis=1` 表示 Blob 的第一个轴是批次维度，其他部分应被强制转换为向量。由于我们在本示例中使用的是单一输入，因此我们使用
+    `axis=0` 来表示整个输入应该被强制转换为 1D 向量以供 `Softmax` 使用。
+- en: Adding input blobs to the workspace
+  id: totrans-88
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将输入 Blob 添加到工作区
+- en: 'Our model is now ready. We now initialize our two input blobs, `A` and `B`,
+    to this model to a linear distribution of values using NumPy:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们的模型已准备好。我们将通过 NumPy 初始化两个输入 Blob `A` 和 `B`，并为其分配线性分布的值：
+- en: '[PRE9]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Note how we are specifying that all the values in these arrays will be of the
+    floating point data type. This is indicated in NumPy using `np.float32`. The NumPy
+    `reshape` function is used to convert the one-dimensional array of values into
+    matrices of sizes ![](img/08dbd3e7-7e05-4a90-b2ca-cdf8f44610b2.png), and ![](img/79bb9ad4-05a5-4668-a43e-ebb67899f202.png),
+    respectively.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们指定了这些数组中的所有值都将是浮点数类型。在 NumPy 中，这通过 `np.float32` 来表示。NumPy 的 `reshape`
+    函数用于将一维数组的值转换为大小为 ![](img/08dbd3e7-7e05-4a90-b2ca-cdf8f44610b2.png) 和 ![](img/79bb9ad4-05a5-4668-a43e-ebb67899f202.png)
+    的矩阵。
+- en: Since we will perform inference on the network in Caffe2, we need to set the
+    input blobs into the workspace. **Inference** is the act of passing inputs to
+    a trained neural network and *inferring*, or obtaining, the output from it. The
+    act of setting a blob into the workspace with a name and its values is called
+    **feeding** in Caffe2.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们将在 Caffe2 中对网络执行推理操作，我们需要将输入 Blob 设置到工作区中。**推理** 是将输入数据传递给经过训练的神经网络并进行“推断”或获取输出的过程。在
+    Caffe2 中，将 Blob 设置到工作区并为其指定名称和值的操作称为 **喂入**。
+- en: 'Feeding our input blobs is executed using `FeedBlob` calls, shown as follows:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 喂入输入 Blob 是通过 `FeedBlob` 调用来执行的，如下所示：
+- en: '[PRE10]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: In the preceding code snippet, we fed tensors `A` and `B` into our workspace
+    and named those blobs `"A"` and `"B"` respectively.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码片段中，我们将张量 `A` 和 `B` 输入到工作区，并分别将这些 Blob 命名为 `"A"` 和 `"B"`。
+- en: Running the network
+  id: totrans-96
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 运行网络
+- en: 'We built a network and we have its inputs ready in the workspace. We are now
+    ready to perform inference on the network. In Caffe2, this is called a **run**.
+    We perform a run on the network in the workspace as follows:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们构建了一个网络，并且已经准备好在工作区中输入数据。现在我们准备在该网络上执行推理操作。在 Caffe2 中，这个过程称为 **运行**。我们在工作区的网络上执行运行操作，如下所示：
+- en: '[PRE11]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'After the run is done, we can extract or fetch the output blob from the workspace
+    and print our input and output blobs for reference:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行结束后，我们可以从工作区中提取或获取输出 Blob，并打印我们的输入和输出 Blob 以供参考：
+- en: '[PRE12]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'When this computation graph code is executed, it should produce an output like
+    the following:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当执行此计算图代码时，应该产生如下所示的输出：
+- en: '[PRE13]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: You can work through the matrix multiplication, Sigmoid, and SoftMax layers
+    of this graph with inputs `A` and `B` and see that `E` does indeed have the correct
+    output values.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以处理矩阵乘法、Sigmoid 和 SoftMax 图层，使用输入 `A` 和 `B`，并验证 `E` 确实具有正确的输出值。
+- en: Building a multilayer perceptron neural network
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建多层感知器神经网络
+- en: In this section, we introduce the MNIST problem and learn how to build a **MultiLayer
+    Perceptron** (**MLP**) network using Caffe2 to solve it. We also learn how to
+    load pretrained parameters into the network and use it for inference.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们介绍了 MNIST 问题，并学习如何使用 Caffe2 构建 **多层感知器** (**MLP**) 网络来解决该问题。我们还学习了如何将预训练的参数加载到网络中并用于推理。
+- en: MNIST problem
+  id: totrans-106
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MNIST 问题
+- en: The **MNIST problem** is a classic image classification problem that used to
+    be popular in machine learning. State-of-the-art methods can now achieve greater
+    than 99% accuracy in relation to this problem, so it is no longer relevant. However,
+    it acts as a stepping stone for us to learn how to build a Caffe2 network that
+    solves a real machine learning problem.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**MNIST问题**是一个经典的图像分类问题，曾在机器学习中非常流行。如今，最先进的方法已经可以在该问题上实现超过99%的准确率，因此它不再具有实际意义。然而，它作为我们学习如何构建一个解决实际机器学习问题的Caffe2网络的垫脚石。'
+- en: 'The MNIST problem lies in identifying the handwritten digit that is present
+    in a grayscale image of size 28 x 28 pixels. These images are from the MNIST database,
+    a modified version of a scanned document dataset that was originally shared by
+    the **National Institute of Standards and Technology** (**NIST**), hence the name
+    **modified NIST** (**MNIST**). Examples from this dataset are shown in Figure
+    2.7:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MNIST问题的核心在于识别28 x 28像素大小的灰度图像中的手写数字。这些图像来自MNIST数据库，这是一个修改过的扫描文档数据集，最初由**国家标准与技术研究院**（**NIST**）共享，因此得名**修改版NIST**（**MNIST**）。该数据集中的一些示例如图2.7所示：
+- en: '![](img/e1c8295a-6dca-4a6d-968d-14fac3b6f1b0.png)'
+  id: totrans-109
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e1c8295a-6dca-4a6d-968d-14fac3b6f1b0.png)'
+- en: 'Figure 2.7: A random sample of 10 images each digit from 0 to 9, in the MNIST
+    dataset'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.7：MNIST数据集中每个数字（0到9）的10张随机样本
+- en: Note how some of the handwritten digits could be difficult for even humans to
+    classify.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，有些手写数字即使对人类来说也可能难以分类。
+- en: Every image in the MNIST dataset contains a single handwritten digit, between
+    0 and 9\. The grayscale values in each image are normalized and the handwritten
+    digit is centered in the image. This makes MNIST a good dataset for beginners
+    since we do not need to do any image cleaning, preprocessing, or augmentation
+    operations before using it for inference or training. (Such operations are typically
+    required if we are using other image datasets.) Typically, 60,000 images from
+    this dataset are used as training data, and a separate set of 10,000 images is
+    used for testing.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每张MNIST数据集中的图像包含一个手写数字，范围从0到9。每张图像中的灰度值已被归一化，并且手写数字被居中处理。因此，MNIST是一个适合初学者的数据集，因为在用于推理或训练之前，我们无需进行图像清理、预处理或增强操作。（如果使用其他图像数据集，通常需要进行这些操作。）通常，我们会使用该数据集中的60,000张图像作为训练数据，另外10,000张图像用于测试。
+- en: Building a MNIST MLP network
+  id: totrans-113
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建一个MNIST MLP网络
+- en: To solve the MNIST problem, we will create a neural network known as a **MultiLayer
+    Perceptron** (**MLP**). This is the classic name given to neural networks that
+    have an input layer, an output layer, and one or more hidden layers between them.
+    An MLP is a type of **feedforward neural network** because its network is a **directed
+    acyclic graph** (**DAG**); that is, it does not have cycles.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决MNIST问题，我们将创建一个神经网络，称为**多层感知器**（**MLP**）。这是给具有输入层、输出层和一个或多个隐藏层的神经网络的经典名称。MLP是一种**前馈神经网络**，因为它的网络是一个**有向无环图**（**DAG**）；即，它没有循环。
+- en: The Python code to create the MLP network described in this section, to load
+    pretrained parameters into it, and use it for inference, can be found in the `mnist_mlp.py`
+    file that accompanies this book. In the sections that follow, we dissect this
+    code and try to understand it.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于创建本节所述的MLP网络、加载预训练参数并用于推理的Python代码，可以在本书附带的`mnist_mlp.py`文件中找到。在接下来的章节中，我们将对这段代码进行拆解并尝试理解它。
+- en: Initializing global constants
+  id: totrans-116
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 初始化全局常量
+- en: 'Our Python Caffe2 code for a MNIST MLP network begins by initializing some
+    MNIST constants:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的Python Caffe2代码用于MNIST MLP网络的开始部分是初始化一些MNIST常量：
+- en: '[PRE14]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: There are `10` (`MNIST_DIGIT_NUM`) digits in the MNIST dataset (0-9) that we
+    want to identify. And the dimensions of every MNIST image are 28 x 28 pixels (`MNIST_IMG_HEIGHT`,
+    `MNIST_IMG_WIDTH`).
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MNIST数据集中有`10`个（`MNIST_DIGIT_NUM`）数字（0-9），我们需要识别这些数字。每个MNIST图像的尺寸为28 x 28像素（`MNIST_IMG_HEIGHT`，`MNIST_IMG_WIDTH`）。
+- en: Composing network layers
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建网络层
+- en: 'The following is a diagram of the MNIST MLP network we will build:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是我们将要构建的MNIST MLP网络的示意图：
+- en: '![](img/51643eef-76db-447d-9822-d7112b0c0303.png)'
+  id: totrans-122
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/51643eef-76db-447d-9822-d7112b0c0303.png)'
+- en: 'Figure 2.8: Our MNIST MLP network comprising an input layer, three pairs of
+    FC and ReLU layers, and a final SoftMax layer'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.8：我们的MNIST MLP网络，包含输入层、三对FC和ReLU层以及最终的SoftMax层
+- en: We will build a simple feedforward neural network composed of three pairs of
+    fully connected layers and ReLU activation layers. Each pair of layers is connected
+    to the output of its previous pair of layers. The output of the third pair of
+    fully connected and ReLU activation layers is passed through a SoftMax layer to
+    get the output classification values of the network. This network structure is
+    depicted in Figure 2.8.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将构建一个简单的前馈神经网络，包含三对全连接层和ReLU激活层。每一对层都连接到前一对层的输出。第三对全连接层和ReLU激活层的输出将通过SoftMax层，以获得网络的输出分类值。该网络结构如图2.8所示。
+- en: To build this network, we first initialize a model using `ModelHelper`, just
+    like in our earlier computation graph example. We then use the **Brew** API to
+    add the layers of the network.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了构建这个网络，我们首先使用`ModelHelper`初始化一个模型，就像我们在之前的计算图示例中做的一样。然后，我们使用**Brew** API来添加网络的各个层。
+- en: While using raw operator calls as in our computation graph example is possible,
+    using Brew is far more preferable if we are building real neural networks. This
+    is because the `helper` functions in Brew make it very easy to initialize parameters
+    for each layer and pick a device for each layer. Doing the same using operator
+    methods would require multiple calls with several parameters.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然像我们在计算图示例中那样使用原始操作符调用也是可行的，但如果我们构建真实的神经网络，使用Brew更为优选。这是因为Brew中的`helper`函数使得为每层初始化参数和为每层选择设备变得非常容易。使用操作符方法来做相同的事情则需要多次调用并传入多个参数。
+- en: 'A typical call to a Brew `helper` function to add a layer would require these
+    parameters:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调用Brew `helper`函数来添加一层通常需要这些参数：
+- en: A model containing the network where we are adding this layer
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含我们正在添加该层的网络的模型
+- en: The name of the input blob or previous layer
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 输入数据块或前一层的名称
+- en: The name of this layer
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该层的名称
+- en: The dimensions of input to this layer
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该层的输入维度
+- en: The dimensions of output from this layer
+  id: totrans-132
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该层的输出维度
+- en: 'We begin by adding the first pair of fully connected and ReLU layers using
+    the following code:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先通过以下代码添加第一对全连接层和ReLU层：
+- en: '[PRE15]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Notice that, in this pair of layers, the input is of the `MNIST_IMG_PIXEL_NUM`
+    dimensions, and the output is of the `MNIST_IMG_PIXEL_NUM * 2` dimensions.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，在这一对层中，输入的维度是`MNIST_IMG_PIXEL_NUM`，而输出的维度是`MNIST_IMG_PIXEL_NUM * 2`。
+- en: ReLU layer
+  id: totrans-136
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: ReLU层
+- en: 'The following figure shows the ReLU function:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下图示展示了ReLU函数：
+- en: '![](img/d48373ca-b384-4dc5-9557-78d0e10885da.png)'
+  id: totrans-138
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d48373ca-b384-4dc5-9557-78d0e10885da.png)'
+- en: 'Figure 2.9: The ReLU function'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.9：ReLU函数
+- en: 'We introduced an activation layer called Sigmoid while building the computation
+    graph. Here, we use another popular activation layer called **Rectified Linear
+    Unit** (**ReLU**). This function can be seen in *Figure 2.9*, and is defined as
+    follows:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在构建计算图时，我们引入了一个激活层，叫做Sigmoid。在这里，我们使用另一个流行的激活层叫做**修正线性单元**（**ReLU**）。该函数在*图2.9*中可以看到，其定义如下：
+- en: '![](img/ba3eaef3-60b9-4180-9640-0686426cb246.png)'
+  id: totrans-141
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ba3eaef3-60b9-4180-9640-0686426cb246.png)'
+- en: 'We add a second and a third pair of layers named (`"fc_layer_1"`, `"relu_layer_1"`)
+    and (`"fc_layer_2"`, `"relu_layer_2"`), respectively, using the following code:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用以下代码添加第二对和第三对层，分别命名为（`"fc_layer_1"`，`"relu_layer_1"`）和（`"fc_layer_2"`，`"relu_layer_2"`）：
+- en: '[PRE16]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: The second pair takes in `MNIST_IMG_PIXEL_NUM * 2`-sized input and outputs `MNIST_IMG_PIXEL_NUM
+    * 2`. The third pair takes in `MNIST_IMG_PIXEL_NUM * 2` and outputs `MNIST_IMG_PIXEL_NUM`.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二对层接受`MNIST_IMG_PIXEL_NUM * 2`大小的输入，输出`MNIST_IMG_PIXEL_NUM * 2`。第三对层接受`MNIST_IMG_PIXEL_NUM
+    * 2`并输出`MNIST_IMG_PIXEL_NUM`。
+- en: 'When solving a classification problem using a neural network, we typically
+    need a probability distribution over the classes. We add a SoftMax layer to the
+    end of our network to achieve this:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用神经网络解决分类问题时，我们通常需要对类别进行概率分布。我们在网络的末尾添加一个SoftMax层来实现这一点：
+- en: '[PRE17]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Notice how the `brew.softmax` method does not need to be told the input and
+    output dimensions explicitly when that information can be obtained from the input
+    it is connected to. This is one of the advantages of using Brew methods.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，当`brew.softmax`方法能够从其连接的输入中获取输入和输出的维度时，它不需要显式地告知输入和输出的维度。这是使用Brew方法的优势之一。
+- en: Set weights of network layers
+  id: totrans-148
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置网络层的权重
+- en: After composing the network, we now incorporate the pretrained weights of the
+    layers into the network. These weights were obtained by training this network
+    on the MNIST training data. We will learn how to train a network in the next chapter.
+    In this chapter, we focus on loading those pretrained weights into our network
+    and performing inference.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在组建完网络后，我们将预训练的层权重整合到网络中。这些权重是通过在MNIST训练数据上训练该网络得到的。我们将在下一章学习如何训练一个网络。在本章中，我们将重点介绍如何将这些预训练权重加载到我们的网络中并执行推理。
+- en: Note that, of the three types of layer we use in this network, only the fully
+    connected layers need pretrained weights. We have stored the weights as NumPy
+    files for ease of loading. They can be loaded from disk using the NumPy `load`
+    method. These values are set in the workspace using the `workspace.FeedBlob` method
+    by specifying the layer name to which they belong.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在我们使用的三种层类型中，只有全连接层需要预训练权重。我们已将这些权重存储为NumPy文件，以便于加载。可以通过使用NumPy的`load`方法从磁盘加载这些文件。这些值通过`workspace.FeedBlob`方法在工作区中设置，并通过指定它们所属的层名称来完成。
+- en: 'The code snippet to achieve this is as follows:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现这一点的代码片段如下：
+- en: '[PRE18]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Running the network
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 运行网络
+- en: So we have built a network and we have initialized its layers with pretrained
+    weights. We are now ready to feed it input and execute an inference through the
+    network to get its output.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以我们已经构建了一个网络，并且用预训练权重初始化了它的层。现在我们可以将输入数据提供给它，并通过网络执行推理来获得输出。
+- en: We could feed input images one by one to our network and obtain the output classification
+    results. However, doing this in production systems would not utilize the computation
+    resources of the CPU or GPU effectively and would result in a low throughput for
+    inference. So, almost all deep learning frameworks allow users to feed a batch
+    of input data to a network, for both inference and training purposes.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以逐个将输入图像喂给网络，并获得输出的分类结果。然而，在生产系统中这样做并不能有效利用CPU或GPU的计算资源，且推理吞吐量低。因此，几乎所有深度学习框架都允许用户将一批输入数据同时提供给网络，无论是在推理还是训练过程中。
+- en: 'To illustrate feeding a batch of input images, we have the `mnist_data.npy`
+    file, which holds the data for a batch of 64 MNIST images. We read this batch
+    from the file and set it as the data blob in the workspace so that it acts as
+    the input to the network:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明如何输入一批图像，我们有一个`mnist_data.npy`文件，其中包含一批64个MNIST图像的数据。我们从文件中读取这批数据，并将其设置为工作区中的数据块，使其作为网络的输入：
+- en: '[PRE19]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'We execute inference on the network by calling the `workspace.RunNetOnce` method
+    with the network as input:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过调用`workspace.RunNetOnce`方法并将网络作为输入来执行网络推理：
+- en: '[PRE20]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'We fetch the output blob of the network from the workspace and, for each of
+    the 64 inputs, we determine which MNIST digit class has the highest confidence
+    value; that is what the network believes was the digit in the MNIST image:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从工作区获取网络的输出数据块，对于每一个64个输入，我们确定哪个MNIST数字类别的置信度最高；也就是说，网络认为该MNIST图像是哪个数字：
+- en: '[PRE21]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'When we execute this script, we obtain outputs like the following:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们执行此脚本时，我们会得到如下输出：
+- en: '[PRE22]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: This means that the network thinks that the first input image had the digit
+    5, the second one had 7, and so on.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着网络认为第一个输入图像是数字5，第二个是数字7，以此类推。
+- en: Summary
+  id: totrans-165
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we learned about Caffe2 operators and how they differ from
+    layers used in older deep learning frameworks. We built a simple computation graph
+    by composing several operators. We then tackled the MNIST machine learning problem
+    and built an MLP network using Brew helper functions. We loaded pretrained weights
+    into this network and used it for inference on a batch of input images. We also
+    introduced several common layers, such as matrix multiplication, fully connected,
+    Sigmoid, SoftMax, and ReLU.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们了解了Caffe2操作符，以及它们与旧深度学习框架中使用的层的区别。我们通过组合多个操作符构建了一个简单的计算图。然后，我们解决了MNIST机器学习问题，使用Brew辅助函数构建了一个MLP网络。我们将预训练的权重加载到该网络中，并用于对一批输入图像进行推理。我们还介绍了几个常见的层，例如矩阵乘法、全连接、Sigmoid、SoftMax和ReLU。
+- en: We learned about performing inference on our networks in this chapter. In the
+    next chapter, we will learn about training and how to train a network to solve
+    the MNIST problem.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们学习了如何对我们的网络进行推理。在下一章，我们将学习训练网络，并了解如何训练网络来解决MNIST问题。

@@ -1,0 +1,1622 @@
+- en: Chapter 6. Taking Machine Learning to Production
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第六章。将机器学习带入生产环境
+- en: A lot of machine learning and deep learning tutorials, text books, and videos
+    focus on the training and evaluation of models only. But how do you take your
+    trained model to production and use it for real-time scenarios or make it available
+    to your customers?
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多机器学习和深度学习的教程、教材和视频只专注于模型的训练和评估。但如何将训练好的模型投入生产，并在实时场景中使用或让客户访问呢？
+- en: In this chapter, you will develop a facial image correction system using the
+    `LFW` dataset to automatically correct corrupted images using your trained GAN
+    model. Then, you will learn several techniques to deploy machine learning or deep
+    learning models in production, both on data centers and clouds with microservice-based
+    containerized environments. Finally, you will learn a way to run deep models in
+    a serverless environment and with managed cloud services.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，您将使用 `LFW` 数据集开发一个面部图像修正系统，通过您训练的 GAN 模型自动修复损坏的图像。接下来，您将学习几种将机器学习或深度学习模型投入生产的技术，包括在数据中心和云端的微服务容器化环境中部署模型。最后，您将学习如何在无服务器环境和托管的云服务中运行深度模型。
+- en: 'We will cover the following topics in this chapter:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章我们将讨论以下内容：
+- en: Building an image correction system using DCGAN
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 DCGAN 构建图像修正系统
+- en: The challenges of deploying machine learning models
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 部署机器学习模型的挑战
+- en: Microservice architecture with containers
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于容器的微服务架构
+- en: Various approaches to deploying deep learning models
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 部署深度学习模型的各种方法
+- en: Serving Keras-based deep models on Docker
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 Docker 上服务 Keras 基础的深度模型
+- en: Deploying deep models on the cloud with GKE
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 GKE 上部署深度模型
+- en: Serverless image recognition with audio using AWS Lambda and Polly
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 AWS Lambda 和 Polly 进行无服务器的图像识别与语音处理
+- en: Running face detection with a cloud managed service
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在云托管服务上运行人脸检测
+- en: Building an image correction system using DCGAN
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 DCGAN 构建图像修正系统
+- en: 'Image correction and inpainting are related technologies used for filling in
+    or completing missing or corrupted parts of images. Building a system that can
+    |fill in the missing pieces broadly requires two pieces of information:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像修正和图像修复是相关的技术，用于填充或补全图像中缺失或损坏的部分。构建一个能够填补缺失部分的系统通常需要两类信息：
+- en: '**Contextual information**: Helps to infer missing pixels based on information
+    provided by the surrounding pixels'
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**上下文信息**：帮助根据周围像素提供的信息推断缺失的像素'
+- en: '**Perceptual information**: Helps to interpret the filled/completed portions
+    as being normal, as seen in real life or other pictures'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**感知信息**：帮助解释填充/补全的部分看起来是正常的，就像在现实生活中或其他图片中看到的一样'
+- en: In this example, we will develop an image correction or completion system with
+    the **Labeled Face in the Wild** (`LFW`) dataset using DCGAN. Refer to [Chapter
+    2](ch02.html "Chapter 2. Unsupervised Learning with GAN"), *Unsupervised Learning
+    with GAN*, for DCGAN and its architecture.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本例中，我们将使用 **Labeled Face in the Wild**（`LFW`）数据集和 DCGAN 开发一个图像修正或补全系统。有关 DCGAN
+    及其架构，请参考[第二章](ch02.html "Chapter 2. Unsupervised Learning with GAN")，*无监督学习与 GAN*。
+- en: 'Let''s define some notation and `loss` function before diving into the steps
+    for building an image correction system:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始构建图像修正系统的步骤之前，我们先定义一些符号和 `loss` 函数：
+- en: '*x*: Corrupted image.'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*x*: 损坏的图像。'
+- en: '*M*: Represents a binary mask that has a value of either 1 (meaning the part
+    of the image we want to keep) or 0 (meaning the part of the image we want to complete/correct).
+    The element-wise multiplication between the two matrices *x* and *M* represented
+    by ![Building an image correction system using DCGAN](img/B08086_06_37.jpg) returns
+    the original part of the image.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*M*: 表示一个二进制掩码，其值为1（表示我们想保留的图像部分）或0（表示我们想修复/补全的图像部分）。*x*和*M*这两个矩阵的逐元素相乘，如![Building
+    an image correction system using DCGAN](img/B08086_06_37.jpg)所示，将返回图像的原始部分。'
+- en: '*pdata*: The unknown distribution of sampled data.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*pdata*: 被采样数据的未知分布。'
+- en: Once we have trained the discriminator *D(x)* and generator *G(z)* of DCGAN,
+    we can leverage it to complete missing pixels in an image, *x*, by maximizing
+    *D(x)* over those missing pixels.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们训练好 DCGAN 的判别器 *D(x)* 和生成器 *G(z)*，就可以利用它通过最大化 *D(x)* 来完成图像 *x* 中缺失的像素。
+- en: 'Contextual loss penalizes *G(z)* for not creating a similar image for the known
+    pixel location in the input image by element-wise subtracting the pixels in *x*
+    from *G(z)* and finding the difference between them:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上下文损失惩罚 *G(z)*，如果其没有为输入图像中已知像素位置创建相似图像，方法是逐元素地将 *x* 中的像素从 *G(z)* 中减去，并计算它们之间的差异：
+- en: '![Building an image correction system using DCGAN](img/B08086_06_38.jpg)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用DCGAN构建图像修正系统](img/B08086_06_38.jpg)'
+- en: 'Perceptual loss has the same criterion used in training DCGAN to make sure
+    that the recovered image looks real:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 感知损失使用与训练DCGAN时相同的标准，以确保恢复的图像看起来真实：
+- en: '![Building an image correction system using DCGAN](img/B08086_06_39.jpg)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用DCGAN构建图像修正系统](img/B08086_06_39.jpg)'
+- en: 'Next, we need to find an image from the generator, *G(z)*, that provides a
+    reasonable reconstruction of the missing pixels. Then, the completed pixels ![Building
+    an image correction system using DCGAN](img/B08086_06_41.jpg) can be added to
+    the original pixels to generate the reconstructed image:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要从生成器中找到一个图像，*G(z)*，它能提供合理的缺失像素重建。然后，可以将完成的像素 ![使用DCGAN构建图像修正系统](img/B08086_06_41.jpg)
+    添加到原始像素中，从而生成重建图像：
+- en: '![Building an image correction system using DCGAN](img/B08086_06_40.jpg)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用DCGAN构建图像修正系统](img/B08086_06_40.jpg)'
+- en: Tip
+  id: totrans-28
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Training a deep convolutional network over a CPU may be prohibitively slow,
+    so it is recommended to use a CUDA-enabled GPU for deep learning activities involving
+    images with convolution or transposed convolution.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在CPU上训练深度卷积网络可能会非常慢，因此建议使用支持CUDA的GPU进行涉及卷积或反卷积的图像深度学习活动。
+- en: Steps for building an image correction system
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 构建图像修正系统的步骤
+- en: 'Make sure you have downloaded the code for this chapter:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保你已下载本章的代码：
+- en: The `DCGAN-ImageCorrection` project will have the following directory structure:![Steps
+    for building an image correction system](img/B08086_06_01.jpg)
+  id: totrans-32
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`DCGAN-ImageCorrection`项目将具有以下目录结构：![构建图像修正系统的步骤](img/B08086_06_01.jpg)'
+- en: 'Now download the `LFW` dataset (aligned with deep funnelling) from [http://vis-www.cs.umass.edu/lfw](http://vis-www.cs.umass.edu/lfw)
+    and extract its content under the `lfw` directory:'
+  id: totrans-33
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在从[http://vis-www.cs.umass.edu/lfw](http://vis-www.cs.umass.edu/lfw)下载`LFW`数据集（已对深度漏斗进行对齐），并将其内容解压到`lfw`目录下：
+- en: '[PRE0]'
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Next, execute `create_tfrecords.py` to generate the TensorFlow standard format
+    from the `LFW` images. Modify the path of your `LFW` image location in the Python
+    file:'
+  id: totrans-35
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，执行`create_tfrecords.py`，将`LFW`图像转换为TensorFlow标准格式。修改Python文件中`LFW`图像路径的位置：
+- en: '[PRE1]'
+  id: totrans-36
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'This will generate the `tfrecords` file in the `data` directory as follows:'
+  id: totrans-37
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将生成`data`目录下的`tfrecords`文件，如下所示：
+- en: '![Steps for building an image correction system](img/B08086_06_02.jpg)'
+  id: totrans-38
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![构建图像修正系统的步骤](img/B08086_06_02.jpg)'
+- en: 'Now train the DCGAN model by executing the following command:'
+  id: totrans-39
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，执行以下命令训练DCGAN模型：
+- en: '[PRE2]'
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'You can modify the `max_itr` attribute in the Python files to determine the
+    maximum number of iterations the training should continue for. Once the training
+    is going on, after every 5,000 iterations, you will find the generated images
+    under the `lfw-gen` directory, as follows:'
+  id: totrans-41
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 你可以在Python文件中修改`max_itr`属性，确定训练应持续的最大迭代次数。一旦训练开始，每进行5000次迭代，你将在`lfw-gen`目录下找到生成的图像，如下所示：
+- en: '![Steps for building an image correction system](img/B08086_06_03.jpg)'
+  id: totrans-42
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![构建图像修正系统的步骤](img/B08086_06_03.jpg)'
+- en: 'Finally, you can use the trained DCGAN model to correct corrupted images. You
+    need to put your corrupted images under the `complete_src` directory and execute
+    the following command:'
+  id: totrans-43
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，你可以使用训练好的DCGAN模型来修正损坏的图像。你需要将损坏的图像放在`complete_src`目录下，并执行以下命令：
+- en: '[PRE3]'
+  id: totrans-44
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: You can also alter the type of masking by specifying `center` or `random` with
+    the `masktype` attribute in the preceding command.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以通过在上述命令中指定`center`或`random`来修改遮罩类型，使用`masktype`属性。
+- en: '![Steps for building an image correction system](img/B08086_06_04.jpg)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_IMG
+  zh: '![构建图像修正系统的步骤](img/B08086_06_04.jpg)'
+- en: 'The preceding command will generate corrected or completed images under the
+    complete directory, as follows:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述命令将在完整目录下生成修正或完成的图像，如下所示：
+- en: '![Steps for building an image correction system](img/B08086_06_05.jpg)'
+  id: totrans-48
+  prefs: []
+  type: TYPE_IMG
+  zh: '![构建图像修正系统的步骤](img/B08086_06_05.jpg)'
+- en: Challenges of deploying models to production
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将模型部署到生产环境中的挑战
+- en: Most researchers and machine learning practitioners focus on the training and
+    evaluation side of machine learning or deep learning models. A real-world analogy
+    of building models during research is similar to cooking at home, whereas building
+    or deploying that model in production is like cooking for a wide variety of customers
+    (whose taste changes over time) in a restaurant.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数研究人员和机器学习从业者专注于机器学习或深度学习模型的训练和评估。研究中构建模型的现实世界类比类似于在家做饭，而在生产环境中构建或部署该模型则类似于在餐厅为各种不同的顾客（他们的口味随时间变化）做饭。
+- en: 'Some of the common challenges that often arise during the production deployment
+    of models are as follows:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是模型在生产部署过程中常见的一些挑战：
+- en: '**Scalability**: A real-world production environment is quite different from
+    a training or research environment. You often need to cater for a high volume
+    of requests without impacting the performance. Your model should automatically
+    scale up/out based on the traffic and then scale down/in when the traffic is low.'
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**可扩展性**：真实的生产环境与训练或研究环境有很大的不同。你通常需要应对大量的请求而不影响性能。你的模型应该能够根据流量自动扩展（向上/向外），并在流量低时自动缩减（向下/向内）。'
+- en: '**Automated model training or updates**: Real-world data has temporal dynamics
+    and, as your model enters the real-world production environment, the data starts
+    looking different from that on which the model was originally trained. This means
+    you need to retrain your model (sometimes automatically) and then switch between
+    models seamlessly.'
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**自动化模型训练或更新**：现实世界中的数据具有时间动态性，随着模型进入真实的生产环境，数据开始与最初用于训练模型的数据有所不同。这意味着你需要重新训练模型（有时是自动化的），并在模型之间无缝切换。'
+- en: '**Interoperation between development languages**: Often, two different people
+    or groups are responsible for researching (training) the model and productionizing
+    it, and the language for research may be different from the preferred language
+    for production. This causes a bunch of problems, as machine learning models have
+    different implementations in different programming languages, even though the
+    model is essentially the same.'
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**开发语言之间的互操作性**：通常，由两个人或不同的团队负责模型的研究（训练）和生产化，而研究使用的语言可能与生产所偏好的语言不同。这会导致许多问题，因为机器学习模型在不同的编程语言中有不同的实现，尽管模型本质上是相同的。'
+- en: '**Knowledge of training set metadata**: Real-world production data might have
+    missing values and you will need to apply a missing value imputation technique
+    to deal with this. Although, in production systems, you don''t keep information
+    about training data, but in order to correctly impute the missing values arriving
+    in production test samples, you have to store the knowledge of the training set
+    statistics needed for imputation.'
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**训练集元数据的知识**：现实世界中的生产数据可能会缺失值，你需要使用缺失值填充技术来处理这个问题。虽然在生产系统中你不保留训练数据的信息，但为了正确地填充生产环境中到达的缺失值，你必须存储用于填充的训练集统计信息。'
+- en: '**Real-time evaluation of model performance**: Evaluation of a model''s performance
+    in production often requires you to collect ground truth data (or other real-time
+    metrics) and generate dynamic pages as a model processes more data. Also, you
+    might need to carry out **A/B** testing by deploying two or more models serving
+    the same functionality simultaneously to evaluate performance in production.'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**实时评估模型性能**：在生产环境中评估模型性能通常需要收集实际数据（或其他实时指标），并随着模型处理更多数据而生成动态页面。此外，你可能需要进行**A/B**测试，通过同时部署两个或更多具有相同功能的模型来评估生产中的性能。'
+- en: Microservice architecture using containers
+  id: totrans-57
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用容器的微服务架构
+- en: In traditional **monolithic** architecture, an application puts all its functionality
+    into single packages such as EAR or WAR and deploys it on an application server
+    (such as JBoss, Tomcat, or WebLogic). Even though a monolithic application has
+    separate and distinguishable components, all are packaged under one roof.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在传统的**单体**架构中，应用程序将所有功能打包到单一的包（如EAR或WAR）中，并将其部署到应用服务器（如JBoss、Tomcat或WebLogic）上。尽管单体应用程序有各自独立且可区分的组件，但所有组件都打包在一个框架下。
+- en: Drawbacks of monolithic architecture
+  id: totrans-59
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 单体架构的缺点
+- en: 'Some of the common pitfalls of monolithic design are as follows:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单体设计的一些常见陷阱如下：
+- en: The functional components in monolithic architecture are packed under one application
+    and are not isolated. Hence, changing a single component requires updating an
+    entire application, thereby bringing the entire application to a halt. This is
+    not desirable in a production scenario.
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单体架构中的功能组件被打包在一个应用程序下，并且没有隔离。因此，修改单个组件需要更新整个应用程序，从而使整个应用程序停机。在生产环境中，这是不希望出现的情况。
+- en: Scaling a monolithic application is not efficient, because to scale you have
+    to deploy each copy of the application (WAR or EAR) in various servers that will
+    utilize the same amount of resources.
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 扩展单体应用程序效率低下，因为为了扩展，你必须在多个服务器上部署应用程序的每一个副本（WAR或EAR），这将占用相同数量的资源。
+- en: Often, in the real world, one or two functional components are heavily used
+    compared to other components. But in monolithic design, all components will utilize
+    the same resources, hence it is hard to segregate highly used components to improve
+    the performance of the overall application.
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在现实世界中，通常一两个功能组件相比其他组件使用频繁。但是在单体设计中，所有组件将使用相同的资源，因此很难将高度使用的组件分离开来，从而提升整个应用程序的性能。
+- en: '**Microservices** is a technique that decomposes large software projects into
+    loosely coupled modules/services that communicate with each other through simple
+    APIs. A microservices-based architecture puts each functionality into separate
+    services to overcome the drawbacks of monolithic design.'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**微服务**是一种技术，它将大型软件项目分解为松散耦合的模块/服务，这些模块/服务通过简单的API相互通信。基于微服务的架构将每个功能放入独立的服务中，从而克服了单体设计的缺点。'
+- en: Benefits of microservice architecture
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 微服务架构的好处
+- en: 'Some of the advantages of microservice design pattern are as follows:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 微服务设计模式的一些优势如下：
+- en: '**Single responsibility principle**: Microservice architecture makes sure that
+    each functionality is deployed or exposed as a separate service through simple
+    APIs.'
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**单一责任原则**：微服务架构确保每个功能通过简单的API作为独立的服务进行部署或暴露。'
+- en: '**High scalability**: Highly utilized or demanding services can be deployed
+    in multiple servers to serve a high number of requests/traffic, thereby enhancing
+    performance. This is difficult to achieve with single, large monolithic services.'
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**高可扩展性**：高度使用或需求量大的服务可以部署在多个服务器上，以处理大量请求/流量，从而提高性能。这对于单一的大型单体服务来说是很难实现的。'
+- en: '**Improves fault tolerance**: The failure of single modules/services doesn''t
+    affect the larger application, and you can quickly recover or bring back the failed
+    module, since the module is running as a separate service. Whereas a monolithic
+    or bulky service having errors in one component/module can impact other modules/functionality.'
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**提高容错性**：单个模块/服务的故障不会影响整个应用程序，并且可以快速恢复或重启故障模块，因为该模块作为独立服务运行。而在单体或庞大的服务中，某个组件/模块出现错误可能会影响到其他模块/功能。'
+- en: '**Freedom of the technology stack**: Microservices allows you to choose the
+    technology that is best suited for a particular functionality and helps you to
+    try out a new technology stack on an individual service.'
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**技术栈的自由度**：微服务允许您为特定功能选择最适合的技术，并帮助您在单个服务上尝试新的技术栈。'
+- en: The best way to deploy microservices-based applications is inside containers.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部署基于微服务的应用程序的最佳方式是将其放入容器中。
+- en: Containers
+  id: totrans-72
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 容器
+- en: 'Containers are shareable, lightweight processes that sit on top of a host operating
+    system and share the kernels (binaries and libraries) of the host OS. Containers
+    solve a bunch of complex problems simultaneously through a layer of abstraction.
+    The popularity of containers can be described by the wonderful triad: *Isolation*!
+    *Portability*! *Repeatability*!.'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 容器是可共享的、轻量级的进程，运行在主机操作系统之上，并共享主机操作系统的内核（二进制文件和库）。容器通过一层抽象同时解决了许多复杂的问题。容器的流行可以用这个美妙的三位一体来描述：*隔离性*！*可移植性*！*可重复性*！
+- en: Docker
+  id: totrans-74
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Docker
+- en: Docker is one of the hottest open source projects and is a very popular containerization
+    engine that allows a convenient way to pack your service/application with all
+    dependencies together to be deployed locally or in the cloud.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Docker是最受欢迎的开源项目之一，是一种非常流行的容器化引擎，允许将服务/应用程序及其所有依赖项打包在一起，便于在本地或云中部署。
+- en: Kubernetes
+  id: totrans-76
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Kubernetes
+- en: Kubernetes is another open source project at Google and it provides orchestration
+    to containers, allowing automated horizontal scaling, service discovery, load
+    balancing, and much more. Simply put, it automates the management of your containerized
+    applications/services in the cloud.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Kubernetes是Google的另一个开源项目，它为容器提供了编排服务，支持自动水平扩展、服务发现、负载均衡等功能。简而言之，它自动化了在云中管理容器化应用程序/服务的过程。
+- en: Note
+  id: totrans-78
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: We will refer to Docker as the container engine for illustration in this section,
+    although other container engines would also provide similar features or functionality.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将Docker作为容器引擎进行说明，尽管其他容器引擎也提供类似的功能或特性。
+- en: Benefits of using containers
+  id: totrans-80
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用容器的好处
+- en: 'Some of the pros of using container are discussed as follows:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用容器的一些优点如下所述：
+- en: '**Continuous deployment and testing**: Often, release life cycles involving
+    different environments, such as development and production, have some differences
+    because of different package versions or dependencies. Docker fills that gap by
+    ensuring consistent environments by maintaining all configurations and dependencies
+    internally from development to production. As a result, you can use the same container
+    from development to production without any discrepancies or manual intervention.'
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**持续部署和测试**：通常，涉及不同环境（如开发和生产）的发布生命周期会因为不同的包版本或依赖关系而有所不同。Docker 通过确保环境的一致性来弥补这一差距，从开发到生产都保持内部配置和依赖关系。因此，您可以在开发和生产之间使用相同的容器，而不会出现任何差异或手动干预。'
+- en: '**Multi-cloud platforms**: One of the greatest benefits of Docker is its portability
+    across various environments and platforms. All major cloud providers, such as
+    **Amazon Web Services** (**AWS**) and **Google Compute Platform** (**GCP**), have
+    embraced Docker''s availability by adding individual support (AWS ECS or Google
+    GKE). Docker containers can run inside a Virtual Machine VM instance (Amazon EC2
+    or Google Compute Engine) provided the host OS supports Docker.'
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**多云平台**：Docker 的最大优点之一是它在各种环境和平台上的可移植性。所有主要的云服务提供商，如**亚马逊网络服务**（**AWS**）和**谷歌计算平台**（**GCP**），都通过增加个别支持（AWS
+    ECS 或 Google GKE）来支持 Docker 的可用性。只要主机操作系统支持 Docker，Docker 容器就可以在虚拟机 VM 实例（如 Amazon
+    EC2 或 Google Compute Engine）中运行。'
+- en: '**Version control**: Docker containers work as a version control system just
+    like `Git`/`SVN` repositories, so that you can commit changes to your Docker images
+    and version control then.'
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**版本控制**：Docker 容器像 `Git`/`SVN` 仓库一样充当版本控制系统，您可以将更改提交到 Docker 镜像并进行版本控制。'
+- en: '**Isolation and security**: Docker ensures that applications running inside
+    containers are completely isolated and segregated from each other, granting complete
+    control over traffic flow and management. No Docker container has access to the
+    processes running inside another container. From an architectural standpoint,
+    each container has its own set of resources.'
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**隔离与安全性**：Docker 确保容器内运行的应用程序彼此完全隔离，提供对流量流动和管理的完全控制。没有任何 Docker 容器能够访问另一个容器内运行的进程。从架构角度看，每个容器都有自己的一套资源。'
+- en: You can combine an advanced machine learning or deep learning application with
+    the deployment capabilities of containers to make the system more efficient and
+    shareable.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以将高级机器学习或深度学习应用程序与容器的部署能力相结合，使系统更高效、可共享。
+- en: Various approaches to deploying deep models
+  id: totrans-87
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 部署深度模型的各种方法
+- en: Machine learning is exciting and fun! It has its challenges though, both during
+    the modeling part and also during deployment, when you want your model to serve
+    real people and systems.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 机器学习既令人兴奋又有趣！不过它也有挑战，无论是在建模阶段还是在部署阶段，尤其是当您希望模型为真实用户和系统提供服务时。
+- en: 'Deploying machine learning models into production can be done in a wide variety
+    of ways and the different ways of productionalizing machine learning models is
+    really governed by various factors:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将机器学习模型部署到生产环境中可以通过多种方式完成，生产化机器学习模型的不同方式实际上受到各种因素的影响：
+- en: Do you want your model to be part of real-time streaming analytics or batch
+    analytics?
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您希望您的模型成为实时流分析的一部分，还是批量分析的一部分？
+- en: Do you want to have multiple models serving the same functionality or do you
+    need to perform A/B testing on your models?
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您是否希望有多个模型提供相同的功能，或者您需要对模型进行 A/B 测试？
+- en: How often do you want your model to be updated?
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您希望您的模型多久更新一次？
+- en: How do you scale your model based on traffic?
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您如何根据流量扩展您的模型？
+- en: How do you integrate with other services or fit the ML service into a pipeline?
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您如何与其他服务集成或将机器学习服务嵌入到管道中？
+- en: Approach 1 - offline modeling and microservice-based containerized deployment
+  id: totrans-95
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 方法 1 - 离线建模和基于微服务的容器化部署
+- en: In this approach, you will train and evaluate your model offline and then use
+    your pretrained model to build a RESTful service and deploy it inside a container.
+    Next, you can run the container within your data center or cloud depending on
+    cost, security, scaling, and infrastructure requirement. This approach is well
+    suited to when your machine learning or deep learning service will have continuous
+    traffic flow and need to dynamically scale based on spikes in requests.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种方法中，您将在离线训练并评估模型后，使用预训练的模型构建一个 RESTful 服务，并将其部署在容器内。接下来，您可以根据成本、安全性、扩展性和基础设施需求，选择在数据中心或云端运行该容器。当您的机器学习或深度学习服务需要持续流量并根据请求激增动态扩展时，这种方法非常适合。
+- en: Approach 2 - offline modeling and serverless deployment
+  id: totrans-97
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 方法 2 - 离线建模与无服务器部署
+- en: In this approach, you will train your model offline and deploy your service
+    in a serverless environment such as AWS Lambda (where you will be charged only
+    for invoking the API; you don't have to pay for running containers or VM instances
+    on an hourly/minute basis). This approach is well suited to when your model service
+    will not be used continuously but will instead be invoked after a certain time.
+    But even if there is continuous traffic flow (depending on the number of requests
+    you hit), this approach might still be cost-effective compared to approach 1.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种方法中，您将在离线训练模型，并将服务部署在无服务器环境中，如 AWS Lambda（您只需为调用 API 付费；无需为容器或虚拟机实例按小时/分钟支付费用）。当您的模型服务不会持续使用，而是会在某个时间后被调用时，这种方法非常适合。但即使有持续流量（取决于请求数量），与方法
+    1 相比，这种方法仍可能具有成本效益。
+- en: Approach 3 - online learning
+  id: totrans-99
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 方法 3 - 在线学习
+- en: Sometimes, you need to perform real-time streaming analytics by integrating
+    your machine learning service with the pipeline (such as putting it at the consumer
+    end of a message queue having IOT sensor data). Data might change very frequently
+    in real-time streaming situations. In that scenario, offline model training is
+    not the right choice. Instead, you need your model to adapt automatically to the
+    data as it is sees it—that is it will update weights/parameters based on data
+    using something like SGD or its mini batch variant.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，您需要通过将机器学习服务与数据流管道集成来执行实时流式分析（例如将其放在具有 IOT 传感器数据的消息队列的消费端）。在实时流式场景中，数据可能会非常频繁地变化。在这种情况下，离线模型训练并不是最佳选择。相反，您需要让模型能够自动适应数据——即它将基于数据使用类似
+    SGD 或其小批量变体来更新权重/参数。
+- en: Approach 4 - using a managed machine learning service
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 方法 4 - 使用托管的机器学习服务
+- en: This approach is well suited to when you don't have the resources or team members
+    to build machine learning models in-house. Instead, you utilize the available
+    cloud-based managed machine learning or deep learning services, such as Google
+    Cloud ML, Azure ML, AWS Rekognition, AWS Polly, Google Cloud Vision, and so on
+    to fulfill your requirements by invoking simple API calls.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您没有资源或团队成员来内部构建机器学习模型时，这种方法非常合适。相反，您可以利用现有的云端托管机器学习或深度学习服务，如 Google Cloud ML、Azure
+    ML、AWS Rekognition、AWS Polly、Google Cloud Vision 等，通过简单的 API 调用满足您的需求。
+- en: Next, we will illustrate the deployment approaches mentioned previously through
+    hands-on examples.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将通过实践示例来展示之前提到的部署方法。
+- en: Serving Keras-based deep models on Docker
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在 Docker 上部署基于 Keras 的深度模型
+- en: In this example, we will build an image identification system with a pretrained
+    Keras InceptionV3 model and deploy it on a container in the local machine. Refer
+    to [Chapter 4](ch04.html "Chapter 4. Building Realistic Images from Your Text"),
+    *Building Realistic Images from Your Text*, for more information about pretrained
+    models. Our pretrained Keras model will run inside a Docker container exposed
+    as a REST API using Flask.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将构建一个图像识别系统，使用预训练的 Keras InceptionV3 模型，并将其部署在本地机器的容器中。有关预训练模型的更多信息，请参考[第
+    4 章](ch04.html "第 4 章：从文本生成真实图像")，*从文本生成真实图像*。我们的预训练 Keras 模型将在 Docker 容器内运行，并通过
+    Flask 以 REST API 形式暴露出来。
+- en: '![Serving Keras-based deep models on Docker](img/B08086_06_06.jpg)'
+  id: totrans-106
+  prefs: []
+  type: TYPE_IMG
+  zh: '![在 Docker 上部署基于 Keras 的深度模型](img/B08086_06_06.jpg)'
+- en: 'Make sure you have the `keras-microservice` project available and then perform
+    the following steps to run a Keras-based deep model inside a `docker` container:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保您有可用的 `keras-microservice` 项目，然后执行以下步骤以在 `docker` 容器中运行基于 Keras 的深度模型：
+- en: 'First, check that the Dockerfile is in your current working directory and then
+    build a Docker image:'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，检查 Dockerfile 是否在当前工作目录中，然后构建一个 Docker 镜像：
+- en: '[PRE4]'
+  id: totrans-109
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Once the Docker image is built successfully, use the image to run a container
+    with the `docker run` command:'
+  id: totrans-110
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦 Docker 镜像成功构建，使用该镜像运行容器，命令是`docker run`：
+- en: '[PRE5]'
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'For example:'
+  id: totrans-112
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 例如：
+- en: '[PRE6]'
+  id: totrans-113
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Note
+  id: totrans-114
+  prefs:
+  - PREF_IND
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Inside the `docker` container, the Keras model is running on port `5001` inside
+    a WSGI HTTP Python server named **Gunicorn**, which is load balanced by an **Nginx**
+    proxy server on port `80`. We used the `–p` attribute previously to map the host
+    port with the container port. Also, we used the `-v` volume attribute to map the
+    host path with the container path, so that we can load the pretrained model from
+    this path.
+  id: totrans-115
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在`docker`容器内，Keras 模型运行在名为**Gunicorn**的 WSGI HTTP Python 服务器的`5001`端口上，且由**Nginx**代理服务器在`80`端口进行负载均衡。我们之前使用`–p`属性将主机端口与容器端口映射。此外，我们使用了`-v`卷属性，将主机路径与容器路径映射，以便从该路径加载预训练模型。
+- en: 'Now it''s time to test our image identification service by executing the `test.sh`
+    script. The script contains a `curl` command to call and test the REST API of
+    our exposed image identification service:'
+  id: totrans-116
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在是通过执行`test.sh`脚本来测试我们的图像识别服务的时候了。该脚本包含一个`curl`命令，用于调用并测试我们公开的图像识别服务的 REST
+    API：
+- en: '[PRE7]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Finally, execute the script to generate a prediction from our Keras service:'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，执行脚本以从我们的 Keras 服务生成预测：
+- en: '[PRE8]'
+  id: totrans-119
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '![Serving Keras-based deep models on Docker](img/B08086_06_07.jpg)'
+  id: totrans-120
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![在 Docker 上提供基于 Keras 的深度模型](img/B08086_06_07.jpg)'
+- en: Voila! We have successfully deployed our first Keras-based deep learning model
+    inside a container.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Voilà！我们已经成功将第一个基于 Keras 的深度学习模型部署到容器内。
+- en: Deploying a deep model on the cloud with GKE
+  id: totrans-122
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在云上使用 GKE 部署深度模型
+- en: Once the deep learning model is created, deployed inside the container, and
+    generating predictions locally, it's time to take the model to the cloud (for
+    example, Google Cloud in this example) using Docker and Kubernetes.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦深度学习模型创建完成，部署在容器内并在本地生成预测结果，就可以使用 Docker 和 Kubernetes 将模型迁移到云端（例如，本示例中的 Google
+    Cloud）。
+- en: 'Perform the following steps to take a locally created containerized model to
+    the cloud:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行以下步骤将本地创建的容器化模型带到云端：
+- en: Sign up for a Google Cloud trial account ([https://cloud.google.com/free](https://cloud.google.com/free))
+    and then create a **New Project** by typing a relevant **Project name** of your
+    choice:![Deploying a deep model on the cloud with GKE](img/B08086_06_08.jpg)
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 注册 Google Cloud 免费试用账户（[https://cloud.google.com/free](https://cloud.google.com/free)），然后通过输入相关的**项目名称**创建一个**新项目**：![在云上使用
+    GKE 部署深度模型](img/B08086_06_08.jpg)
+- en: Please note down the **project ID** containing your **Project name** along with
+    some numeric digits of the format `<project name>-xxxxxx`. We will need the **project
+    ID** later for deploying our local model to the c
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 请记下包含**项目名称**及一些数字的**项目 ID**，格式为`<项目名称>-xxxxxx`。稍后我们需要使用**项目 ID**将本地模型部署到云端。
+- en: 'd SDK on your machine ([https://cloud.google.com/sdk](https://cloud.google.com/sdk)).
+    And then install kubectl to manage the Kubernetes cluster:'
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在你的机器上安装 SDK（[https://cloud.google.com/sdk](https://cloud.google.com/sdk)）。然后安装
+    kubectl 以管理 Kubernetes 集群：
+- en: '[PRE9]'
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The `gcloud` command is included in the Google Cloud SDK.
+  id: totrans-129
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`gcloud`命令包含在 Google Cloud SDK 中。'
+- en: 'Set some environment variables with the `gcloud` command-line tool `config`
+    command:'
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`gcloud`命令行工具的`config`命令设置一些环境变量：
+- en: '[PRE10]'
+  id: totrans-131
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Now build the docker image with a tag or version (`v1` in this example):'
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在使用标签或版本（此示例中的`v1`）构建 Docker 镜像：
+- en: '[PRE11]'
+  id: totrans-133
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'For example:'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 例如：
+- en: '[PRE12]'
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Next, upload the image built previously with the `docker push` command to the
+    Google Container Registry:'
+  id: totrans-136
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，使用`docker push`命令将之前构建的镜像上传到 Google 容器注册表：
+- en: '[PRE13]'
+  id: totrans-137
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'For example:'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 例如：
+- en: '[PRE14]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '![Deploying a deep model on the cloud with GKE](img/B08086_06_09.jpg)'
+  id: totrans-140
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![在云上使用 GKE 部署深度模型](img/B08086_06_09.jpg)'
+- en: 'Once the container image is stored in a registry, we need to create a container
+    cluster by specifying the number of Compute Engine VM instances. This cluster
+    will be orchestrated and managed by Kubernetes. Execute the following command
+    to create a two-node cluster named `dl-cluster`:'
+  id: totrans-141
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦容器镜像存储在注册表中，我们需要通过指定计算引擎虚拟机实例的数量来创建容器集群。该集群将由 Kubernetes 协调和管理。执行以下命令以创建一个名为`dl-cluster`的两节点集群：
+- en: '[PRE15]'
+  id: totrans-142
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We will use the Kubernetes `kubectl` command-line tool to deploy and run an
+    application on a Container Engine cluster, listening on port `80`:'
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将使用 Kubernetes 的`kubectl`命令行工具在容器引擎集群上部署并运行应用，监听`80`端口：
+- en: '[PRE16]'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '![Deploying a deep model on the cloud with GKE](img/B08086_06_10.jpg)'
+  id: totrans-145
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![在云上使用 GKE 部署深度模型](img/B08086_06_10.jpg)'
+- en: 'Now attach the application running inside the container cluster to the load
+    balancer, so that we can expose our image identification service to a real- world
+    user:'
+  id: totrans-146
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，将容器集群内运行的应用程序附加到负载均衡器，以便我们可以将图像识别服务暴露给真实世界的用户：
+- en: '[PRE17]'
+  id: totrans-147
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Next, run the following `kubectl` command to get the external IP of our service:'
+  id: totrans-148
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，运行以下 `kubectl` 命令以获取我们服务的外部 IP：
+- en: '[PRE18]'
+  id: totrans-149
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Finally, execute the following command to get a prediction from our image recognition
+    service hosted inside a container cluster hosted on the cloud:'
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，执行以下命令，以从托管在云中容器集群中的图像识别服务获取预测：
+- en: '[PRE19]'
+  id: totrans-151
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '![Deploying a deep model on the cloud with GKE](img/B08086_06_11.png.jpg)'
+  id: totrans-152
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![在云上部署深度模型与 GKE](img/B08086_06_11.png.jpg)'
+- en: Serverless image recognition with audio using AWS Lambda and Polly
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 AWS Lambda 和 Polly 进行无服务器音频图像识别
+- en: In this example, we will build an audio-based image prediction system using
+    TensorFlow pretrained InceptionV3 model and deploy it on a serverless environment
+    of AWS Lambda. We will run our image prediction code on AWS Lambda and load our
+    pretrained model from S3, and then expose the service to our real-world customer
+    through the AWS API gateway.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将构建一个基于音频的图像预测系统，使用 TensorFlow 预训练的 InceptionV3 模型，并将其部署在 AWS Lambda
+    的无服务器环境中。我们将在 AWS Lambda 上运行我们的图像预测代码，并从 S3 加载预训练的模型，然后通过 AWS API 网关将服务暴露给我们的真实客户。
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_12.jpg)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 的无服务器音频图像识别](img/B08086_06_12.jpg)'
+- en: 'Perform the following steps to build an audio-based image recognition system
+    on a serverless platform:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行以下步骤以在无服务器平台上构建基于音频的图像识别系统：
+- en: 'Sign up for an AWS trial account ([https://aws.amazon.com/free/](https://aws.amazon.com/free/))
+    and navigate to the **IAM** service to create a new role for AWS Lambda. Attach
+    two new managed policies: **S3FullAccess** and **PollyFullAccess** alongside the
+    inline policy of **lambda_basic_execution**.![Serverless image recognition with
+    audio using AWS Lambda and Polly](img/B08086_06_13.png.jpg)'
+  id: totrans-157
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 注册一个 AWS 免费试用账户（[https://aws.amazon.com/free/](https://aws.amazon.com/free/)），并进入
+    **IAM** 服务创建一个新的角色用于 AWS Lambda。附加两个新的托管策略：**S3FullAccess** 和 **PollyFullAccess**，以及
+    **lambda_basic_execution** 的内联策略。![使用 AWS Lambda 和 Polly 的无服务器音频图像识别](img/B08086_06_13.png.jpg)
+- en: 'Next, create an S3 bucket, where we will store our lambda code (consisting
+    of custom Python packages such as `numpy`, `scipy`, `tensorflow`, and so on).
+    Also create three folders within your S3 bucket:'
+  id: totrans-158
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，创建一个 S3 桶，用于存储我们的 lambda 代码（包括自定义 Python 包，如 `numpy`、`scipy`、`tensorflow`
+    等）。还需在 S3 桶内创建三个文件夹：
+- en: '`code`: We will store our code for the lambda environment here'
+  id: totrans-159
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`code`：我们将在这里存储 lambda 环境的代码'
+- en: '`audio`: Our prediction audio will be saved in this location'
+  id: totrans-160
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`audio`：我们的预测音频将保存在此位置'
+- en: '`model`: We will store our pretrained model in this location'
+  id: totrans-161
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`model`：我们将把预训练的模型保存在此位置'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_14.png.jpg)'
+  id: totrans-162
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 的无服务器音频图像识别](img/B08086_06_14.png.jpg)'
+- en: 'Download the pretrained TensorFlow model ([http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz](http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz)),
+    extract it, and then upload the following files to the `S3` bucket under the `model`
+    directory:'
+  id: totrans-163
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 下载预训练的 TensorFlow 模型（[http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz](http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz)），解压缩后，将以下文件上传到
+    `S3` 桶中的 `model` 目录：
+- en: '[PRE20]'
+  id: totrans-164
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_15.png.jpg)'
+  id: totrans-165
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 的无服务器音频图像识别](img/B08086_06_15.png.jpg)'
+- en: 'The `lambda_tensorflow.zip` contains a `classify.py` file that will be invoked
+    during the `lambda` function execution. Change the bucket name, and inside the
+    `classify.py`, zip it again and upload it to the S3 bucket under the `code` directory:'
+  id: totrans-166
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`lambda_tensorflow.zip` 包含一个 `classify.py` 文件，该文件将在 `lambda` 函数执行期间被调用。更改桶名称，并在
+    `classify.py` 中再次打包，然后将其上传到 S3 桶中的 `code` 目录：'
+- en: '[PRE21]'
+  id: totrans-167
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_16.png.jpg)'
+  id: totrans-168
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 的无服务器音频图像识别](img/B08086_06_16.png.jpg)'
+- en: Now navigate to the **Lambda** service from the web console to create a new
+    Lambda function from scratch. Provide **Name*** and **Description** for the function;
+    choose **Runtime** as **Python 2.7** and attach the `IAM` role created previously
+    to this Lambda function.![Serverless image recognition with audio using AWS Lambda
+    and Polly](img/B08086_06_17.png.jpg)
+  id: totrans-169
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，从 Web 控制台导航到 **Lambda** 服务，创建一个新的 Lambda 函数。从头开始创建时，提供 **名称** 和 **描述**，选择
+    **运行时** 为 **Python 2.7**，并将之前创建的 `IAM` 角色附加到此 Lambda 函数中。![使用 AWS Lambda 和 Polly
+    进行无服务器图像识别与音频处理](img/B08086_06_17.png.jpg)
+- en: And then specify the code (`lambda_tensorflow.zip`) location in your Lambda
+    function configuration:![Serverless image recognition with audio using AWS Lambda
+    and Polly](img/B08086_06_18.png.jpg)
+  id: totrans-170
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，在 Lambda 函数配置中指定代码文件（`lambda_tensorflow.zip`）的位置：![使用 AWS Lambda 和 Polly
+    进行无服务器图像识别与音频处理](img/B08086_06_18.png.jpg)
+- en: Also increase the **Memory(MB)** and **Timeout** of your Lambda function under
+    the **Advance Settings** tab. The first time, the lambda execution will take some
+    time due to the loading of the pretrained model from S3.![Serverless image recognition
+    with audio using AWS Lambda and Polly](img/B08086_06_19.png.jpg)
+  id: totrans-171
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 还需在 **高级设置** 标签下增加 Lambda 函数的 **内存（MB）** 和 **超时时间**。第一次执行时，由于从 S3 加载预训练模型，Lambda
+    执行可能会花费一些时间。![使用 AWS Lambda 和 Polly 进行无服务器图像识别与音频处理](img/B08086_06_19.png.jpg)
+- en: Next, create a new API by navigating to the **API Gateway** service:![Serverless
+    image recognition with audio using AWS Lambda and Polly](img/B08086_06_20.png.jpg)
+  id: totrans-172
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，导航到 **API 网关** 服务，创建一个新的 API：![使用 AWS Lambda 和 Polly 进行无服务器图像识别与音频处理](img/B08086_06_20.png.jpg)
+- en: 'Then, click the **Binary Support** tab on the left panel of your API to add
+    the following content type:'
+  id: totrans-173
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，点击 API 左侧面板中的 **二进制支持** 标签，添加以下内容类型：
+- en: '**image/png**'
+  id: totrans-174
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**image/png**'
+- en: '**image/jpeg**'
+  id: totrans-175
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**image/jpeg**'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_21.png.jpg)'
+  id: totrans-176
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 进行无服务器图像识别与音频处理](img/B08086_06_21.png.jpg)'
+- en: Next, create a **New Child Resource** by specifying the **Resource Path** (for
+    example, `tensorflow-predict`):![Serverless image recognition with audio using
+    AWS Lambda and Polly](img/B08086_06_22.png.jpg)
+  id: totrans-177
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，创建一个 **新子资源**，指定 **资源路径**（例如，`tensorflow-predict`）：![使用 AWS Lambda 和 Polly
+    进行无服务器图像识别与音频处理](img/B08086_06_22.png.jpg)
+- en: Next, add a method (**POST**) to your child resource by clicking **Create Method**
+    from the **Action** menu. Add the Lambda function we created previously to AMP
+    with this API resource. You may need to specify the correct region to find your
+    Lambda function from the dropdown.
+  id: totrans-178
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，点击 **操作** 菜单中的 **创建方法**，为子资源添加一个 **POST** 方法。将我们之前创建的 Lambda 函数添加到此 API
+    资源的 AMP 中。你可能需要选择正确的区域，以从下拉菜单中找到你的 Lambda 函数。
+- en: 'Once the **POST** method is created, click on **Integration Request** and expand
+    the **Body Mapping Templates** tab. Under **Request body passthrough**, choose
+    **When there are no templates defined (recommended)**. Then, add an image/jpeg
+    under **Content-Type** and add the following under the **Generate template** section:'
+  id: totrans-179
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦 **POST** 方法创建完成，点击 **集成请求** 并展开 **请求体映射模板** 标签。在 **请求体直通** 下，选择 **当没有定义模板时（推荐）**。然后，在
+    **Content-Type** 下添加 `image/jpeg`，并在 **生成模板** 部分添加如下内容：
+- en: '[PRE22]'
+  id: totrans-180
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_23.png.jpg)'
+  id: totrans-181
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 进行无服务器图像识别与音频处理](img/B08086_06_23.png.jpg)'
+- en: 'Finally, deploy the API from the **Action** menu and define the **Stage name**
+    (for example, `prod` or `dev`). Once your API is deployed, you will find your
+    API URL as follows:'
+  id: totrans-182
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，从 **操作** 菜单部署 API，并定义 **阶段名称**（例如 `prod` 或 `dev`）。API 部署完成后，你将得到如下 API URL：
+- en: '`https://<API ID>.execute-api.<region>.amazonaws.com/`'
+  id: totrans-183
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`https://<API ID>.execute-api.<region>.amazonaws.com/`'
+- en: 'Next, access your API from the REST client, such as **POSTMAN** shown in this
+    example, to invoke your image prediction service. In the **API Request**, set
+    the **Content-Type** as **image/jpeg** and add the parameter name **imageName**
+    with a value (such as `animal`). Add an image in the body as a `binary` file that
+    our service will predict:'
+  id: totrans-184
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，从 REST 客户端（例如本示例中的 **POSTMAN**）访问你的 API，调用图像预测服务。在 **API 请求** 中，将 **Content-Type**
+    设置为 **image/jpeg**，并添加参数名 **imageName**，值为（例如 `animal`）。在请求体中添加一个图像作为 `binary`
+    文件，我们的服务将进行预测：
+- en: '`https://<API ID>.execute-api.<region>.amazonaws.com/prod/tensorflow-predict?imageName=animal`'
+  id: totrans-185
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`https://<API ID>.execute-api.<region>.amazonaws.com/prod/tensorflow-predict?imageName=animal`'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_24.png.jpg)'
+  id: totrans-186
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 AWS Lambda 和 Polly 进行无服务器图像识别与音频处理](img/B08086_06_24.png.jpg)'
+- en: 'Voila! You will see the following output from the serverless service in your
+    Postman response:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 太好了！你将在Postman响应中看到以下来自无服务器服务的输出：
+- en: '**"The image is identified as giant panda, panda, panda bear, coon bear, Ailuropoda
+    melanoleuca (with score = 0.89107)"**'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**"该图像被识别为大熊猫、熊猫、熊猫熊、浣熊熊、熊猫（得分 = 0.89107）"**'
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_25.png.jpg)'
+  id: totrans-189
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用AWS Lambda和Polly进行无服务器图像识别与音频处理](img/B08086_06_25.png.jpg)'
+- en: Also, audio of the predicted response will be generated and stored in the S3
+    bucket under the `audio` folder.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，预测响应的音频将被生成并存储在S3桶中的`audio`文件夹下。
+- en: '![Serverless image recognition with audio using AWS Lambda and Polly](img/B08086_06_26.png.jpg)'
+  id: totrans-191
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用AWS Lambda和Polly进行无服务器图像识别与音频处理](img/B08086_06_26.png.jpg)'
+- en: Steps to modify code and packages for lambda environments
+  id: totrans-192
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 修改代码和包以适应Lambda环境的步骤
+- en: 'If you need to add an additional Python package for your service or update
+    any existing package, perform the following:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要为你的服务添加额外的Python包或更新任何现有包，请执行以下操作：
+- en: Launch an EC2 instance with **Amazon Linux AMI 2017.03.1 (HVM), SSD Volume Type**:![Steps
+    to modify code and packages for lambda environments](img/B08086_06_27.png.jpg)
+  id: totrans-194
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 启动一个EC2实例，选择**Amazon Linux AMI 2017.03.1 (HVM)，SSD卷类型**：![修改代码和包以适应Lambda环境的步骤](img/B08086_06_27.png.jpg)
+- en: 'Log in to the EC2 instance and copy the current lambda code in the instance.
+    Then, create a directory and extract the ZIP file inside that directory:'
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 登录到EC2实例并将当前Lambda代码复制到实例中。然后，创建一个目录，并在该目录中解压ZIP文件：
+- en: '[PRE23]'
+  id: totrans-196
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '![Steps to modify code and packages for lambda environments](img/B08086_06_28.png.jpg)'
+  id: totrans-197
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![修改代码和包以适应Lambda环境的步骤](img/B08086_06_28.png.jpg)'
+- en: 'To update any existing package, first remove it and then install it with the
+    `pip` command. To add a new package install with `pip` (if that package depends
+    on shared `.so` libraries, then you need to create a `lib` folder and copy those
+    files in it from the `//usr/lib` and `/usr/lib64` directory):'
+  id: totrans-198
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 若要更新任何现有包，首先删除它，然后使用`pip`命令重新安装。若要添加新的包，请使用`pip`安装（如果该包依赖共享的`.so`库，则需要创建一个`lib`文件夹，并将这些文件从`//usr/lib`和`/usr/lib64`目录中复制到该文件夹中）：
+- en: '[PRE24]'
+  id: totrans-199
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Then create the ZIP file of the full directory:'
+  id: totrans-200
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后创建整个目录的ZIP文件：
+- en: '[PRE25]'
+  id: totrans-201
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: And finally, copy the ZIP file to S3 and update your Lambda function by mentioning
+    the new ZIP file location on S3.
+  id: totrans-202
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，将ZIP文件复制到S3，并通过提及S3上的新ZIP文件位置来更新Lambda函数。
+- en: Note
+  id: totrans-203
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: You may need to strip down some packages or irrelevant directories from packages
+    to make sure the total size of unzipped files in the `code` directory is less
+    than 250 MB; otherwise, Lambda won't deploy your code.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能需要去除一些包或不相关的目录，以确保`code`目录中解压后的文件总大小小于250 MB；否则，Lambda将无法部署你的代码。
+- en: Go to the following link for more information about custom package deployment
+    on Lambda[http://docs.aws.amazon.com/lambda/latest/dg/lambda-python-how-to-create-deployment-package.html](http://docs.aws.amazon.com/lambda/latest/dg/lambda-python-how-to-create-deployment-package.html).
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前往以下链接，获取更多关于Lambda上自定义包部署的信息：[http://docs.aws.amazon.com/lambda/latest/dg/lambda-python-how-to-create-deployment-package.html](http://docs.aws.amazon.com/lambda/latest/dg/lambda-python-how-to-create-deployment-package.html)
+- en: Running face detection with a cloud managed service
+  id: totrans-206
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用云托管服务进行面部检测
+- en: In this example, we will use a deep learning-based managed cloud service for
+    our label identification and face detection system. We will continue to leverage
+    a serverless environment AWS Lambda and utilize a deep learning-based cloud managed
+    service, AWS Rekognition for facial attribute identification.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将使用基于深度学习的托管云服务来进行标签识别和面部检测系统的开发。我们将继续利用无服务器环境AWS Lambda，并使用深度学习基础的云托管服务AWS
+    Rekognition来进行面部属性识别。
+- en: 'Perform the following steps to build a facial detection system using managed
+    cloud deep learning services on a serverless platform:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行以下步骤，使用云端托管深度学习服务在无服务器平台上构建面部检测系统：
+- en: First, update the IAM Lambda execution role from the previous example and attach
+    a new managed policy **AmazonRekognitionFullAccess** as follows:![Running face
+    detection with a cloud managed service](img/B08086_06_29.png.jpg)
+  id: totrans-209
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，更新前述示例中的IAM Lambda执行角色，并附加一个新的托管策略**AmazonRekognitionFullAccess**，如下所示：![运行云托管服务进行面部检测](img/B08086_06_29.png.jpg)
+- en: Next, create a new Lambda function that will be used for building the facial
+    detection service. Select **Runtime*** as **Python 2.7** and keep all other settings
+    as default. Attach the updated IAM role with this Lambda function:![Running face
+    detection with a cloud managed service](img/B08086_06_30.png.jpg)
+  id: totrans-210
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，创建一个新的Lambda函数，用于构建人脸检测服务。选择**Runtime**为**Python 2.7**，并保持所有其他设置为默认。将更新后的IAM角色附加到此Lambda函数：![运行云托管服务进行人脸检测](img/B08086_06_30.png.jpg)
+- en: 'Then, paste the following code in the **Lambda function code** section area.
+    Update the S3 **Bucket Name** and AWS **Region** information in the `boto3.client`
+    of the code as follows:'
+  id: totrans-211
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，将以下代码粘贴到**Lambda函数代码**区域。在代码中的`boto3.client`部分，更新S3**桶名称**和AWS**区域**信息，如下所示：
+- en: '[PRE26]'
+  id: totrans-212
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Once you have created the Lambda function, we will create an API gateway child
+    resource for this service as follows:![Running face detection with a cloud managed
+    service](img/B08086_06_31.png.jpg)
+  id: totrans-213
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦你创建了Lambda函数，我们将为此服务创建一个API网关子资源，如下所示：![运行云托管服务进行人脸检测](img/B08086_06_31.png.jpg)
+- en: Next, we will add a method (**PUT** in this case) to our new child resource
+    (**predict**), then click on **Integration Request** of the **PUT** method.![Running
+    face detection with a cloud managed service](img/B08086_06_32.jpg)
+  id: totrans-214
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将向新子资源（**predict**）添加一个方法（此处为**PUT**），然后点击**PUT**方法的**Integration Request**。![运行云托管服务进行人脸检测](img/B08086_06_32.jpg)
+- en: Now, attach the **Lambda Function** created previously with this resource method.
+    You need to select the AWS **Lambda Region** where you have created your **Lambda
+    Function** to get the Lambda function name in the drop-down list:![Running face
+    detection with a cloud managed service](img/B08086_06_33.png.jpg)
+  id: totrans-215
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，将先前创建的**Lambda Function**附加到此资源方法上。你需要选择创建Lambda函数的AWS**Lambda Region**，以便在下拉列表中获取Lambda函数名称：![运行云托管服务进行人脸检测](img/B08086_06_33.png.jpg)
+- en: 'Next, expand the **Body Mapping Templates** section and select **When there
+    are no templates defined (recommended)** in the **Request body passthrough** section.
+    Then, add a mapping template **image/png** in the **Content-Type** and paste the
+    following code in the **General template** area:'
+  id: totrans-216
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，展开**Body Mapping Templates**部分，并在**Request body passthrough**部分选择**When
+    there are no templates defined (recommended)**。然后，在**Content-Type**中添加映射模板**image/png**，并将以下代码粘贴到**General
+    template**区域：
+- en: '[PRE27]'
+  id: totrans-217
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '![Running face detection with a cloud managed service](img/B08086_06_34.png.jpg)'
+  id: totrans-218
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![运行云托管服务进行人脸检测](img/B08086_06_34.png.jpg)'
+- en: 'Now deploy your API Gateway resource API by clicking **Deploy API** from the
+    **Action** menu. Once your resource is deployed, you will get an API of the gateway
+    that you will use to invoke the face detection service. We will continue to use
+    the REST client **Postman** ([https://chrome.google.com/webstore/detail/postman/fhbjgbiflinjbdggehcddcbncdddomop?hl=en](https://chrome.google.com/webstore/detail/postman/fhbjgbiflinjbdggehcddcbncdddomop?hl=en))
+    from our previous example, but you can use any other REST client of your choice
+    as well. The API Gateway URL will look as follows:'
+  id: totrans-219
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，通过点击**Action**菜单中的**Deploy API**，部署你的API Gateway资源API。一旦资源部署完成，你将获得一个API网关，使用该网关可以调用人脸检测服务。我们将继续使用之前的REST客户端**Postman**（[https://chrome.google.com/webstore/detail/postman/fhbjgbiflinjbdggehcddcbncdddomop?hl=en](https://chrome.google.com/webstore/detail/postman/fhbjgbiflinjbdggehcddcbncdddomop?hl=en)），但你也可以使用任何你喜欢的其他REST客户端。API网关的URL将如下所示：
+- en: '`https://<API ID>.execute-api.<AWS Region>.amazonaws.com/prod/predict`'
+  id: totrans-220
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`https://<API ID>.execute-api.<AWS Region>.amazonaws.com/prod/predict`'
+- en: Add **Content-Type** as **image/png** and add two request parameter activities
+    and filenames in the request. The parameter **activity** takes two values (**label-detect**
+    for image recognition or label detection) and (**face-detect** for face detection).
+    And the **fileName** parameter will be used to save the raw image to S3 with that
+    name.![Running face detection with a cloud managed service](img/B08086_06_35.png.jpg)
+  id: totrans-221
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 添加**Content-Type**为**image/png**，并在请求中添加两个请求参数：activities和filenames。参数**activity**有两个取值（**label-detect**用于图像识别或标签检测）和（**face-detect**用于人脸检测）。**fileName**参数将用于将原始图像以该名称保存到S3中。![运行云托管服务进行人脸检测](img/B08086_06_35.png.jpg)
+- en: Now, invoke your service to detect a label or face and get the response output
+    in JSON as follows:![Running face detection with a cloud managed service](img/B08086_06_36.png.jpg)
+  id: totrans-222
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，调用你的服务来检测标签或人脸，并获得以下JSON格式的响应输出：![运行云托管服务进行人脸检测](img/B08086_06_36.png.jpg)
+- en: Summary
+  id: totrans-223
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 概要
+- en: 'So far, you have learned and implemented various ways of deploying the trained
+    deep model and making predictions for new data samples. You have also learned
+    how to take your model from your local machine or data center to the cloud using
+    Docker containers smoothly. I hope, throughout the book, with lots of hands-on
+    examples using real-world public datasets, you have understood the concept of
+    GANs, and its variant architecture (SSGAN, BEGAN, DCGAN, CycleGAN, StackGAN, DiscoGAN)
+    well. Once you have played around with the code and examples in this book, I would
+    definitely encourage you to do the following:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，你已经学习并实现了多种方式来部署训练好的深度模型，并为新的数据样本进行预测。你还学会了如何使用Docker容器将模型从本地计算机或数据中心顺利迁移到云端。希望通过本书中大量使用真实世界公共数据集的动手示例，你已经很好地理解了生成对抗网络（GANs）的概念及其变体架构（SSGAN、BEGAN、DCGAN、CycleGAN、StackGAN、DiscoGAN）。一旦你动手实验了本书中的代码和示例，我肯定会鼓励你做以下事情：
+- en: 'Participate in the Kaggle Adversarial Network competition: [https://www.kaggle.com/c/nips-2017-defense-against-adversarial-attack](https://www.kaggle.com/c/nips-2017-defense-against-adversarial-attack).'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '参与Kaggle对抗网络比赛: [https://www.kaggle.com/c/nips-2017-defense-against-adversarial-attack](https://www.kaggle.com/c/nips-2017-defense-against-adversarial-attack)。'
+- en: 'Keep your knowledge updated about deep learning and GANs by attending or viewing
+    the following conferences:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过参加或观看以下会议，保持你对深度学习和生成对抗网络（GANs）的知识更新：
+- en: '**Neural Informat****ion Processing Syst****ems** (**NIPS**): [https://nips.cc/](https://nips.cc/)'
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**神经信息处理系统** (**NIPS**): [https://nips.cc/](https://nips.cc/)'
+- en: '**International Conference on Learning Representations** (ICLR): [HTTP://WWW.ICLR.CC/](HTTP://WWW.ICLR.CC/)'
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**国际学习表征会议** (ICLR): [HTTP://WWW.ICLR.CC/](HTTP://WWW.ICLR.CC/)'

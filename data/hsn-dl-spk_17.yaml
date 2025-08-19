@@ -1,0 +1,168 @@
+- en: 'Appendix B: Image Data Preparation for Spark'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 附录 B：Spark 图像数据准备
+- en: CNNs are among the main topics of this book. They are used in lots of practical
+    applications of image classification and analysis. This Appendix explains how
+    to create a `RDD<DataSet>` to train a CNN model for image classification.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 卷积神经网络（CNN）是本书的主要话题之一。它们被广泛应用于图像分类和分析的实际应用中。本附录解释了如何创建一个 `RDD<DataSet>` 来训练
+    CNN 模型进行图像分类。
+- en: Image preprocessing
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 图像预处理
+- en: The approach described in this section, image preprocessing into batches of
+    files, relies on the ND4J `FileBatch` class ([https://static.javadoc.io/org.nd4j/nd4j-common/1.0.0-beta3/org/nd4j/api/loader/FileBatch.html](https://static.javadoc.io/org.nd4j/nd4j-common/1.0.0-beta3/org/nd4j/api/loader/FileBatch.html)),
+    which is available starting from the 1.0.0-beta3 release of that library. This
+    class can store the raw content of multiple files in byte arrays (one per file),
+    including their original paths. A `FileBatch` object can be stored to disk in
+    ZIP format. This can reduce the number of disk reads that are required (because
+    of fewer files) and network transfers when reading from remote storage (because
+    of the ZIP compression). Typically, the original image files that are used to
+    train a CNN make use of an efficient (in terms of space and network) compression
+    format (such as JPEG or PNG). But when it comes to a cluster, there is the need
+    to minimize disk reads due to latency issues with remote storage. Switching to
+    one file read/transfer will be faster compared to `minibatchSize` remote file
+    reads.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节描述的图像预处理方法将文件分批处理，依赖于 ND4J 的 `FileBatch` 类（[https://static.javadoc.io/org.nd4j/nd4j-common/1.0.0-beta3/org/nd4j/api/loader/FileBatch.html](https://static.javadoc.io/org.nd4j/nd4j-common/1.0.0-beta3/org/nd4j/api/loader/FileBatch.html)），该类从
+    ND4J 1.0.0-beta3 版本开始提供。该类可以将多个文件的原始内容存储在字节数组中（每个文件一个数组），包括它们的原始路径。`FileBatch`
+    对象可以以 ZIP 格式存储到磁盘中。这可以减少所需的磁盘读取次数（因为文件更少）以及从远程存储读取时的网络传输（因为 ZIP 压缩）。通常，用于训练 CNN
+    的原始图像文件会采用一种高效的压缩格式（如 JPEG 或 PNG），这种格式在空间和网络上都比较高效。但在集群中，需要最小化由于远程存储延迟问题导致的磁盘读取。与
+    `minibatchSize` 的远程文件读取相比，切换到单次文件读取/传输会更快。
+- en: 'Doing image preprocessing into batches comes with the following limitation
+    in DL4J – the class labels need to be provided manually. Images should reside
+    in directories whose names are their corresponding labels. Let''s look at an example
+    – assuming that we have three classes, that is, car, truck, and motorbike, the
+    image directory structure should be as follows:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将图像预处理成批次会带来以下限制：在 DL4J 中，类标签需要手动提供。图像应存储在以其对应标签命名的目录中。我们来看一个示例——假设我们有三个类，即汽车、卡车和摩托车，图像目录结构应该如下所示：
+- en: '[PRE0]'
+  id: totrans-5
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The names of the image files don't matter. All that matters is that the subdirectories
+    of the root directory have the names of the classes.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像文件的名称并不重要。重要的是根目录下的子目录名称必须与类的名称一致。
+- en: Strategies
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 策略
+- en: 'Two strategies are possible for preprocessing images before we starting training
+    on a Spark cluster. The first strategy is about preprocessing the images locally
+    by using the `SparkDataUtils` class of `dl4j-spark`. For example:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Spark 集群上开始训练之前，有两种策略可以用来预处理图像。第一种策略是使用 `dl4j-spark` 中的 `SparkDataUtils` 类在本地预处理图像。例如：
+- en: '[PRE1]'
+  id: totrans-9
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: In this example, `sourceDir` is the root directory of the local images, `destDir`
+    is the local directory where the preprocessed images will be saved, and `batchSize`
+    is the number of images to put into a single `FileBatch` object. The `createFileBatchesLocal`
+    method is responsible for the import. Once all of the images have been preprocessed,
+    the content of the destination, `dir`, can be copied/moved to a cluster for training
+    purposes.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，`sourceDir` 是本地图像的根目录，`destDir` 是保存预处理后图像的本地目录，`batchSize` 是将图像放入单个 `FileBatch`
+    对象中的数量。`createFileBatchesLocal` 方法负责导入。一旦所有图像都被预处理，目标目录 `dir` 的内容可以被复制或移动到集群中用于训练。
+- en: 'The second strategy is about preprocessing the images using Spark. In those
+    cases where the original images are stored in a distributed filesystem, such as
+    HDFS, or a distributed object storage, such as S3, the `SparkDataUtils` class
+    is still used, but a different method, `createFileBatchesLocal`, which expects
+    a SparkContext among its arguments, has to be invoked. Here''s an example:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种策略是使用 Spark 对图像进行预处理。在原始图像存储在分布式文件系统（如 HDFS）或分布式对象存储（如 S3）的情况下，仍然使用 `SparkDataUtils`
+    类，但必须调用一个不同的方法 `createFileBatchesLocal`，该方法需要一个 SparkContext 作为参数。以下是一个示例：
+- en: '[PRE2]'
+  id: totrans-12
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: In this case, the original images are stored in HDFS (the location is specified
+    through `sourceDirectory`) and the preprocessed images are saved in HDFS as well
+    (in a location specified through `destinationDirectory`). Before starting the
+    preprocessing, the `SparkUtils` class of dl4j-spark has to be used to create a
+    `JavaRDD<String>` (`filePaths`) of the source images paths. The `SparkDataUtils.createFileBatchesSpark`
+    method takes `filePaths`, the destination HDFS path (`destinationDirectory`),
+    the number of images (`batchSize`) to put into a single `FileBatch` object, and
+    the SparkContext (`sparkContext`) as input. The training can start once all of
+    the images have been preprocessed by Spark.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，原始图像存储在HDFS中（通过`sourceDirectory`指定位置），预处理后的图像也保存在HDFS中（位置通过`destinationDirectory`指定）。在开始预处理之前，需要使用dl4j-spark的`SparkUtils`类创建源图像路径的`JavaRDD<String>`（`filePaths`）。`SparkDataUtils.createFileBatchesSpark`方法接受`filePaths`、目标HDFS路径（`destinationDirectory`）、放入单个`FileBatch`对象的图像数量（`batchSize`）以及SparkContext（`sparkContext`）作为输入。只有所有图像都经过Spark预处理后，训练才能开始。
+- en: Training
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练
+- en: Whatever preprocessing strategy (local or Spark) has been chosen, here is how
+    training using Spark happens.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论选择了哪种预处理策略（本地或Spark），以下是使用Spark进行训练的步骤。
+- en: 'First, you create the SparkContext, set up the `TrainingMaster`*, *and build
+    the neural network model using the following instances:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，创建SparkContext，设置`TrainingMaster`*，*并使用以下实例构建神经网络模型：
+- en: '[PRE3]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'After this, a data loader needs to be created, as in the following example:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，需要创建数据加载器，如以下示例所示：
+- en: '[PRE4]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The input images have a resolution 64 x 64 pixels (`imageHeightWidth`) and three
+    channels (RGB, `imageChannels`). 0-255 valued pixels are scaled by the loader
+    through a range of 0-1 through the `ImagePreProcessingScaler` class ([https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/ImagePreProcessingScaler.html](https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/ImagePreProcessingScaler.html)).
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入图像具有分辨率为64 x 64像素（`imageHeightWidth`）和三个通道（RGB，`imageChannels`）。加载器通过`ImagePreProcessingScaler`类将0-255值像素缩放到0-1的范围内（[https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/ImagePreProcessingScaler.html](https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/ImagePreProcessingScaler.html)）。
+- en: 'The training can then start, as in the following example:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练可以从以下示例开始：
+- en: '[PRE5]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'

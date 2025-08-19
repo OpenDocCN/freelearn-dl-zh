@@ -1,0 +1,1524 @@
+- en: Simulating Control Tasks
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 控制任务的仿真
+- en: In the previous chapter, we saw the notable success of **deep Q-learning** (**DQN**)
+    in training an AI agent to play Atari games. One limitation of DQN is that the
+    action space must be discrete, namely, only a finite number of actions are available
+    for the agent to select and the total number of actions cannot be too large. However,
+    many practical tasks require continuous actions, which makes DQN difficult to
+    apply. A naive remedy for DQN in this case is discretizing the continuous action
+    space. But this remedy doesn't work due to the curse of dimensionality, meaning
+    that DQN quickly becomes infeasible and does not generalize well.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们看到了**深度 Q 学习**（**DQN**）在训练 AI 代理玩 Atari 游戏中的显著成功。DQN 的一个局限性是，动作空间必须是离散的，也就是说，代理可以选择的动作数量是有限的，并且动作的总数不能太大。然而，许多实际任务需要连续动作，这使得
+    DQN 难以应用。在这种情况下，对 DQN 的一种简单补救方法是将连续动作空间离散化。但由于维度灾难，这种补救方法并不起作用，意味着 DQN 很快变得不可行，并且无法很好地泛化。
+- en: This chapter will discuss deep reinforcement learning algorithms for control
+    tasks with a continuous action space. Several classic control tasks, such as CartPole,
+    Pendulum, and Acrobot, will be introduced first. You will learn how to simulate
+    these tasks using Gym and understand the goal and the reward for each task. Then,
+    a basic actor-critic algorithm, called the **deterministic policy gradient** (**DPG**),
+    will be represented. You will learn what the actor-critic architecture is, and
+    why these kinds of algorithms can address continuous control tasks. Besides this,
+    you will also learn how to implement DPG via Gym and TensorFlow. Finally, a more
+    advanced algorithm, called the **trust region policy optimization** (**TRPO**),
+    will be introduced. You will understand why TRPO works much better than DPG and
+    how to learn a policy by applying the conjugate gradient method.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将讨论用于具有连续动作空间的控制任务的深度强化学习算法。首先将介绍几个经典控制任务，如 CartPole、Pendulum 和 Acrobot。你将学习如何使用
+    Gym 仿真这些任务，并理解每个任务的目标和奖励。接下来，将介绍一种基本的演员-评论家算法，称为**确定性策略梯度**（**DPG**）。你将学习什么是演员-评论家架构，为什么这类算法能够处理连续控制任务。除此之外，你还将学习如何通过
+    Gym 和 TensorFlow 实现 DPG。最后，将介绍一种更高级的算法，称为**信任区域策略优化**（**TRPO**）。你将理解为什么 TRPO 的表现比
+    DPG 更好，以及如何通过应用共轭梯度法来学习策略。
+- en: This chapter requires some background knowledge of mathematical programming
+    and convex/non-convex optimization. Don't be afraid-we will discuss these algorithms
+    step by step to make sure that you fully understand the mechanism behind them.
+    Understanding why they work, when they cannot work, and what their advantages
+    and disadvantages are is much more important than simply knowing how to implement
+    them with Gym and TensorFlow. After finishing this chapter, you will understand
+    that the magic show of deep reinforcement learning is directed by mathematics
+    and deep learning together.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章需要一些数学编程和凸/非凸优化的背景知识。别担心，我们会一步步地讨论这些算法，确保你能充分理解它们背后的机制。理解它们为何有效、何时无法工作以及它们的优缺点，比仅仅知道如何用
+    Gym 和 TensorFlow 实现它们要重要得多。完成本章后，你将明白深度强化学习的魔法表演是由数学和深度学习共同指导的。
+- en: 'The following topics will be covered in this chapter:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Introduction to classic control tasks
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 经典控制任务介绍
+- en: Deterministic policy gradient methods
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确定性策略梯度方法
+- en: Trust region policy optimization for complex control tasks
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复杂控制任务的信任区域策略优化
+- en: Introduction to control tasks
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 控制任务介绍
+- en: 'OpenAI Gym offers classic control tasks from the classic reinforcement learning
+    literature. These tasks include CartPole, MountainCar, Acrobot, and Pendulum.
+    To find out more, visit the OpenAI Gym website at: [https://gym.openai.com/envs/#classic_control](https://gym.openai.com/envs/#classic_control).
+    Besides this, Gym also provides more complex continuous control tasks running
+    in the popular physics simulator MuJoCo. Here is the homepage for MuJoCo: [http://www.mujoco.org/](http://www.mujoco.org/).
+    MuJoCo stands for Multi-Joint Dynamics with Contact, which is a physics engine
+    for research and development in robotics, graphics, and animation. The tasks provided
+    by Gym are Ant, HalfCheetah, Hopper, Humanoid, InvertedPendulum, Reacher, Swimmer,
+    and Walker2d. These names are very tricky, aren''t they? For more details about
+    these tasks, please visit the following link: [https://gym.openai.com/envs/#mujoco](https://gym.openai.com/envs/#mujoco)[.](http://www.mujoco.org/)'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: OpenAI Gym 提供了经典强化学习文献中的经典控制任务。这些任务包括 CartPole、MountainCar、Acrobot 和 Pendulum。欲了解更多信息，请访问
+    OpenAI Gym 网站：[https://gym.openai.com/envs/#classic_control](https://gym.openai.com/envs/#classic_control)。此外，Gym
+    还提供了在流行物理模拟器 MuJoCo 中运行的更复杂的连续控制任务。MuJoCo 的主页地址是：[http://www.mujoco.org/](http://www.mujoco.org/)。MuJoCo
+    代表多关节动力学与接触，是一个用于机器人学、图形学和动画研究与开发的物理引擎。Gym 提供的任务包括 Ant、HalfCheetah、Hopper、Humanoid、InvertedPendulum、Reacher、Swimmer
+    和 Walker2d。这些名字很难理解，不是吗？有关这些任务的更多细节，请访问以下链接：[https://gym.openai.com/envs/#mujoco](https://gym.openai.com/envs/#mujoco)[.](http://www.mujoco.org/)
+- en: Getting started
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 快速入门
+- en: 'If you don''t have a full installation of OpenAI Gym, you can install the `classic_control`
+    and `mujoco` environment dependencies as follows:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你没有完整安装 OpenAI Gym，可以按如下方式安装`classic_control`和`mujoco`环境的依赖：
+- en: '[PRE0]'
+  id: totrans-12
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'MuJoCo is not open source, so you''ll have to follow the instructions in `mujoco-py` (available
+    at [https://github.com/openai/mujoco-py#obtaining-the-binaries-and-license-key](https://github.com/openai/mujoco-py#obtaining-the-binaries-and-license-key))
+    to set it up. After the classic control environment is installed, try the following
+    commands:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MuJoCo 不是开源的，因此你需要按照`mujoco-py`中的说明（可在[https://github.com/openai/mujoco-py#obtaining-the-binaries-and-license-key](https://github.com/openai/mujoco-py#obtaining-the-binaries-and-license-key)获取）进行设置。安装经典控制环境后，尝试以下命令：
+- en: '[PRE1]'
+  id: totrans-14
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'If it runs successfully, a small window will pop up, showing the screen of
+    the Acrobot task:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果成功运行，一个小窗口将弹出，显示 Acrobot 任务的屏幕：
+- en: '![](img/8f7814e7-22ab-410e-901e-c217a06af6ef.png)'
+  id: totrans-16
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/8f7814e7-22ab-410e-901e-c217a06af6ef.png)'
+- en: 'Besides Acrobot, you can replace the `Acrobot-v1` task name with `CartPole-v0`,
+    `MountainCarContinuous-v0`, and `Pendulum-v0` to check out the other control tasks.
+    You can run the following code to simulate these tasks and try to get a high-level
+    understanding of their physical properties:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了 Acrobot，你可以将`Acrobot-v1`任务名称替换为`CartPole-v0`、`MountainCarContinuous-v0`和`Pendulum-v0`，以查看其他控制任务。你可以运行以下代码来模拟这些任务，并尝试对它们的物理属性有一个高层次的理解：
+- en: '[PRE2]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Gym uses the same interface for all the tasks, including Atari games, classic
+    control tasks, and MuJoCo control tasks. At each step, an action is randomly drawn
+    from the action space by calling `task.env.action_space.sample()` and then this
+    action is submitted to the simulator via `task.step(action)`, which tells the
+    simulator to execute it. The `step` function returns the observation and the reward
+    corresponding to this action.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Gym 使用相同的接口来处理所有任务，包括 Atari 游戏、经典控制任务和 MuJoCo 控制任务。在每一步中，动作是从动作空间中随机抽取的，方法是调用`task.env.action_space.sample()`，然后这个动作通过`task.step(action)`提交给模拟器，告诉模拟器执行该动作。`step`函数返回与该动作对应的观察值和奖励。
+- en: The classic control tasks
+  id: totrans-20
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 经典控制任务
+- en: 'We will now go through the details of each control task and answer the following
+    questions:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在将详细介绍每个控制任务，并回答以下问题：
+- en: What are the control inputs and the corresponding feedbacks?
+  id: totrans-22
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 控制输入是什么？对应的反馈是什么？
+- en: How is the reward function defined?
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 奖励函数是如何定义的？
+- en: Is the action space continuous or discrete?
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 动作空间是连续的还是离散的？
+- en: Understanding the details of these control tasks is quite important for designing
+    proper reinforcement learning algorithms because their specifications, such as
+    the dimension of the action space and the reward function, can affect the performance
+    a lot.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解这些控制任务的细节对于设计合适的强化学习算法非常重要，因为它们的规格（例如动作空间的维度和奖励函数）会对性能产生很大影响。
+- en: 'CartPole is quite a famous control task in both the control and reinforcement
+    learning communities. Gym implements the CartPole system described by *Barto,
+    Sutton, and Anderson* in their paper *Neuronlike Adaptive Elements That Can Solve
+    Difficult Learning Control Problem*, 1983\. In CartPole, a pole is attached by
+    an un-actuated joint to a cart, which moves along a frictionless track, as illustrated
+    here:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CartPole是控制和强化学习领域非常著名的控制任务。Gym实现了由*Barto, Sutton, 和 Anderson*在其论文《Neuronlike
+    Adaptive Elements That Can Solve Difficult Learning Control Problem》（1983年）中描述的CartPole系统。在CartPole中，一根杆子通过一个没有驱动的关节连接到一辆小车上，小车在一条无摩擦轨道上移动，如下所示：
+- en: '![](img/7e679e07-1c03-4306-9a0e-e182bd2e43f0.png)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7e679e07-1c03-4306-9a0e-e182bd2e43f0.png)'
+- en: 'Here are the specifications of CartPole:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是CartPole的规格：
+- en: '| **Goal** | The goal is to prevent the pole from falling over. |'
+  id: totrans-29
+  prefs: []
+  type: TYPE_TB
+  zh: '| **目标** | 目标是防止杆子倒下。 |'
+- en: '| **Action** | The action space is discrete, namely, the system is controlled
+    by applying a force of +1 (right direction) and -1 (left direction) to the cart.
+    |'
+  id: totrans-30
+  prefs: []
+  type: TYPE_TB
+  zh: '| **动作** | 动作空间是离散的，即通过对小车施加+1（右方向）和-1（左方向）的力量来控制系统。 |'
+- en: '| **Observation** | The observation is a vector with four elements, for example,
+    [ 0.0316304, -0.1893631, -0.0058115, 0.27025422], which describe the positions
+    of the pole and the cart. |'
+  id: totrans-31
+  prefs: []
+  type: TYPE_TB
+  zh: '| **观察** | 观察值是一个包含四个元素的向量，例如[ 0.0316304, -0.1893631, -0.0058115, 0.27025422]，表示杆子和小车的位置。
+    |'
+- en: '| **Reward** | A reward of +1 is provided for every timestep that the pole
+    remains upright. |'
+  id: totrans-32
+  prefs: []
+  type: TYPE_TB
+  zh: '| **奖励** | 每当杆子保持竖直时，都会获得+1的奖励。 |'
+- en: '| **Termination** | The episode ends when the pole is more than 15 degrees
+    from vertical, or the cart moves more than 2.4 units from the center. |'
+  id: totrans-33
+  prefs: []
+  type: TYPE_TB
+  zh: '| **终止条件** | 当杆子的角度超过15度或小车移动超过2.4个单位时，回合结束。 |'
+- en: Because this chapter talks about solving continuous control tasks, we will later
+    design a wrapper for CartPole to convert its discrete action space into a continuous
+    one.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为本章讲解的是解决连续控制任务，接下来我们将设计一个包装器用于CartPole，将其离散的动作空间转换为连续的动作空间。
+- en: 'MountainCar was first described by Andrew Moore in his PhD thesis *A. Moore,
+    Efficient Memory-Based Learning for Robot Control*, 1990, which is widely applied
+    as the benchmark for control, **Markov decision process** (**MDP**), and reinforcement
+    learning algorithms. In MountainCar, a small car is on a one-dimensional track,
+    moving between two mountains and trying to reach the yellow flag, as shown here:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MountainCar首次由Andrew Moore在其博士论文《A. Moore, Efficient Memory-Based Learning for
+    Robot Control》中描述，该论文于1990年发表，广泛应用于控制、**马尔科夫决策过程**（**MDP**）和强化学习算法的基准测试。在MountainCar中，一辆小车在一条一维轨道上移动，在两座山之间，试图到达黄色旗帜，如下所示：
+- en: '![](img/b05ae469-0ba1-4cef-811e-584dc93ba924.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b05ae469-0ba1-4cef-811e-584dc93ba924.png)'
+- en: 'The following table provides its specifications:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下表格提供了其规格：
+- en: '| **Goal** | The goal is to reach the top of the right mountain. However, the
+    car''s engine is not strong enough to scale the mountain in a single pass. Therefore,
+    the only way to succeed is to drive back and forth to build up momentum. |'
+  id: totrans-38
+  prefs: []
+  type: TYPE_TB
+  zh: '| **目标** | 目标是到达右侧山顶。然而，小车的发动机不足以一次性爬上山顶。因此，成功的唯一方式是前后行驶以积累动能。 |'
+- en: '| **Action** | The action space is continuous. The input action is the engine
+    force applied to the car. |'
+  id: totrans-39
+  prefs: []
+  type: TYPE_TB
+  zh: '| **动作** | 动作空间是连续的。输入的动作是施加于小车的发动机力量。 |'
+- en: '| **Observation** | The observation is a vector with two elements, for example,
+    [-0.46786288, -0.00619457], which describe the velocity and the position of the
+    car. |'
+  id: totrans-40
+  prefs: []
+  type: TYPE_TB
+  zh: '| **观察** | 观察值是一个包含两个元素的向量，例如[-0.46786288, -0.00619457]，表示小车的速度和位置。 |'
+- en: '| **Reward** | The reward is greater if you spend less energy to reach the
+    goal. |'
+  id: totrans-41
+  prefs: []
+  type: TYPE_TB
+  zh: '| **奖励** | 奖励越大，表示用更少的能量达成目标。 |'
+- en: '| **Termination** | The episode ends when the car reaches the goal flag or
+    the maximum number of steps is reached. |'
+  id: totrans-42
+  prefs: []
+  type: TYPE_TB
+  zh: '| **终止条件** | 回合在小车到达目标旗帜或达到最大步数时结束。 |'
+- en: 'The Pendulum swing-up problem is a classic problem in the control literature
+    and is used as a benchmark for testing control algorithms. In Pendulum, a pole
+    is attached to a pivot point, as shown here:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Pendulum摆动问题是控制文献中的经典问题，并作为测试控制算法的基准。在Pendulum中，一根杆子固定在一个支点上，如下所示：
+- en: '![](img/3b3f9b21-e5d5-4f08-bb4c-fc5edac9557b.png)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3b3f9b21-e5d5-4f08-bb4c-fc5edac9557b.png)'
+- en: 'Here are the specifications of Pendulum:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是Pendulum的规格：
+- en: '| **Goal** | The goal is to swing the pole up so it stays upright and to prevent
+    it from falling over. |'
+  id: totrans-46
+  prefs: []
+  type: TYPE_TB
+  zh: '| **目标** | 目标是将杆子摆起并保持竖直，防止其倒下。 |'
+- en: '| **Action** | The action space is continuous. The input action is the torque
+    applied to the pole. |'
+  id: totrans-47
+  prefs: []
+  type: TYPE_TB
+  zh: '| **动作** | 动作空间是连续的。输入动作是施加在杆上的扭矩。 |'
+- en: '| **Observation** | The observation is a vector with three elements, for example,
+    [-0.19092327, 0.98160496, 3.36590881], which indicate the angle and angular velocity
+    of the pole. |'
+  id: totrans-48
+  prefs: []
+  type: TYPE_TB
+  zh: '| **观察** | 观察是一个包含三个元素的向量，例如，[-0.19092327, 0.98160496, 3.36590881]，表示杆的角度和角速度。
+    |'
+- en: '| **Reward** | The reward is computed by a function with the angle, angular
+    velocity, and the torque as the inputs. |'
+  id: totrans-49
+  prefs: []
+  type: TYPE_TB
+  zh: '| **奖励** | 奖励由一个函数计算，该函数的输入包括角度、角速度和扭矩。 |'
+- en: '| **Termination** | The episode ends when the maximum number of steps is reached.
+    |'
+  id: totrans-50
+  prefs: []
+  type: TYPE_TB
+  zh: '| **终止** | 当达到最大步数时，任务结束。 |'
+- en: 'Acrobot was first described by Sutton in the paper *Generalization in Reinforcement
+    Learning: Successful Examples Using Sparse Coarse Coding*, 1996\. The Acrobot
+    system includes two joints and two links, where the joint between the two links
+    is actuated:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Acrobot最早由Sutton在1996年的论文《强化学习中的泛化：使用稀疏粗编码的成功案例》中描述。Acrobot系统包含两个关节和两个链接，其中两个链接之间的关节是驱动的：
+- en: '![](img/0528244b-5626-4c4e-841b-2ece663eb886.png)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0528244b-5626-4c4e-841b-2ece663eb886.png)'
+- en: 'Here are the settings of Acrobot:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是Acrobot的设置：
+- en: '| **Goal** | The goal is to swing the end of the lower link up to a given height.
+    |'
+  id: totrans-54
+  prefs: []
+  type: TYPE_TB
+  zh: '| **目标** | 目标是将下部链接的末端摆动到指定高度。 |'
+- en: '| **Action** | The action space is discrete, namely, the system is controlled
+    by applying a torque of 0, +1 and -1 to the links. |'
+  id: totrans-55
+  prefs: []
+  type: TYPE_TB
+  zh: '| **动作** | 动作空间是离散的，也就是说，系统是通过向链接施加0、+1和-1的扭矩来控制的。 |'
+- en: '| **Observation** | The observation is a vector with six elements, for example,
+    [0.9926474, 0.12104186, 0.99736744, -0.07251337, 0.47965018, -0.31494488], which
+    describe the positions of the two links. |'
+  id: totrans-56
+  prefs: []
+  type: TYPE_TB
+  zh: '| **观察** | 观察是一个包含六个元素的向量，例如，[0.9926474, 0.12104186, 0.99736744, -0.07251337,
+    0.47965018, -0.31494488]，表示两个链接的位置。 |'
+- en: '| **Reward** | A reward of +1 is provided for every timestep where the lower
+    link is at the given height or, otherwise, -1. |'
+  id: totrans-57
+  prefs: []
+  type: TYPE_TB
+  zh: '| **奖励** | 当下部链接位于给定高度时，每一步将获得+1奖励，否则为-1奖励。 |'
+- en: '| **Termination** | The episode ends when the end of the lower link is at the
+    given height, or the maximum number of steps is reached. |'
+  id: totrans-58
+  prefs: []
+  type: TYPE_TB
+  zh: '| **终止** | 当下部链接的末端达到指定高度，或达到最大步数时，本轮任务结束。 |'
+- en: 'Note that, in Gym, both CartPole and Acrobot have discrete action spaces, which
+    means these two tasks can be solved by applying the deep Q-learning algorithm.
+    Well, because this chapter considers continuous control tasks, we need to convert
+    their action spaces into continuous ones. The following class provides a wrapper
+    for Gym classic control tasks:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在Gym中，CartPole和Acrobot都有离散的动作空间，这意味着这两个任务可以通过应用深度Q学习算法来解决。由于本章讨论的是连续控制任务，我们需要将它们的动作空间转换为连续的。以下类为Gym经典控制任务提供了一个包装器：
+- en: '[PRE3]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: For CartPole and Acrobot, the input action should be a probability vector indicating
+    the probability of selecting each action. In the `play_action` function, an action
+    is randomly sampled based on this probability vector and submitted to the system.
+    The `get_total_reward` function returns the total reward in one episode. The `get_action_dim` and
+    `get_state_dim` functions return the dimension of the action space and the observation,
+    respectively. The `get_activation_fn` function is used for the output layer in
+    the actor network, which we will discuss later.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于CartPole和Acrobot，输入动作应该是一个概率向量，表示选择每个动作的概率。在`play_action`函数中，动作会根据这个概率向量随机采样并提交给系统。`get_total_reward`函数返回一个回合中的总奖励。`get_action_dim`和`get_state_dim`函数分别返回动作空间和观察空间的维度。`get_activation_fn`函数用于演员网络的输出层，我们将在后续讨论中提到。
+- en: Deterministic policy gradient
+  id: totrans-62
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 确定性策略梯度
+- en: 'As discussed in the previous chapter, DQN uses the Q-network to estimate the
+    `state-action value` function, which has a separate output for each available
+    action. Therefore, the Q-network cannot be applied, due to the continuous action
+    space. A careful reader may remember that there is another architecture of the
+    Q-network that takes both the state and the action as its inputs, and outputs
+    the estimate of the corresponding Q-value. This architecture doesn''t require
+    the number of available actions to be finite, and has the capability to deal with
+    continuous input actions:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如前一章所讨论的，DQN 使用 Q 网络来估计 `状态-动作值` 函数，该函数对每个可用动作都有一个单独的输出。因此，由于动作空间是连续的，Q 网络无法应用。细心的读者可能还记得，Q
+    网络的另一种架构是将状态和动作作为输入，输出相应的 Q 值估计。这种架构不要求可用动作的数量是有限的，并且能够处理连续的输入动作：
+- en: '![](img/e4a36225-b99e-4587-941e-2149251fecc7.png)'
+  id: totrans-64
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e4a36225-b99e-4587-941e-2149251fecc7.png)'
+- en: 'If we use this kind of network to estimate the `state-action value` function,
+    there must be another network that defines the behavior policy of the agent, namely
+    outputting a proper action given the observed state. In fact, this is the intuition
+    behind actor-critic reinforcement learning algorithms. The actor-critic architecture
+    contains two parts:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们使用这种网络来估计 `状态-动作值` 函数，那么必定还需要另一个网络来定义智能体的行为策略，即根据观察到的状态输出合适的动作。事实上，这正是演员-评论员强化学习算法的直观理解。演员-评论员架构包含两个部分：
+- en: '**Actor**: The actor defines the behavior policy of the agent. In control tasks,
+    it outputs the control signal given the current state of the system.'
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**演员**：演员定义了智能体的行为策略。在控制任务中，它根据系统的当前状态输出控制信号。'
+- en: '**Critic**: The critic estimates the Q-value of the current policy. It can
+    judge whether the policy is good or not.'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**评论员**：评论员估计当前策略的 Q 值。它可以判断策略是否优秀。'
+- en: Therefore, if both the actor and the critic can be trained with the feedbacks
+    (state, reward, next state, termination signal) received from the system, as in
+    training the Q-network in DQN, then the classic control tasks will be solved.
+    But how do we train them?
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，如果演员和评论员都能像在 DQN 中训练 Q 网络一样，利用系统反馈（状态、奖励、下一个状态、终止信号）进行训练，那么经典的控制任务就能得到解决。那么我们该如何训练它们呢？
+- en: The theory behind policy gradient
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 策略梯度背后的理论
+- en: 'One solution is the **deep deterministic policy gradient** (**DDPG**) algorithm,
+    which combines the actor-critic approach with insights from the success of DQN.
+    This is discussed in the following papers:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种解决方案是 **深度确定性策略梯度** (**DDPG**) 算法，它将演员-评论员方法与 DQN 成功的经验相结合。相关论文如下：
+- en: D. Silver, G. Lever, N. Heess, T. Degris, D. Wierstra and M. Riedmiller. *Deterministic
+    policy gradient algorithms*. In ICML, 2014.
+  id: totrans-71
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: D. Silver, G. Lever, N. Heess, T. Degris, D. Wierstra 和 M. Riedmiller. *确定性策略梯度算法*.
+    见于 ICML，2014。
+- en: T. P. Lillicrap, J. J. Hunt, A. Pritzel, N. Heess, T. Erez, Y. Tassa, D. Silver
+    and D. Wierstra. *Continuous control with deep reinforcement learning*. In ICLR,
+    2016.
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: T. P. Lillicrap, J. J. Hunt, A. Pritzel, N. Heess, T. Erez, Y. Tassa, D. Silver
+    和 D. Wierstra. *深度强化学习中的连续控制*. 见于 ICLR，2016。
+- en: 'The reason why DDPG is introduced first is that it is quite similar to DQN,
+    so you can understand the mechanism behind it much more easily after finishing
+    the previous chapter. Recall that DQN is able to train the Q-network in a stable
+    and robust way for the following reasons:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 引入 DDPG 的原因首先是它与 DQN 非常相似，因此在完成前一章内容后，你可以更轻松地理解其背后的机制。回顾一下，DQN 能够以稳定且健壮的方式训练
+    Q 网络，原因如下：
+- en: The Q-network is trained with the samples randomly drawn from the replay memory
+    to minimize the correlations between samples.
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Q 网络通过从回放记忆中随机抽取样本进行训练，以最小化样本之间的相关性。
+- en: A target network is used to estimate the target Q-value, reducing the probability
+    that oscillation or divergence of the policy occurs. DDPG applies the same strategy,
+    which means that DDPG is also a model-free and off-policy method.
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用目标网络来估计目标 Q 值，从而减少策略发生振荡或发散的概率。DDPG 采用了相同的策略，这意味着 DDPG 也是一种无模型且离线的算法。
+- en: 'We use the same notations as in the previous chapter for the reinforcement
+    learning setting. At each timestep ![](img/0213555b-9970-4ebb-a299-93cecc221371.png),
+    the agent observes state ![](img/37a22f30-aa50-4a09-bb47-2e17e53160d9.png), takes
+    action ![](img/3c05b5fd-7a4c-4908-bf33-124ab777c762.png) ,and then receives the
+    corresponding reward ![](img/fc6a21d6-8165-4005-a792-6d83e1f304db.png) generated
+    from a function ![](img/87145533-c582-40ee-8cda-be95c2ccc08c.png). Instead of
+    using ![](img/f25863dd-e76e-4b76-9500-1e1d5e13c773.png) to represent the set of
+    all the available actions at state ![](img/dd850911-cd3e-4b3a-be3d-0c9f40a99565.png),
+    here, we use ![](img/77bd2c0f-79ee-4a83-b663-17c921f87f38.png) to denote the policy
+    of the agent, which maps states to a probability distribution over the actions.
+    Many approaches in reinforcement learning, such as DQN, use the Bellman equation
+    as the backbone:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在强化学习设置中使用与上一章相同的符号。在每个时间步 ![](img/0213555b-9970-4ebb-a299-93cecc221371.png)，智能体观察状态
+    ![](img/37a22f30-aa50-4a09-bb47-2e17e53160d9.png)，采取动作 ![](img/3c05b5fd-7a4c-4908-bf33-124ab777c762.png)，然后从函数
+    ![](img/87145533-c582-40ee-8cda-be95c2ccc08c.png) 生成的奖励 ![](img/fc6a21d6-8165-4005-a792-6d83e1f304db.png)
+    中获得相应的回报。与使用 ![](img/f25863dd-e76e-4b76-9500-1e1d5e13c773.png) 表示状态 ![](img/dd850911-cd3e-4b3a-be3d-0c9f40a99565.png)
+    下所有可用动作的集合不同，这里我们使用 ![](img/77bd2c0f-79ee-4a83-b663-17c921f87f38.png) 来表示智能体的策略，它将状态映射到动作的概率分布。许多强化学习方法，如
+    DQN，都使用贝尔曼方程作为基础：
+- en: '![](img/d33ff51d-b88d-4860-a676-3bed39d88850.png).'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/d33ff51d-b88d-4860-a676-3bed39d88850.png)。'
+- en: 'The only difference between this formulation and the one in DQN is that the
+    policy ![](img/2735e862-bbe8-4a3b-a3cf-4e13d9f6316a.png) here is stochastic, so
+    that the expectation of ![](img/9b74ca4d-4795-42e5-9963-782190843add.png) is taken
+    over ![](img/63b79d7f-ff2c-4b13-b7d9-67134f921b91.png). If the target policy ![](img/df3852c6-b7d4-48f2-906c-85e20d45b6d5.png)
+    is deterministic, which can be described as a function ![](img/03d19098-5a51-4ecf-9349-97d235f0572c.png),
+    then this inner expectation can be avoided:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个公式与 DQN 中的公式唯一的区别是这里的策略 ![](img/2735e862-bbe8-4a3b-a3cf-4e13d9f6316a.png)
+    是随机的，因此对 ![](img/9b74ca4d-4795-42e5-9963-782190843add.png) 的期望是通过 ![](img/63b79d7f-ff2c-4b13-b7d9-67134f921b91.png)
+    来计算的。如果目标策略 ![](img/df3852c6-b7d4-48f2-906c-85e20d45b6d5.png) 是确定性的，可以通过函数 ![](img/03d19098-5a51-4ecf-9349-97d235f0572c.png)
+    来描述，那么就可以避免这个内部的期望：
+- en: '![](img/7e5b2b35-ed62-474b-9d78-9ab73c8cd725.png).'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/7e5b2b35-ed62-474b-9d78-9ab73c8cd725.png)。'
+- en: 'The expectation depends only on the environment. This means that it is possible
+    to learn the `state-action value` function ![](img/0e72e393-18cf-49e8-987b-1665d38289b7.png)
+    off-policy, using transitions that are generated from other policies, as we did
+    in DQN. The function ![](img/11aa1617-ea61-409b-a303-bf28c1aa4cb0.png), the critic,
+    can be approximated by a neural network parameterized by ![](img/d3a5c035-972e-4dda-8af5-497e2bde1689.png)
+    and the policy ![](img/bf619c4b-02a7-4134-a83e-c7c5f7740445.png), the actor, can
+    also be represented by another neural network parameterized by ![](img/0beff831-f282-44be-a4c1-fa3abdc824d9.png)
+    (in DQN, ![](img/afb1eec9-f424-4f1b-a510-4e582f3dfa11.png) is just ![](img/b7c37d7d-ea25-475a-9b07-4e839a6024fa.png)).
+    Then, the critic ![](img/e84ee47b-b0f0-4ab4-9c06-807b68db4548.png) can be be trained
+    by minimizing the following loss function:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 期望仅依赖于环境。这意味着可以使用 `状态-动作值` 函数 ![](img/0e72e393-18cf-49e8-987b-1665d38289b7.png)
+    进行离策略学习，使用从其他策略生成的转换，就像我们在 DQN 中做的那样。函数 ![](img/11aa1617-ea61-409b-a303-bf28c1aa4cb0.png)
+    作为评估器，可以通过神经网络进行近似，该神经网络由 ![](img/d3a5c035-972e-4dda-8af5-497e2bde1689.png) 参数化，而策略
+    ![](img/bf619c4b-02a7-4134-a83e-c7c5f7740445.png) 作为演员，也可以通过另一神经网络来表示，且该神经网络由
+    ![](img/0beff831-f282-44be-a4c1-fa3abdc824d9.png) 参数化（在 DQN 中，![](img/afb1eec9-f424-4f1b-a510-4e582f3dfa11.png)
+    只是 ![](img/b7c37d7d-ea25-475a-9b07-4e839a6024fa.png)）。然后，可以通过最小化以下损失函数来训练评估器 ![](img/e84ee47b-b0f0-4ab4-9c06-807b68db4548.png)：
+- en: '![](img/8885b2f4-a2b1-4a7f-93d1-06c763aa57f4.png),'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/8885b2f4-a2b1-4a7f-93d1-06c763aa57f4.png)。'
+- en: Here, ![](img/373f36de-a6b8-4fdd-9f4c-199efec86702.png). As in DQN, ![](img/db4d322c-2054-423a-8834-466d98288b33.png)
+    can be estimated via the target network and the samples for approximating ![](img/761e8806-ef76-48da-ac45-a8f533f2277e.png)
+    can be randomly drawn from the replay memory.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/373f36de-a6b8-4fdd-9f4c-199efec86702.png)。如同 DQN 中一样，![](img/db4d322c-2054-423a-8834-466d98288b33.png)
+    可以通过目标网络来估计，而用于近似 ![](img/761e8806-ef76-48da-ac45-a8f533f2277e.png) 的样本可以从重放记忆中随机抽取。
+- en: 'To train the actor ![](img/65c68316-35e0-4352-b0bd-4512ce079d3a.png), we fix
+    the critic ![](img/baeaa310-3fb3-4cfd-9786-5b9595570c8b.png), learned by minimizing
+    the loss function ![](img/51ce9801-6891-4d3b-aa28-5fcd61d91376.png), and try to
+    maximize ![](img/8a50c452-1c5f-41b1-8dc7-8f01a0a8686d.png) over ![](img/f20dd0ca-a41a-4750-95d3-86434c885672.png),
+    since a larger Q-value means a better policy. This can be done by following the
+    applying the chain rule to the expected return with respect to the actor parameters:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了训练演员 ![](img/65c68316-35e0-4352-b0bd-4512ce079d3a.png)，我们通过最小化损失函数 ![](img/51ce9801-6891-4d3b-aa28-5fcd61d91376.png)来固定评论员 ![](img/baeaa310-3fb3-4cfd-9786-5b9595570c8b.png)，并尝试最大化 ![](img/8a50c452-1c5f-41b1-8dc7-8f01a0a8686d.png)相对于 ![](img/f20dd0ca-a41a-4750-95d3-86434c885672.png)的值，因为较大的Q值意味着更好的策略。这可以通过应用链式法则来计算相对于演员参数的期望回报：
+- en: '![](img/b67bb9db-a7c5-40cf-8fcb-1daf7adb257e.png).'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/b67bb9db-a7c5-40cf-8fcb-1daf7adb257e.png)。'
+- en: 'The following diagram shows the high-level architecture of DDPG:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下图展示了DDPG的高层架构：
+- en: '![](img/ce4a8706-e5a0-400f-bf01-eeac828b66c2.png)'
+  id: totrans-86
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ce4a8706-e5a0-400f-bf01-eeac828b66c2.png)'
+- en: 'Compared to DQN, there is a small difference in updating the target network.
+    Instead of directly copying the weights of ![](img/83eb027c-4020-42e0-8222-63ccf5903e5b.png)
+    to the target network after several iterations, a soft update is used:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与DQN相比，更新目标网络的方式有所不同。不是在几次迭代后直接将 ![](img/83eb027c-4020-42e0-8222-63ccf5903e5b.png)的权重复制到目标网络，而是使用软更新：
+- en: '![](img/74e5cb42-fed1-4443-a51e-0b0a56c6ad40.png)'
+  id: totrans-88
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/74e5cb42-fed1-4443-a51e-0b0a56c6ad40.png)'
+- en: Here, ![](img/4aa85430-4001-4131-b53c-e9d49369d0ee.png) represents the weights
+    of the target network. This update means that the target values are constrained
+    to change slowly, greatly improving the stability of learning. This simple change
+    moves the relatively unstable problem of learning the value function closer to
+    the case of supervised learning.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里， ![](img/4aa85430-4001-4131-b53c-e9d49369d0ee.png)表示目标网络的权重。这个更新意味着目标值的变化受到约束，变化速度较慢，从而大大提高了学习的稳定性。这个简单的变化将学习值函数的相对不稳定问题，拉近到了监督学习的情况。
+- en: 'Similar to DQN, DDPG also needs to balance exploration and exploitation during
+    the training. Since the action generated by the policy ![](img/9df779a4-c193-41f5-8bd6-380ca55498d2.png)
+    is continuous, the ![](img/9a1c3ea8-ddcc-4e58-ad65-ec7cae3f99d7.png)-greedy method
+    cannot be applied. Instead, we can construct an exploration policy ![](img/d75015e2-a728-46e8-9712-98640b2121d9.png)
+    by adding noise sampled from a distribution ![](img/bf171446-b357-49f3-a646-c1cdb3b58a70.png)
+    to the actor policy ![](img/f0bfd658-9b98-4c21-a175-efd17e3715b3.png):'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与DQN类似，DDPG在训练过程中也需要平衡探索和开发。由于由策略生成的动作 ![](img/9df779a4-c193-41f5-8bd6-380ca55498d2.png)是连续的，因此无法应用 ![](img/9a1c3ea8-ddcc-4e58-ad65-ec7cae3f99d7.png)-贪婪策略。相反，我们可以通过向演员策略 ![](img/f0bfd658-9b98-4c21-a175-efd17e3715b3.png)中加入从分布 ![](img/bf171446-b357-49f3-a646-c1cdb3b58a70.png)中采样的噪声来构造一个探索策略 ![](img/d75015e2-a728-46e8-9712-98640b2121d9.png)：
+- en: '![](img/dde2dd51-dbd4-48c5-98d5-8cfab67139c5.png) where ![](img/3d8a98da-c78f-43e5-b978-ca2258dddb19.png)'
+  id: totrans-91
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/dde2dd51-dbd4-48c5-98d5-8cfab67139c5.png) 其中 ![](img/3d8a98da-c78f-43e5-b978-ca2258dddb19.png)'
+- en: '![](img/4d4c9de1-140a-446c-a4c9-77d2d42b8185.png) can be chosen as ![](img/90caf88c-219a-40e7-8fe4-12dc270d38ce.png),
+    where ![](img/c8166a78-9468-4ac9-b5d1-b82e4e5e753c.png) is the standard Gaussian
+    distribution and ![](img/a1072a0b-8629-45ef-a059-7c0de83c8a87.png) decreases during
+    each training step. Another choice is to apply an Ornstein-Uhlenbeck process to
+    generate the exploration noise ![](img/d90e6e65-59e3-447f-9a31-42a692177ee9.png).'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/4d4c9de1-140a-446c-a4c9-77d2d42b8185.png) 可以选择为 ![](img/90caf88c-219a-40e7-8fe4-12dc270d38ce.png)，其中 ![](img/c8166a78-9468-4ac9-b5d1-b82e4e5e753c.png)是标准高斯分布，且 ![](img/a1072a0b-8629-45ef-a059-7c0de83c8a87.png)在每个训练步骤中递减。另一种选择是应用奥恩斯坦-乌伦贝克过程生成探索噪声 ![](img/d90e6e65-59e3-447f-9a31-42a692177ee9.png)。'
+- en: DPG algorithm
+  id: totrans-93
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: DPG算法
+- en: 'The following pseudo code shows the DDPG algorithm:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下伪代码展示了DDPG算法：
+- en: '[PRE4]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: There is a natural extension of DDPG by replacing the feedforward neural networks
+    used for approximating the actor and the critic with recurrent neural networks.
+    This extension is called the **recurrent deterministic policy gradient** algorithm
+    (**RDPG**) and is discussed in the f paper N. Heess, J. J. Hunt, T. P. Lillicrap
+    and D. Silver. *Memory-based control with recurrent neural networks*. 2015.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过将用于近似演员和评论员的前馈神经网络替换为递归神经网络，DDPG自然扩展出了一个变体。这个扩展被称为**递归确定性策略梯度**算法（**RDPG**），在论文《N.
+    Heess, J. J. Hunt, T. P. Lillicrap 和 D. Silver. *基于记忆的控制与递归神经网络*》中有讨论，发表于2015年。
+- en: The recurrent critic and actor are trained using **backpropagation through time**
+    (**BPTT**). For readers who are interested in it, the paper can be downloaded
+    from [https://arxiv.org/abs/1512.04455](https://arxiv.org/abs/1512.04455).
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 循环评论家和演员通过**时间反向传播**（**BPTT**）进行训练。对于有兴趣的读者，可以从[https://arxiv.org/abs/1512.04455](https://arxiv.org/abs/1512.04455)下载相关论文。
+- en: Implementation of DDPG
+  id: totrans-98
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: DDPG实现
+- en: This section will show you how to implement the actor-critic architecture using
+    TensorFlow. The code structure is almost the same as the DQN implementation that
+    was shown in the previous chapter.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节将向你展示如何使用TensorFlow实现演员-评论家架构。代码结构几乎与上一章展示的DQN实现相同。
+- en: 'The `ActorNetwork` is a simple MLP that takes the observation state as its
+    input:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ActorNetwork`是一个简单的多层感知机（MLP），它将观测状态作为输入：'
+- en: '[PRE5]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The constructor requires four arguments: `input_state`, `output_dim`, `hidden_layers`,
+    and `activation`. `input_state` is a tensor for the observation state. `output_dim` is
+    the dimension of the action space. `hidden_layers` specifies the number of the
+    hidden layers and the number of units for each layer. `activation` indicates the
+    activation function for the output layer.'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构造函数需要四个参数：`input_state`、`output_dim`、`hidden_layers`和`activation`。`input_state`是观测状态的张量。`output_dim`是动作空间的维度。`hidden_layers`指定隐藏层的数量和每层的单元数。`activation`表示输出层的激活函数。
+- en: 'The `CriticNetwork` is also a MLP, which is enough for the classic control
+    tasks:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CriticNetwork`也是一个多层感知机（MLP），足以应对经典控制任务：'
+- en: '[PRE6]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: The network takes the state and the action as its inputs. It first maps the
+    state into a hidden feature representation and then concatenates this representation
+    with the action, followed by several hidden layers. The output layer generates
+    the Q-value that corresponds to the inputs.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络将状态和动作作为输入。它首先将状态映射为一个隐藏特征表示，然后将该表示与动作进行拼接，接着通过几个隐藏层。输出层生成与输入对应的Q值。
+- en: 'The actor-critic network combines the actor network and the critic network
+    together:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 演员-评论家网络将演员网络和评论家网络结合在一起：
+- en: '[PRE7]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The constructor requires six arguments, as follows: `input_dim` and `action_dim`
+    are the dimensions of the state space and the action space, respectively. `critic_layers`
+    and `actor_layers` specify the hidden layers of the critic network and the actor
+    network.  `actor_activation` indicates the activation function for the output
+    layer of the actor network. `scope` is the scope name used for the `scope` TensorFlow
+    variable.'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构造函数需要六个参数，分别为：`input_dim`和`action_dim`是状态空间和动作空间的维度，`critic_layers`和`actor_layers`指定评论家网络和演员网络的隐藏层，`actor_activation`表示演员网络输出层的激活函数，`scope`是用于`scope`
+    TensorFlow变量的作用域名称。
+- en: The constructor first creates an instance of the `self.actor_network` actor
+    network with an input of `self.x,` where `self.x` represents the current state.
+    It then creates an instance of the critic network using the following as the inputs: `self.actor_network.get_output_layer()` as
+    the output of the actor network and `self.x` as the current state. Given these
+    two networks, the constructor calls `self._build()` to build the loss functions
+    for the actor and critic that we discussed previously. The actor loss is `-tf.reduce_mean(value)`,
+    where `value` is the Q-value computed by the critic network. The critic loss is
+    `0.5 * tf.reduce_mean(tf.square((value - self.y)))`, where `self.y` is a tensor
+    for the predicted target value computed by the target network.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构造函数首先创建一个`self.actor_network`演员网络的实例，输入为`self.x`，其中`self.x`表示当前状态。然后，它使用以下输入创建评论家网络的实例：`self.actor_network.get_output_layer()`作为演员网络的输出，`self.x`作为当前状态。给定这两个网络，构造函数调用`self._build()`来构建我们之前讨论过的演员和评论家的损失函数。演员损失是`-tf.reduce_mean(value)`，其中`value`是评论家网络计算的Q值。评论家损失是`0.5
+    * tf.reduce_mean(tf.square((value - self.y)))`，其中`self.y`是由目标网络计算的预测目标值的张量。
+- en: 'The class `ActorCriticNet` provides the functions for calculating the action
+    and the Q-value given the current state, that is, `get_action` and `get_value`.
+    It also provides `get_action_value`, which computes the `state-action value` function
+    given the current state and the action taken by the agent:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ActorCriticNet`类提供了在给定当前状态的情况下计算动作和Q值的功能，即`get_action`和`get_value`。它还提供了`get_action_value`，该函数根据当前状态和代理执行的动作计算`状态-动作值`函数：'
+- en: '[PRE8]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Because DPG has almost the same architecture as DQN, the implementations of
+    the replay memory and the optimizer are not shown in this chapter. For more details,
+    you can refer to the previous chapter or visit our GitHub repository ([https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects](https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects)).
+    By combining these modules together, we can implement the `DPG` class for the
+    deterministic policy gradient algorithm:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于DPG与DQN的架构几乎相同，本章没有展示回放记忆和优化器的实现。欲了解更多细节，您可以参考前一章或访问我们的GitHub仓库([https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects](https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects))。通过将这些模块结合在一起，我们可以实现用于确定性策略梯度算法的`DPG`类：
+- en: '[PRE9]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Here, `config` includes all the parameters of DPG, for example, batch size
+    and learning rate for training. The `task` is an instance of a certain classic
+    control task. In the constructor, the replay memory, Q-network, target network,
+    and optimizer are initialized by calling the `_init_modules` function:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`config`包含DPG的所有参数，例如训练时的批量大小和学习率。`task`是某个经典控制任务的实例。在构造函数中，回放记忆、Q网络、目标网络和优化器通过调用`_init_modules`函数进行初始化：
+- en: '[PRE10]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: The `choose_action` function selects an action based on the current estimate
+    of the actor-critic network and the observed state.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`choose_action`函数根据当前演员-评论员网络的估计和观察到的状态选择一个动作。'
+- en: Note that a Gaussian noise controlled by `epsilon` is added for exploration.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，添加了由`epsilon`控制的高斯噪声以进行探索。
+- en: The `play` function submits an action into the simulator and returns the feedback
+    from the simulator. The `update_target_network` function updates the target network
+    from the current actor-critic network.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`play`函数将一个动作提交给模拟器，并返回模拟器的反馈。`update_target_network`函数从当前的演员-评论员网络中更新目标网络。'
+- en: 'To begin the training process, the following function can be called:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了开始训练过程，可以调用以下函数：
+- en: '[PRE11]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: In each episode, it calls `replay_memory.phi` to get the current state and calls
+    the `choose_action` function to select an action based on the current state. This
+    action is submitted into the simulator by calling the `play` function, which returns
+    the corresponding reward, next state, and termination signal. Then, the `(current
+    state, action, reward, termination)` transition is stored into the replay memory.
+    For every `update_interval` step (`update_interval = 1` ,by default), the actor-critic
+    network is trained with a batch of transitions that are randomly sampled from
+    the replay memory. For every `time_between_two_copies` step, the target network
+    is updated and the weights of the Q-network are saved to the hard disk.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每一轮中，它调用`replay_memory.phi`来获取当前状态，并调用`choose_action`函数根据当前状态选择一个动作。然后，通过调用`play`函数将该动作提交给模拟器，该函数返回相应的奖励、下一个状态和终止信号。接着，`(当前状态,
+    动作, 奖励, 终止)`的转移将被存储到回放记忆中。每当`update_interval`步（默认为`update_interval = 1`）时，演员-评论员网络会通过从回放记忆中随机抽取的一批转移进行训练。每当经过`time_between_two_copies`步时，目标网络将更新，并将Q网络的权重保存到硬盘。
+- en: 'After the training step, the following function can be called for evaluating
+    the performance of our trained agent:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练步骤之后，可以调用以下函数来评估我们训练好的代理的表现：
+- en: '[PRE12]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Experiments
+  id: totrans-124
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实验
+- en: 'The full implementation of DPG can be downloaded from our GitHub ([https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects](https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects)).
+    To train an agent for CartPole, run the following command under the `src` folder:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DPG的完整实现可以从我们的GitHub仓库下载([https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects](https://github.com/PacktPublishing/Python-Reinforcement-Learning-Projects))。要训练一个用于CartPole的代理，请在`src`文件夹下运行以下命令：
+- en: '[PRE13]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: There are two arguments in `train.py`. One is `-t`, or `--task`, indicating
+    the name of the classic control task you want to test. The other one is `-d`,
+    or `--device`, which specifies the device (CPU or GPU) that you want to use to
+    train the actor-critic network. Since the dimensions of the state spaces of these
+    classic control tasks are relatively low compared to the Atari environment, using
+    the CPU to train the agent is fast enough. It should only take several minutes
+    to finish.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`train.py`有两个参数。一个是`-t`或`--task`，表示您要测试的经典控制任务的名称。另一个是`-d`或`--device`，指定您要使用的设备（CPU或GPU）来训练演员-评论员网络。由于这些经典控制任务的状态空间维度相较于Atari环境较低，使用CPU训练代理已经足够快速，通常只需几分钟即可完成。'
+- en: 'During the training, you can open a new Terminal and type the following command
+    to visualize both the architecture of the actor-critic network and the training
+    procedure:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，你可以打开一个新的终端并输入以下命令，以可视化演员-评论员网络的架构和训练过程：
+- en: '[PRE14]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Here, `logdir` points to the folder where the `CartPole-v0` log file is stored.
+    Once TensorBoard is running, navigate your web browser to `localhost:6006` to
+    view the TensorBoard:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`logdir` 指向存储 `CartPole-v0` 日志文件的文件夹。TensorBoard 运行后，打开浏览器并导航到 `localhost:6006`
+    来查看 TensorBoard：
+- en: '![](img/86309e48-df49-4dc5-91d1-53a3b33e5f6b.png)'
+  id: totrans-131
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/86309e48-df49-4dc5-91d1-53a3b33e5f6b.png)'
+- en: Tensorboard view
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Tensorboard 视图
+- en: The top two graphs show the changes of the actor loss and the critic loss against
+    the training step. For classical control tasks, the actor loss usually decreases
+    consistently, while the critic loss has a large fluctuation. After 60,000 training
+    steps, the score becomes stable, achieving 200, the highest score that can be
+    reached in the CartPole simulator.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前两个图显示了演员损失和评论员损失相对于训练步骤的变化。对于经典控制任务，演员损失通常会持续下降，而评论员损失则会有较大的波动。在 60,000 个训练步骤后，分数变得稳定，达到了
+    200，这是 CartPole 仿真器中能达到的最高分数。
+- en: 'Using a similar command, you can also train an agent for the `Pendulum` task:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用类似的命令，你也可以为 `Pendulum` 任务训练一个智能体：
+- en: '[PRE15]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Then, check the training procedure via `Tensorboard`:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，通过 `Tensorboard` 检查训练过程：
+- en: '[PRE16]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'The following screenshot shows the changes of the score during  training:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下截图显示了训练过程中分数的变化：
+- en: '![](img/6af8e21c-55b9-405d-ac5a-1fc545f87f55.png)'
+  id: totrans-139
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6af8e21c-55b9-405d-ac5a-1fc545f87f55.png)'
+- en: Changes in score during training
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练过程中分数的变化
+- en: 'A careful reader may notice that the score of Pendulum fluctuates widely compared
+    to the score of CartPole. There are two reasons that are causing this problem:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一位细心的读者可能会注意到，Pendulum 的分数波动比 CartPole 的分数要大。造成这个问题的原因有两个：
+- en: In Pendulum, the starting position of the pole is not deterministic, namely,
+    it may be different for two episodes
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 Pendulum 中，杆子的起始位置是不确定的，即它可能在两次尝试之间有所不同
+- en: The train procedure in DPG may not be always stable, especially for complicated
+    tasks, such as MuJoCo control tasks
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: DPG 的训练过程可能并不总是稳定的，尤其是对于复杂任务，如 MuJoCo 控制任务
+- en: 'The MuJoCo control tasks, for example, Ant, HalfCheetah, Hopper, Humanoid,
+    InvertedPendulum, Reacher, Swimmer, and Walker2d provided by Gym, have high-dimensional
+    state and action space, which makes DPG fail. If you are curious about what happens
+    when running DPG with the `Hopper-v0` task, you can try the following:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Gym 提供的 MuJoCo 控制任务，例如 Ant、HalfCheetah、Hopper、Humanoid、InvertedPendulum、Reacher、Swimmer
+    和 Walker2d，具有高维度的状态和动作空间，这使得 DPG 无法正常工作。如果你对在运行 DPG 时 `Hopper-v0` 任务会发生什么感到好奇，你可以尝试以下操作：
+- en: '[PRE17]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: After several minutes, you will see that DPG cannot teach Hopper how to walk.
+    The main reason why DPG fails in this case is that the simple actor and critic
+    updates discussed here become unstable with high-dimensional inputs.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几分钟后，你会看到 DPG 无法教会 Hopper 如何行走。DPG 失败的主要原因是，本文讨论的简单的演员和评论员更新在高维输入下变得不稳定。
+- en: Trust region policy optimization
+  id: totrans-147
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 信任区域策略优化
+- en: 'The **trust region policy optimization** (**TRPO**) algorithm was proposed
+    to solve complex continuous control tasks in the following paper: Schulman, S.
+    Levine, P. Moritz, M. Jordan and P. Abbeel. *Trust Region Policy Optimization*.
+    In ICML, 2015.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**信任区域策略优化**（**TRPO**）算法旨在解决复杂的连续控制任务，相关论文如下：Schulman, S. Levine, P. Moritz,
+    M. Jordan 和 P. Abbeel. *信任区域策略优化*，发表于 ICML，2015。'
+- en: To understand why TRPO works requires some mathematical background. The main
+    idea is that it is better to guarantee that the new policy, ![](img/31f8d3cd-e898-4f0e-8ba2-b373935baa9e.png),
+    optimized by one training step, not only monotonically decreases the optimization
+    loss function (and thus improves the policy), but also does not deviate from the
+    previous policy ![](img/312b08f4-832f-453a-8d90-e4d0f2d9c0bb.png) much, which
+    means that there should be a constraint on the difference between ![](img/8fe518c7-f75b-44df-9f5b-e0299bf3ee1a.png)
+    and ![](img/d8d38231-bc91-43c4-a75f-8f3d39b6d8ca.png), for example, ![](img/dba88e62-aaac-48df-8696-ab24ba291e01.png)
+    for a certain constraint function ![](img/87c66a83-5938-4481-8b63-92a08ddd9b81.png)
+    constant ![](img/5b9d38d9-0b1e-443b-b93f-0b124e2af135.png).
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要理解为什么 TRPO 有效，需要一些数学背景。主要思路是，最好确保由一个训练步骤优化后的新策略 ![](img/31f8d3cd-e898-4f0e-8ba2-b373935baa9e.png)，不仅在单调减少优化损失函数（从而改进策略）的同时，还不会偏离之前的策略 ![](img/312b08f4-832f-453a-8d90-e4d0f2d9c0bb.png)
+    太远，这意味着应该对 ![](img/8fe518c7-f75b-44df-9f5b-e0299bf3ee1a.png) 和 ![](img/d8d38231-bc91-43c4-a75f-8f3d39b6d8ca.png)
+    之间的差异施加约束，例如对某个约束函数 ![](img/87c66a83-5938-4481-8b63-92a08ddd9b81.png) 施加常数 ![](img/5b9d38d9-0b1e-443b-b93f-0b124e2af135.png)。
+- en: Theory behind TRPO
+  id: totrans-150
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TRPO 背后的理论
+- en: 'Let''s see the mechanism behind TRPO. If you feel that this part is hard to
+    understand, you can skip it and go directly to how to run TRPO to solve MuJoCo
+    control tasks. Consider an infinite-horizon discounted Markov decision process
+    denoted by ![](img/4382afa1-271c-4016-bcf0-682471689d03.png), where ![](img/fa7e1576-fa63-4912-9f28-766c74f39662.png)
+    is a finite set of states, ![](img/b8bf6678-7e34-4238-bfae-95ca5d706259.png) is
+    a finite set of actions, ![](img/ee138461-338b-4461-9c8f-f852cea0201b.png) is
+    the transition probability distribution, ![](img/4e72cb1f-a0b0-45c3-96df-eb65d2815c6a.png)
+    is the cost function, ![](img/8bcde0ac-2124-40cb-ae6b-fbacc977fa36.png) is the
+    distribution of the initial state, and ![](img/61ab4a6b-a890-4de7-a592-f11acc0c5e6c.png)
+    is the discount factor. Let ![](img/779c9c94-3227-4173-bc9b-47a496df8645.png)
+    be a stochastic policy that we want to learn by minimizing the following expected
+    discounted cost:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下 TRPO 背后的机制。如果你觉得这一部分难以理解，可以跳过它，直接看如何运行 TRPO 来解决 MuJoCo 控制任务。考虑一个无限期折扣的马尔科夫决策过程，记作 ![](img/4382afa1-271c-4016-bcf0-682471689d03.png)，其中 ![](img/fa7e1576-fa63-4912-9f28-766c74f39662.png)
+    是状态的有限集合， ![](img/b8bf6678-7e34-4238-bfae-95ca5d706259.png) 是行动的有限集合， ![](img/ee138461-338b-4461-9c8f-f852cea0201b.png)
+    是转移概率分布， ![](img/4e72cb1f-a0b0-45c3-96df-eb65d2815c6a.png) 是成本函数， ![](img/8bcde0ac-2124-40cb-ae6b-fbacc977fa36.png)
+    是初始状态的分布， ![](img/61ab4a6b-a890-4de7-a592-f11acc0c5e6c.png) 是折扣因子。设 ![](img/779c9c94-3227-4173-bc9b-47a496df8645.png)
+    为我们希望通过最小化以下预期折扣成本来学习的随机策略：
+- en: '![](img/4b2b2d3b-82ce-4be8-9268-804c004a1c75.png)'
+  id: totrans-152
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4b2b2d3b-82ce-4be8-9268-804c004a1c75.png)'
+- en: 'Here, this is ![](img/c6326a20-968a-4c4b-8edc-ef2a78164482.png), ![](img/4b3f52e1-26c7-469c-84ed-afc5dde95507.png) and ![](img/687aa323-eee8-4230-8c65-e74bae743a2e.png). The
+    definitions of the `state-action value` function ![](img/ec709246-272b-4d6e-a633-8650958a88d8.png),
+    the value function ![](img/fd5bb2d1-02ca-4612-b937-a28495e2122b.png) ,and the
+    advantage function ![](img/e2731530-62ec-47a3-ad8f-0e4f0fa96b4d.png) under policy ![](img/f0c57c4c-00ae-41c7-ae5b-504777148477.png)
+    are as follows:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是 ![](img/c6326a20-968a-4c4b-8edc-ef2a78164482.png)， ![](img/4b3f52e1-26c7-469c-84ed-afc5dde95507.png) 和 ![](img/687aa323-eee8-4230-8c65-e74bae743a2e.png)。在策略 ![](img/f0c57c4c-00ae-41c7-ae5b-504777148477.png)
+    下，`状态-行动值`函数 ![](img/ec709246-272b-4d6e-a633-8650958a88d8.png)，值函数 ![](img/fd5bb2d1-02ca-4612-b937-a28495e2122b.png)，以及优势函数 ![](img/e2731530-62ec-47a3-ad8f-0e4f0fa96b4d.png)
+    的定义如下：
+- en: '![](img/1ecdecae-c636-4f18-8a0f-d9f1852b3f55.png)![](img/dbe7950e-c726-4be1-ae1d-571772cd0ec3.png)![](img/695cfd42-af47-4f7a-a1df-2c19428aabb3.png)'
+  id: totrans-154
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/1ecdecae-c636-4f18-8a0f-d9f1852b3f55.png)![](img/dbe7950e-c726-4be1-ae1d-571772cd0ec3.png)![](img/695cfd42-af47-4f7a-a1df-2c19428aabb3.png)'
+- en: Here, this is ![](img/8ad044e8-e6bc-40d4-93c0-37581d8858a6.png) and ![](img/e487be73-6cde-4217-8024-e4f7cd401537.png).
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是 ![](img/8ad044e8-e6bc-40d4-93c0-37581d8858a6.png) 和 ![](img/e487be73-6cde-4217-8024-e4f7cd401537.png)。
+- en: 'Our goal is to improve policy ![](img/19d0debc-2372-4819-a9b2-ac5e04248f11.png)
+    (by reducing the expected discounted cost) during each training step. In order
+    to design an algorithm monotonically improving ![](img/68b1c497-e041-4391-8a5b-36ea39ab6685.png),
+    let''s consider the following equation:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的目标是在每个训练步骤中，通过减少预期折扣成本，改善策略 ![](img/19d0debc-2372-4819-a9b2-ac5e04248f11.png)。为了设计一个单调改善 ![](img/68b1c497-e041-4391-8a5b-36ea39ab6685.png)的算法，让我们考虑以下方程：
+- en: '![](img/f20b954f-9a2d-4cbf-94c3-27e99e78982c.png)'
+  id: totrans-157
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f20b954f-9a2d-4cbf-94c3-27e99e78982c.png)'
+- en: 'Here, this is ![](img/4878a2f8-03b8-4c93-8ca6-ebc08fc5382b.png), ![](img/311043e8-58ca-4b6b-89e5-f82e712a6f04.png) and ![](img/324cf7f3-59a2-460b-84a2-efef176891c5.png).
+    This equation holds for any policy ![](img/81d9e91f-d378-4c87-a354-414d1ad84942.png). For
+    the readers who are interested in the proof of this equation, refer to the appendix
+    in the TRPO paper or the paper *Approximately optimal approximate reinforcement
+    learning*, written by Kakade and Langford. To simplify this equation, let ![](img/10619e12-c8bf-4cf2-84a7-1c4e1cb07ec1.png)
+    be the discounted visitation frequencies:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，表示的是 ![](img/4878a2f8-03b8-4c93-8ca6-ebc08fc5382b.png)，![](img/311043e8-58ca-4b6b-89e5-f82e712a6f04.png)
+    和 ![](img/324cf7f3-59a2-460b-84a2-efef176891c5.png)。这个方程对于任何策略 ![](img/81d9e91f-d378-4c87-a354-414d1ad84942.png)
+    都成立。对于有兴趣了解此方程证明的读者，请参阅 TRPO 论文的附录或 Kakade 和 Langford 撰写的论文《*大致最优的近似强化学习*》。为了简化这个方程，设
+    ![](img/10619e12-c8bf-4cf2-84a7-1c4e1cb07ec1.png) 为折扣访问频率：
+- en: '![](img/3c544a5f-60c8-4d3f-80a6-c3296d59e3fc.png)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3c544a5f-60c8-4d3f-80a6-c3296d59e3fc.png)'
+- en: 'By rearranging the preceding equation to sum over states instead of timesteps,
+    it becomes the following:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过将前面的方程重排，以对状态而不是时间步进行求和，它变为以下形式：
+- en: '![](img/3bceac54-47bb-4518-acb3-7b256a13febc.png)'
+  id: totrans-161
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3bceac54-47bb-4518-acb3-7b256a13febc.png)'
+- en: 'From this equation, we can see that any policy update ![](img/fda3a1ca-854b-44d8-a0c6-197d8cc0cb8c.png)
+    that has a non-positive expected advantage at every state ![](img/a6e419f2-c2d2-46fe-afef-48570caec744.png),
+    that is, ![](img/baf76ede-f391-4ed9-b6e9-605cb166bcdf.png), is guaranteed to reduce
+    the cost ![](img/0ffe18a6-a81d-4139-8539-c77c0badf09c.png). Therefore, for discrete
+    action space such as the Atari environment, the deterministic policy ![](img/88b0ef26-401f-4033-8576-82d6fca72fab.png), selected
+    in DQN, guarantees to improves the policy if there is at least one state-action
+    pair with a negative advantage value and nonzero state visitation probability.
+    However, in practical problems, especially when the policy is approximated by
+    a neural network, there will be some state for which the expected advantage is
+    positive, due to approximation errors. Besides this, the dependency of ![](img/5642fe43-339d-46fb-be5d-7b6bd14b1df0.png) on ![](img/0fc4904e-49e5-447a-a56a-efecaa1ff4a3.png) makes
+    this equation hard to optimize, so TRPO considers optimizing the following function
+    by replacing ![](img/d7fce747-17fc-4da3-97d6-20db3c3c9ed9.png) with ![](img/3f64995a-2da0-4ea4-9508-dd5d750197b6.png):'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个方程我们可以看出，任何策略更新 ![](img/fda3a1ca-854b-44d8-a0c6-197d8cc0cb8c.png)，只要在每个状态
+    ![](img/a6e419f2-c2d2-46fe-afef-48570caec744.png) 上的期望优势非正，即 ![](img/baf76ede-f391-4ed9-b6e9-605cb166bcdf.png)，都能保证减少成本
+    ![](img/0ffe18a6-a81d-4139-8539-c77c0badf09c.png)。因此，对于像 Atari 环境这样的离散动作空间，DQN
+    中选择的确定性策略 ![](img/88b0ef26-401f-4033-8576-82d6fca72fab.png) 保证如果至少有一个状态-动作对的优势值为负且状态访问概率非零，就能改进策略。然而，在实际问题中，特别是当策略通过神经网络近似时，由于近似误差，某些状态的期望优势可能为正。除此之外，![](img/5642fe43-339d-46fb-be5d-7b6bd14b1df0.png)
+    对 ![](img/0fc4904e-49e5-447a-a56a-efecaa1ff4a3.png) 的依赖使得该方程难以优化，因此 TRPO 考虑通过将
+    ![](img/d7fce747-17fc-4da3-97d6-20db3c3c9ed9.png) 替换为 ![](img/3f64995a-2da0-4ea4-9508-dd5d750197b6.png)
+    来优化以下函数：
+- en: '![](img/78aa2307-eb0c-43b9-bd95-7d12f26f0530.png)'
+  id: totrans-163
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/78aa2307-eb0c-43b9-bd95-7d12f26f0530.png)'
+- en: 'Kakade and Langford showed that if we have a parameterized policy, ![](img/8fd694a5-34cc-4604-8330-309b3cae3d44.png),
+    which is a differentiable function of the parameter ![](img/1fe4211a-0762-4c8e-b964-f82205c58113.png),
+    then for any parameter ![](img/aed1c2ad-56e3-4a6c-b9cc-667860302101.png):'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Kakade 和 Langford 显示，如果我们有一个参数化策略，![](img/8fd694a5-34cc-4604-8330-309b3cae3d44.png)，这是参数
+    ![](img/1fe4211a-0762-4c8e-b964-f82205c58113.png) 的可微函数，那么对于任何参数 ![](img/aed1c2ad-56e3-4a6c-b9cc-667860302101.png)：
+- en: '![](img/b26d3705-7acd-46e3-95d9-7960a539a17d.png)![](img/2c4d94aa-c595-4312-b77b-4f5b5aa2268d.png)'
+  id: totrans-165
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b26d3705-7acd-46e3-95d9-7960a539a17d.png)![](img/2c4d94aa-c595-4312-b77b-4f5b5aa2268d.png)'
+- en: 'This means that improving ![](img/7e29d171-632b-47f7-8fde-aa755abac2ad.png)
+    will also improve ![](img/eb9f53b5-15ee-4804-99a3-d05ae7b70007.png) with a sufficient
+    small update on ![](img/a5a215c0-8b48-4d4c-af73-b0cb2855f812.png). Based on this
+    idea, Kakade and Langford proposed a policy updating scheme called the conservative
+    policy iteration:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着，改进 ![](img/7e29d171-632b-47f7-8fde-aa755abac2ad.png) 也会通过对 ![](img/a5a215c0-8b48-4d4c-af73-b0cb2855f812.png)
+    的足够小的更新来改进 ![](img/eb9f53b5-15ee-4804-99a3-d05ae7b70007.png)。基于这个思想，Kakade 和 Langford
+    提出了一个叫做保守策略迭代的策略更新方案：
+- en: '![](img/7b34ce87-7dad-4891-bfc4-d06ac637bf61.png)'
+  id: totrans-167
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7b34ce87-7dad-4891-bfc4-d06ac637bf61.png)'
+- en: 'Here, ![](img/8e97e940-f4a8-4aca-a389-196e3672e47b.png) is the current policy, ![](img/0690ebf6-d1d9-4a5d-9975-88e070099654.png)
+    is the new policy, and ![](img/656c223d-a53d-466f-9049-cfb3ea1aa43e.png) is obtained
+    by solving ![](img/bb69abc4-4efa-431d-bde8-8cb81333e9d9.png). They proved the
+    following bound for this update:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/8e97e940-f4a8-4aca-a389-196e3672e47b.png) 是当前策略，![](img/0690ebf6-d1d9-4a5d-9975-88e070099654.png)
+    是新策略，![](img/656c223d-a53d-466f-9049-cfb3ea1aa43e.png) 是通过求解 ![](img/bb69abc4-4efa-431d-bde8-8cb81333e9d9.png)
+    得到的。它们证明了以下更新的界限：
+- en: '![](img/2202bc30-b02d-4b4f-ac00-ccd006344629.png) where ![](img/4e8d8a89-687b-4c09-a75b-fd05efbb42bd.png)'
+  id: totrans-169
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/2202bc30-b02d-4b4f-ac00-ccd006344629.png)，其中 ![](img/4e8d8a89-687b-4c09-a75b-fd05efbb42bd.png)'
+- en: 'Note that this bound only applies to mixture policies generated by the preceding
+    update. In TRPO, the authors extended this bound to general stochastic policies,
+    rather than just mixture policies. The main idea is to replace mixture weight ![](img/433ef82d-2ae0-4059-a0db-d0a9b5d60936.png)
+    with a distance measure between ![](img/94e130cc-71b0-40ca-b6ad-e962705670f2.png)
+    and ![](img/a5b4a9a7-64dd-420f-8422-255798c4721b.png). An interesting pick of
+    the distance measure is the total variation divergence. Taking two discrete distributions ![](img/3234f41f-86a5-4366-9189-5ca28c7c9043.png)
+    and ![](img/6c78aec7-e723-4044-9371-d99781c5b6ce.png) as an example, the total
+    variation divergence is defined as follows:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这个界限仅适用于通过前述更新生成的混合策略。在TRPO中，作者将这个界限扩展到一般的随机策略，而不仅仅是混合策略。其主要思想是用 ![](img/433ef82d-2ae0-4059-a0db-d0a9b5d60936.png)
+    替换混合权重，使用 ![](img/94e130cc-71b0-40ca-b6ad-e962705670f2.png) 和 ![](img/a5b4a9a7-64dd-420f-8422-255798c4721b.png)
+    之间的距离度量。一个有趣的距离度量选项是总变差散度。以两个离散分布 ![](img/3234f41f-86a5-4366-9189-5ca28c7c9043.png)
+    和 ![](img/6c78aec7-e723-4044-9371-d99781c5b6ce.png) 为例，总变差散度定义如下：
+- en: '![](img/b39bd755-aac8-44f3-b148-40e7e6c75d22.png)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b39bd755-aac8-44f3-b148-40e7e6c75d22.png)'
+- en: 'For policies ![](img/e1a2e0b2-a80f-4c94-a238-eb5c6a72884b.png) and ![](img/a5952e1b-fdf3-4d52-952d-08efb4aab567.png),
+    let ![](img/962c116d-a5af-45c3-9868-2f3ff9c7c69c.png) be the maximum total variation
+    divergence over all the states:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于策略 ![](img/e1a2e0b2-a80f-4c94-a238-eb5c6a72884b.png) 和 ![](img/a5952e1b-fdf3-4d52-952d-08efb4aab567.png)，令
+    ![](img/962c116d-a5af-45c3-9868-2f3ff9c7c69c.png) 为所有状态的最大总变差散度：
+- en: '![](img/b8cdaa06-5dd1-42b5-964c-709d9194dd14.png)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b8cdaa06-5dd1-42b5-964c-709d9194dd14.png)'
+- en: 'With ![](img/f5ad7c02-2977-4428-92c9-e1d932054ab3.png) and ![](img/4e930847-34f4-4fd3-bbc6-65f4ec91fd6a.png),
+    it can be shown that:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 ![](img/f5ad7c02-2977-4428-92c9-e1d932054ab3.png) 和 ![](img/4e930847-34f4-4fd3-bbc6-65f4ec91fd6a.png)，可以证明：
+- en: '![](img/eb185217-9538-492f-bffe-32d1307b6d08.png), where ![](img/00448aeb-93d9-4f75-bb9c-32de71911cab.png).'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/eb185217-9538-492f-bffe-32d1307b6d08.png)，其中 ![](img/00448aeb-93d9-4f75-bb9c-32de71911cab.png)。'
+- en: 'Actually, the total variation divergence can be upper bounded by the KL divergence,
+    namely, ![](img/78c2353d-c2a3-4fe1-9e1b-407ac9f8101a.png), which means that:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，总变差散度可以被KL散度上界，即 ![](img/78c2353d-c2a3-4fe1-9e1b-407ac9f8101a.png)，这意味着：
+- en: '![](img/2de74f64-0e3f-4130-9b12-48ec49724f87.png), where ![](img/055f7bdb-5fcd-4f75-be54-a5033373ef64.png).'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/2de74f64-0e3f-4130-9b12-48ec49724f87.png)，其中 ![](img/055f7bdb-5fcd-4f75-be54-a5033373ef64.png)。'
+- en: TRPO algorithm
+  id: totrans-178
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TRPO算法
+- en: 'Based on the preceding policy improvement bound, the following algorithm is
+    developed:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于前述的策略改进界限，开发了以下算法：
+- en: '[PRE18]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'In each step, this algorithm minimizes the upper bound of ![](img/af7c9656-8e07-4215-9d38-0f867bd07473.png),
+    so that:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每一步中，该算法最小化 ![](img/af7c9656-8e07-4215-9d38-0f867bd07473.png) 的上界，使得：
+- en: '![](img/22c9cc5b-58c6-4996-bb21-280af47bc7db.png)'
+  id: totrans-182
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/22c9cc5b-58c6-4996-bb21-280af47bc7db.png)'
+- en: The last equation follows from that ![](img/8acb0164-88a5-4075-a1ad-798769022863.png)
+    for any policy ![](img/72c0ceb5-4b1f-4a7b-a34d-74cf20f5ca6e.png). This implies
+    that this algorithm is guaranteed to generate a sequence of monotonically improving
+    policies.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一条等式由此得出，![](img/8acb0164-88a5-4075-a1ad-798769022863.png) 对于任何策略 ![](img/72c0ceb5-4b1f-4a7b-a34d-74cf20f5ca6e.png)
+    都成立。这意味着该算法保证生成一系列单调改进的策略。
+- en: 'In practice, since the exact value of ![](img/08cd6ec4-d66e-4134-b835-13a665021708.png) in ![](img/6d906ae5-9485-497d-90be-9e3205312eb6.png)
+    is hard to calculate, and it is difficult to control the step size of each update
+    using the penalty term, TRPO replaces the penalty term with the constraint that
+    KL divergence is bounded by a constant ![](img/e604b012-bcac-4dca-b9bf-c5d4ac226e43.png):'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实践中，由于难以计算 ![](img/08cd6ec4-d66e-4134-b835-13a665021708.png) 的确切值，并且很难通过惩罚项来控制每次更新的步长，TRPO将惩罚项替换为KL散度受限于常数
+    ![](img/e604b012-bcac-4dca-b9bf-c5d4ac226e43.png) 的约束：
+- en: '![](img/9e0c56b3-1599-4ad7-8933-d3fcf07b1c67.png)'
+  id: totrans-185
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/9e0c56b3-1599-4ad7-8933-d3fcf07b1c67.png)'
+- en: 'But this problem is still impractical to solve due to the large number of constraints.
+    Therefore, TRPO uses a heuristic approximation that considers the average KL divergence:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但由于约束条件过多，这个问题仍然很难解决。因此，TRPO使用了一种启发式近似方法，考虑了平均KL散度：
+- en: '![](img/8d508e2a-acf2-4345-aebb-e232439dcfbc.png)'
+  id: totrans-187
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/8d508e2a-acf2-4345-aebb-e232439dcfbc.png)'
+- en: 'This leads to the following optimization problem:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这导致了以下优化问题：
+- en: '![](img/e098bb38-864f-4fbd-ab5c-2a22a7902534.png)'
+  id: totrans-189
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e098bb38-864f-4fbd-ab5c-2a22a7902534.png)'
+- en: 'In other words, by expanding ![](img/fff01813-299b-4fa6-910c-c6bdb438fbaf.png),
+    we need to solve the following:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，通过展开![](img/fff01813-299b-4fa6-910c-c6bdb438fbaf.png)，我们需要解决以下问题：
+- en: '![](img/305da5d4-b490-4301-9e4d-9b949f277cda.png)'
+  id: totrans-191
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/305da5d4-b490-4301-9e4d-9b949f277cda.png)'
+- en: 'Now, the question is: how do we optimize this problem? A straightforward idea
+    is to sample several trajectories by simulating the policy ![](img/e6fe0c4f-2dd5-4f93-a676-47a4d0599d9d.png) for
+    some number of steps and then approximate the objective function of this problem
+    using these trajectories. Since the advantage function ![](img/d0f93482-d0f8-411f-b9e3-e0ae54566ede.png),
+    we replace ![](img/bf05b41e-458f-4cbf-ac10-dff5f4e25f56.png) with by the Q-value ![](img/b9edf522-8800-4336-8ac7-1c14d0aa0bd8.png)
+    in the objective function, which only changes the objective by a constant. Besides,
+    note the following:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，问题是：我们如何优化这个问题？一个直接的想法是通过模拟策略![](img/e6fe0c4f-2dd5-4f93-a676-47a4d0599d9d.png)进行若干步，然后使用这些轨迹来逼近该问题的目标函数。由于优势函数![](img/d0f93482-d0f8-411f-b9e3-e0ae54566ede.png)，我们将目标函数中的![](img/bf05b41e-458f-4cbf-ac10-dff5f4e25f56.png)替换为Q值![](img/b9edf522-8800-4336-8ac7-1c14d0aa0bd8.png)，这只是使目标函数变化一个常数。此外，注意以下几点：
+- en: '![](img/34f59a5f-7d84-44a2-b76d-f483147a3157.png)'
+  id: totrans-193
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/34f59a5f-7d84-44a2-b76d-f483147a3157.png)'
+- en: 'Therefore, given a trajectory ![](img/c40ea99f-c792-44cb-bef0-1944188cfac8.png) generated
+    under policy ![](img/17240a16-8143-425d-a94b-3f3029041e9b.png), we will optimize
+    as follows:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，给定一个在策略![](img/17240a16-8143-425d-a94b-3f3029041e9b.png)下生成的轨迹![](img/c40ea99f-c792-44cb-bef0-1944188cfac8.png)，我们将按以下方式进行优化：
+- en: '![](img/27da421f-eb3d-4630-b1e7-dec03aab4f25.png)'
+  id: totrans-195
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/27da421f-eb3d-4630-b1e7-dec03aab4f25.png)'
+- en: For the MuJoCo control tasks, both the policy ![](img/17f26470-538d-4521-be3f-f3e4ea1ed2b6.png)
+    and the `state-action value` function ![](img/21d3f97e-547f-4d2e-903b-9120ab4f820d.png)
+    are approximated by neural networks. In order to optimize this problem, the KL
+    divergence constraint can be approximated by the Fisher information matrix. This
+    problem can then be solved via the conjugate gradient algorithm. For more details,
+    you can download the source code of TRPO from GitHub and check `optimizer.py`,
+    which implements the conjugate gradient algorithm using TensorFlow.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于MuJoCo控制任务，策略![](img/17f26470-538d-4521-be3f-f3e4ea1ed2b6.png)和`状态-动作值`函数![](img/21d3f97e-547f-4d2e-903b-9120ab4f820d.png)都通过神经网络进行逼近。为了优化这个问题，KL散度约束可以通过Fisher信息矩阵来近似。然后，可以通过共轭梯度算法来求解此问题。有关更多详细信息，您可以从GitHub下载TRPO的源代码，并查看`optimizer.py`，该文件实现了使用TensorFlow的共轭梯度算法。
+- en: Experiments on MuJoCo tasks
+  id: totrans-197
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MuJoCo任务实验
+- en: 'The `Swimmer` task is a good example to test TRPO. This task involves a 3-link
+    swimming robot in a viscous fluid, where the goal is to make it swim forward as
+    fast as possible by actuating the two joints ([http://gym.openai.com/envs/Swimmer-v2/](http://gym.openai.com/envs/Swimmer-v2/)).
+    The following screenshot shows how `Swimmer` looks in the MuJoCo simulator:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Swimmer`任务是测试TRPO的一个很好的例子。这个任务涉及一个在粘性流体中游泳的三连杆机器人，目标是通过驱动两个关节，使其尽可能快地游向前方（[http://gym.openai.com/envs/Swimmer-v2/](http://gym.openai.com/envs/Swimmer-v2/)）。下面的截图显示了`Swimmer`在MuJoCo模拟器中的样子：'
+- en: '![](img/c4e13121-31e1-4e6b-b34a-3f3d6577829c.png)'
+  id: totrans-199
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c4e13121-31e1-4e6b-b34a-3f3d6577829c.png)'
+- en: 'To train an agent for `Swimmer`, run the following command under the `src` folder:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要训练一个`Swimmer`代理，请在`src`文件夹下运行以下命令：
+- en: '[PRE19]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: There are two arguments in `train.py`. One is `-t`, or `--task`, indicating
+    the name of the MuJoCo or classic control task you want to test. Since the state
+    spaces of these control tasks have relatively low dimensions compared to the Atari
+    environment, it is enough to use CPU alone to train the agent by setting `CUDA_VISIBLE_DEVICES` to
+    empty, which will take between 30 minutes and two hours.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`train.py`中有两个参数。一个是`-t`，或`--task`，表示您要测试的MuJoCo或经典控制任务的名称。由于这些控制任务的状态空间相比于Atari环境维度较低，单独使用CPU进行训练就足够了，只需将`CUDA_VISIBLE_DEVICES`设置为空，这将花费30分钟到两小时不等。'
+- en: 'During the training, you can open a new Terminal and type the following command
+    to visualize the training procedure:'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，您可以打开一个新的终端，并输入以下命令来可视化训练过程：
+- en: '[PRE20]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Here, `logdir` points to the folder where the `Swimmer` log file is stored.
+    Once TensorBoard is running, navigate your web browser to `localhost:6006` to
+    view the TensorBoard:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，`logdir`指向存储`Swimmer`日志文件的文件夹。一旦TensorBoard正在运行，使用网页浏览器访问`localhost:6006`以查看TensorBoard：
+- en: '![](img/61d02d5f-0705-499b-80e3-b4334d0e13af.png)'
+  id: totrans-206
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/61d02d5f-0705-499b-80e3-b4334d0e13af.png)'
+- en: 'Clearly, after 200 episodes, the total reward achieved in each episode becomes
+    stable, namely, around 366\. To check how `Swimmer` moves after the training,
+    run the following command:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很明显，经过200个回合后，每个回合的总奖励变得稳定，即大约为366。要检查训练后`Swimmer`如何移动，运行以下命令：
+- en: '[PRE21]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: You will see a funny-looking `Swimmer` object walking on the floor.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你将看到一个看起来很有趣的`Swimmer`对象在地面上行走。
+- en: Summary
+  id: totrans-210
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: This chapter introduced the classical control tasks and the MuJoCo control tasks
+    provided by Gym. You have learned the goals and specifications of these tasks
+    and how to implement a simulator for them. The most important parts of this chapter
+    were the deterministic DPG and the TRPO for continuous control tasks. You learned
+    the theory behind them, which explains why they work well in these tasks. You
+    also learned how to implement DPG and TRPO using TensorFlow, and how to visualize
+    the training procedure.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了Gym提供的经典控制任务和MuJoCo控制任务。你已经了解了这些任务的目标和规格，以及如何为它们实现一个模拟器。本章最重要的部分是用于连续控制任务的确定性DPG和TRPO。你了解了它们背后的理论，这也解释了它们为什么在这些任务中表现良好。你还学习了如何使用TensorFlow实现DPG和TRPO，以及如何可视化训练过程。
+- en: In the next chapter, we will learn about how to apply reinforcement learning
+    algorithms to more complex tasks, for example, playing Minecraft. We will introduce
+    the **Asynchronous Actor-Critic** (**A3C**) algorithm, which is much faster than
+    DQN at complex tasks, and has been widely applied as a framework in many deep
+    reinforcement learning algorithms.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，我们将学习如何将强化学习算法应用于更复杂的任务，例如，玩Minecraft。我们将介绍**异步演员-评论员**（**A3C**）算法，它在复杂任务中比DQN更快，并且已广泛应用于许多深度强化学习算法作为框架。

@@ -1,0 +1,1093 @@
+- en: '15'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '15'
+- en: Forecasting Traffic Using A3T-GCN
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用A3T-GCN进行交通预测
+- en: 'We introduced T-GNNs in [*Chapter 13*](B19153_13.xhtml#_idTextAnchor153), but
+    we did not elaborate on their main application: **traffic forecasting**. In recent
+    years, the concept of smart cities has become increasingly popular. This idea
+    refers to cities where data is used to manage and improve operations and services.
+    In this context, one of the main sources of appeal is the creation of intelligent
+    transportation systems. Accurate traffic forecasts can help traffic managers to
+    optimize traffic signals, plan infrastructure, and reduce congestion. However,
+    traffic forecasting is a challenging problem due to complex spatial and temporal
+    dependencies.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在[*第13章*](B19153_13.xhtml#_idTextAnchor153)中介绍了T-GNNs，但没有详细说明它们的主要应用：**交通预测**。近年来，智能城市的概念越来越受欢迎。这个概念指的是通过数据来管理和改善城市的运营和服务。在这种背景下，一个主要的吸引力来源是创建智能交通系统。准确的交通预测可以帮助交通管理者优化交通信号、规划基础设施并减少拥堵。然而，由于复杂的时空依赖性，交通预测是一个具有挑战性的问题。
+- en: In this chapter, we will apply T-GNNs to a particular case of traffic forecasting.
+    First, we will explore and process a new dataset to create a temporal graph from
+    raw CSV files. We will then apply a new type of T-GNN to predict future traffic
+    speed. Finally, we will visualize and compare the results to a baseline solution
+    to verify that our architecture is relevant.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将应用T-GNNs（时序图神经网络）到交通预测的一个特定案例。首先，我们将探索并处理一个新的数据集，从原始CSV文件中创建一个时序图。接着，我们将应用一种新的T-GNN模型来预测未来的交通速度。最后，我们将可视化并将结果与基准解决方案进行比较，以验证我们的架构的有效性。
+- en: By the end of this chapter, you will know how to create a temporal graph dataset
+    from tabular data. In particular, we will see how to create a weighted adjacency
+    matrix that will provide us with edge weights. Finally, you will learn how to
+    apply a T-GNN to a traffic forecasting task and evaluate the results.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章结束时，您将学会如何从表格数据中创建时序图数据集。特别地，我们将展示如何创建一个加权邻接矩阵，以提供边权重。最后，您将学习如何将T-GNN应用于交通预测任务并评估结果。
+- en: 'In this chapter, we will cover the following main topics:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主要内容：
+- en: Exploring the PeMS-M dataset
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 探索PeMS-M数据集
+- en: Processing the dataset
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 处理数据集
+- en: Implementing a temporal GNN
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现时序GNN
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: All the code examples from this chapter can be found on GitHub at [https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter15](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter15).
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的所有代码示例可以在GitHub上的[https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter15](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter15)找到。
+- en: Installation steps required to run the code on your local machine can be found
+    in the *Preface* of this book. This chapter requires a large amount of GPU. You
+    can lower it by decreasing the size of the training set in the code.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的*前言*中可以找到运行代码所需的本地安装步骤。本章需要大量GPU资源，您可以通过减少训练集的大小来降低需求。
+- en: Exploring the PeMS-M dataset
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 探索PeMS-M数据集
+- en: In this section, we will explore our dataset to find patterns and get insights
+    that will be useful to the task of interest.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将探索数据集，以寻找有助于解决任务的模式和洞察。
+- en: 'The dataset we will use for this application is the medium variant of the `PeMSD7`
+    dataset [1]. The original dataset was obtained by collecting traffic speed from
+    39,000 sensor stations on the weekdays of May and June 2012 using the Caltrans
+    **Performance Measurement System** (**PeMS**). We will only consider 228 stations
+    across District 7 of California in the medium variant. These stations output 30-second
+    speed measurements that are aggregated into 5-minute intervals in this dataset.
+    For example, the following figure shows the Caltrans PeMS ([pems.dot.ca.gov](https://pems.dot.ca.gov))
+    with various traffic speeds:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将为此应用使用的数据集是`PeMSD7`数据集的中型变体[1]。原始数据集通过收集2012年5月和6月期间的工作日交通速度数据，这些数据来自加州交通部门（Caltrans）在39,000个传感器站点上的测量，采用了**绩效测量系统**（**PeMS**）。在中型变体中，我们将只考虑加州第七区的228个站点。这些站点提供的30秒速度测量被聚合成5分钟的时间间隔。例如，以下图展示了加州交通部门PeMS（[pems.dot.ca.gov](https://pems.dot.ca.gov)）的交通速度数据：
+- en: '![Figure 15.1 – Traffic data from Caltrans PeMS with high speed (>60 mph) in
+    green and low speed (<35 mph) in red](img/B19153_15_001.jpg)'
+  id: totrans-15
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图15.1 – 来自Caltrans PeMS的交通数据，高速（>60 mph）用绿色表示，低速（<35 mph）用红色表示](img/B19153_15_001.jpg)'
+- en: Figure 15.1 – Traffic data from Caltrans PeMS with high speed (>60 mph) in green
+    and low speed (<35 mph) in red
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 15.1 – 来自Caltrans PeMS的交通数据，速度超过60英里每小时（>60 mph）用绿色表示，速度低于35英里每小时（<35 mph）用红色表示
+- en: 'We can directly load the dataset from GitHub and unzip it:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以直接从GitHub加载数据集并解压：
+- en: '[PRE0]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The resulting folder contains two files: `V_228.csv` and `W_228.csv`. The `V_228.csv`
+    file contains the traffic speed collected by the 228 sensor stations, and `W_228.csv`
+    stores the distances between these stations.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果文件夹包含两个文件：`V_228.csv`和`W_228.csv`。`V_228.csv`文件包含了来自228个传感器站点收集的交通速度数据，而`W_228.csv`文件则存储了这些站点之间的距离。
+- en: 'Let’s load them using `pandas`. We will rename the columns using `range()`
+    for easy access:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们使用`pandas`加载数据。我们将使用`range()`重新命名列，以便更方便地访问：
+- en: '[PRE1]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The first thing we want to do with this dataset is to visualize the evolution
+    of traffic speed. This is a classic in time series forecasting since characteristics
+    such as seasonality can be extremely helpful. On the other hand, non-stationary
+    time series might need further processing before they can be used.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望对这个数据集做的第一件事是可视化交通速度的变化。这是时间序列预测中的经典方法，因为像季节性这样的特征可以极大地帮助分析。另一方面，非平稳时间序列可能在使用之前需要进一步处理。
+- en: 'Let’s plot the traffic speed over time using `matplotlib`:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们使用`matplotlib`绘制交通速度随时间变化的图表：
+- en: 'We import `NumPy` and `matplotlib`:'
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们导入`NumPy`和`matplotlib`：
+- en: '[PRE2]'
+  id: totrans-25
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We use `plt.plot()` to create a line plot for every row in our DataFrame:'
+  id: totrans-26
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用`plt.plot()`为数据框中的每一行创建折线图：
+- en: '[PRE3]'
+  id: totrans-27
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'We obtain the following plot:'
+  id: totrans-28
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们得到如下图表：
+- en: '![Figure 15.2 – Traffic speed over time for each of the 228 sensor stations](img/B19153_15_002.jpg)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 15.2 – 每个228个传感器站点的交通速度随时间变化](img/B19153_15_002.jpg)'
+- en: Figure 15.2 – Traffic speed over time for each of the 228 sensor stations
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 15.2 – 每个228个传感器站点的交通速度随时间变化
+- en: 'Unfortunately, the data is too noisy to give us any insight using this approach.
+    Instead, we could plot the data corresponding to a few sensor stations. However,
+    it might not be representative of the entire dataset. There is another option:
+    we can plot the mean traffic speed with standard deviation. That way, we can visualize
+    a summary of the dataset.'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，数据太嘈杂，无法通过这种方法提供任何有价值的见解。相反，我们可以绘制一些传感器站点的数据。但是，这可能并不能代表整个数据集。还有另一种选择：我们可以绘制平均交通速度和标准差。这样，我们可以可视化数据集的摘要。
+- en: 'In practice, we would use both approaches, but let’s try the second option
+    now:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实际应用中，我们会同时使用这两种方法，但现在让我们尝试第二种方法：
+- en: 'We calculate the mean traffic speed with the corresponding standard deviation
+    for each column (time step):'
+  id: totrans-33
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们计算每列（时间步长）的平均交通速度及相应的标准差：
+- en: '[PRE4]'
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'We plot the mean values in black with a solid line:'
+  id: totrans-35
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用黑色实线绘制平均值：
+- en: '[PRE5]'
+  id: totrans-36
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'We plot the standard deviation around the mean values using `plt.fill_between()`
+    in light red:'
+  id: totrans-37
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用`plt.fill_between()`在平均值周围绘制标准差，并填充为浅红色：
+- en: '[PRE6]'
+  id: totrans-38
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The code generates the following plot:'
+  id: totrans-39
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 代码生成了如下图表：
+- en: '![Figure 15.3 – Mean traffic speed over time with a standard deviation](img/B19153_15_003.jpg)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 15.3 – 随时间变化的平均交通速度及其标准差](img/B19153_15_003.jpg)'
+- en: Figure 15.3 – Mean traffic speed over time with a standard deviation
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 15.3 – 随时间变化的平均交通速度及其标准差
+- en: 'This figure is much more comprehensible. We can see a clear seasonality (pattern)
+    in the time series data, except around the 5,800th data sample. The traffic speed
+    has a lot of variability with important spikes. This is understandable because
+    the sensor stations are spread throughout District 7 of California: traffic might
+    be jammed for some sensors but not for others.'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个图表更易于理解。我们可以看到时间序列数据中存在明显的季节性（模式），除了大约第5800个数据点周围。交通速度有很大的波动，出现了重要的峰值。这是可以理解的，因为这些传感器站点分布在加利福尼亚州第七区：某些传感器可能会发生交通堵塞，而其他传感器则不会。
+- en: We can verify that by plotting the correlation between the speed values from
+    every sensor. In addition to that, we can compare it with the distances between
+    each station. Stations close to each other should display similar values more
+    often than distant ones.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过绘制每个传感器速度值之间的相关性来验证这一点。此外，我们还可以将其与每个站点之间的距离进行比较。相邻的站点应比远距离站点显示出更多的相似值。
+- en: 'Let’s compare these two plots on the same figure:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在同一图表中比较这两个图：
+- en: 'We create a figure with two horizontal subplots and some padding between them:'
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个包含两个横向子图的图形，并在它们之间添加一些间距：
+- en: '[PRE7]'
+  id: totrans-46
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'First, we use the `matshow()` function to plot the distance matrix:'
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们使用`matshow()`函数绘制距离矩阵：
+- en: '[PRE8]'
+  id: totrans-48
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Then, we calculate the Pearson correlation coefficients for each sensor station.
+    We must transpose the speed matrix or we will get the correlation coefficients
+    for each time step instead. Finally, we invert them, so the two plots are easier
+    to compare:'
+  id: totrans-49
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接着，我们计算每个传感器站的 Pearson 相关系数。我们必须转置速度矩阵，否则我们将得到每个时间步的相关系数。最后，我们将其反转，这样两个图表就更容易比较：
+- en: '[PRE9]'
+  id: totrans-50
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We obtain the following plot:'
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们得到如下图：
+- en: '![Figure 15.4 – Distance and correlation matrices with darker colors representing
+    short distances and high correlation, while brighter colors represent long distances
+    and low correlation](img/B19153_15_004.jpg)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 15.4 – 距离和相关矩阵，颜色较深表示短距离和高相关性，而颜色较浅表示长距离和低相关性](img/B19153_15_004.jpg)'
+- en: Figure 15.4 – Distance and correlation matrices with darker colors representing
+    short distances and high correlation, while brighter colors represent long distances
+    and low correlation
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 15.4 – 距离和相关矩阵，颜色较深表示短距离和高相关性，而颜色较浅表示长距离和低相关性
+- en: 'Interestingly, long distances between stations do not mean they are not highly
+    correlated (and vice versa). This is particularly important if we only consider
+    a subset of this dataset: close stations might have very different outputs, making
+    traffic forecasting more difficult. In this chapter, we will take into account
+    every sensor station in the dataset.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有趣的是，站点之间的长距离并不意味着它们没有高度相关（反之亦然）。如果我们只考虑这个数据集的一个子集，这一点尤其重要：接近的站点可能有非常不同的输出，这使得交通预测更加困难。在本章中，我们将考虑数据集中的每个传感器站。
+- en: Processing the dataset
+  id: totrans-55
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据集处理
+- en: Now that we have more information about this dataset, it is time to process
+    it before we can feed it to a T-GNN.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们对这个数据集有了更多的了解，是时候处理它，然后将其输入到 T-GNN 中。
+- en: The first step consists of transforming the tabular dataset into a temporal
+    graph. So, first, we need to create a graph from the raw data. In other words,
+    we must connect the different sensor stations in a meaningful way. Fortunately,
+    we have access to the distance matrix, which should be a good way to connect the
+    stations.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一步是将表格数据集转化为时序图。因此，首先，我们需要从原始数据中创建一个图。换句话说，我们必须以有意义的方式连接不同的传感器站。幸运的是，我们可以访问距离矩阵，它应该是连接站点的一个好方法。
+- en: 'There are several options to compute the adjacency matrix from the distance
+    matrix. For example, we could assign a link when the distance between two stations
+    is inferior to the mean distance. Instead, we will perform a more advanced processing
+    introduced in [2] to calculate a weighted adjacency matrix. Instead of binary
+    values, we calculate weights between 0 (no connection) and 1 (strong connection)
+    using the following formula:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种方法可以从距离矩阵计算邻接矩阵。例如，当两个站点之间的距离小于平均距离时，我们可以为它们分配一个连接。相反，我们将执行在[2]中介绍的更高级的处理，计算加权邻接矩阵。我们不使用二进制值，而是通过以下公式计算
+    0（无连接）和 1（强连接）之间的权重：
+- en: '![](img/Formula_B19153_15_001.jpg)'
+  id: totrans-59
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_15_001.jpg)'
+- en: Here, ![](img/Formula_B19153_15_002.png) represents the weight of the edge from
+    node ![](img/Formula_B19153_15_003.png) to node ![](img/Formula_B19153_15_004.png),
+    ![](img/Formula_B19153_15_005.png) is the distance between these two nodes, and
+    ![](img/Formula_B19153_15_006.png) and ![](img/Formula_B19153_15_007.png) are
+    two thresholds to control the distribution and sparsity of the adjacency matrix.
+    The official implementation of [2] is available on GitHub ([https://github.com/VeritasYin/STGCN_IJCAI-18](https://github.com/VeritasYin/STGCN_IJCAI-18)).
+    We will reuse the same threshold values ![](img/Formula_B19153_15_008.png) and
+    ![](img/Formula_B19153_15_009.png).
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，![](img/Formula_B19153_15_002.png)表示从节点 ![](img/Formula_B19153_15_003.png)
+    到节点 ![](img/Formula_B19153_15_004.png) 的边的权重，![](img/Formula_B19153_15_005.png)
+    是这两个节点之间的距离，![](img/Formula_B19153_15_006.png) 和 ![](img/Formula_B19153_15_007.png)
+    是两个阈值，用来控制邻接矩阵的分布和稀疏度。[2]的官方实现可以在 GitHub 上找到（[https://github.com/VeritasYin/STGCN_IJCAI-18](https://github.com/VeritasYin/STGCN_IJCAI-18)）。我们将重用相同的阈值
+    ![](img/Formula_B19153_15_008.png) 和 ![](img/Formula_B19153_15_009.png)。
+- en: 'Let’s implement it in Python and plot the resulting adjacency matrix:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们用 Python 实现并绘制结果的邻接矩阵：
+- en: 'We create a function to compute the adjacency matrix that takes three parameters:
+    the distance matrix and the two thresholds ![](img/Formula_B19153_15_010.png)
+    and ![](img/Formula_B19153_15_011.png). Like in the official implementation, we
+    divide the distances by 10,000 and calculate ![](img/Formula_B19153_15_012.png):'
+  id: totrans-62
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个函数来计算邻接矩阵，该函数需要三个参数：距离矩阵和两个阈值 ![](img/Formula_B19153_15_010.png) 和 ![](img/Formula_B19153_15_011.png)。像官方实现一样，我们将距离除以10,000并计算
+    ![](img/Formula_B19153_15_012.png)：
+- en: '[PRE10]'
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Here, we want weights when their values are greater than or equal to ![](img/Formula_B19153_15_013.png)
+    (otherwise, they should be equal to zero). When we test whether the weights are
+    greater than or equal to ![](img/Formula_B19153_15_014.png), the results are `True`
+    or `False` statements. This is why we need a mask of ones (`w_mask`) to convert
+    it back into 0 and 1 values. We multiply it a second time so that we only obtain
+    the real values of weights that are greater than or equal to ![](img/Formula_B19153_15_015.png):'
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在这里，我们希望在权重值大于或等于 ![](img/Formula_B19153_15_013.png) 时保留这些权重（否则它们应等于零）。当我们测试权重是否大于或等于
+    ![](img/Formula_B19153_15_014.png) 时，结果是`True`或`False`语句。这就是为什么我们需要一个全是1的掩码（`w_mask`）来将其转换回0和1值的原因。我们第二次乘以它，以便只获得大于或等于
+    ![](img/Formula_B19153_15_015.png) 的真实权重值：
+- en: '[PRE11]'
+  id: totrans-65
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Let’s compute our adjacency matrix and print the result for one line:'
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们计算邻接矩阵并打印出一行的结果：
+- en: '[PRE12]'
+  id: totrans-67
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: We can see a value of `0.61266012`, representing the weight of the edge from
+    node 1 to node 2.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到`0.61266012`这个值，代表从节点1到节点2的边的权重。
+- en: 'A more efficient way to visualize this matrix is to use `matplotlib`’s `matshow`
+    again:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更高效的可视化这个矩阵的方法是再次使用`matplotlib`的`matshow`：
+- en: '[PRE13]'
+  id: totrans-70
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'We get the following figure:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们得到以下图形：
+- en: '![Figure 15.5 – The PeMS-M dataset’s weighted adjacency matrix](img/B19153_15_005.jpg)'
+  id: totrans-72
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图15.5 – PeMS-M数据集的加权邻接矩阵](img/B19153_15_005.jpg)'
+- en: Figure 15.5 – The PeMS-M dataset’s weighted adjacency matrix
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图15.5 – PeMS-M数据集的加权邻接矩阵
+- en: This is a great way to summarize this first processing step. We can compare
+    it to the distance matrix we previously plotted to find similarities.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一种很好地总结第一步处理的方法。我们可以将其与之前绘制的距离矩阵进行比较，以查找相似之处。
+- en: 'We can also directly plot it as a graph using `networkx`. In this case, connections
+    are binary, so we can simply consider every weight higher than 0\. We could display
+    these values using edge labels, but the graph would be extremely difficult to
+    read:'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还可以直接使用`networkx`将其绘制为图形。在这种情况下，连接是二进制的，因此我们可以简单地将每个权重大于0的连接考虑进去。我们可以使用边标签显示这些值，但图形将变得极其难以阅读：
+- en: '[PRE14]'
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Even without labels, the resulting graph is not easy to read:'
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 即使没有标签，生成的图形也不容易阅读：
+- en: '[PRE15]'
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'It gives us the following output:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它给出了以下输出：
+- en: '![Figure 15.6 – The PeMS-M dataset as a graph (every node represents a sensor
+    station)](img/B19153_15_006.jpg)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图15.6 – PeMS-M数据集作为图形（每个节点代表一个传感器站）](img/B19153_15_006.jpg)'
+- en: Figure 15.6 – The PeMS-M dataset as a graph (every node represents a sensor
+    station)
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图15.6 – PeMS-M数据集作为图形（每个节点代表一个传感器站）
+- en: Indeed, many nodes are interconnected because they are very close to each other.
+    Yet, despite that, we can distinguish several branches that could correspond to
+    actual roads.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事实上，许多节点相互连接，因为它们彼此非常接近。然而，尽管如此，我们仍然可以区分出几条可能对应于实际道路的分支。
+- en: 'Now that we have a graph, we can focus on the time series aspect of this problem.
+    The first step consists of normalizing the speed values so they can be fed to
+    a neural network. In the traffic forecasting literature, many authors choose a
+    z-score normalization (or standardization), which we will implement here:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了一个图形，我们可以专注于这个问题的时间序列方面。第一步是对速度值进行归一化处理，以便它们可以输入到神经网络中。在交通预测文献中，许多作者选择了z-score归一化（或标准化），我们将在这里实现这一方法：
+- en: 'We create a function to calculate z-scores:'
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个函数来计算z-score：
+- en: '[PRE16]'
+  id: totrans-85
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We apply it to our dataset to create a normalized version of it:'
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将其应用于我们的数据集，以创建其标准化版本：
+- en: '[PRE17]'
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'We can check the result:'
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以检查结果：
+- en: '[PRE18]'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'We get the following output:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们得到了以下输出：
+- en: '| **0** | **1** | **2** | **3** | **4** | **5** | **6** | **…** |'
+  id: totrans-91
+  prefs: []
+  type: TYPE_TB
+  zh: '| **0** | **1** | **2** | **3** | **4** | **5** | **6** | **…** |'
+- en: '| **0** | 0.950754 | 0.548255 | 0.502211 | 0.831672 | 0.793696 | 1.193806 |
+    … |'
+  id: totrans-92
+  prefs: []
+  type: TYPE_TB
+  zh: '| **0** | 0.950754 | 0.548255 | 0.502211 | 0.831672 | 0.793696 | 1.193806 |
+    … |'
+- en: Figure 15.7 – An example of standardized speed values
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图15.7 – 标准化速度值的示例
+- en: 'These values are correctly standardized. Now, we can use them to create time
+    series for each node. We want ![](img/Formula_B19153_15_016.png) input data samples
+    at each time step, ![](img/Formula_B19153_15_017.png), to predict the speed value
+    at ![](img/Formula_B19153_15_018.png). A high number of input data samples also
+    increases the memory footprint of the dataset. The value for ![](img/Formula_B19153_15_019.png),
+    also called the horizon, depends on the task we want to perform: short-term or
+    long-term traffic forecasting.'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些值已经正确标准化。现在，我们可以使用它们为每个节点创建时间序列。我们希望在每个时间步输入![](img/Formula_B19153_15_016.png)数据样本，![](img/Formula_B19153_15_017.png)，以预测![](img/Formula_B19153_15_018.png)时的速度值。较多的输入数据样本也会增加数据集的内存占用。![](img/Formula_B19153_15_019.png)的值，也称为预测范围，取决于我们想要执行的任务：短期或长期交通预测。
+- en: 'In this example, let’s take a high value of 48 to predict the traffic speed
+    in 4 hours:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们取一个较高的值 48 来预测 4 小时后的交通速度：
+- en: 'We initialize the variables: the number of `lags` (number of input data samples),
+    `horizon`, the input matrix, and the ground-truth matrix:'
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们初始化变量：`lags`（输入数据样本数量）、`horizon`、输入矩阵和真实值矩阵：
+- en: '[PRE19]'
+  id: totrans-97
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'For each time step ![](img/Formula_B19153_15_020.png), we store the 12 (lags)
+    previous values in `xs` and the value at ![](img/Formula_B19153_15_021.png) in
+    `ys`:'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于每个时间步![](img/Formula_B19153_15_020.png)，我们将存储之前的 12 个值（lags）在`xs`中，当前时刻![](img/Formula_B19153_15_021.png)的值存储在`ys`中：
+- en: '[PRE20]'
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Finally, we can create the temporal graph using PyTorch Geometric Temporal.
+    We need to give the edge index in COO format and the edge weight from the weighted
+    adjacency matrix:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们可以使用 PyTorch Geometric Temporal 创建时序图。我们需要提供 COO 格式的边索引以及来自加权邻接矩阵的边权重：
+- en: '[PRE21]'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Let’s print information about the first graph to see whether everything looks
+    good:'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们打印第一个图的信息，看看一切是否正常：
+- en: '[PRE22]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Let’s not forget the train/test split to finalize our dataset:'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们不要忘记划分训练集和测试集，来完成我们的数据集准备：
+- en: '[PRE23]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: The final temporal graph has 228 nodes with 12 values and 1,664 connections.
+    We are now ready to apply a T-GNN to predict traffic.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终的时序图包含 228 个节点，每个节点有 12 个值和 1,664 条连接。我们现在准备应用 T-GNN 来预测交通状况。
+- en: Implementing the A3T-GCN architecture
+  id: totrans-107
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现 A3T-GCN 架构
+- en: 'In this section, we will train an **Attention Temporal Graph Convolutional
+    Network** (**A3T-GCN**), designed for traffic forecasting. This architecture allows
+    us to consider complex spatial and temporal dependencies:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一节中，我们将训练一个**注意力时序图卷积网络**（**A3T-GCN**），该网络是为交通预测设计的。这种架构使我们能够考虑复杂的空间和时间依赖性：
+- en: Spatial dependencies refer to the fact that the traffic condition of a location
+    can be influenced by the traffic condition of nearby locations. For example, traffic
+    jams often spread to neighboring roads.
+  id: totrans-109
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 空间依赖性是指一个位置的交通状况可能受到周围位置交通状况的影响。例如，交通堵塞往往会蔓延到邻近的道路。
+- en: Temporal dependencies refer to the fact that the traffic condition of a location
+    at a time can be influenced by the traffic condition of the same location at previous
+    times. For example, if a road is congested during the morning peak, it is likely
+    to remain congested until the evening peak.
+  id: totrans-110
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 时间依赖性是指一个位置在某一时刻的交通状况可能会受到该位置在之前时刻交通状况的影响。例如，如果某条道路在早高峰时段发生拥堵，那么它很可能会持续到晚高峰。
+- en: A3T-GCN is an improvement over the **temporal GCN** (**TGCN**) architecture.
+    The TGCN is a combination of a GCN and GRU that produces hidden vectors from each
+    input time series. The combination of these two layers captures spatial and temporal
+    information from the input. An attention model is then used to calculate weights
+    and output a context vector. The final prediction is based on the resulting context
+    vector. The addition of this attention model is motivated by the need to understand
+    global trends.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: A3T-GCN 是对**时序 GCN**（**TGCN**）架构的改进。TGCN 是一个结合了 GCN 和 GRU 的架构，从每个输入时间序列中生成隐藏向量。这两层的组合捕捉了输入中的空间和时间信息。然后，使用注意力模型来计算权重并输出上下文向量。最终的预测基于得到的上下文向量。增加这个注意力模型的动机在于需要理解全局趋势。
+- en: '![Figure 15.8 – The A3T-GCN framework](img/B19153_15_007.jpg)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 15.8 – A3T-GCN 框架](img/B19153_15_007.jpg)'
+- en: Figure 15.8 – The A3T-GCN framework
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 15.8 – A3T-GCN 框架
+- en: 'We will now implement it using the PyTorch Geometric Temporal library:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在将使用 PyTorch Geometric Temporal 库来实现它：
+- en: 'First, we import the required libraries:'
+  id: totrans-115
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们导入所需的库：
+- en: '[PRE24]'
+  id: totrans-116
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'We create a T-GNN with an `A3TGCN` layer and a linear layer with 32 hidden
+    dimensions. The `edge_attr` parameter will store our edge weights:'
+  id: totrans-117
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个带有 `A3TGCN` 层和 32 个隐藏维度的线性层的 T-GNN。`edge_attr` 参数将存储我们的边权重：
+- en: '[PRE25]'
+  id: totrans-118
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'We instantiate the T-GNN and the `Adam` optimizer with a learning rate of `0.005`.
+    Due to implementation details, we will train this model using a CPU instead of
+    a GPU, which is faster in this case:'
+  id: totrans-119
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们实例化了T-GNN和`Adam`优化器，学习率设置为`0.005`。由于实现细节，我们将使用CPU而不是GPU来训练该模型，因为在这种情况下CPU更快：
+- en: '[PRE26]'
+  id: totrans-120
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'We train the model for 30 epochs using the `loss` function. The `loss` value
+    is backpropagated after each epoch:'
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用`loss`函数训练模型30个epoch。在每个epoch后，`loss`值会进行反向传播：
+- en: '[PRE27]'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'We obtain the following output:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们获得了以下输出：
+- en: '[PRE28]'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Now that our model is trained, we have to evaluate it. Beyond classic metrics
+    such as **Root Mean Squared Error** (**RMSE**) and **Mean Absolute Error** (**MAE**),
+    it is particularly helpful to compare our model to a baseline solution with time
+    series data. In the following list, we will introduce two methods:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们的模型已经训练完成，我们需要对其进行评估。除了经典的指标如**均方根误差**（**RMSE**）和**平均绝对误差**（**MAE**），将我们的模型与时间序列数据的基准解决方案进行比较也特别有帮助。在接下来的列表中，我们将介绍两种方法：
+- en: Using **Random Walk** (**RW**) as a naïve forecaster. In this case, RW refers
+    to using the last observation as the predicted value. In other words, the value
+    at ![](img/Formula_B19153_15_022.png) is the same one as at ![](img/Formula_B19153_15_023.png).
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用**随机游走**（**RW**）作为一个简单的预测器。在这种情况下，RW指的是使用最后一个观察值作为预测值。换句话说，![](img/Formula_B19153_15_022.png)处的值与![](img/Formula_B19153_15_023.png)处的值相同。
+- en: Using **Historical Average** (**HA**) as a slightly more evolved solution. In
+    this case, we calculate the mean traffic speed of ![](img/Formula_B19153_15_024.png)
+    previous samples as the value at ![](img/Formula_B19153_15_025.png). In this example,
+    we will use the number of lags as our ![](img/Formula_B19153_15_026.png) value,
+    but we could also take the overall historical average.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用**历史平均值**（**HA**）作为略微更进化的解决方案。在这种情况下，我们计算前![](img/Formula_B19153_15_024.png)个样本的平均交通速度，作为![](img/Formula_B19153_15_025.png)处的值。在这个示例中，我们将使用滞后的数量作为我们的![](img/Formula_B19153_15_026.png)值，但我们也可以采用总体历史平均值。
+- en: 'Let’s start by evaluating the model’s predictions on the test set:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先评估模型在测试集上的预测：
+- en: 'We create a function to invert the z-score and get back to the original values:'
+  id: totrans-129
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建了一个函数来反转z-score并返回原始值：
+- en: '[PRE29]'
+  id: totrans-130
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'We use it to recalculate the speeds we want to predict from their normalized
+    values. The following loop is not very efficient, but it is clearer to understand
+    than more optimized code:'
+  id: totrans-131
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用它从归一化值重新计算我们希望预测的速度。以下循环效率不高，但比更优化的代码更容易理解：
+- en: '[PRE30]'
+  id: totrans-132
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'We apply the same strategy to the predictions made by the GNN:'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们对GNN做出的预测应用相同的策略：
+- en: '[PRE31]'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'We do the same thing for the RW and HA techniques:'
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们对RW和HA技术做同样的处理：
+- en: '[PRE32]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'We create functions to calculate the MAE, RMSE, and the **Mean Absolute Percentage**
+    **Error** (**MAPE**):'
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建了计算MAE、RMSE和**平均绝对百分比误差**（**MAPE**）的函数：
+- en: '[PRE33]'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'We evaluate the GNN’s predictions in the following block and repeat this process
+    for every technique:'
+  id: totrans-139
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们在以下模块中评估GNN的预测，并对每个技术重复此过程：
+- en: '[PRE34]'
+  id: totrans-140
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'In the end, we obtain the following table:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终，我们得到了以下表格：
+- en: '|  | RMSE | MAE | MAPE |'
+  id: totrans-142
+  prefs: []
+  type: TYPE_TB
+  zh: '|  | RMSE | MAE | MAPE |'
+- en: '| A3T-GCN | **11.9396** | **8.3293** | **14.95%** |'
+  id: totrans-143
+  prefs: []
+  type: TYPE_TB
+  zh: '| A3T-GCN | **11.9396** | **8.3293** | **14.95%** |'
+- en: '| Random Walk | 17.6501 | 11.0469 | 29.99% |'
+  id: totrans-144
+  prefs: []
+  type: TYPE_TB
+  zh: '| 随机游走 | 17.6501 | 11.0469 | 29.99% |'
+- en: '| Historical Average | 17.9009 | 11.7308 | 28.93% |'
+  id: totrans-145
+  prefs: []
+  type: TYPE_TB
+  zh: '| 历史平均值 | 17.9009 | 11.7308 | 28.93% |'
+- en: Figure 15.9 – Output table of predictions
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图15.9 – 预测输出表格
+- en: We see that the baseline techniques are outperformed by the A3T-GCN model in
+    every metric. This is an important result because baselines can often be difficult
+    to beat. It would be interesting to compare these metrics to the predictions provided
+    by LSTM or GRU networks to measure the importance of the topological information.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们看到，在每个指标上，基准技术都被A3T-GCN模型超越。这是一个重要的结果，因为基准往往是很难超越的。将这些指标与LSTM或GRU网络提供的预测进行比较，将有助于衡量拓扑信息的重要性。
+- en: 'Finally, we can plot the mean predictions to obtain a visualization that is
+    similar to *Figure 15**.3*:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们可以绘制平均预测值，得到类似于*图15.3*的可视化：
+- en: 'We obtain the mean predictions using a list comprehension that is a little
+    faster than the previous method (but harder to read):'
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用列表推导法获得平均预测值，这种方法比之前的方法稍快（但更难以阅读）：
+- en: '[PRE35]'
+  id: totrans-150
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'We calculate the mean and standard deviation of the original dataset:'
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们计算了原始数据集的均值和标准差：
+- en: '[PRE36]'
+  id: totrans-152
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'We plot the mean traffic speed with standard deviation and compare it to the
+    predicted values (![](img/Formula_B19153_15_027.png) hours):'
+  id: totrans-153
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们绘制了带有标准差的平均交通速度，并将其与预测值进行比较（![](img/Formula_B19153_15_027.png)小时）：
+- en: '[PRE37]'
+  id: totrans-154
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'We obtain the following figure:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们得到了以下图形：
+- en: '![Figure 15.10 – Mean traffic speeds predicted by the A3T-GCN model on the
+    test set](img/B19153_15_008.jpg)'
+  id: totrans-156
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图15.10 – A3T-GCN模型在测试集上预测的平均交通速度](img/B19153_15_008.jpg)'
+- en: Figure 15.10 – Mean traffic speeds predicted by the A3T-GCN model on the test
+    set
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图15.10 – A3T-GCN模型在测试集上预测的平均交通速度
+- en: The T-GNN correctly predicts spikes and follows the general trend. However,
+    the predicted speeds are closer to the overall average value, as it is more costly
+    for the model to make serious mistakes due to the MSE loss. Despite that, the
+    GNN is quite accurate and could be fine-tuned to output more extreme values.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: T-GNN正确预测了交通高峰并跟踪了总体趋势。然而，预测的速度更接近整体平均值，因为模型由于MSE损失而更不容易犯重大错误。尽管如此，GNN仍然相当准确，并可以进一步调整以输出更极端的值。
+- en: Summary
+  id: totrans-159
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: This chapter focused on a traffic forecasting task using T-GNNs. First, we explored
+    the PeMS-M dataset and converted it from tabular data into a static graph dataset
+    with a temporal signal. In practice, we created a weighted adjacency matrix based
+    on the input distance matrix and converted the traffic speeds into time series.
+    Finally, we implemented an A3T-GCN model, a T-GNN designed for traffic forecasting.
+    We compared the results to two baselines and validated the predictions made by
+    our model.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章集中讨论了使用T-GNNs进行交通预测的任务。首先，我们探索了PeMS-M数据集，并将其从表格数据转换为具有时间信号的静态图数据集。在实践中，我们基于输入的距离矩阵创建了加权邻接矩阵，并将交通速度转换为时间序列。最后，我们实现了一个A3T-GCN模型，这是一个为交通预测设计的T-GNN。我们将结果与两个基准进行了比较，并验证了我们模型的预测。
+- en: In [*Chapter 16*](B19153_16.xhtml#_idTextAnchor187)*, Building a Recommender
+    System Using LightGCN*, we will see the most popular application of GNNs. We will
+    implement a lightweight GNN on a massive dataset and evaluate it using techniques
+    from recommender systems.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[*第16章*](B19153_16.xhtml#_idTextAnchor187)《使用LightGCN构建推荐系统》中，我们将看到GNNs最流行的应用。我们将在一个大规模数据集上实现一个轻量级GNN，并使用推荐系统中的技术对其进行评估。
+- en: Further reading
+  id: totrans-162
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '[1] B. Yu, H. Yin, and Z. Zhu. *Spatio-Temporal Graph Convolutional Networks:
+    A Deep Learning Framework for Traffic Forecasting*. Jul. 2018\. doi: 10.24963/ijcai.2018/505\.
+    Available at [https://arxiv.org/abs/1709.04875](https://arxiv.org/abs/1709.04875).'
+  id: totrans-163
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[1] B. Yu, H. Yin, 和 Z. Zhu. *时空图卷积网络：面向交通预测的深度学习框架*. 2018年7月\. doi: 10.24963/ijcai.2018/505\.
+    可在[https://arxiv.org/abs/1709.04875](https://arxiv.org/abs/1709.04875)查看。'
+- en: '[2] Y. Li, R. Yu, C. Shahabi, and Y. Liu. *Diffusion Convolutional Recurrent
+    Neural Network: Data-Driven Traffic Forecasting*. arXiv, 2017\. doi: 10.48550/ARXIV.1707.01926\.
+    Available at [https://arxiv.org/abs/1707.01926](https://arxiv.org/abs/1707.01926).'
+  id: totrans-164
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[2] Y. Li, R. Yu, C. Shahabi, 和 Y. Liu. *扩散卷积递归神经网络：数据驱动的交通预测*. arXiv, 2017年\.
+    doi: 10.48550/ARXIV.1707.01926\. 可在[https://arxiv.org/abs/1707.01926](https://arxiv.org/abs/1707.01926)查看。'

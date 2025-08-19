@@ -1,0 +1,1664 @@
+- en: Bringing a Model to Production
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将模型部署到生产环境
+- en: In this chapter, the ultimate goal of any real-life machine learning application
+    will be presented—the deployment and inference of a trained model. As we saw in
+    the previous chapters, TensorFlow allows us to train models and save their parameters
+    in checkpoint files, making it possible to restore the model's status and continue
+    with the training process, while also running the inference from Python.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，将介绍任何现实机器学习应用的最终目标——训练模型的部署与推理。正如我们在前几章所看到的，TensorFlow 允许我们训练模型并将其参数保存在检查点文件中，这使得恢复模型状态并继续训练变得可能，同时也能够从
+    Python 执行推理。
+- en: The checkpoint files, however, are not in the right file format when the goal
+    is to use a trained machine learning model with low latency and a low memory footprint.
+    In fact, the checkpoint files only contain the models' parameters value, without
+    any description of the computation; this forces the program to define the model
+    structure first and then restore the model parameters. Moreover, the checkpoint
+    files contain variable values that are only useful during the training process.
+    However, they are a complete waste of resources during inference (for instance,
+    all the variables created by the optimizers). The correct representation to use
+    is the SavedModel serialization format, which is described in the next section.
+    After analyzing the SavedModel serialization format, and seeing how a `tf.function`
+    decorated function can be graph-converted and serialized, we will deep dive into
+    the TensorFlow deployment ecosystem to see how TensorFlow 2.0 speeds up the deployment
+    of a graph on a wide number of platforms and how it is designed for serving at
+    scale.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，检查点文件在目标是使用经过训练的机器学习模型进行低延迟和低内存占用时并不是合适的文件格式。事实上，检查点文件只包含模型的参数值，而没有计算的描述；这迫使程序先定义模型结构，然后再恢复模型参数。此外，检查点文件包含的变量值仅在训练过程中有用，但在推理时（例如，优化器创建的所有变量）完全浪费资源。正确的表示方式是使用
+    SavedModel 序列化格式，接下来会进行详细介绍。在分析了 SavedModel 序列化格式，并查看如何将一个 `tf.function` 装饰的函数进行图转换和序列化后，我们将深入探讨
+    TensorFlow 部署生态系统，了解 TensorFlow 2.0 如何加速图在多个平台上的部署，并且如何为大规模服务而设计。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主题：
+- en: The SavedModel serialization format
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SavedModel 序列化格式
+- en: Python deployment
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 部署
+- en: Supported deployment platforms
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 支持的部署平台
+- en: The SavedModel serialization format
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: SavedModel 序列化格式
+- en: As we explained in [Chapter 3](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml),* TensorFlow
+    Graph Architecture*, representing computations using DataFlow graphs has several
+    advantages in terms of model portability since a graph is a language-agnostic
+    representation of the computation.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在[第3章](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml)中解释的，*TensorFlow 图计算架构*，通过数据流图（DataFlow
+    graphs）表示计算具有多个优势，特别是在模型可移植性方面，因为图是一种与语言无关的计算表示。
+- en: SavedModel is a universal serialization format for TensorFlow models that extends
+    the TensorFlow standard graph representation by creating a language-agnostic representation
+    for the computation that is recoverable and hermetic. This representation has
+    been designed not only to carry the graph description and values (like the standard
+    graph) but also to offer additional features that were designed to simplify the
+    usage of the trained models in heterogeneous production environments.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SavedModel 是 TensorFlow 模型的通用序列化格式，它通过创建一个语言无关的计算表示，扩展了 TensorFlow 标准图表示，使得该表示不仅可恢复且是封闭的。这种表示的设计不仅用于承载图的描述和值（像标准图一样），还提供了额外的特性，这些特性旨在简化在异构生产环境中使用训练过的模型。
+- en: 'TensorFlow 2.0 has been designed with simplicity in mind. This design choice
+    is visible in the following diagram, where it is possible to appreciate how the
+    SavedModel format is the only bridge between the research and development phases
+    (on the left) and the deployment phase (on the right):'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 在设计时考虑了简洁性。这种设计选择在以下图示中可以明显看到，在这个图示中，可以看到 SavedModel 格式是研究和开发阶段（左侧）与部署阶段（右侧）之间的唯一桥梁：
+- en: '![](img/74244cce-6674-4e44-9fa0-a47aee4adaf9.png)'
+  id: totrans-11
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/74244cce-6674-4e44-9fa0-a47aee4adaf9.png)'
+- en: The TensorFlow 2.0 training and deployment ecosystem. Image source: [https://medium.com/tensorflow/whats-coming-in-tensorflow-2-0-d3663832e9b8](https://medium.com/tensorflow/whats-coming-in-tensorflow-2-0-d3663832e9b8)—the
+    TensorFlow Team
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 的训练和部署生态系统。图片来源：[https://medium.com/tensorflow/whats-coming-in-tensorflow-2-0-d3663832e9b8](https://medium.com/tensorflow/whats-coming-in-tensorflow-2-0-d3663832e9b8)——TensorFlow
+    团队
+- en: Being the bridge between the model's training and its deployment, the SavedModel
+    format must offer a broad set of features to satisfy the wide spectrum of deployment
+    platforms available, thereby providing excellent support for different software
+    and hardware platforms.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为模型训练和部署之间的桥梁，SavedModel 格式必须提供广泛的特性，以满足可用的各种部署平台，从而为不同的软件和硬件平台提供出色的支持。
+- en: Features
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 特性
+- en: A SavedModel contains a complete computational graph, including model parameters
+    and everything else that's specified during its creation. SavedModel objects that
+    are created using the TensorFlow 1.x API only contain a flat graph representation
+    of the computation; in TensorFlow 2.0, a SavedModel contains a serialized representation
+    of `tf.function` objects.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SavedModel 包含一个完整的计算图，包括模型参数以及在创建过程中指定的所有其他内容。使用 TensorFlow 1.x API 创建的 SavedModel
+    对象仅包含计算的平面图表示；在 TensorFlow 2.0 中，SavedModel 包含一个序列化的`tf.function`对象表示。
+- en: 'Creating a SavedModel is straightforward when you''re using the TensorFlow
+    Python API (as shown in the next section), but its configuration requires that
+    you understand its main features, which are as follows:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建 SavedModel 在使用 TensorFlow Python API 时非常简单（如下一节所示），但其配置要求你理解其主要特性，具体如下：
+- en: '**Graph tagging**: In a production environment, you often need to put a model
+    into production, while at the same time continuing the development of the same
+    model after getting new data. Another possible scenario is the parallel training
+    of two or more identical models, trained with different techniques or with different
+    data, with the desire to put them all in production to test which performs better.'
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Graph tagging**：在生产环境中，你经常需要将模型投入生产，同时在获得新数据后继续开发同一模型。另一个可能的场景是并行训练两个或多个相同的模型，这些模型使用不同的技术或不同的数据进行训练，并希望将它们全部投入生产，以测试哪个性能更好。'
+- en: The SavedModel format allows you to have multiple graphs that share the same
+    set of variables and assets in the same file. Each graph is associated with one
+    or more tags (user-defined strings) that allow us to identify it during the load
+    operation.
+  id: totrans-18
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: SavedModel 格式允许你在同一个文件中拥有多个图，这些图共享相同的变量和资产集。每个图都与一个或多个标签（用户定义的字符串）相关联，便于我们在加载操作时识别它。
+- en: '**SignatureDefs**: When defining a computational graph, we are aware of the
+    model''s inputs and outputs; this is called a **Model Signature**. The SavedModel
+    serialization format uses `SignatureDefs` to allow generic support for signatures
+    that may need to be saved within `graph.SignatureDefs` are nothing but a set of
+    namedModel Signatures that defines from which nodes the model can be called and
+    which is the output node, given a certain input.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**SignatureDefs**：在定义计算图时，我们需要了解模型的输入和输出；这被称为**模型签名**。SavedModel 序列化格式使用`SignatureDefs`来允许对可能需要保存在`graph.SignatureDefs`中的签名提供通用支持。`SignatureDefs`仅仅是定义了哪些节点可以调用模型以及哪个是输出节点的命名模型签名集合，给定一个特定的输入。'
+- en: '**Assets**: To allow the models to rely upon external files for initialization,
+    SavedModel supports the concept of assets. The assets are copied to the SavedModel
+    location during its creation, and they can be read by the model initialization
+    procedure safely.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Assets**：为了允许模型依赖外部文件进行初始化，SavedModel 支持资产的概念。资产在 SavedModel 创建过程中被复制到 SavedModel
+    位置，并且可以被模型初始化过程安全地读取。'
+- en: '**Device cleanup**: The computational graph, which we looked at in [Chapter
+    3](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml), *TensorFlow Graph Architecture*,
+    contains the device name of where the computation must be executed. To generate
+    generic graphs that can run on any hardware platform, SavedModel supports clearing
+    devices before its generation.'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Device cleanup**：我们在[第 3 章](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml)中看到的计算图，*TensorFlow
+    图架构*，包含了计算必须执行的设备名称。为了生成可以在任何硬件平台上运行的通用图，SavedModel 支持在生成之前清理设备。'
+- en: These features allow you to create hardware that's independent and self-contained
+    objects that specify how the model should be called, the output nodes, given a
+    specific input, and which particular model to use among the ones available (via
+    tags).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些特性使您能够创建独立且自包含的硬件对象，指定如何调用模型、给定特定输入时的输出节点，以及在可用模型中使用哪一个特定模型（通过标签）。
+- en: Creating a SavedModel from a Keras model
+  id: totrans-23
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从 Keras 模型创建 SavedModel
+- en: In TensorFlow 1.x, creating a SavedModel requires that we know what the input
+    nodes are, what the output nodes are, and that we have successfully loaded the
+    graph representation of the model we want to save inside a `tf.Session` function.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 1.x 中，创建 SavedModel 需要知道输入节点是什么，输出节点是什么，并且我们必须成功加载要保存的模型的图形表示到
+    `tf.Session` 函数中。
+- en: 'TensorFlow 2.0 simplified the way of creating a SavedModel a lot. Since Keras
+    is the only way of defining models, and there are no more sessions, the process
+    of creation of SavedModel consists of a single line of code:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 大大简化了创建 SavedModel 的过程。由于 Keras 是唯一定义模型的方式，而且不再有会话，创建 SavedModel
+    的过程只需要一行代码：
+- en: '`(tf2)`'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: 'This is as follows:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具体结构如下：
+- en: '[PRE0]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The `path` variable follows a good practice that consists of adding a version
+    number to the model directly in the export path (`/1`). The only tag associated
+    with the model is the default `tag: "serve"`.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`path` 变量遵循一种良好的实践，即在导出路径中直接添加模型的版本号 (`/1`)。与模型关联的唯一标签是默认的 `tag: "serve"`。'
+- en: The `tf.saved_model.save` call creates the following directory structure in
+    the specified `path `variable
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.saved_model.save` 调用会在指定的 `path` 变量中创建以下目录结构。'
+- en: '[PRE1]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The directory contains the following:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目录包含以下内容：
+- en: '`assets` contains auxiliary files. These files were described in the previous
+    section.'
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`assets` 包含辅助文件。这些文件在前一节中有描述。'
+- en: '`variables` contains the model variables. These variables are created from
+    a TensorFlow Saver object in the same way they are created for the checkpoint
+    files.'
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`variables` 包含模型变量。这些变量与检查点文件中的变量一样，是通过 TensorFlow Saver 对象创建的。'
+- en: '`saved_model.pb` is the compiled Protobuf. This is a binary representation
+    of the computation the Keras model describes.'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`saved_model.pb` 是已编译的 Protobuf 文件。这是 Keras 模型描述的计算的二进制表示。'
+- en: The Keras model already specifies what the model input and outputs are; therefore,
+    there is no need to worry about which is which. The SignatureDef that's exported
+    by a Keras model (it is worth recalling from the previous section that they are
+    just named functions that describe how to call the model) is the invocation of
+    the `call` method of the Keras model (its forward pass), and it is exported under
+    the `serving_default` signature key.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras 模型已经指定了模型的输入和输出；因此，无需担心哪个是输入哪个是输出。从 Keras 模型导出的 SignatureDef（值得提醒的是，它们只是描述如何调用模型的命名函数）是调用
+    Keras 模型的 `call` 方法（即前向传递），并且它在 `serving_default` 签名键下导出。
+- en: Creating a SavedModel from a Keras model is straightforward since the description
+    of the forward pass is contained in its `call` method. This function is then automatically
+    converted by TensorFlow into its graph equivalent using AutoGraph. The input parameters
+    of the `call` method become the input signature of the graph and the outputs of
+    the Keras model.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 Keras 模型创建 SavedModel 非常简单，因为前向传递的描述包含在其 `call` 方法中。然后，TensorFlow 会使用 AutoGraph
+    自动将该函数转换为其图形等效表示。`call` 方法的输入参数成为图形的输入签名，而 Keras 模型的输出则成为输出。
+- en: However, we may not be interested in exporting a Keras model. What if we just
+    want to deploy and serve a generic computational graph?
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，我们可能不想导出 Keras 模型。如果我们只想部署并提供一个通用的计算图怎么办？
+- en: Converting a SavedModel from a generic function
+  id: totrans-39
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从通用函数转换 SavedModel
+- en: 'In TensorFlow 1.x, there is no difference between exporting a generic graph
+    and a model: select the input and output nodes, create a session, define the signature,
+    and save it.'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 1.x 中，导出通用图和模型没有区别：选择输入和输出节点，创建会话，定义签名，然后保存。
+- en: In TensorFlow 2.0, since graphs are hidden, the conversion of a generic TensorFlow
+    computation to a SavedModel (graph) requires some additional attention.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 2.0 中，由于图形被隐藏，将通用的 TensorFlow 计算转换为 SavedModel（图形）需要一些额外的注意。
+- en: The description of the first parameter of the `tf.saved_model.save(obj, export_dir,
+    signatures=None)` function clearly states that `obj` must be a trackable *object*.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.saved_model.save(obj, export_dir, signatures=None)` 函数的第一个参数描述清楚，`obj`
+    必须是一个可追踪的 *对象*。'
+- en: A trackable object is an object derived from the `TrackableBase` class (private,
+    which means it's not visible in the `tensorflow` package)—almost every object
+    in TensorFlow 2.0 derives from this class. These objects are the objects that
+    can be stored inside a checkpoint file, and among them, we find the Keras models,
+    the optimizers, and so on.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可跟踪对象是从`TrackableBase`类派生的对象（私有，意味着它在`tensorflow`包中不可见）——几乎 TensorFlow 2.0 中的所有对象都派生自这个类。这些对象是可以存储在检查点文件中的对象，其中包括
+    Keras 模型、优化器等。
+- en: 'For this reason, it is not possible to export a function like the following
+    one without creating an object that inherits from a `TrackableBase` object:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，像下面这样的函数无法导出，除非创建一个继承自`TrackableBase`对象的对象：
+- en: '`(tf2)`'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE2]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'The most generic class in the TensorFlow API that, once instantiated, creates
+    a trackable object is the `tf.Module` class. A module is a named container for `tf.Variable`
+    objects, other modules, and functions that apply to user input. Subclassing `tf.Module`
+    is a straightforward way to create a trackable object and satisfying the requirement
+    of the `tf.saved_model.save` function:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow API 中最通用的类是`tf.Module`类，一旦实例化，它会创建一个可跟踪对象。模块是一个命名容器，用于存放`tf.Variable`对象、其他模块和适用于用户输入的函数。继承`tf.Module`是创建可跟踪对象的直接方法，并满足`tf.saved_model.save`函数的要求：
+- en: '`(tf2)`'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE3]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Not being a Keras model, `tf.saved_model.save` doesn''t know which one of the `Wrapper`
+    class methods applies to graph conversion. There are two different ways of instructing
+    the `save` function to convert only the methods we are interested in. They are
+    as follows:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于不是 Keras 模型，`tf.saved_model.save`不知道`Wrapper`类中的哪个方法适用于图形转换。我们可以通过两种不同的方式来指示`save`函数仅转换我们感兴趣的方法。它们如下：
+- en: '**Specify the signature**: The third parameter of the `save` function optionally
+    accepts a dictionary. The dictionary must contain the name of the method to export
+    and the input description. It does so by using the `tf.TensorSpec` object.'
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**指定签名**：`save`函数的第三个参数可以选择接受一个字典。字典必须包含要导出的函数名称和输入描述。通过使用`tf.TensorSpec`对象来实现。'
+- en: '**Use** `tf.function`: The `save` mode, when the `signature` parameter is omitted,
+    searches inside the `obj` for a `@tf.function` decorated method. If exactly one
+    method is found, that method will be used as the default signature for the SavedModel.
+    Also, in this case, we have to describe the input type and shape by using `tf.TensorSpec`
+    objects that are manually passed to the `tf.function` `input_signature` parameter.'
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**使用** `tf.function`：当省略`signature`参数时，`save`模式会在`obj`中查找被`@tf.function`装饰的方法。如果找到了恰好一个方法，那么该方法将作为
+    SavedModel 的默认签名使用。并且在这种情况下，我们必须通过手动传递`tf.TensorSpec`对象来描述输入类型和形状，传递给`tf.function`的`input_signature`参数。'
+- en: The second method is the handiest, and it also brings the advantage of having
+    defined and converted to graph the current Python program. When used, this could
+    speed up computation.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种方法是最方便的，它的优点还在于能够定义并将当前的 Python 程序转换为图形。使用时，这可以加速计算。
+- en: '`(tf2)`'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE4]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Therefore, the way of exporting a generic function to its SavedModel representation
+    is to wrap the function into a trackable object, decorate the method with `tf.function`,
+    and specify the input signature to use during the conversion.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，将通用函数导出为其 SavedModel 表示的方式是将函数封装到一个可跟踪对象中，使用`tf.function`装饰器装饰方法，并指定转换过程中使用的输入签名。
+- en: This is all we need to do to export a generic function, that is, a generic computational
+    graph, or a Keras model to its self-contained and language-agnostic representation,
+    so that it's ready to use in every programming language.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是我们导出通用函数的全部步骤，也就是导出一个通用计算图或 Keras 模型到其自包含且与语言无关的表示形式，以便它可以在任何编程语言中使用。
+- en: The easiest way to use a SavedModel object is to use the TensorFlow Python API,
+    since it's the more complete high-level API for TensorFlow and offers convenient
+    methods to load and use a SavedModel.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 SavedModel 对象的最简单方法是使用 TensorFlow Python API，因为它是 TensorFlow 更完整的高级 API，并提供了方便的方法来加载和使用
+    SavedModel。
+- en: Python deployment
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Python 部署
+- en: Using Python, it is straightforward to load the computational graphs stored
+    inside a SavedModel and use them as native Python functions. This is all thanks
+    to the TensorFlow Python API. The `tf.saved_model.load(path)` method deserializes
+    the SavedModel located in `path` and returns a trackable object with a `signatures`
+    attribute that contains the mapping from the signature keys to Python functions
+    that are ready to be used.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用Python，加载保存在SavedModel中的计算图并将其用作本地Python函数是非常简单的。这一切都要归功于TensorFlow的Python
+    API。`tf.saved_model.load(path)`方法会将位于`path`的SavedModel反序列化，并返回一个可跟踪的对象，该对象具有`signatures`属性，包含从签名键到已准备好使用的Python函数的映射。
+- en: 'The `load` method is capable of deserializing the following:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`load`方法能够反序列化以下内容：'
+- en: Generic computational graphs, such as the ones we created in the previous section
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通用计算图，例如我们在上一节中创建的那些
+- en: Keras models
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Keras模型
+- en: SavedModel created using TensorFlow 1.x or the Estimator API
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用TensorFlow 1.x或Estimator API创建的SavedModel
+- en: Generic computational graph
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通用计算图
+- en: 'Let''s say we are interested in loading the computational graph of the `pow` function
+    we created in the previous section and using it inside a Python program. Doing
+    this is straightforward in TensorFlow 2.0\. Follow these steps to do so:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有兴趣加载在上一节中创建的`pow`函数的计算图，并在Python程序中使用它。在TensorFlow 2.0中，这非常简单。按照以下步骤进行操作：
+- en: 'Import the model:'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入模型：
+- en: '`(tf2)`'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE5]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The `imported` object has a `signatures` attribute we can inspect to see the
+    available functions. In this case, since we didn''t specify a signature when we
+    exported the model, we expect to find only the default signature, `"serving_default"`:'
+  id: totrans-70
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`imported`对象具有一个`signatures`属性，我们可以检查它来查看可用的函数。在这种情况下，由于我们在导出模型时没有指定签名，因此我们预计只会找到默认签名`"serving_default"`：'
+- en: '`(tf2)`'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE6]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: The computational graph of the power function can be made available by accessing
+    `imported.signatures["serving_default"]`. Then, it is ready to be used.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过访问`imported.signatures["serving_default"]`来获取幂函数的计算图。然后，它就可以准备使用了。
+- en: Using the imported computational graphs requires you to have good understanding
+    of the TensorFlow graph structure, as explained in [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_26), *TensorFlow
+    Graph Architecture*. In fact, the `imported.signatures["serving_default"]` function
+    is a static graph, and as such, it requires some additional attention to be used.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用导入的计算图要求你对TensorFlow图结构有良好的理解，正如在[第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_26)《*TensorFlow图架构*》中解释的那样。事实上，`imported.signatures["serving_default"]`函数是一个静态图，因此，它需要一些额外的关注才能使用。
+- en: 'Calling the graph but passing a wrong input type will make it raise an exception
+    since the static graph is strictly statically typed. Moreover, the object returned
+    by the `tf.saved_model.load` function forces the usage of named parameters only,
+    and not positional ones (which is different to the `pow` function''s original
+    definition, which used only positional arguments). Thus, once the inputs with
+    the correct shape and input type are defined, it is possible to invoke the function
+    easily:'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 调用计算图并传入错误的输入类型会导致引发异常，因为静态图是严格静态类型的。此外，`tf.saved_model.load`函数返回的对象强制要求只使用命名参数，而不能使用位置参数（这与`pow`函数的原始定义不同，后者只使用位置参数）。因此，一旦定义了正确形状和输入类型的输入，就可以轻松调用该函数：
+- en: '`(tf2)`'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE7]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: The `result` variable, as opposed to what you might expect, does not contain
+    a `tf.Tensor` object with a value of `32.0`; it is a dictionary. Using a dictionary
+    to return the result of a computation is a good design choice. In fact, this forces
+    the caller (the Python program using the imported computational graph) to explicitly
+    access a key that indicates the desired return value.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与你预期的不同，`result`变量并不包含一个值为`32.0`的`tf.Tensor`对象；它是一个字典。使用字典来返回计算结果是一个好的设计选择。事实上，这强制调用者（使用导入的计算图的Python程序）显式访问一个键，以指示所需的返回值。
+- en: 'In the case of the `pow` function, where the return value is a `tf.Tensor`
+    and not a Python dictionary, the returned dictionary has keys that follow a naming
+    convention—the key name is always the`"output_"` string, followed by the position
+    (starting from zero) of the returned argument. The following code snippet clarifies
+    this concept:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在 `pow` 函数的情况下，返回值是 `tf.Tensor` 而不是 Python 字典，返回的字典具有遵循命名约定的键——键名始终是 `"output_"`
+    字符串，后跟返回参数的位置（从零开始）。以下代码片段阐明了这个概念：
+- en: '`(tf2)`'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE8]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'If the `pow` function is updated as follows, the dictionary keys will be `"output_0",
+    "output_1"`:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 `pow` 函数更新如下，字典键将变为 `"output_0"`, `"output_1"`：
+- en: '`(tf2)`'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE9]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Of course, falling back on the default naming convention is not a good or maintainable
+    solution (what does `output_0` represent?). Therefore, when designing functions
+    that will be exported in a SavedModel, it''s good practice to make the function
+    return a dictionary so that the exported SavedModel will use the same dictionary
+    as the return value when invoked. Thus, a better design of the `pow` function
+    could be as follows:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，依赖默认的命名约定并不是一个好的或可维护的解决方案（`output_0` 代表什么？）。因此，在设计将要导出的函数时，最好使函数返回一个字典，这样导出的
+    SavedModel 在调用时将使用相同的字典作为返回值。因此，`pow` 函数的更好设计可能如下：
+- en: '`(tf2)`'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE10]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Once imported and executed, the following code will produce a dictionary with
+    meaningful names:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦导入并执行，以下代码将生成一个包含有意义名称的字典：
+- en: '`(tf2)`'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE11]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The resultant output is the following dictionary:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果输出是以下字典：
+- en: '[PRE12]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: The TensorFlow Python API simplifies not only the loading of a generic computational
+    graph, but also the usage of a trained Keras model.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow Python API 简化了不仅仅是通用计算图的加载，也简化了训练后的 Keras 模型的使用。
+- en: Keras models
+  id: totrans-94
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Keras 模型
+- en: 'Being the official TensorFlow 2.0 way of defining machine learning models,
+    the Keras models, when serialized, contain more than just the serialized `call`
+    method. The object returned by the `load` function is similar to the object that''s
+    returned when you''re restoring a generic computational graph, but with more attributes
+    and peculiarities:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为官方 TensorFlow 2.0 定义机器学习模型的方式，Keras 模型在序列化时不仅包含序列化的 `call` 方法。由 `load` 函数返回的对象类似于恢复通用计算图时返回的对象，但具有更多的属性和特点：
+- en: 'The `.variables` attribute: The non-trainable variables attached to the original
+    Keras model have been serialized and stored inside the SavedModel.'
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`.variables` 属性：附加在原始 Keras 模型上的不可训练变量已被序列化并存储在 SavedModel 中。'
+- en: 'The `.trainable_variables` attribute: In the same manner as the `.variables`
+    attribute, the trainable variables of the model have also been serialized and
+    stored inside the SavedModel.'
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`.trainable_variables` 属性：与 `.variables` 属性类似，模型的可训练变量也被序列化并存储在 SavedModel
+    中。'
+- en: 'The `__call__` method: Instead of exposing a `signatures` attribute with a
+    single key, `"serving_default"`, the returned object exposes a `__call__` method
+    that accepts inputs just like the original Keras model.'
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`__call__` 方法：返回的对象暴露了一个 `__call__` 方法，接受的输入方式与原始 Keras 模型相同，而不是暴露一个具有单一键 `“serving_default”`
+    的 `signatures` 属性。'
+- en: 'All of these features allow not only the use of the SavedModel as a standalone
+    computational graph, as shown in the following code snippet, but they also allow
+    you to completely restore the Keras model and continue to train it:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些功能不仅允许将 SavedModel 作为独立的计算图使用，如下面的代码片段所示，还允许你完全恢复 Keras 模型并继续训练：
+- en: '`(tf2)`'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE13]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'As we mentioned previously, all these additional features (variables that are
+    trainable and not trainable, plus the serialized representation of the computation)
+    allow for a complete restore of a Keras model object from a SavedModel, making
+    it possible to use them as checkpoint files. The Python API offers the `tf.keras.models.load_model`
+    function to do that, and, as usual, in TensorFlow 2.0, it is really handy:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们之前提到的，所有这些附加特性（可训练和不可训练的变量，以及计算的序列化表示）允许从 SavedModel 完全恢复 Keras 模型对象，从而使它们可以作为检查点文件使用。Python
+    API 提供了 `tf.keras.models.load_model` 函数来完成这一任务，并且在 TensorFlow 2.0 中，它非常方便：
+- en: '`(tf2)`'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE14]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Here, `path` is the path of the SavedModel, or the `h5py` file. The `h5py` serialization
+    format is not considered in this book since it is a Keras representation and has
+    no additional advantages with respect to the SavedModel serialization format.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`path` 是 SavedModel 或 `h5py` 文件的路径。由于 `h5py` 序列化格式是 Keras 的表示形式，并且与 SavedModel
+    序列化格式相比没有额外的优势，因此本书不考虑 `h5py` 格式。
+- en: The Python API is also backward-compatible with the TensorFlow 1.x SavedModel
+    format, and so you can restore flat graphs instead of `tf.function` objects.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python API还向后兼容TensorFlow 1.x的SavedModel格式，因此你可以恢复平坦图，而不是`tf.function`对象。
+- en: Flat graphs
+  id: totrans-107
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 平坦图
+- en: The SavedModel objects created by the `tf.estimator` API or using the SavedModel
+    1.x API contain a rawer representation of the computation. This representation
+    is known as **flat graph**.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由`tf.estimator` API或使用SavedModel 1.x API创建的SavedModel对象包含计算的更原始表示，这种表示称为**平坦图**。
+- en: In this representation, the flat graph inherits no signatures from a `tf.function`
+    object in order to simplify the restoration process. It only takes the computational
+    graph as is, along with its node names and variables (see [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_26), *TensorFlow
+    Graph Architecture*, for details).
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种表示形式中，平坦图不会继承来自`tf.function`对象的任何签名，以简化恢复过程。它只需直接获取计算图，以及其节点名称和变量（详情请见[第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_26)，*TensorFlow图架构*）。
+- en: These SavedModels have functions that correspond to their signatures (defined
+    manually before the serialization process) in the `.signatures` attribute, but
+    more importantly, the restored SavedModel that uses the new TensorFlow 2.0 API
+    has a `.prune` method that allows you to extract functions from arbitrary subgraphs
+    just by knowing the input and output node names.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些SavedModel具有与其签名对应的函数（在序列化过程之前手动定义）存储在`.signatures`属性中，但更重要的是，恢复的SavedModel使用新的TensorFlow
+    2.0 API具有`.prune`方法，允许你仅通过知道输入和输出节点名称就能从任意子图中提取函数。
+- en: Using the `.prune` method is the equivalent of restoring the SavedModel in the
+    default graph and putting it in a TensorFlow 1.x Session; then, the input and
+    output nodes can be accessed by using the `tf.Graph.get_tensor_by_name` method.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`.prune`方法相当于在默认图中恢复SavedModel并将其放入TensorFlow 1.x的Session中；然后，可以通过使用`tf.Graph.get_tensor_by_name`方法访问输入和输出节点。
+- en: 'TensorFlow 2.0, through the `.prune` method, simplified this process, making
+    it just as easy, as shown in the following code snippet:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过`.prune`方法，TensorFlow 2.0简化了这一过程，使其变得像下面的代码片段一样简单：
+- en: '`(tf2)`'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE15]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Here, `input_` is a placeholder of any possible input node, and `"cnn/out/identity:0"`
+    is the output node.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，`input_`是任何可能输入节点的占位符，而`"cnn/out/identity:0"`是输出节点。
+- en: After the SavedModel has been loaded inside the Python program, it is possible
+    to use the trained model (or the generic computational graph) as a building block
+    for any standard Python application. For instance, once you've trained a face
+    detection model, it is straightforward to use OpenCV (the most famous open source
+    computer vision library) to open the webcam stream and feed it to the face detection
+    model. The applications of trained models are countless and you can develop your
+    own Python application that uses a trained machine learning model as a building
+    block.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Python程序中加载SavedModel后，可以将训练好的模型（或通用计算图）用作任何标准Python应用程序的构建块。例如，一旦你训练了一个人脸检测模型，就可以轻松使用OpenCV（最著名的开源计算机视觉库）打开网络摄像头流，并将其输入到人脸检测模型中。训练模型的应用无数，你可以开发自己的Python应用程序，将训练好的机器学习模型作为构建块。
+- en: Although Python is the language of data science, it isn't the perfect candidate
+    for the deployment of machine learning models on different platforms. There are
+    programming languages that are the de facto standard for certain tasks or environments;
+    for example, Javascript for client-side web development, C++ and Go for data centers
+    and cloud services, and so on.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管Python是数据科学的主要语言，但它并不是在不同平台上部署机器学习模型的完美选择。有些编程语言是某些任务或环境的事实标准；例如，Javascript用于客户端Web开发，C++和Go用于数据中心和云服务，等等。
+- en: Being a language-agnostic representation, it is, in theory, possible to load
+    and execute (deploy) a SavedModel using every programming language; this is a
+    huge advantage since there are cases in which Python is not usable, or it is not
+    the best choice.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一种语言无关的表示形式，理论上可以使用任何编程语言加载和执行（部署）SavedModel；这具有巨大的优势，因为有些情况下Python不可用，或者不是最佳选择。
+- en: 'TensorFlow supports many different deployment platforms: it offers tools and
+    frameworks in many different languages in order to satisfy a wide range of use
+    cases.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow支持许多不同的部署平台：它提供了许多不同语言的工具和框架，以满足广泛的使用场景。
+- en: Supported deployment platforms
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 支持的部署平台
+- en: 'As shown in the diagram at the beginning of this chapter, SavedModel is the
+    input for a vast ecosystem of deployment platforms, with each one being created
+    to satisfy a different range of use cases:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如本章开头的图示所示，SavedModel是一个庞大部署平台生态系统的输入，每个平台的创建目标是满足不同的使用场景需求：
+- en: '**TensorFlow Serving**: This is the official Google solution for serving machine
+    learning models. It supports model versioning, multiple models can be deployed
+    in parallel, and it ensures that concurrent models achieve high throughput with
+    low latency thanks to its complete support for hardware accelerators (GPUs and
+    TPUs). TensorFlow Serving is not merely a deployment platform, but an entire ecosystem
+    built around TensorFlow and written in highly efficient C++ code. Currently, this
+    is the solution Google itself uses to run tens of millions of inferences per second
+    on Google Cloud''s ML platform.'
+  id: totrans-122
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**TensorFlow Serving**：这是谷歌官方提供的机器学习模型服务解决方案。它支持模型版本控制，多个模型可以并行部署，并且通过完全支持硬件加速器（GPU和TPU），确保并发模型在低延迟下实现高吞吐量。TensorFlow
+    Serving不仅仅是一个部署平台，而是围绕TensorFlow构建的一个完整生态系统，且使用高效的C++代码编写。目前，这是谷歌自己用来在Google Cloud
+    ML平台上每秒处理数千万次推理的解决方案。'
+- en: '**TensorFlow Lite**:Thisis the deployment platform of choice for running machine
+    learning models on mobile and embedded devices. TensorFlow Lite is a whole new
+    ecosystem and has its own training and deployment tools. It is designed to optimize
+    the trained models for size, thereby creating a small binary representation of
+    the original model that''s optimized for fast inference and low power consumption.
+    Moreover, the TensorFlow Lite framework also offers the tools to build a new model
+    and retrain an existing one (thus it allows you to do transfer learning/fine-tuning)
+    directly from the embedded device or smartphone.'
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**TensorFlow Lite**：这是在移动设备和嵌入式设备上运行机器学习模型的首选部署平台。TensorFlow Lite是一个全新的生态系统，拥有自己的训练和部署工具。它的设计目标是优化训练后的模型大小，从而生成一个针对快速推理和低功耗消耗优化的、原始模型的小型二进制表示。此外，TensorFlow
+    Lite框架还提供了构建新模型和重新训练现有模型的工具（因此它允许进行迁移学习/微调），这些操作可以直接在嵌入式设备或智能手机上完成。'
+- en: TensorFlow Lite comes with a Python toolchain that's used to convert the SavedModel
+    into its optimized representation, the `.tflite` file.
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: TensorFlow Lite附带一个Python工具链，用于将SavedModel转换为其优化表示，即`.tflite`文件。
+- en: '**TensorFlow.js**: This is a framework similar to TensorFlow Lite but designed
+    to train and deploy TensorFlow models in the browser and Node.js. Like TensorFlow
+    Lite, the framework comes with a Python toolchain that can be used to convert
+    a SavedModel into a JSON readable format by the TensorFlow Javascript library.
+    TensorFlow.js can be used to fine-tune or train models from scratch, which it
+    does by using sensor data coming from the browser or any other client-side data.'
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**TensorFlow.js**：这是一个类似于TensorFlow Lite的框架，但设计目的是在浏览器和Node.js中训练和部署TensorFlow模型。与TensorFlow
+    Lite类似，该框架提供了一个Python工具链，可用于将SavedModel转换为TensorFlow JavaScript库可读的JSON格式。TensorFlow.js可以用于微调或从零开始训练模型，利用来自浏览器或任何其他客户端的数据传感器。'
+- en: '**Other language bindings**: TensorFlow Core is written in C++, and there are
+    bindings for many different programming languages, most of which are automatically
+    generated. The structure of the binding is often very low-level and similar to
+    the TensorFlow Graph structure used in the TensorFlow 1.x Python API and under
+    the hood of the TensorFlow C++ API.'
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**其他语言绑定**：TensorFlow核心是用C++编写的，且为许多不同的编程语言提供绑定，其中大多数是自动生成的。绑定的结构通常非常低级，类似于TensorFlow
+    1.x Python API和TensorFlow C++ API内部使用的TensorFlow图结构。'
+- en: Supporting many different deployment platforms, TensorFlow is ready to deploy
+    on a broad range of platforms and devices. In the following sections, you will
+    learn how to deploy a trained model on a browser using TensorFlow.js and how to
+    run inferences using the Go programming language.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow支持许多不同的部署平台，准备在广泛的平台和设备上进行部署。在接下来的章节中，您将学习如何使用TensorFlow.js在浏览器中部署训练好的模型，并如何使用Go编程语言进行推理。
+- en: TensorFlow.js
+  id: totrans-128
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TensorFlow.js
+- en: TensorFlow.js ([https://www.tensorflow.org/js/](https://www.tensorflow.org/js/))
+    is a library that's used for developing and training machine learning models on
+    JavaScript and deploying them in browsers or in Node.js.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow.js ([https://www.tensorflow.org/js/](https://www.tensorflow.org/js/))
+    是一个用于开发和训练机器学习模型的JavaScript库，支持在浏览器或Node.js中部署这些模型。
+- en: To be used inside TensorFlow.js, a trained model must be converted into a format
+    TensorFlow.js can load. The target format is a directory containing a `model.json`
+    file and a set of binary files containing the model parameters. The `model.json`
+    file contains the graph description and information about the binary files, to
+    make it possible to restore the trained model successfully.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 TensorFlow.js 中使用，训练好的模型必须转换为 TensorFlow.js 可加载的格式。目标格式是一个包含`model.json`文件和一组包含模型参数的二进制文件的目录。`model.json`文件包含图形描述和关于二进制文件的信息，以确保能够成功恢复训练好的模型。
+- en: Although it is fully compatible with TensorFlow 2.0, it is good practice to
+    create an isolated environment for TensorFlow.js, as explained in the *Environment
+    setup* section of [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_26), *TensorFlow
+    Graph Architecture*. The TensorFlow.js dedicated environment is, from now on,
+    displayed using the `(tfjs)` notation, before the code snippets.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管它与 TensorFlow 2.0 完全兼容，但为了最佳实践，建议为 TensorFlow.js 创建一个独立的环境，正如在[第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_26)的*环境设置*部分中所解释的那样，*TensorFlow
+    图架构*。TensorFlow.js 专用环境从现在开始会使用`(tfjs)`符号，在代码片段之前显示。
+- en: 'The first step in developing a TensorFlow.js application is to install TensorFlow.js
+    inside the isolated environment. You need to do this so that you can use all the
+    provided command-line tools and the library itself via Python:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 开发 TensorFlow.js 应用程序的第一步是将 TensorFlow.js 安装到独立环境中。你需要这样做，以便可以通过 Python 使用所有提供的命令行工具和库本身：
+- en: '`(tfjs)`'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tfjs)`'
+- en: '[PRE16]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: TensorFlow.js has tight integration with TensorFlow 2.0\. In fact, it is possible
+    to convert a Keras model into a TensorFlow.js representation directly using Python.
+    Moreover, it offers a command-line interface for converting a generic SavedModel
+    that could contain any computational graph into its supported representation.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow.js 与 TensorFlow 2.0 紧密集成。实际上，使用 Python 直接将 Keras 模型转换为 TensorFlow.js
+    表示是可能的。此外，它还提供了一个命令行界面，用于将任何计算图的通用 SavedModel 转换为其支持的表示。
+- en: Converting a SavedModel into model.json format
+  id: totrans-136
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将 SavedModel 转换为 model.json 格式
+- en: Since it is not possible to use a SavedModel directly from TensorFlow.js, we
+    need to convert it into a compatible version and then load it in the TensorFlow.js
+    runtime. The `tensorflowjs_converter` command-line application makes the conversion
+    process straightforward. This tool not only performs the conversion between the
+    SavedModel and the TensorFlow.js representation but also automatically quantizes
+    the model, thereby reducing its dimensions when necessary.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于无法直接在 TensorFlow.js 中使用 SavedModel，我们需要将其转换为兼容版本，然后在 TensorFlow.js 运行时加载。`tensorflowjs_converter`命令行工具使得转换过程变得简单明了。此工具不仅执行
+    SavedModel 和 TensorFlow.js 表示之间的转换，还会自动量化模型，在必要时减少其维度。
+- en: 'Let''s say we are interested in converting the SavedModel of the computational
+    graph we exported in the previous section into TensorFlow format via the serialized `pow`
+    function. Using `tensorflowjs_converter`, we only need to specify the input and
+    output file formats (in this case, the input is a SavedModel, and the output is
+    a TensorFlow.js graph model) and location, and then we are ready to go:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有兴趣将前一节中导出的计算图的 SavedModel 转换为 TensorFlow 格式，方法是通过序列化的`pow`函数。使用`tensorflowjs_converter`，我们只需指定输入和输出文件格式（在这种情况下，输入是
+    SavedModel，输出是 TensorFlow.js 图模型）及其位置，之后我们就可以开始操作了：
+- en: '`(tfjs)`'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tfjs)`'
+- en: '[PRE17]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The preceding command reads the SavedModel present in `/tmp/pow/1` and places
+    the result of the conversion in the current directory, `exported_js` (creating
+    it if it doesn't exist). Since the SavedModel has no parameters, in the `exported_js`
+    folder, we only find the `model.json` file that contains the description of the
+    computation.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述命令读取位于`/tmp/pow/1`的 SavedModel，并将转换结果放入当前目录`exported_js`中（如果该目录不存在则创建它）。由于
+    SavedModel 没有参数，在`exported_js`文件夹中，我们只会看到包含计算描述的`model.json`文件。
+- en: 'We are now ready to go – we can define a simple web page or a simple Node.js
+    application that imports the TensorFlow.js runtime and then successfully import
+    and use the converted SavedModel. The following code creates a one-page application
+    with a form inside it; by using the click event of the **pow** button, the exported
+    graph is loaded, and the computation is executed:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在可以开始了——我们可以定义一个简单的网页或一个简单的 Node.js 应用程序，导入 TensorFlow.js 运行时，然后成功导入并使用已转换的
+    SavedModel。以下代码创建了一个包含表单的一页应用程序；通过使用 **pow** 按钮的点击事件，可以加载已导出的图并执行计算：
+- en: '[PRE18]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'TensorFlow.js follows different conventions in regards to how to use a loaded
+    SavedModel. As we can see in the preceding code snippet, the signature defined
+    inside the SavedModel has been preserved, and the function is being invoked by
+    passing the named parameters `"x"` and `"y"`. Instead, the return value format
+    has been changed: the `pow_x_y` and `pow_y_x` keys have been discarded, and the
+    return values are now positional; in the first position (`results[0]`), we found
+    the value of the `pow_x_y` key, and in the second position, the value of the `pow_y_x` key.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow.js 在如何使用加载的 SavedModel 方面遵循了不同的约定。如前面的代码片段所示，SavedModel 中定义的签名得以保留，并且通过传递命名参数
+    `"x"` 和 `"y"` 来调用该函数。相反，返回值的格式已被更改：`pow_x_y` 和 `pow_y_x` 键已被丢弃，返回值现在是位置参数；在第一个位置（`results[0]`），我们找到了
+    `pow_x_y` 键的值，而在第二个位置找到了 `pow_y_x` 键的值。
+- en: Moreover, with JavaScript being a language with strong support for asynchronous
+    operations, the TensorFlow.js API uses it a lot—the model loading is asynchronous
+    and defined inside an `async` function. Even fetching the results from the model
+    is asynchronous by default. But in this case, we forced the call to be synchronous
+    using the `dataSync` method.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，由于 JavaScript 是一种对异步操作有强大支持的语言，TensorFlow.js API 在使用时也大量采用了异步操作——模型加载是异步的，并且定义在一个
+    `async` 函数内部。即使是从模型中获取结果，默认也是异步的。但在这种情况下，我们通过使用 `dataSync` 方法强制调用为同步。
+- en: 'Using Python, we can now launch a simple HTTP server and see the application
+    inside the browser:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 Python，我们现在可以启动一个简单的 HTTP 服务器，并在浏览器中查看该应用程序：
+- en: '`(tfjs)`'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tfjs)`'
+- en: '[PRE19]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'By visiting the `http://localhost:8000/` address using a web browser and opening
+    the HTML page containing the previously written code, we can see and use the deployed
+    graph, directly in the browser:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过在浏览器中访问 `http://localhost:8000/` 地址并打开包含先前编写代码的 HTML 页面，我们可以直接在浏览器中查看和使用已部署的图：
+- en: '![](img/5fd26d0a-d14f-4070-a6f5-c3bcd2e2f26c.png)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/5fd26d0a-d14f-4070-a6f5-c3bcd2e2f26c.png)'
+- en: The TensorFlow.js API, although similar to the Python one, is different and
+    follows different rules; a complete analysis of TensorFlow.js is beyond the scope
+    of this book, and so you should have a look at the official documentation to gain
+    a better understanding of the TensorFlow.js API.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 TensorFlow.js API 与 Python 版本相似，但它有所不同，并遵循不同的规则；对 TensorFlow.js 进行全面分析超出了本书的范围，因此你应该查看官方文档，以便更好地理解
+    TensorFlow.js API。
+- en: Compared to the preceding procedure, which involves the usage of `tensorflowjs_converter`,
+    the deployment of a Keras model is simplified, and it is possible to integrate
+    the conversion from a Keras model to a `model.json` file directly in the TensorFlow
+    2.0 Python script that's used to train the model.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与前述过程相比，后者涉及使用 `tensorflowjs_converter`，Keras 模型的部署更加简化，并且可以直接将 Keras 模型转换为
+    `model.json` 文件的过程嵌入到用于训练模型的 TensorFlow 2.0 Python 脚本中。
+- en: Converting a Keras Model into model.json format
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将 Keras 模型转换为 model.json 格式
+- en: 'As shown at the beginning of this chapter, a Keras model can be exported as
+    a SavedModel, and therefore, the procedure explained earlier to convert a SavedModel
+    into a `model.json` file can still be used. However, since the Keras models are
+    particular objects in the TensorFlow 2.0 framework, it is possible to directly
+    embed the deployment into TensorFlow.js at the end of the training pipeline:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如本章开始时所示，Keras 模型可以导出为 SavedModel，因此，前面提到的将 SavedModel 转换为 `model.json` 文件的过程仍然可以使用。然而，由于
+    Keras 模型是 TensorFlow 2.0 框架中的特定对象，因此可以直接将部署过程嵌入到 TensorFlow.js 中，这一操作发生在训练流程的最后：
+- en: '`(tfjs)`'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tfjs)`'
+- en: '[PRE20]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: The conversion is straightforward since it only consists of a single line, `tfjs.converters.save_keras_model(model,
+    tfjs_target_dir)`. For this reason, the practical application is left as an exercise
+    to you (see the *Exercises* section for more information).
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转换过程很简单，因为它只包含一行代码，`tfjs.converters.save_keras_model(model, tfjs_target_dir)`。因此，实际应用部分留给你作为练习（有关更多信息，请参见*练习*部分）。
+- en: Among the available deployment platforms, there is a long list of programming
+    languages whose support to TensorFlow is given by bindings, which are usually
+    automatically generated.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在可用的部署平台中，有一长串编程语言支持 TensorFlow，这些语言的支持通常通过自动生成的绑定来实现。
+- en: Supporting different programming languages is a great advantage since it allows
+    developers to embed machine learning models that have been developed and trained
+    using Python in their applications. If, for instance, we are Go developers and
+    we want to embed a machine learning model in our application, we can use the TensorFlow
+    Go bindings or a simplified interface built upon them called **tfgo**.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 支持不同编程语言是一个很大的优势，因为它允许开发者将使用 Python 开发和训练的机器学习模型嵌入到他们的应用程序中。例如，如果我们是 Go 开发者，想要在我们的应用程序中嵌入一个机器学习模型，我们可以使用
+    TensorFlow Go 绑定或其基础上构建的简化接口 **tfgo**。
+- en: Go Bindings and tfgo
+  id: totrans-160
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Go 绑定和 tfgo
+- en: The TensorFlow bindings for the Go programming language are almost entirely
+    automatically generated from the C++ API, and as such, they implement only primitive
+    operations. There's no Keras models, no eager execution, nor any other TensorFlow
+    2.0 new features; in fact, almost no changes were made to the Python API. Moreover,
+    the Go API is not covered by the TensorFlow API satabilty guarantee, which means
+    that everything can change between minor releases. However, this API is particularly
+    useful for loading models that are created with Python and running them within
+    a Go application.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 对 Go 编程语言的绑定几乎完全是从 C++ API 自动生成的，因此它们只实现了基本操作。没有 Keras 模型、没有即时执行，也没有任何其他
+    TensorFlow 2.0 新特性；事实上，几乎没有对 Python API 进行任何更改。此外，Go API 不包含在 TensorFlow API 稳定性保证范围内，这意味着在小版本发布之间，所有内容都可能发生变化。不过，这个
+    API 对于加载使用 Python 创建的模型并在 Go 应用程序中运行它们特别有用。
+- en: Setup
+  id: totrans-162
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置
+- en: Setting up the environment is more complex compared to Python since it is necessary
+    to download and install the TensorFlow C library and clone the whole TensorFlow
+    repository to create the Go TensorFlow package at the correct version.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置环境比 Python 更加复杂，因为需要下载并安装 TensorFlow C 库，并克隆整个 TensorFlow 仓库来创建正确版本的 Go TensorFlow
+    包。
+- en: 'The following `bash` script shows how to download, configure, and install the
+    TensorFlow Go API, with no GPU, at version 1.13:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下 `bash` 脚本展示了如何下载、配置并安装没有 GPU 的 TensorFlow Go API，版本为 1.13：
+- en: '[PRE21]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Once installed, it is possible to build and run an example program that only
+    uses the Go bindings.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦安装完成，就可以构建并运行一个仅使用 Go 绑定的示例程序。
+- en: Go bindings
+  id: totrans-167
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Go 绑定
+- en: Refer to the example program available at [https://www.tensorflow.org/install/lang_go](https://www.tensorflow.org/install/lang_go)
+    for this section.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请参考本节提供的示例程序，[https://www.tensorflow.org/install/lang_go](https://www.tensorflow.org/install/lang_go)。
+- en: As you will see from the code, using TensorFlow in Go is very different compared
+    to Python or even JavaScript. In particular, the operations that are available
+    are really low-level and there is still the graph definition and session execution
+    pattern to follow. A detailed explanation of the TensorFlow Go API is beyond the
+    scope of this book; however, you can read the *Understanding TensorFlow using
+    GO* article ([https://pgaleone.eu/tensorflow/go/2017/05/29/understanding-tensorflow-using-go/](https://pgaleone.eu/tensorflow/go/2017/05/29/understanding-tensorflow-using-go/)),
+    which explains the basics of the Go API.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你从代码中看到的，Go 中使用 TensorFlow 与 Python 或甚至 JavaScript 的使用方式非常不同。特别是，提供的操作非常低级，而且仍然需要遵循图定义和会话执行模式。TensorFlow
+    Go API 的详细解释超出了本书的范围；不过，你可以阅读 *理解使用 Go 的 TensorFlow* 文章（[https://pgaleone.eu/tensorflow/go/2017/05/29/understanding-tensorflow-using-go/](https://pgaleone.eu/tensorflow/go/2017/05/29/understanding-tensorflow-using-go/)），该文解释了
+    Go API 的基础知识。
+- en: A `Go` package that simplifies the usage of Go bindings is `tfgo`. In the following
+    section, we are going to use it to restore and execute the computational graph
+    of the `pow` operation from the previously exported SavedModel.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个简化使用 Go 绑定的 `Go` 包是 `tfgo`。在接下来的部分，我们将使用它来恢复并执行先前导出的 SavedModel 中的 `pow` 操作的计算图。
+- en: Working with tfgo
+  id: totrans-171
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 tfgo
+- en: 'Installing `tfgo` is straightforward; just use the following code after installing
+    the TensorFlow Go package:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装 `tfgo` 非常简单；只需在安装 TensorFlow Go 包之后使用以下代码：
+- en: '[PRE22]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Since the goal is to use Go to deploy the SavedModel of the previously defined
+    `pow` function, we are going to use the `tfgo` `LoadModel` function, which was
+    created to load a SavedModel given the path and the desired tag.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于目标是使用 Go 部署之前定义的 `pow` 函数的 SavedModel，我们将使用 `tfgo` 的 `LoadModel` 函数，该函数用于根据路径和所需标签加载
+    SavedModel。
+- en: TensorFlow 2.0 comes with the `saved_model_cli` tool, which can be used to inspect
+    a SavedModel file. This tool is fundamental to correctly using a SavedModel using
+    the Go bindings or `tfgo`. In fact, contrary to Python or TensorFlow.js, the Go
+    API requires the name of the operations of input and output, and not the high-level
+    names given during the SavedModel's creation.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 配备了 `saved_model_cli` 工具，可以用来检查 SavedModel 文件。该工具对于正确使用 Go 绑定或
+    `tfgo` 使用 SavedModel 至关重要。事实上，与 Python 或 TensorFlow.js 相反，Go API 需要输入和输出操作的名称，而不是在
+    SavedModel 创建时给出的高级名称。
+- en: 'By using `saved_model_cli show`, it is possible to have all the information
+    about the inspect SavedModel and thus be able to use them in Go:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用`saved_model_cli show`，可以获得关于已检查 SavedModel 的所有信息，从而能够在 Go 中使用它们：
+- en: '[PRE23]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This produces the following list of information:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将生成以下信息列表：
+- en: '[PRE24]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'The most important parts are as follows:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最重要的部分如下：
+- en: '**The tag name**: `serve` is the only tag present in this SavedModel object.'
+  id: totrans-181
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**标签名称**：`serve` 是该 SavedModel 对象中唯一的标签。'
+- en: '**The SignatureDefs**: There are two different SignatureDefs in this SavedModel: `__saved_model_init_op`
+    which, in this case, does nothing; and `serving_default`, which contains all the
+    necessary information about the input and output nodes of the exported computational
+    graph.'
+  id: totrans-182
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**SignatureDefs**：该 SavedModel 中有两个不同的 SignatureDefs：`__saved_model_init_op`，在这种情况下不执行任何操作；以及
+    `serving_default`，它包含有关导出计算图的输入和输出节点的所有必要信息。'
+- en: '**The inputs and outputs**: Every SignatureDef section contains a list of input
+    and outputs. As we can see, for every node, the dtype, shape, and name of the
+    operation that generates the output Tensor are available.'
+  id: totrans-183
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**输入和输出**：每个 SignatureDef 部分都包含输入和输出的列表。如我们所见，对于每个节点，输出张量的 dtype、形状和生成该输出张量的操作名称都是可用的。'
+- en: Since the Go bindings support the flat graph structure, we have to use the operation
+    names and not the names that were given during the SavedModel's creation to access
+    the input/output nodes.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 Go 绑定支持扁平化的图结构，我们必须使用操作名称，而不是在 SavedModel 创建过程中所使用的名称，来访问输入/输出节点。
+- en: 'Now that we have all this information, it is easy to use `tfgo` to load and
+    execute the model. The following code contains information about how the model
+    is loaded and its usage so that it only executes the output node that computes
+    [![](img/4e15f405-513a-440e-ba07-b2a5a1f12d53.png)]:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们拥有了所有这些信息，使用`tfgo`加载和执行模型变得很简单。以下代码包含了有关如何加载模型及其使用的信息，以便它只执行计算输出节点的操作[![](img/4e15f405-513a-440e-ba07-b2a5a1f12d53.png)]：
+- en: '`(go)`'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(go)`'
+- en: '[PRE25]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'In the following code snippet, you restore the model from the SavedModel tag, `"serve"`. Define
+    the input tensors, that is, *x=2*, *y=5*. Then, compute the result. The output
+    is the first node, `"PartitionedCall:0"`, which corresponds to *x_to_y*. The input
+    names are `"serving_default_{x,y}"` and correspond to `x` and `y`. The predictions
+    need to be converted back into the correct type, which is `float32` in this case:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码片段中，你将从 SavedModel 标签 `"serve"` 中恢复模型。定义输入张量，即 *x=2*，*y=5*。然后，计算结果。输出是第一个节点，`"PartitionedCall:0"`，它对应于
+    *x_to_y*。输入名称是 `"serving_default_{x,y}"`，对应于 `x` 和 `y`。预测结果需要转换回正确的类型，这里是 `float32`：
+- en: '[PRE26]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: As expected, the program produces *32* as the output.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如预期的那样，程序输出 *32*。
+- en: The process of inspecting a SavedModel using `saved_model_cli` and using it
+    in a Go program or in any other supported deployment platform is always the same,
+    no matter what the content of the SavedModel is. This is one of the greatest advantages
+    of using the standardized SavedModel serialization format as the unique connection
+    point between the training/graph definition and the deployment.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`saved_model_cli`检查 SavedModel 并在 Go 程序或任何其他支持的部署平台中使用它的过程始终是一样的，无论 SavedModel
+    的内容如何。这是使用标准化 SavedModel 序列化格式作为训练/图定义与部署之间唯一连接点的最大优势之一。
+- en: Summary
+  id: totrans-192
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 概要
+- en: In this chapter, we looked at the SavedModel serialization format. This standardized
+    serialization format was designed with the goal of simplifying the deployment
+    of machine learning models on many different platforms.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们研究了 SavedModel 序列化格式。这个标准化的序列化格式旨在简化在多个不同平台上部署机器学习模型的过程。
+- en: SavedModel is a language-agnostic, self-contained representation of the computation,
+    and the whole TensorFlow ecosystem supports it. Deploying a trained machine learning
+    model on embedded devices, smartphones, browsers, or using many different languages
+    is possible thanks to the conversion tools based on the SavedModel format or the
+    native support offered by the TensorFlow bindings for other languages.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SavedModel 是一种与语言无关、自包含的计算表示，整个 TensorFlow 生态系统都支持它。由于基于 SavedModel 格式的转换工具或
+    TensorFlow 绑定提供的其他语言的本地支持，可以在嵌入式设备、智能手机、浏览器上部署训练过的机器学习模型，或者使用许多不同的语言。
+- en: The easiest way to deploy a model is by using Python since the TensorFlow 2.0
+    API has complete support for the creation, restoration, and manipulation of SavedModel
+    objects. Moreover, the Python API offers additional features and integrations
+    between the Keras models and the SavedModel objects, making it possible to use
+    them as checkpoints.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部署模型的最简单方式是使用 Python，因为 TensorFlow 2.0 API 完全支持创建、恢复和操作 SavedModel 对象。此外，Python
+    API 还提供了额外的功能和 Keras 模型与 SavedModel 对象之间的集成，使得可以将它们用作检查点。
+- en: We saw how all the other deployment platforms supported by the TensorFlow ecosystem
+    are based on the SavedModel file format or on some of its transformations. We
+    used TensorFlow.js to deploy a model in a browser and in Node.js. We learned that
+    we require an additional conversion step, but doing this is straightforward thanks
+    to the Python TensorFlow.js package and the native support for Keras models. The
+    automatically generated language bindings are close to the C++ API, and so they
+    are more low-level and difficult to use. We also learned about Go bindings and
+    `tfgo`, which is a simplified interface for the TensorFlow Go API. Together with
+    the command-line tools that are used to analyze a SavedModel object, you've seen
+    how to read the information contained inside a SavedModel and use it to deploy
+    a SavedModel in Go.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们看到，TensorFlow 生态系统支持的所有其他部署平台都基于 SavedModel 文件格式或其某些转换。我们使用 TensorFlow.js
+    在浏览器和 Node.js 中部署模型。我们了解到，我们需要额外的转换步骤，但由于 Python TensorFlow.js 包和 Keras 模型的本地支持，这一步骤很简单。自动生成的语言绑定接近于
+    C++ API，因此更低级且难以使用。我们还了解了 Go 绑定和 `tfgo`，这是 TensorFlow Go API 的简化接口。结合用于分析 SavedModel
+    对象的命令行工具，您已经了解到如何读取 SavedModel 中包含的信息，并将其用于在 Go 中部署 SavedModel。
+- en: 'We''ve reached the end of this book. By looking back at the previous chapters,
+    we can see all the progress that we''ve made. Your journey into the world of neural
+    networks shouldn''t end here; in fact, this should be a starting point so that
+    you can create your own neural network applications in TensorFlow 2.0\. Throughout
+    this journey, we learned about the basics of machine learning and deep learning
+    while emphasizing the graph representation of the computation. In particular,
+    we learned about the following:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经完成了本书的阅读。通过回顾前几章，我们可以看到我们所取得的所有进展。你在神经网络世界的旅程不应该在这里结束；事实上，这应该是一个起点，让您可以在
+    TensorFlow 2.0 中创建自己的神经网络应用程序。在这段旅程中，我们学习了机器学习和深度学习的基础知识，同时强调了计算的图形表示。特别是，我们了解了以下内容：
+- en: Machine learning basics, from the dataset's importance to the most common machine
+    learning algorithm families (supervised, unsupervised, and semi-supervised).
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 机器学习基础知识，从数据集的重要性到最常见的机器学习算法家族（监督学习、无监督学习和半监督学习）。
+- en: The most common neural network architectures, how to train a machine learning
+    model, and how to fight the overfitting problem through regularization.
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最常见的神经网络架构，如何训练机器学习模型以及如何通过正则化解决过拟合问题。
+- en: The TensorFlow graph architecture that's explicitly used in TensorFlow 1.x and
+    still present in TensorFlow 2.0\. In this chapter, we started to write TensorFlow
+    1.x code, which we found to be extremely useful when working with `tf.function`.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: TensorFlow 图形架构在 TensorFlow 1.x 中明确使用，并且仍然存在于 TensorFlow 2.0 中。在本章中，我们开始编写 TensorFlow
+    1.x 代码，在处理`tf.function`时发现它非常有用。
+- en: The TensorFlow 2.0 architecture with its new way of programming, the TensorFlow
+    2.0 Keras implementation, eager execution, and many other new features, which
+    were also explained in previous chapters.
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 架构及其新的编程方式，TensorFlow 2.0 Keras 实现，急切执行以及许多其他新功能，这些内容在前几章节中也有详细解释。
+- en: How to create efficient data input pipelines and how to use the new **TensorFlow
+    datasets** (**tfds**) project to quickly get a common benchmark dataset. Moreover,
+    the Estimator API was presented, although it still uses the old graph representation.
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何创建高效的数据输入管道，并且如何使用新的**TensorFlow 数据集**(**tfds**)项目快速获取常见的基准数据集。此外，还介绍了Estimator
+    API，尽管它仍然使用旧的图表示。
+- en: How to use TensorFlow Hub and Keras to fine-tune a pre-trained model or do transfer
+    learning. By doing this, we learned how to quickly prototype a classification
+    network, thereby speeding up the training time by reusing the work made by the
+    tech giant.
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用TensorFlow Hub和Keras对预训练模型进行微调或进行迁移学习。通过这样做，我们学会了如何快速构建一个分类网络，从而通过重用技术巨头的工作来加速训练时间。
+- en: How to define a simple classification and regression network, with the goal
+    of introducing the topic of object detection and showing how easy it is to train
+    a multi-headed network using TensorFlow eager execution.
+  id: totrans-204
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何定义一个简单的分类和回归网络，目的是引入目标检测主题并展示如何利用TensorFlow即时执行轻松训练一个多头网络。
+- en: After object detection, we focused on the more difficult task (but easier to
+    implement) of performing semantic segmentation on images, and we developed our
+    own version of U-Net to solve it. Since a dataset of semantic segmentation is
+    not presented in TensorFlow datasets (tfds), we also learned how to add a custom
+    DatasetBuilder to add a new datset.
+  id: totrans-205
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在目标检测之后，我们关注了更难的任务（但更易实现）——对图像进行语义分割，并开发了我们自己的U-Net版本来解决它。由于TensorFlow数据集（tfds）中没有语义分割数据集，我们还学习了如何添加自定义DatasetBuilder来添加新的数据集。
+- en: The **Generative Adversarial Networks** (**GANs**) theory and how to implement
+    the adversarial training loop using TensorFlow 2.0\. Moreover, by using the fashion-MNIST
+    dataset, we also learned how to define and train a conditional GAN.
+  id: totrans-206
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**生成对抗网络**(**GANs**)的理论以及如何使用TensorFlow 2.0实现对抗训练循环。此外，通过使用fashion-MNIST数据集，我们还学习了如何定义和训练条件GAN。'
+- en: Finally, in this chapter, we learned how to bring a trained model (or a generic
+    computational graph) to production by leveraging the SavedModel serialization
+    format and the TensorFlow 2.0 Serving ecosystem.
+  id: totrans-207
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最后，在这一章中，我们学会了如何通过利用SavedModel序列化格式和TensorFlow 2.0 Serving生态系统，将训练好的模型（或通用计算图）带入生产环境。
+- en: Although this is the last chapter, there are exercises to do and, as usual,
+    you shouldn't skip them!
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管这是最后一章，但仍然有练习需要做，像往常一样，你不应该跳过它们！
+- en: Exercises
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 练习
+- en: 'The following exercises are programming challenges, combining the expressive
+    power of the TensorFlow Python API and the advantages brought by other programming
+    languages:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下练习是编程挑战，结合了TensorFlow Python API的表达能力和其他编程语言带来的优势：
+- en: What is a checkpoint file?
+  id: totrans-211
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是检查点文件？
+- en: What is a SavedModel file?
+  id: totrans-212
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是SavedModel文件？
+- en: What are the differences between a checkpoint and a SavedModel?
+  id: totrans-213
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查点（checkpoint）和SavedModel有什么区别？
+- en: What is a SignatureDef?
+  id: totrans-214
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是SignatureDef？
+- en: Can a checkpoint have a SignatureDef?
+  id: totrans-215
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查点可以有SignatureDef吗？
+- en: Can a SavedModel have more than one SignatureDef?
+  id: totrans-216
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: SavedModel可以有多个SignatureDef吗？
+- en: Export a computational graph as a SavedModel that computes the batch matrix
+    multiplication; the returned dictionary must have a meaningful key value.
+  id: totrans-217
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导出一个计算批量矩阵乘法的计算图作为SavedModel；返回的字典必须有一个有意义的键值。
+- en: Convert the SavedModel defined in the previous exercise into its TensorFlow.js
+    representation.
+  id: totrans-218
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将上一个练习中定义的SavedModel转换为TensorFlow.js表示。
+- en: Use the `model.json` file we created in the previous exercise to develop a simple
+    web page that computes the multiplication of matrices chosen by the user.
+  id: totrans-219
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用我们在上一个练习中创建的`model.json`文件，开发一个简单的网页，允许用户选择矩阵并计算其乘积。
+- en: Restore the semantic segmentation model defined in [Chapter 8](51f4dcda-add6-4e58-a660-75f34a7e5593.xhtml), *Semantic
+    Segmentation and Custom Dataset Builder*, from its latest checkpoint and use `tfjs.converters.save_keras_model` to
+    convert it into a `model.json` file.
+  id: totrans-220
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 恢复在[第8章](51f4dcda-add6-4e58-a660-75f34a7e5593.xhtml)中定义的语义分割模型，*语义分割与自定义数据集构建器*，从其最新检查点恢复，并使用`tfjs.converters.save_keras_model`将其转换为`model.json`文件。
+- en: Use the semantic segmentation model we exported in the previous exercise to
+    develop a simple web page that, given an image, performs semantic segmentation.
+    Use the `tf.fromPixels` method to get the input model. A complete reference for
+    the TensorFlow.js API is available at [https://js.tensorflow.org/api/latest/](https://js.tensorflow.org/api/latest/).
+  id: totrans-221
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用我们在上一练习中导出的语义分割模型，开发一个简单的网页，给定一张图像，执行语义分割。使用`tf.fromPixels`方法获取输入模型。TensorFlow.js
+    API的完整参考可以在[https://js.tensorflow.org/api/latest/](https://js.tensorflow.org/api/latest/)找到。
+- en: Write a Go application using the TensorFlow Go bindings that computes the convolution
+    between one image and a 3 x 3 kernel.
+  id: totrans-222
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编写一个使用TensorFlow Go绑定的Go应用程序，计算一张图像与一个3x3卷积核之间的卷积。
+- en: Rewrite the Go application that you wrote in the previous exercise using tfgo.
+    Use the "image" package. Read the documentation at [https://github.com/galeone/tfgo](https://github.com/galeone/tfgo) for
+    more information.
+  id: totrans-223
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用tfgo重写你在上一练习中编写的Go应用程序。使用“image”包。有关更多信息，请阅读[https://github.com/galeone/tfgo](https://github.com/galeone/tfgo)上的文档。
+- en: Restore the semantic segmentation model we defined in [Chapter 8](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_32), *Semantic
+    Segmentation and Custom Dataset Builder*, to its latest checkpoint and export
+    it as a SavedModel object.
+  id: totrans-224
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 恢复我们在[第8章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=308&action=edit#post_32)中定义的语义分割模型，*语义分割与自定义数据集构建器*，将其恢复到最新的检查点，并将其导出为SavedModel对象。
+- en: Use `tg.LoadModel` to load the Semantic Segmentation model into a Go program
+    and use it to produce a segmentation map for an input image whose path is passed
+    as a command-line parameter.
+  id: totrans-225
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`tg.LoadModel`将语义分割模型加载到Go程序中，并利用该模型为输入图像生成分割图，该图像的路径作为命令行参数传入。

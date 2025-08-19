@@ -1,0 +1,915 @@
+- en: '9'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '9'
+- en: Advanced Training Concepts
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 高级训练概念
+- en: In this chapter, we will cover advanced training concepts at scale, such as
+    evaluating throughput, calculating model **teraFLOPS** (**TFLOPS**) per device,
+    compiling, and using the scaling laws to determine the right length of training
+    time. In the last chapter, you learned about how to do large-scale training on
+    SageMaker, in general terms. In this chapter, you’ll learn about particularly
+    complex and sophisticated techniques you can use to drive down the overall cost
+    of your job. This lower cost directly translates to higher model performance because
+    you can train for longer on the same budget.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖大规模训练的高级概念，例如评估吞吐量、计算每个设备的模型**teraFLOPS**(**TFLOPS**)、编译以及使用缩放法则来确定合适的训练时间长度。在上一章中，你学习了如何在
+    SageMaker 上进行大规模训练的基本知识。在本章中，你将学习一些复杂且先进的技术，帮助你降低作业的总体成本。较低的成本直接转化为更高的模型性能，因为你可以在相同的预算下进行更长时间的训练。
+- en: 'We will cover the following topics in this chapter:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Evaluating and improving throughput with model TFLOPS
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用模型 TFLOPS 评估和提升吞吐量
+- en: Using FlashAttention to speed up your training runs
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 FlashAttention 加速训练过程
+- en: Speeding up your jobs with compilation
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过编译加速作业
+- en: Amazon SageMaker Training Compiler and Neo
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Amazon SageMaker 训练编译器和 Neo
+- en: Running compiled models on Amazon’s Trainium and Inferentia custom hardware
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 Amazon 的 Trainium 和 Inferentia 定制硬件上运行编译后的模型
+- en: Solving for an optimal training time
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 解决最优训练时间的问题
+- en: Evaluating and improving throughput
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 评估和提升吞吐量
+- en: As we’ve previously covered in the book, total job throughput is an important
+    metric to track. On the one hand, you want to keep a batch size small enough to
+    ensure your model is trained appropriately. On the other hand, you want to max
+    out your overall job performance to get the most possibly accurate model you can.
+    We learned in [*Chapter 7*](B18942_07.xhtml#_idTextAnchor116) how to use hyperparameter
+    tuning to solve both of those. We also covered other tips and tricks for reducing
+    your **graphics processing unit** (**GPU**) memory footprint in [*Chapter 5*](B18942_05.xhtml#_idTextAnchor085)
+    and [*Chapter 8*](B18942_08.xhtml#_idTextAnchor127). Now, let’s close out a few
+    more gaps in this area.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在本书中之前提到的，总作业吞吐量是一个重要的指标。 一方面，你需要保持小的批处理大小，以确保模型得到适当训练。另一方面，你希望最大化整体作业性能，以获得尽可能准确的模型。我们在[*第七章*](B18942_07.xhtml#_idTextAnchor116)中学习了如何使用超参数调整来解决这两个问题。我们还在[*第五章*](B18942_05.xhtml#_idTextAnchor085)和[*第八章*](B18942_08.xhtml#_idTextAnchor127)中介绍了减少**图形处理单元**(**GPU**)内存占用的其他技巧。现在，让我们进一步解决这一领域的一些问题。
+- en: First, it’s important to consider how you measure throughput in general terms.
+    You have probably used some logging packages in PyTorch that handily report iterations
+    per second during the training loop. Obviously, this is extremely useful in clocking
+    your training speed, but how would you take into account the size of the model?
+    What if you wanted to compare your speed with others to see whether you’re in
+    the same ballpark?
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，重要的是要考虑如何在一般情况下衡量吞吐量。你可能已经在 PyTorch 中使用过一些日志包，它们方便地报告训练循环中的每秒迭代次数。显然，这对于监控训练速度非常有用，但你如何考虑模型的大小呢？如果你想与他人比较你的速度，以确定是否处于相同的水平，该怎么办呢？
+- en: To solve this problem, many research teams calculate an aggregate term that
+    combines both indicators for the model’s size with operations completed. Commonly,
+    this is called **model TFLOPS**. These calculations will vary based on individual
+    team preferences, but we’ll explore the setup from a recent Chinchilla *(11)*
+    paper that just won a **Neural Information Processing Systems** (**NeurIPS**)
+    best paper award. You’ll find this phrase is common in evaluating large-scale
+    distributed training systems.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，许多研究团队计算一个聚合指标，将模型大小和完成的操作结合在一起。通常，这被称为**模型 TFLOPS**。这些计算会根据不同团队的偏好有所变化，但我们将探讨来自近期
+    Chinchilla *(11)* 论文的设置，这篇论文刚刚获得了**神经信息处理系统**(**NeurIPS**)最佳论文奖。你会发现，这个短语在评估大规模分布式训练系统时非常常见。
+- en: Calculating model TFLOPS
+  id: totrans-14
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 计算模型的 TFLOPS
+- en: You’ve heard of **floating operations per second** (**FLOPS**). This is a simple
+    way of presenting how many computations a given machine can perform. Higher is
+    better because this means your machine can complete more tasks given the same
+    amount of time. **TFLOPS** is an easier way of comparing performance for distributed
+    training solutions.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你听说过**每秒浮动操作数**（**FLOPS**）吗？这是一个简单的方式来展示一个给定机器可以执行多少次计算。数值越高越好，因为这意味着在相同时间内，机器可以完成更多的任务。**TFLOPS**是一种更容易比较分布式训练解决方案性能的方式。
+- en: 'In Chinchilla, the authors have a clean way of computing model TFLOPS. First,
+    let’s consider that the performance of the forward pass and the backward pass
+    is different. The backward pass is actually two times the compute costs of the
+    forward pass because we need to both compute the gradients and update the weights
+    and parameters. So, the model TFLOPS would then be the following:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Chinchilla中，作者有一种清晰的计算模型TFLOPS的方法。首先，考虑到前向传播和反向传播的性能是不同的。反向传播实际上是前向传播计算成本的两倍，因为我们不仅需要计算梯度，还需要更新权重和参数。因此，模型的TFLOPS将如下所示：
+- en: '![](img/B18942_09_001.jpg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B18942_09_001.jpg)'
+- en: Simple enough? Now let’s unpack that term.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简单吧？现在让我们来解读一下这个术语。
+- en: '![](img/B18942_09_002.jpg)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B18942_09_002.jpg)'
+- en: In *Appendix F* of their paper, they define the rest of their terminology in
+    detail. Another much more simple but slightly less precise way of computing your
+    total model TFLOPS is simply C=6⋅D⋅N, where *N* is the number of parameters in
+    your model. Chinchilla actually found no significant difference between this computation
+    and theirs presented in the preceding formula.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在他们论文的*附录F*中，作者详细定义了他们的其他术语。另一种更简单但稍微不那么精确的计算总模型TFLOPS的方法是直接使用C=6⋅D⋅N，其中*N*是模型中的参数数量。Chinchilla实际上发现这个计算方式与前面公式中的计算结果没有显著差异。
+- en: As you read through these metrics, consider that each term relates to a part
+    of your neural network, specifically scoping how large it is. When you combine
+    these with the number of tokens processed per second, you get a realistic metric
+    for the efficiency of your overall training loop. This efficiency metric then
+    becomes a single common denominator you can use to compare your experiments at
+    runtime.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在阅读这些指标时，考虑到每个术语都与神经网络的一个部分相关，特别是它的规模。将这些与每秒处理的令牌数量结合起来，你就可以得到一个衡量整体训练循环效率的实际指标。这个效率指标随后成为一个你可以在运行时比较实验的共同标准。
+- en: Remember that in [*Chapter 3*](B18942_03.xhtml#_idTextAnchor050), you learned
+    how to think about your overall project as a series of experiments? While the
+    accuracy of your project should no doubt be a key performance indicator, I would
+    strongly recommend including an efficiency indicator as well. This helps ensure
+    that you’re making the best use of your compute budget, which is relevant for
+    the initial training runs, subsequent retraining, inference, monitoring, and overall
+    project maintenance.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记得在[*第3章*](B18942_03.xhtml#_idTextAnchor050)中，你学习了如何将整体项目视为一系列实验吗？虽然项目的准确性无疑应该是一个关键性能指标，但我强烈建议你同时包括一个效率指标。这有助于确保你充分利用计算预算，这对于初始训练、随后的再训练、推理、监控和整体项目维护都非常重要。
+- en: 'For example, you might consider the following experiment schedule:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，你可能会考虑以下实验计划：
+- en: '| **Phase** | **Model type** | **Model size** | **Datase size** | **Compute
+    size** | **Compute efficiency** | **Experiment run-time** |'
+  id: totrans-24
+  prefs: []
+  type: TYPE_TB
+  zh: '| **阶段** | **模型类型** | **模型大小** | **数据集大小** | **计算规模** | **计算效率** | **实验运行时间**
+    |'
+- en: '| One – small-scale testing | Generic pretrained | Base | 5–30 GBs | 1–4 less
+    expensive GPUs | Low | One full pass through a small data sample |'
+  id: totrans-25
+  prefs: []
+  type: TYPE_TB
+  zh: '| 一 – 小规模测试 | 通用预训练 | 基础 | 5–30 GB | 1–4个较便宜的GPU | 低 | 对小数据样本进行一次完整的传递 |'
+- en: '| Two – increase the dataset | Semi-custom | A few billion     parameters | 100 GBs–     TBs | Tens to hundreds of better GPUs | Medium | A few steps or epochs |'
+  id: totrans-26
+  prefs: []
+  type: TYPE_TB
+  zh: '| 二 – 增加数据集 | 半定制 | 数十亿参数 | 100 GB至TB | 数十至数百个更强的GPU | 中等 | 几个步骤或纪元 |'
+- en: '| Three – increase     model (and data) | Very custom | Tens of billions of parameters | TBs | Hundreds
+    to     thousands of     high-performance GPUs | High | A few steps or epochs |'
+  id: totrans-27
+  prefs: []
+  type: TYPE_TB
+  zh: '| 三 – 增加模型（及数据） | 非常定制 | 数十亿参数 | TB | 数百至数千个高性能GPU | 高 | 几个步骤或纪元 |'
+- en: '| Four – maximize compute budget | Fully custom | Tens to hundreds of billions
+    of parameters | TBs–PBs | Thousands or more     high-performance GPUs | State of the art | Train to optimal     period |'
+  id: totrans-28
+  prefs: []
+  type: TYPE_TB
+  zh: '| 四 – 最大化计算预算 | 完全定制 | 数十亿至数百亿参数 | TB至PB | 数千个或更多高性能GPU | 最先进 | 训练至最优时期 |'
+- en: Figure 9.1 – Suggested phase of experiments for training foundation models at
+    scale
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.1 – 建议用于大规模训练基础模型的实验阶段
+- en: Let me be explicitly clear about this table; I do not under any circumstances
+    expect every person to follow this exactly. There are countless nuances in novel
+    training regimes, dataset sizes, models, GPU performance, modeling results, compute
+    budget, and perspectives for a single table to encompass all of them. Some teams
+    will never hit models over 1 billion parameters and still build something the
+    world adores, such as Stable Diffusion! But I guarantee you that the lab staged
+    its build across multiple phases that eventually culminated in a massive run.
+    You want to learn how to increase the scope of your projects from very doable
+    to very impressive. It’s up to you how to do that appropriately for the problem
+    you’re solving at hand.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我明确地说一下这张表；无论在任何情况下，我都不指望每个人都完全按此执行。新颖的训练模式、数据集规模、模型、GPU 性能、建模结果、计算预算以及不同视角有着无数的细微差别，单一的表格无法囊括所有这些差异。有些团队永远无法构建超过
+    10 亿参数的模型，但仍然能打造出世界喜爱的作品，例如 Stable Diffusion！但我向你保证，实验室的构建经历了多个阶段，最终才达成了大规模运行。你需要学习如何将项目的范围从“可行”扩展到“令人印象深刻”。如何适当地实现这一点，取决于你正在解决的具体问题。
+- en: Now let’s look at a few more methods you can use to boost your training efficiency.
+    Next up is Flash Attention!
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们看看一些可以用来提高训练效率的方法。接下来是 Flash Attention！
+- en: Using Flash Attention to speed up your training runs
+  id: totrans-32
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 Flash Attention 加速你的训练过程
+- en: In earlier chapters, we learned about the core Transformer model, with its underlying
+    self-attention mechanism that serves as the basis for most state-of-the-art models
+    across vision, language, and generative use cases today. While Transformer models
+    are easily parallelizable, they aren’t particularly good at optimizing for different
+    memory speeds within modern GPUs. This becomes a problem when they materialize
+    the Transformer in the slowest part of the GPU due to a naïve implementation.
+    As you can imagine, that leaves performance gains on the table.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们了解了核心的 Transformer 模型，以及其底层的自注意力机制，这成为了如今视觉、语言和生成任务中大多数先进模型的基础。虽然
+    Transformer 模型很容易并行化，但它们在优化现代 GPU 中不同内存速度方面并不特别擅长。当由于简单的实现方式导致 Transformer 出现在
+    GPU 中最慢的部分时，就会成为问题。正如你所想象的那样，这会让性能提升无法得到完全释放。
+- en: A Stanford-led research team realized that they could improve this and developed
+    a novel implementation of the Transformer architecture. Simply put, it’s an extremely
+    clever way to handle a quadratic nested for-loop. Let’s take a closer look.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 斯坦福大学领导的研究团队意识到，他们可以改进这一点，并开发出一种创新的 Transformer 架构实现。简而言之，这是一种极其巧妙的方式来处理一个二次嵌套的
+    for 循环。让我们仔细看看。
+- en: '![Figure 9.2 – From FlashAttention by Tri Dao et al, 2022 (1)](img/B18942_image_09_02.jpg)'
+  id: totrans-35
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.2 – 来源于 Tri Dao 等人 2022 年的 FlashAttention (1)](img/B18942_image_09_02.jpg)'
+- en: Figure 9.2 – From FlashAttention by Tri Dao et al, 2022 *(1)*
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.2 – 来源于 Tri Dao 等人 2022 年的 FlashAttention *(1)*
+- en: This visual from the paper demonstrates three key concepts. On the left-hand
+    side, we see a simple pyramid showing the three common types of compute available
+    on most GPU servers. At the base, we have a lot of CPUs with more than 1 TB available
+    of main memory. However, this peaks at 12.8 GB/s bandwidth. Next, we have the
+    slower part of the GPU, with much less memory but much more bandwidth, only 40
+    GB of GPU HMB but up to 1.5 TBs. Finally, we have the fastest part of the GPU,
+    with only 20 MB of memory but up to 19 TBs of bandwidth. Obviously, 19 TBs is
+    more than 10 times faster than 1.5 TBs! This shows you right away that moving
+    as much of the compute to the **static random-access memory** (**SRAM**) can save
+    you a lot of time.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这张论文中的图示展示了三个关键概念。左侧部分，我们看到一个简单的金字塔，展示了大多数 GPU 服务器上可用的三种常见计算类型。在底部，我们有许多 CPU，并且主内存超过
+    1 TB，但其带宽最高为 12.8 GB/s。接下来是 GPU 中较慢的部分，内存更少，但带宽更大，只有 40 GB 的 GPU HMB，但带宽高达 1.5
+    TB。最后，我们有 GPU 中最快的部分，内存仅有 20 MB，但带宽可达 19 TB。显然，19 TB 的带宽比 1.5 TB 快超过 10 倍！这立刻向你展示了，将尽可能多的计算移至**静态随机存取内存**（**SRAM**）可以为你节省大量时间。
+- en: However, you’ll notice that this 10 times is in bandwidth, not necessarily throughput.
+    While pure throughput means efficiently processing a large volume of data, bandwidth
+    here helps optimize **input/output** (**I/O**). In this case, it refers to how
+    data is passed between different data structures in this overall computer architecture.
+    This is why it’s the bandwidth metric we’re most interested in; bandwidth controls
+    the volume of data we can pass to or from a given compute. This means that when
+    we have an I/O intensive process, such as the quadratic nested for-loop used in
+    self-attention heads, pushing as much of the data to the part with the highest
+    bandwidth is a way to increase the overall speed.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，你会注意到，这个 10 倍的提升是指带宽，而不一定是吞吐量。纯吞吐量意味着高效处理大量数据，而带宽在这里有助于优化 **输入/输出**（**I/O**）。在这种情况下，它指的是数据在整个计算机架构中如何在不同的数据结构之间传递。这就是为什么我们最关注带宽指标；带宽控制了我们能够传递到或从给定计算单元的数据量。这意味着当我们处理
+    I/O 密集型过程时，例如在自注意力头中使用的二次嵌套循环，将尽可能多的数据传输到带宽最高的部分，是加速整体速度的一个方法。
+- en: What types of gains does this give us? In the far right-hand side of the visual,
+    you can see that this new *fused kernel*, provided by FlashAttention, finishes
+    in the amount of time it takes just one of the five operations to complete in
+    a naïve PyTorch implementation. While a naïve implementation needs about 17 seconds
+    to finish all the **Matrix multiplication** (**Matmul**), Masking, Softmax, Dropout,
+    and finally Matmul, the FlashAttention fused kernel can run all of these in around
+    seconds!
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种技术能带来什么样的收益？在图像的最右侧，你可以看到 FlashAttention 提供的这一新 *融合内核*，它的运行时间等同于在一个普通 PyTorch
+    实现中完成五个操作中的一个所需的时间。普通实现需要大约 17 秒来完成所有的 **矩阵乘法**（**Matmul**）、掩蔽、Softmax、Dropout，最后是
+    Matmul，而 FlashAttention 融合内核可以在不到几秒钟的时间内完成所有这些操作！
+- en: FlashAttention hasn’t yet been upstreamed into PyTorch directly, although I
+    would be shocked if that didn’t happen in the next 12 months. For the time being,
+    you can use an open source implementation available here *(2)*. The authors show
+    that this leads to a 3–5 times speedup for **generative pre-trained transformer**
+    (**GPT**) models over the Hugging Face options, reaching up to 189 TFLOPS on each
+    NVIDIA A100 GPU. While that may not sound like a big jump at smaller scales, once
+    you’ve hit hundreds to thousands of GPUs, that can equal massive savings! Support
+    for FlashAttention is available in the SageMaker Model Parallel library as of
+    December 2022 *(3).*
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: FlashAttention 目前尚未直接集成到 PyTorch 中，尽管如果在接下来的 12 个月内没有集成，我会感到非常惊讶。暂时，你可以使用一个开源实现，详情见这里
+    *(2)*。作者展示了，使用 FlashAttention 可以让 **生成预训练变换器**（**GPT**）模型在 Hugging Face 的选项上实现
+    3–5 倍的加速，在每个 NVIDIA A100 GPU 上达到 189 TFLOPS。虽然在较小规模下这可能听起来不是很大的提升，但一旦你使用了数百到上千个
+    GPU，这就可能带来巨大的节省！FlashAttention 在 SageMaker Model Parallel 库中已提供支持，从 2022 年 12
+    月开始 *(3)*。
+- en: 'Now let’s look at another advanced training concept to help speed up your training
+    runs: compilation.'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看另一个先进的训练概念，帮助加速你的训练过程：编译。
+- en: Speeding up your jobs with compilation
+  id: totrans-42
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 利用编译加速你的任务
+- en: Remember that in [*Chapter 4*](B18942_04.xhtml#_idTextAnchor066), we learned
+    about some basic concepts in GPU systems architecture. We covered the foundational
+    **Compute Unified Device Architecture** (**CUDA**) software framework that lets
+    you run normal Python code on GPUs. We talked about managed containers and deep
+    learning frameworks, such as PyTorch and TensorFlow, which are already tested
+    and proven to run nicely on the AWS cloud. The problem with most neural network
+    implementations is that they aren’t particularly optimized for GPUs. This is where
+    compilation comes in; you can use it to eke out an extra two-times jump in speed
+    for the same model!
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记得在 [*第 4 章*](B18942_04.xhtml#_idTextAnchor066) 中，我们学习了 GPU 系统架构的一些基本概念。我们介绍了
+    **计算统一设备架构**（**CUDA**）软件框架，它使你可以在 GPU 上运行普通的 Python 代码。我们讨论了管理容器和深度学习框架，如 PyTorch
+    和 TensorFlow，这些框架已经经过测试并且可以很好地运行在 AWS 云平台上。大多数神经网络实现的问题在于它们并没有针对 GPU 进行特别优化。这就是编译发挥作用的地方；你可以通过它为同一个模型带来两倍的加速！
+- en: In the context of compilers for deep learning, we’re mostly interested in `torch.compile`
+    method.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深度学习编译器的上下文中，我们主要关注的是 `torch.compile` 方法。
+- en: 'Before we get into any examples of using compilation, let’s first try to understand
+    what it is and why it’s useful. Imagine you have two vectors (remember, think
+    “lists”), both of size 1000\. One of them is filled with zeros, and the other
+    is filled with ones. Now imagine that you have a basic operation to apply to both
+    of these vectors: addition. You want to add these two vectors to produce a third
+    vector with a length of 1000, which is simply the direct sum of each item in both
+    of the original vectors.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们进入使用编译的示例之前，让我们先尝试理解它是什么以及为什么它有用。假设你有两个向量（记住，想成是“列表”），每个向量的大小都是1000。一个向量填充的是零，另一个向量填充的是一。现在假设你有一个基本操作要应用于这两个向量：加法。你想将这两个向量相加，得到一个长度为1000的第三个向量，该向量是原始两个向量中每个项的直接和。
+- en: A naïve way of doing this would be to walk through both lists, compute the sum,
+    and add it to the new list. But what if you knew ahead of time that one of these
+    vectors was zero? Wouldn’t you want to then skip the addition operation altogether?
+    If you did, it could save you a lot of time!
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种简单的做法是遍历两个列表，计算和，并将结果添加到新列表中。但如果你提前知道其中一个向量是零呢？那样的话，你不想完全跳过加法操作吗？如果你这样做，可能会节省很多时间！
+- en: This jump is possible as a result of an intermediate representation. As presented
+    in a 2020 survey *(4)*, deep learning compilers profile the graph that is your
+    neural network. First, a frontend compiler computes a more optimal version of
+    your graph, such as fusing operators, simplifying the algebraic expressions, performing
+    static memory planning, and many more techniques. Next, a backend compiler computes
+    this again for specific hardware, lower-level representations, memory allocation,
+    custom kernels, and more. This then generates the new code that is consumed by
+    the accelerator.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种跃升的实现得益于中间表示。如2020年一项调查所示 *(4)*，深度学习编译器会对神经网络的图进行分析。首先，前端编译器计算出图的一个更优版本，如融合操作符、简化代数表达式、执行静态内存规划等多种技术。接着，后端编译器会根据特定硬件、低级表示、内存分配、定制内核等因素再次计算这一过程。然后，它会生成新的代码，这些代码会被加速器使用。
+- en: Now let’s learn how to add compilation to your scripts!
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来学习如何将编译添加到你的脚本中！
+- en: Integrating compilation into your PyTorch scripts
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将编译集成到你的 PyTorch 脚本中
+- en: From the launch PyTorch documentation here *(5)*, you’ll see that there are
+    three major ways to use compilation in your own PyTorch code. First, you can use
+    any PyTorch built-in functions such as `torch.sin` or `torch.cos`, and then pass
+    these into `torch.compile`. This uses a variety of the techniques we discussed
+    previously to compile your function based on the available GPUs. Alternatively,
+    you can add a decorator to your PyTorch function, simply `@torch.compile`, which
+    provides the same functionality. Both of these features are also available for
+    the `torch.nn.Module` base object, which means you should be able to use them
+    for any of your PyTorch models!
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这里的 PyTorch 文档 *(5)* 中，你会看到有三种主要方式可以在你自己的 PyTorch 代码中使用编译。首先，你可以使用任何 PyTorch
+    内置的函数，比如`torch.sin`或`torch.cos`，然后将这些传递给`torch.compile`。这会使用我们之前讨论的多种技术来根据可用的GPU编译你的函数。或者，你可以为你的
+    PyTorch 函数添加一个装饰器，简单地写`@torch.compile`，它提供相同的功能。这两种功能也适用于`torch.nn.Module`基础对象，这意味着你应该能够在你的任何
+    PyTorch 模型中使用它们！
+- en: If you’re thinking these speedups with compilation seem useful, but I don’t
+    want to re-write my model code to use them, this next section will be extremely
+    interesting for you! Let’s look at managed compilation features on AWS – SageMaker
+    Training Compiler and SageMaker Neo.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你觉得编译带来的加速很有用，但又不想重写我的模型代码来使用它们，那么接下来的部分对你来说一定非常有趣！我们来看看AWS上的托管编译功能——SageMaker训练编译器和SageMaker
+    Neo。
+- en: Amazon SageMaker Training Compiler and Neo
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 亚马逊 SageMaker 训练编译器与 Neo
+- en: If you use Hugging Face language models today, such as BERT, GPT, RoBERTa, AlBERT,
+    DistiliBERT, or hundreds of others, then you are in luck! Without much work, you
+    can easily speed up the run-time of your jobs by up to 50%. This is because of
+    **SageMaker Training Compiler** (**SMTC**). As we learned earlier, compilation
+    generally has the potential to increase the speed of your training. With SMTC,
+    we provide a managed compilation feature within SageMaker training to easily enable
+    this for your own models and scripts.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你今天使用的是 Hugging Face 语言模型，比如 BERT、GPT、RoBERTa、AlBERT、DistiliBERT 或其他数百种模型，那么你很幸运！通过简单的操作，你就可以轻松将作业的运行时间提高最多
+    50%。这是因为 **SageMaker Training Compiler** (**SMTC**) 的存在。正如我们之前所学，编译通常具有提高训练速度的潜力。使用
+    SMTC，我们在 SageMaker 训练中提供了一个托管的编译功能，轻松地为你自己的模型和脚本启用这一功能。
+- en: 'As you can see in the visual provided, enabling this is quite simple. Here
+    we use the Hugging Face AWS-managed deep learning container and simply add `TrainingCompilerConfig()`.
+    If you’re using a model with the Hugging Face `Trainer` API, this will automatically
+    trigger Training Compiler:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你在提供的图示中所见，启用这一功能非常简单。在这里，我们使用 Hugging Face 提供的 AWS 托管深度学习容器，并只需添加 `TrainingCompilerConfig()`。如果你正在使用带有
+    Hugging Face `Trainer` API 的模型，这将自动触发训练编译器：
+- en: '![Figure 9.3 – Configure SageMaker Training Compiler](img/B18942_image_09_03.jpg)'
+  id: totrans-55
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.3 – 配置 SageMaker Training Compiler](img/B18942_image_09_03.jpg)'
+- en: Figure 9.3 – Configure SageMaker Training Compiler
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.3 – 配置 SageMaker Training Compiler
+- en: 'How does it work? SMTC uses a variety of compilation methods on three different
+    levels: compilations for the graph, the data flow, and the backend. The graph-level
+    optimizations include operator fusion, memory planning, and algebraic simplifications.
+    The data flow-level optimizations include layout transformation and common sub-expression
+    elimination. Backend optimizations include memory latency hiding and loop-oriented
+    optimizations. This accelerates the training process by up to 50%, and the resultant
+    model is the same as if SMTC had not been applied. For example, when fine-tuning
+    Hugging Face’s GPT-2 model, SMTC reduced the training time from nearly 3 hours
+    to just 90 minutes!'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它是如何工作的？SMTC 在三个不同的层次上使用各种编译方法：图层、数据流层和后端层。图层优化包括操作符融合、内存规划和代数简化。数据流层优化包括布局转换和常见子表达式消除。后端优化包括内存延迟隐藏和面向循环的优化。这些优化可以将训练过程加速最多
+    50%，且结果模型与未应用 SMTC 时的模型相同。例如，在微调 Hugging Face 的 GPT-2 模型时，SMTC 将训练时间从将近 3 小时减少到仅
+    90 分钟！
+- en: Best practices for compilation
+  id: totrans-58
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 编译的最佳实践
+- en: When working with compilers, you’ll want to ensure that you are updating your
+    hyperparameters accordingly. This is because the net effect of a compiler is that
+    it reduces the GPU memory footprint of the model. For example, without compiling,
+    your model might consume a solid 10 GB of GPU memory. After compilation, you might
+    get that down to 5 GB! This opens up more space for you to pack in objects in
+    your batch size. As we learned earlier in the book, this directly increases your
+    GPU utilization and, thus, your overall project efficiency. Just be careful not
+    to over-increase batch size, which then makes it harder to converge. You’ll also
+    want to increase your learning rate at the same pace.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用编译器时，你需要确保相应地更新你的超参数。这是因为编译器的最终效果是减少模型的 GPU 内存占用。例如，未编译时，你的模型可能会消耗大约 10 GB
+    的 GPU 内存。经过编译后，可能会将其减少到 5 GB！这为你提供了更多的空间来增加批量大小中的对象。如我们在书中早些时候学到的，这直接提高了 GPU 的利用率，从而提高了整体项目效率。只需小心不要过度增加批量大小，否则会使收敛变得更加困难。你还需要以相同的速度增加学习率。
+- en: As you might be anticipating, there are clear times when compilation is expected
+    to be quite useful. There are also times when compilation could be a waste of
+    time. This is because most compilers *take some time to run their compilation
+    process* before executing your code. That means that, in contrast to normal Python
+    code execution, the compiler will run its subprocess ahead of time to produce
+    a more optimized version of your model. Once this is produced, your code will
+    run in earnest.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你可能预料的那样，有些时候编译是非常有用的，而有些时候编译可能会浪费时间。这是因为大多数编译器*在执行你的代码之前需要一些时间来运行编译过程*。这意味着，与正常的
+    Python 代码执行相比，编译器会提前运行其子进程，生成一个更优化的模型版本。一旦这个版本生成完成，你的代码就会开始正式运行。
+- en: This ahead-of-time compilation process introduces the key tradeoff for evaluating
+    the impact of compilation as a whole. The longer your model training period, the
+    larger the boost from the compilation. This means if you’re using a large number
+    of epochs, or if your dataset is quite large, then compilation should be a useful
+    way to save compute costs. Personally, I’d say if your model runs for anything
+    longer than 30 or 40 minutes, try to find a way to drive that down with compilation.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种提前编译的过程引入了评估编译整体影响的关键权衡。你的模型训练周期越长，编译带来的提升就越大。这意味着如果你使用大量的epoch，或者数据集非常庞大，那么编译应该是一个节省计算成本的有效方法。就我个人而言，如果你的模型运行超过30或40分钟，尝试通过编译来缩短这个时间。
+- en: Alternatively, if you have a frequent retraining pipeline or job, one that runs
+    on a semi-frequent schedule, try to use compilation to drive down that time. Some
+    of my customers retrain their models every day, every week, or even every few
+    hours or minutes. We’ll dive into this and other topics about operations in [*Chapter
+    14*](B18942_14.xhtml#_idTextAnchor217).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果你有一个频繁的重训练流程或任务，特别是一个半定期运行的任务，可以尝试使用编译来缩短时间。我的一些客户每天、每周，甚至每几小时或几分钟就会重训练他们的模型。我们将在[*第14章*](B18942_14.xhtml#_idTextAnchor217)中深入讨论这个以及其他与操作相关的话题。
+- en: 'Now, let’s learn how using PyTorch compilation enables us to easily use Amazon’s
+    custom hardware for machine learning: Trainium and Inferentia!'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们学习如何通过使用PyTorch编译，使我们能够轻松使用亚马逊的定制硬件进行机器学习：Trainium和Inferentia！
+- en: Running compiled models on Amazon’s Trainium and Inferentia custom hardware
+  id: totrans-64
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在亚马逊的Trainium和Inferentia定制硬件上运行已编译的模型
+- en: So far in this book, most of the accelerators we evaluated have been GPUs designed
+    and built by NVIDIA. As we learned earlier, NVIDIA’s excellent software enables
+    the lion’s share of deep learning frameworks to run nicely on those same GPUs,
+    which ends up being a primary deciding factor in using GPUs. We also learned earlier
+    how those same GPUs are also available on AWS, notably through our machine learning
+    service, Amazon SageMaker.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，在本书中，我们评估的大多数加速器都是由NVIDIA设计和制造的GPU。正如我们之前所了解的，NVIDIA的优秀软件使得大部分深度学习框架能够在这些GPU上运行得非常顺畅，这也成为了使用GPU的主要决定因素。我们还了解到，这些GPU同样可以在AWS上使用，特别是通过我们的机器学习服务Amazon
+    SageMaker。
+- en: 'However, as you have no doubt realized by this point, the price tag of those
+    same GPUs can be high! Even though AWS has generous enterprise discount programs,
+    such as using reserved instances to save up to 75% *(6)*, you would still benefit
+    from learning about alternatives. Basic economics tells us that when supply increases,
+    such as through alternative accelerators, while demand stays constant, the price
+    drops! This is exactly what we’re thrilled to provide customers: our custom accelerators
+    for machine learning – Trainium and Inferentia. As you might have guessed, Trainium
+    is dedicated to training machine learning models, while Inferentia does the same
+    for hosting. As of this writing, these are available on EC2 and SageMaker as Inf1
+    and Trn1 instances.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，正如你到目前为止无疑已经意识到的那样，那些GPU的价格可能非常高！即使AWS有慷慨的企业折扣计划，比如通过使用预留实例节省高达75%的费用*(6)*，你仍然可以从了解替代方案中获益。基础经济学告诉我们，当供给增加，比如通过替代加速器，而需求保持不变时，价格就会下降！这正是我们兴奋地为客户提供的：我们的机器学习定制加速器——Trainium和Inferentia。正如你可能猜到的，Trainium专门用于训练机器学习模型，而Inferentia则专注于托管。至本文写作时，这些加速器已经可以通过EC2和SageMaker作为Inf1和Trn1实例使用。
+- en: Fortunately for those of you who made it through the previous section on compilation,
+    many models compiled with XLA are supported by Trainium and Inferentia! This means
+    that if you are already using XLA compilation, either through PyTorch or TensorFlow,
+    you are well on your way to a successful migration onto Trainium and Inferentia.
+    A word of caution, however, is that not every model and operation is supported
+    by these yet. Expect some friction as you develop and test. The AWS Neuron **software
+    development kit** (**SDK**) is a great way to test compatibility *(7)*.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幸运的是，对于那些已经通过前一节了解过编译的读者，许多使用XLA编译的模型已经得到Trainium和Inferentia的支持！这意味着，如果你已经在使用通过PyTorch或TensorFlow的XLA编译，那么你已经很接近成功迁移到Trainium和Inferentia了。不过需要提醒的是，并不是每个模型和操作都已经得到支持。在开发和测试时，可能会遇到一些摩擦。AWS
+    Neuron **软件开发工具包** (**SDK**) 是测试兼容性的好方法*(7)*。
+- en: 'There are two reasons to evaluate our custom accelerators:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两个原因需要评估我们的定制加速器：
+- en: First, it’s a new type of hardware. This is particularly valuable for you scientists
+    out there because you could quite literally be the first person to use a certain
+    type of model on this hardware in the world. This may actually increase your odds
+    of publication and recognition because you could develop a truly novel insight
+    based on how this model performs.
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 首先，它是一种新型的硬件。对你们这些科学家来说，这一点尤其重要，因为你们很可能是世界上第一个在这种硬件上使用某种类型模型的人。这可能实际上会增加你们发表论文和获得认可的机会，因为你们可以基于模型在该硬件上的表现开发出真正新颖的见解。
+- en: Second, as with all of our new instances on AWS, the price-performance ratio
+    should be substantially better than it was previously.
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第二，与我们在 AWS 上的所有新实例一样，性价比应该比以前大大提高。
+- en: What is a price-performance ratio? Consider each task you need to complete.
+    In the case of Inferentia, that would be model inference requests completed. For
+    Trainium, that would be steps through your training loop. Then consider the cost
+    for each task to be completed. Now you have your ratio! Our Trn1 instances offer
+    up to 50% cost-to-train savings over comparable GPU instances, and Amazon Search
+    reduced their inference costs by 85% with Inferentia *(8)*.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 什么是性价比？考虑你需要完成的每项任务。以 Inferentia 为例，这将是完成的模型推理请求数。对于 Trainium，则是通过训练循环的步骤数。然后，考虑完成每项任务的成本。现在你就有了性价比！我们的
+    Trn1 实例提供比同类 GPU 实例高达 50% 的训练成本节省，而 Amazon Search 通过 Inferentia 将其推理成本降低了 85%
+    *(8)*。
+- en: Now that we’ve looked at Trainium and Inferentia at a very high level, let’s
+    explore how to solve for an optimal training time using the scaling laws.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经对 Trainium 和 Inferentia 有了一个非常高层次的了解，接下来让我们探讨如何利用扩展法则来解决最佳训练时间的问题。
+- en: Solving for an optimal training time
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 寻找最佳训练时间
+- en: Time is an interesting construct in training large vision and language models.
+    On the one hand, you might consider it a hyperparameter, simply the number of
+    epochs. On the other hand, you might consider it a facet of your training data,
+    its total number of tokens or images. You might also consider it a fixed input
+    to your project, your total compute budget. Most research teams I work with use
+    their intuition and good judgment to use a combination of all of these.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 时间是训练大型视觉和语言模型中的一个有趣的概念。一方面，你可能会将其视为一个超参数，仅仅是迭代次数的数量。另一方面，你可能会将其视为训练数据的一个方面，比如数据的总令牌数或图像数。你也可能会将其视为项目的固定输入，即你的总计算预算。我与之合作的大多数研究团队通过直觉和良好的判断力，结合这些因素来确定最佳方案。
+- en: As we learned earlier in the book, the proposed *scaling laws* provide an interesting
+    theoretical tool you can use to predict the performance of your model. Their original
+    author, Kaplan et al. *(9)*, actually suggested that optimal usage of a given
+    compute budget should stop “significantly before convergence.” They proposed this
+    because of their proposed insight into large language models being more “sample
+    efficient” than smaller ones.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在书中早些时候所学，提出的 *扩展法则* 提供了一种有趣的理论工具，您可以用它来预测模型的表现。其原作者 Kaplan 等人 *(9)* 实际上建议，在给定的计算预算下，最佳的使用应当在“远未收敛”时就停止。他们提出这一建议，是基于他们对大型语言模型“比小型模型更具样本效率”的洞察。
+- en: 'However, 2022 saw these original laws being turn on their head. In this visual,
+    you can see the theoretical predictions determined by a new set of scaling laws
+    from **Chinchilla**:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，2022年，这些原始法则发生了翻转。在这个图示中，你可以看到由 **Chinchilla** 提出的新一组扩展法则所确定的理论预测：
+- en: '![Figure 9.4 – Improved performance from Hoffman et al., 2022 (10)](img/B18942_image_09_04.jpg)'
+  id: totrans-77
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.4 – 来自 Hoffman 等人的改进表现，2022年 (10)](img/B18942_image_09_04.jpg)'
+- en: Figure 9.4 – Improved performance from Hoffman et al., 2022 *(10)*
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.4 – 来自 Hoffman 等人的改进表现，2022年 *(10)*
+- en: Here Hoffman et al. make the elegant proposal that *training data and model
+    sizes should be increased linearly*. That is to say, if you double the size of
+    the model, you should double the size of the training data. I appreciate this
+    natural symmetry and find it quite intuitive. Happily, these predictions were
+    validated by extensive empirical evidence across no less than 400 models, 150
+    downstream tasks, and 6 domains, including language modeling, reading comprehension,
+    question answering, common sense reasoning, and more. Per the authors, “Chinchilla
+    uniformly and significantly outperforms **Gopher (280 B)**, **GPT-3 (175 B)**,
+    **Jurassic-1 (178 B)**, and **Megatron-Turing NLG (530B)** on a large range of
+    downstream evaluation tasks.” This implies that these models are undertrained,
+    actually needing much larger datasets to validate their parameter size.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，Hoffman 等人提出了一个优雅的建议，认为*训练数据和模型大小应该线性增加*。也就是说，如果你把模型的大小加倍，训练数据的大小也应该加倍。我很欣赏这种自然的对称性，并且觉得它非常直观。幸运的是，这些预测得到了跨越至少
+    400 个模型、150 个下游任务和 6 个领域的广泛实证证据的验证，其中包括语言建模、阅读理解、问答、常识推理等。根据作者的说法，“Chinchilla
+    在大量下游评估任务上统一且显著地超越了**Gopher (280 B)**、**GPT-3 (175 B)**、**Jurassic-1 (178 B)**
+    和 **Megatron-Turing NLG (530B)**。”这意味着这些模型训练不足，实际上需要更大的数据集来验证它们的参数大小。
+- en: 'Using these equations and a massive set of experimental results, the authors
+    suggest the following set of values for parameters, FLOPS, and tokens:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这些方程式和大量的实验结果，作者建议了以下一组参数、FLOPS 和 tokens 的值：
+- en: '![Figure 9.5 – Suggested FLOPS and tokens per model size](img/B18942_image_09_05.jpg)'
+  id: totrans-81
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.5 – 每个模型大小建议的 FLOPS 和 tokens](img/B18942_image_09_05.jpg)'
+- en: Figure 9.5 – Suggested FLOPS and tokens per model size
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.5 – 每个模型大小建议的 FLOPS 和 tokens
+- en: 'Remember that when we look at this FLOPS value, we need to consider the following:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，当我们查看这个 FLOPS 值时，我们需要考虑以下几点：
+- en: What value do I expect this model to bring to my organization?
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我期望这个模型为我的组织带来什么价值？
+- en: From this, what total compute budget can I plan for?
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 根据这些，我可以规划多少总的计算预算？
+- en: How large is my training data?
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我的训练数据有多大？
+- en: What size of a model should I use based on this?
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 基于这些，应该使用多大规模的模型？
+- en: How efficient are my training loop and distributed system? Said another way,
+    how many TFLOPS per GPU am I able to eke out?
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我的训练循环和分布式系统有多高效？换句话说，我每个 GPU 能挤出多少 TFLOPS？
+- en: How many GPUs can I get from my cloud provider?
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我能从我的云服务提供商那里获取多少个 GPU？
+- en: How long will I need to run my entire training loop to train to convergence?
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我需要多长时间才能运行整个训练循环，直到训练收敛？
+- en: The answers to questions (*1*), (*2*), (*3*), and (*5*) can only come from you.
+    The answers to questions (*4*) and (*7*) are functional derivatives of the previous
+    answers. The answer to question (*6*), I would say is halfway between a functional
+    derivative from the answer to (*1*), and a simple fact of the market at that point
+    in time. If there’s a global supply chain issue for electronics, then accessing
+    GPUs will be hard.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于问题（*1*）、（*2*）、（*3*）和（*5*）的答案只能由你来提供。问题（*4*）和（*7*）的答案是前面答案的函数导数。至于问题（*6*），我认为它是问题（*1*）的函数导数与当时市场的一个简单事实之间的中间值。如果电子产品出现全球供应链问题，那么获取
+    GPU 将变得困难。
+- en: 'Whew, you made it through the advanced chapter! Now let’s do a quick concept
+    recap, and then we’ll move into *Part Four: Evaluate* *your model*.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 呼，您已经完成了高级章节！现在让我们快速回顾一下概念，然后进入*第四部分：评估* *您的模型*。
+- en: Summary
+  id: totrans-93
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we covered some advanced concepts in training large-scale vision
+    and language models. First, you learned how to evaluate and improve throughput
+    by computing model TFLOPS per GPU, and using this as one of a number of metrics
+    to compare experimental results. You learned about FlashAttention, and how its
+    I/O-aware optimized quadratic for-loop speeds up the Transformer self-attention
+    mechanism by as much as 3–5 times. You learned about compilation using methods
+    built into PyTorch natively and those managed by AWS. You also learned about a
+    few different types of compilation methods. You learned to update your hyperparameters
+    for compilation, in addition to cases where the compilation is expected to provide
+    a boost (or not).
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了一些训练大规模视觉和语言模型的高级概念。首先，你学习了如何通过计算每个 GPU 上的模型 TFLOPS 来评估和提高吞吐量，并使用这一指标与其他多个指标来比较实验结果。你了解了
+    FlashAttention，以及它的 I/O 感知优化二次循环如何将 Transformer 自注意力机制的速度提高 3-5 倍。你学习了如何使用 PyTorch
+    内置和 AWS 管理的方法进行编译。你还了解了几种不同类型的编译方法。你学会了如何更新你的编译超参数，以及在某些情况下编译是否能提供提升（或没有提升）。
+- en: You also learned about how to use compilers to run on Amazon’s custom hardware
+    for machine learning, Trainium, and Inferentia. Lastly, we used the scaling laws
+    to solve for an optimal train time.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还学到了如何使用编译器在亚马逊的机器学习定制硬件 Trainium 和 Inferentia 上运行。最后，我们使用缩放定律来解决最优训练时间问题。
+- en: In the next chapter, you’ll learn how to fine-tune your model and compare it
+    with open source alternatives.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，你将学习如何微调你的模型，并将其与开源替代方案进行比较。
+- en: References
+  id: totrans-97
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 参考文献
+- en: 'FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness:
+    [https://arxiv.org/pdf/2205.14135.pdf](https://arxiv.org/pdf/2205.14135.pdf)'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: FlashAttention：快速且内存高效的精确注意力机制，具备 I/O 感知：[https://arxiv.org/pdf/2205.14135.pdf](https://arxiv.org/pdf/2205.14135.pdf)
+- en: 'HazyResearch/flash-attention: [https://github.com/HazyResearch/flash-attention](https://github.com/HazyResearch/flash-attention)'
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: HazyResearch/flash-attention：[https://github.com/HazyResearch/flash-attention](https://github.com/HazyResearch/flash-attention)
+- en: 'New performance improvements in Amazon SageMaker model parallel library: [https://aws.amazon.com/blogs/machine-learning/new-performance-improvements-in-amazon-sagemaker-model-parallel-library/](https://aws.amazon.com/blogs/machine-learning/new-performance-improvements-in-amazon-sagemaker-model-parallel-library/)'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 亚马逊 SageMaker 模型并行库的新性能改进：[https://aws.amazon.com/blogs/machine-learning/new-performance-improvements-in-amazon-sagemaker-model-parallel-library/](https://aws.amazon.com/blogs/machine-learning/new-performance-improvements-in-amazon-sagemaker-model-parallel-library/)
+- en: 'The Deep Learning Compiler: A Comprehensive Survey: [https://arxiv.org/pdf/2002.03794.pdf](https://arxiv.org/pdf/2002.03794.pdf)'
+  id: totrans-101
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 深度学习编译器：综合调查：[https://arxiv.org/pdf/2002.03794.pdf](https://arxiv.org/pdf/2002.03794.pdf)
+- en: 'TORCH.COMPILE TUTORIAL: [https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html)'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: TORCH.COMPILE 教程：[https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html)
+- en: 'Enterprise Customers: [https://aws.amazon.com/pricing/enterprise/](https://aws.amazon.com/pricing/enterprise/)'
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 企业客户：[https://aws.amazon.com/pricing/enterprise/](https://aws.amazon.com/pricing/enterprise/)
+- en: 'Welcome to AWS Neuron: [https://awsdocs-neuron.readthedocs-hosted.com/en/latest/](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/)'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 欢迎使用 AWS Neuron：[https://awsdocs-neuron.readthedocs-hosted.com/en/latest/](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/)
+- en: 'How Amazon Search reduced ML inference costs by 85% with AWS Inferentia: [https://aws.amazon.com/blogs/machine-learning/how-amazon-search-reduced-ml-inference-costs-by-85-with-aws-inferentia/](https://aws.amazon.com/blogs/machine-learning/how-amazon-search-reduced-ml-inference-costs-by-85-with-aws-inferentia/)'
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 亚马逊搜索如何通过 AWS Inferentia 将 ML 推理成本降低 85%：[https://aws.amazon.com/blogs/machine-learning/how-amazon-search-reduced-ml-inference-costs-by-85-with-aws-inferentia/](https://aws.amazon.com/blogs/machine-learning/how-amazon-search-reduced-ml-inference-costs-by-85-with-aws-inferentia/)
+- en: 'Scaling Laws for Neural Language Models: [https://arxiv.org/abs/2001.08361](https://arxiv.org/abs/2001.08361)'
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 神经语言模型的缩放定律：[https://arxiv.org/abs/2001.08361](https://arxiv.org/abs/2001.08361)
+- en: 'Training Compute-Optimal Large Language Models: [https://arxiv.org/pdf/2203.15556.pdf](https://arxiv.org/pdf/2203.15556.pdf)'
+  id: totrans-107
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练计算最优的大型语言模型：[https://arxiv.org/pdf/2203.15556.pdf](https://arxiv.org/pdf/2203.15556.pdf)
+- en: 'Training Compute-Optimal Large Language Models: [https://openreview.net/pdf?id=iBBcRUlOAPR](https://openreview.net/pdf?id=iBBcRUlOAPR)'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练计算最优的大型语言模型：[https://openreview.net/pdf?id=iBBcRUlOAPR](https://openreview.net/pdf?id=iBBcRUlOAPR)
+- en: 'Part 4: Evaluate Your Model'
+  id: totrans-109
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第四部分：评估你的模型
+- en: In part 4, you’ll learn how to evaluate your model. You’ll use the scaling laws
+    to identify the shortest possible training time, fine-tune your model to compare
+    with public benchmarks, and identify and mitigate bias.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第4部分，你将学习如何评估你的模型。你将使用扩展规律来确定最短的训练时间，微调你的模型并与公共基准进行比较，同时识别并缓解偏差。
+- en: 'This section has the following chapters:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节包含以下章节：
+- en: '[*Chapter 10*](B18942_10.xhtml#_idTextAnchor152), *Fine-Tuning and Evaluating*'
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第10章*](B18942_10.xhtml#_idTextAnchor152)，*微调与评估*'
+- en: '[*Chapter 11*](B18942_11.xhtml#_idTextAnchor167), *Detecting, Mitigating, and
+    Monitoring Bias*'
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第11章*](B18942_11.xhtml#_idTextAnchor167)，*检测、缓解与监控偏差*'
+- en: '[*Chapter 12*](B18942_12.xhtml#_idTextAnchor178), *How to Deploy Your Model*'
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第12章*](B18942_12.xhtml#_idTextAnchor178)，*如何部署你的模型*'

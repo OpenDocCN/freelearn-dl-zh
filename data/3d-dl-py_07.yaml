@@ -1,0 +1,1102 @@
+- en: '6'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '6'
+- en: Exploring Neural Radiance Fields (NeRF)
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 探索神经辐射场（NeRF）
+- en: In the previous chapter, you learned about Differentiable Volume Rendering where
+    you reconstructed the 3D volume from several multi-view images. With this technique,
+    you modeled a volume consisting of N x N x N voxels. The space requirement for
+    storing this volume scale would therefore be O(N3). This is undesirable, especially
+    if we want to transmit this information over the network. Other methods can overcome
+    such large disk space requirements, but they are prone to smoothing geometry and
+    texture. Therefore, we cannot use them to model very complex or textured scenes
+    reliably.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，你了解了可微分体积渲染技术，其中你通过多个视图图像重建了 3D 体积。使用这种技术，你建模了由 N x N x N 体素组成的体积。存储该体积所需的空间规模将是
+    O(N3)。这是不理想的，特别是当我们希望通过网络传输这些信息时。其他方法可以克服如此大的磁盘空间需求，但它们容易平滑几何形状和纹理。因此，我们不能依赖它们来可靠地建模非常复杂或有纹理的场景。
+- en: In this chapter, we are going to discuss a breakthrough new approach to representing
+    3D scenes, called **Neural Radiance Fields** (**NeRF**). This is one of the first
+    techniques to model a 3D scene that requires less constant disk space and at the
+    same time, captures the fine geometry and texture of complex scenes.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论一种突破性的 3D 场景表示新方法，称为 **神经辐射场**（**NeRF**）。这是首批能够建模 3D 场景的技术之一，它比传统方法需要更少的常驻磁盘空间，同时捕捉复杂场景的精细几何和纹理。
+- en: 'In this chapter, you will learn about the following topics:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，你将学习以下内容：
+- en: Understanding NeRF
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解 NeRF
+- en: Training a NeRF model
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练 NeRF 模型
+- en: Understanding the NeRF model architecture
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解 NeRF 模型架构
+- en: Understanding volume rendering with radiance fields
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解使用辐射场的体积渲染
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'In order to run the example code snippets in this book, you need to have a
+    computer, ideally with a GPU with about 8 GB of GPU memory. Running code snippets
+    only using CPUs is not impossible but will be extremely slow. The recommended
+    computer configuration is as follows:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了运行本书中的示例代码片段，你需要一台电脑，理想情况下配备约 8 GB GPU 内存的显卡。仅使用 CPU 运行代码片段并非不可能，但将非常慢。推荐的计算机配置如下：
+- en: A GPU device – for example, Nvidia GTX series or RTX series with at least 8
+    GB of memory
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一台 GPU 设备——例如，至少具有 8 GB 内存的 Nvidia GTX 系列或 RTX 系列
+- en: Python 3.7+
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 3.7+
+- en: The PyTorch and PyTorch3D libraries
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyTorch 和 PyTorch3D 库
+- en: The code snippets for this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python).
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的代码片段可以在 [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python)
+    找到。
+- en: Understanding NeRF
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解 NeRF
+- en: View synthesis is a long-standing problem in 3D computer vision. The challenge
+    is to synthesize new views of a 3D scene using a small number of available 2D
+    snapshots of the scene. It is particularly challenging because the view of a complex
+    scene can depend on a lot of factors such as object artifacts, light sources,
+    reflections, opacity, object surface texture, and occlusions. Any good representation
+    should capture this information either implicitly or explicitly. Additionally,
+    many objects have complex structures that are not completely visible from a certain
+    viewpoint. The challenge is to construct complete information about the world
+    given incomplete and noisy information.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 视图合成是 3D 计算机视觉中的一个长期存在的问题。挑战在于使用少量可用的 2D 场景快照来合成 3D 场景的新视图。这尤其具有挑战性，因为复杂场景的视角可能依赖于许多因素，如物体伪影、光源、反射、不透明度、物体表面纹理和遮挡。任何好的表示方法都应该隐式或显式地捕捉这些信息。此外，许多物体具有复杂的结构，从某个视点并不能完全看到。这项挑战在于如何在给定不完全和噪声信息的情况下构建关于世界的完整信息。
+- en: As the name suggests, NeRF uses neural networks to model the world. As we will
+    learn later in the chapter, NeRF uses neural networks in a very unconventional
+    manner. It was a concept first developed by a team of researchers from UC Berkeley,
+    Google Research, and UC San Diego. Because of their unconventional use of neural
+    networks and the quality of the learned models, it has spawned multiple new inventions
+    in the fields of view synthesis, depth sensing, and 3D reconstruction. It is therefore
+    a very useful concept to understand as you navigate through the rest of this chapter
+    and book.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顾名思义，NeRF使用神经网络来建模世界。正如我们在本章稍后将学习到的，NeRF以非常不同寻常的方式使用神经网络。这个概念最初是由来自UC Berkeley、Google
+    Research和UC San Diego的研究团队开发的。由于它不寻常的神经网络使用方式以及所学模型的质量，它在视图合成、深度感知和3D重建等领域催生了多项新发明。因此，理解这个概念对你继续阅读本章及本书至关重要。
+- en: In this section, first, we will explore the meaning of radiance fields and how
+    we can use a neural network to represent these radiance fields.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节中，我们首先将探讨辐射场的含义，以及如何使用神经网络来表示这些辐射场。
+- en: What is a radiance field?
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 什么是辐射场？
+- en: Before we get to NeRF, let us understand what radiance fields are first. You
+    see an object when the light from that object is processed by your body’s sensory
+    system. The light from the object can either be generated by the object itself
+    or reflected off it.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们讨论NeRF之前，让我们首先了解辐射场是什么。当光从某个物体反射并被你的感官系统处理时，你就能看到该物体。物体的光可以由物体本身产生，也可以是反射自物体的光。
+- en: 'Radiance is the standard metric for measuring the amount of light that passes
+    through or is emitted from an area inside a particular solid angle. For our purposes,
+    we can treat the radiance to be the intensity of a point in space when viewed
+    in a particular direction. When capturing this information in RGB, the radiance
+    will have three components corresponding to the colors Red, Green, and Blue. The
+    radiance of a point in space can depend on many factors, including the following:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 辐射是衡量通过或从特定固体角度内的区域发出的光量的标准度量。就我们而言，辐射可以视为在特定方向上观察时，空间中某一点的光强度。当以RGB方式捕捉这一信息时，辐射将具有三个分量，分别对应红色、绿色和蓝色。空间中某一点的辐射可能取决于许多因素，包括以下内容：
+- en: Light sources illuminating that point
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 照亮该点的光源
+- en: The existence of a surface (or volume density) that can reflect light at that
+    point
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该点处是否存在可以反射光线的表面（或体积密度）
+- en: The texture properties of the surface
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表面的纹理属性
+- en: 'The following figure depicts the radiance value at a certain point in the 3D
+    scene when viewed at a certain angle. The radiance field is just a collection
+    of these radiance values at all points and viewing angles in the 3D scene:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下图示展示了在特定角度观察时，3D场景中某一点的辐射值。辐射场就是这些辐射值在3D场景中的所有点和观察角度上的集合：
+- en: '![Figure 6.1: The radiance (r, g, b) at a point (x, y, z) when viewed with
+    certain viewing angles (θ, ∅) ](img/B18217_06_1.png)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.1：在特定观察角度（θ，∅）下，点（x，y，z）处的辐射（r，g，b）](img/B18217_06_1.png)'
+- en: 'Figure 6.1: The radiance (r, g, b) at a point (x, y, z) when viewed with certain
+    viewing angles (θ, ∅)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.1：在特定观察角度（θ，∅）下，点（x，y，z）处的辐射（r，g，b）
+- en: If we know the radiance of all the points in a scene in all directions, we have
+    all the visual information we need about the scene. This field of radiance values
+    constitutes a radiance field. We can store the radiance field information as a
+    volume in a 3D voxel grid data structure. We saw this in the previous chapter
+    when discussing volume rendering.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们知道场景中所有点在所有方向上的辐射，我们就拥有了关于该场景的所有视觉信息。这个辐射值的场景就是辐射场。我们可以将辐射场信息存储为3D体素网格数据结构中的一个体积。我们在前一章讨论体积渲染时见过这一点。
+- en: Representing radiance fields with neural networks
+  id: totrans-29
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用神经网络表示辐射场
+- en: In this section, we will explore a new way of using neural networks. In typical
+    computer vision tasks, we use neural networks to map an input in the pixel space
+    to an output. In the case of a discriminative model, the output is a class label.
+    In the case of a generative model, the output is also in the pixel space. A NeRF
+    model is neither of these.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节中，我们将探讨一种使用神经网络的新方式。在典型的计算机视觉任务中，我们使用神经网络将输入的像素空间映射到输出。对于判别模型，输出是一个类别标签；对于生成模型，输出也在像素空间中。而NeRF模型既不是前者，也不是后者。
+- en: NeRF uses a neural network to represent a volumetric scene function. This neural
+    network takes a 5-dimensional input. These are the three spatial locations (x,
+    y, z) and two viewing angles (θ, ∅). Its output is the volume density σ at (x,
+    y, z) and the emitted color (r, g, b) of the point (x, y, z) when viewed from
+    the viewing angle (θ, ∅). The emitted color is a proxy used to estimate the radiance
+    at that point. In practice, instead of directly using (θ, ∅) to represent the
+    viewing angle, NeRF uses the unit direction vector d in the 3D Cartesian coordinate
+    system. These are equivalent representations of the viewing angle.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NeRF 使用神经网络来表示一个体积场景函数。这个神经网络接受一个 5 维输入，分别是三个空间位置（x, y, z）和两个视角（θ, ∅）。它的输出是在（x,
+    y, z）处的体积密度 σ 和从视角（θ, ∅）观察到的点（x, y, z）的发射颜色（r, g, b）。发射的颜色是用来估算该点辐射强度的代理。在实际应用中，NeRF
+    不直接使用（θ, ∅）来表示视角，而是使用 3D 笛卡尔坐标系中的单位方向向量 d。这两种表示方式是等效的视角表示。
+- en: The model therefore maps any point in the 3D scene and a viewing angle to the
+    volume density and radiance at that point. You can then use this model to synthesize
+    views by querying the 5D coordinates along camera rays and using the volume rendering
+    technique you learned about in the previous chapter to project the output colors
+    and volume densities into an image.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，该模型将 3D 场景中的任何点和一个视角映射到该点的体积密度和辐射强度。然后，你可以使用这个模型通过查询相机射线上的 5D 坐标，利用你在前一章中学习的体积渲染技术将输出颜色和体积密度投影到图像中，从而合成视图。
+- en: 'With the following figure, let us find out how a neural network can be used
+    to predict the density and radiance at a certain point (x, y, z) when viewed along
+    a certain direction (θ, ∅):'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下图中，我们将展示如何使用神经网络预测某一点（x, y, z）在沿某个方向（θ, ∅）视角下的密度和辐射强度：
+- en: '![Figure 6.2: The inputs (x, y, z, θ, and ∅) are used to create separate harmonic
+    embeddings for the spatial location and viewing angle first, forming the input
+    to a neural network, and this neural network outputs the predicted density and
+    radiance ](img/B18217_06_2.jpg)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.2：输入（x, y, z, θ 和 ∅）首先用于为空间位置和视角创建单独的谐波嵌入，然后形成神经网络的输入，神经网络输出预测的密度和辐射强度](img/B18217_06_2.jpg)'
+- en: 'Figure 6.2: The inputs (x, y, z, θ, and ∅) are used to create separate harmonic
+    embeddings for the spatial location and viewing angle first, forming the input
+    to a neural network, and this neural network outputs the predicted density and
+    radiance'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.2：输入（x, y, z, θ 和 ∅）首先用于为空间位置和视角创建单独的谐波嵌入，然后形成神经网络的输入，神经网络输出预测的密度和辐射强度
+- en: Note that this is a fully connected network – typically, this is referred to
+    as a **Multi-Layer Perceptron** (**MLP**). More importantly, this is not a convolutional
+    neural network. We refer to this model as the NeRF model. A single NeRF model
+    is optimized on a set of images from a single scene. Therefore, each model only
+    knows the scene on which it is optimized. This is not the standard way to use
+    a neural network, where we typically need the model to generalize unseen images.
+    In the case of NeRF, we need the network to generalize unseen viewpoints well.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，这是一种全连接网络——通常我们称之为**多层感知器**（**MLP**）。更重要的是，这不是卷积神经网络。我们将这种模型称为 NeRF 模型。单个
+    NeRF 模型是在单一场景的一组图像上进行优化的。因此，每个模型只了解它所优化的场景。这与我们通常需要模型对未见过的图像进行泛化的标准神经网络使用方式不同。在
+    NeRF 的情况下，我们需要网络能够很好地对未见过的视角进行泛化。
+- en: Now that you know what a NeRF is, let us look at how to use it to render new
+    views from it.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经了解了什么是 NeRF，接下来我们来看看如何使用它渲染新的视图。
+- en: Training a NeRF model
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练一个 NeRF 模型
+- en: 'In this section, we are going to train a simple NeRF model on images generated
+    from the synthetic cow model. We are only going to instantiate the NeRF model
+    without worrying about how it is implemented. The implementation details are covered
+    in the next section. A single neural network (NeRF model) is trained to represent
+    a single 3D scene. The following codes can be found in `train_nerf.py`, which
+    can be found in this chapter’s GitHub repository. It is modified from a PyTorch3D
+    tutorial. Let us go through the code to train a NeRF model on the synthetic cow
+    scene:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将训练一个简单的 NeRF 模型，使用从合成牛模型生成的图像。我们只会实例化 NeRF 模型，而不关心它是如何实现的。实现细节将在下一节中介绍。一个单一的神经网络（NeRF
+    模型）被训练来表示单一的 3D 场景。以下代码可以在`train_nerf.py`中找到，该文件位于本章的 GitHub 仓库中。它是从 PyTorch3D
+    教程修改而来的。让我们通过这段代码，在合成牛场景上训练一个 NeRF 模型：
+- en: 'First, let us import the standard modules:'
+  id: totrans-40
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，让我们导入标准模块：
+- en: '[PRE0]'
+  id: totrans-41
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Next, let us import the functions and classes used for rendering. These are
+    `pytorch3d` data structures:'
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，让我们导入用于渲染的函数和类。这些是`pytorch3d`数据结构：
+- en: '[PRE1]'
+  id: totrans-43
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Next, we need to set up the device:'
+  id: totrans-44
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要设置设备：
+- en: '[PRE2]'
+  id: totrans-45
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Next, let us import the utility functions that will let us generate synthetic
+    training data and visualize images:'
+  id: totrans-46
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，让我们导入一些实用函数，用于生成合成训练数据并可视化图像：
+- en: '[PRE3]'
+  id: totrans-47
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'We can now use these utility functions to generate camera angles, images, and
+    silhouettes of the synthetic cow from multiple different angles. This will print
+    the number of generated images, silhouettes, and camera angles:'
+  id: totrans-48
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在可以使用这些实用函数从多个不同角度生成合成牛的相机角度、图像和轮廓。这将打印生成的图像、轮廓和相机角度的数量：
+- en: '[PRE4]'
+  id: totrans-49
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'As we have done in the previous chapter, let us define a ray sampler. We will
+    use `MonteCarloRaysampler`. This generates rays from a random subset of pixels
+    from the image plane. We need a random sampler here since we want to use a mini-batch
+    gradient descent algorithm to optimize the model. This is a standard neural network
+    optimization technique. Sampling rays systematically can result in optimization
+    bias during each optimization step. This can lead to a worse model and increase
+    the model training time. The ray sampler samples points uniformly along the ray:'
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 就像我们在上一章做的那样，让我们定义一个光线采样器。我们将使用`MonteCarloRaysampler`。它从图像平面上的随机子集像素生成光线。我们在这里需要一个随机采样器，因为我们想使用小批量梯度下降算法来优化模型。这是一种标准的神经网络优化技术。系统地采样光线可能会在每一步优化时导致优化偏差，从而导致更差的模型，并增加模型训练时间。光线采样器沿着光线均匀采样点：
+- en: '[PRE5]'
+  id: totrans-51
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Next, we will define the ray marcher. This uses the volume densities and colors
+    of points sampled along the ray and renders the pixel value for that ray. For
+    the ray marcher, we use `EmissionAbsorptionRaymarcher`. This implements the classical
+    Emission-Absorption ray marching algorithm:'
+  id: totrans-52
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将定义光线行进器。它使用沿光线采样的点的体积密度和颜色，并渲染该光线的像素值。对于光线行进器，我们使用`EmissionAbsorptionRaymarcher`。它实现了经典的发射-吸收光线行进算法：
+- en: '[PRE6]'
+  id: totrans-53
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'We will now instantiate `ImplicitRenderer`. This composes the ray sampler and
+    the ray marcher into a single data structure:'
+  id: totrans-54
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在将实例化`ImplicitRenderer`。它将光线采样器和光线行进器组合成一个单一的数据结构：
+- en: '[PRE7]'
+  id: totrans-55
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Let us look at the Huber loss function. This is defined in `utils.helper_functions.huber`.
+    It is a robust alternative to the mean squared error function and is less sensitive
+    to outliers:'
+  id: totrans-56
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们来看一下Huber损失函数。它在`utils.helper_functions.huber`中定义，是均方误差函数的稳健替代，且对异常值不那么敏感：
+- en: '[PRE8]'
+  id: totrans-57
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'We will now look at a helper function defined in `utils.helper_functions.sample_images_at_mc_loss`
+    that is used to extract ground truth pixel values from target images. `MonteCarloRaysampler`
+    samples rays passing through some `x` and `y` locations on the image. These are
+    in `torch.nn.functional.grid_sample` function. This uses interpolation techniques
+    in the background to provide us with accurate pixel values. This is better than
+    just mapping NDC coordinates to pixel coordinates and then sampling the one pixel
+    that corresponds to an NDC coordinate value. In the NDC coordinate system, `x`
+    and `y` both have a range of `[-1, 1]`. For example, (x, y) = (-1, -1) corresponds
+    to the top left corner of the image:'
+  id: totrans-58
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在来看一个定义在`utils.helper_functions.sample_images_at_mc_loss`中的辅助函数，它用于从目标图像中提取地面真实像素值。`MonteCarloRaysampler`会采样经过图像中某些`x`和`y`位置的光线。这些位置在`torch.nn.functional.grid_sample`函数中。该函数使用插值技术在后台提供准确的像素值。这比仅仅将NDC坐标映射到像素坐标并采样与NDC坐标值对应的单个像素要好。在NDC坐标系中，`x`和`y`的范围都是`[-1,
+    1]`。例如，(x, y) = (-1, -1)对应图像的左上角：
+- en: '[PRE9]'
+  id: totrans-59
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'While training the model, it is always useful to visualize the model output.
+    Among many other uses, this will help us course-correct if we see that the model
+    outputs are not changing over time. So far, we have used `MonteCarloRaysampler`,
+    which is very useful while training the model, but this will not be useful when
+    we want to render full images since it randomly samples rays. To view the full
+    image, we need to systematically sample rays corresponding to all the pixels in
+    the output frame. To achieve this, we are going to use `NDCMultinomialRaysampler`:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在训练模型时，查看模型输出总是很有用的。除了其他许多用途外，这将帮助我们进行调整，如果我们发现模型输出随着时间的推移没有变化。到目前为止，我们使用了`MonteCarloRaysampler`，它在训练模型时非常有用，但当我们想要渲染完整图像时，它就不再有用了，因为它是随机采样光线。为了查看完整的图像，我们需要系统地采样对应输出帧中所有像素的光线。为此，我们将使用`NDCMultinomialRaysampler`：
+- en: '[PRE10]'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We will now instantiate the implicit renderer:'
+  id: totrans-62
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在将实例化隐式渲染器：
+- en: '[PRE11]'
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'In order to visualize the intermediate training results, let us define a helper
+    function that takes the model and camera parameters as its input and compares
+    it with the target image and its corresponding silhouette. If the rendered image
+    is very large, it might not be possible to fit all the rays into the GPU memory
+    at once. Therefore, we need to break them down into batches and run several forward
+    passes on the model to get the output. We need to merge the output of the rendering
+    into one coherent image. In order to keep it simple, we will just import the function
+    here, but the full code is provided in the book’s GitHub repository:'
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为了可视化中间训练结果，我们定义了一个辅助函数，该函数以模型和相机参数为输入，并将其与目标图像及相应的轮廓进行比较。如果渲染图像非常大，可能无法一次性将所有光线装入
+    GPU 内存。因此，我们需要将它们分成批次，并在模型上运行多次前向传播以获取输出。我们需要将渲染的输出合并成一个连贯的图像。为了简化，我们将在这里导入该函数，但完整代码已提供在本书的
+    GitHub 仓库中：
+- en: '[PRE12]'
+  id: totrans-65
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'We will now instantiate the NeRF model. To keep it simple, we are not presenting
+    the model’s class definition here. You can find that in the chapter’s GitHub repository.
+    Because the model structure is so important, we are going to discuss it in detail
+    in a separate section:'
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将实例化 NeRF 模型。为了简化起见，我们在这里不展示模型的类定义。你可以在本章的 GitHub 仓库中找到它。由于模型结构非常重要，我们将在单独的章节中详细讨论它：
+- en: '[PRE13]'
+  id: totrans-67
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Let us now prepare to train the model. In order to reproduce the training,
+    we should set the random seed used in `torch` to a fixed value. We then need to
+    send all the variables to the device used for processing. Since this is a resource-intensive
+    computational problem, we should ideally run it on a GPU-enabled machine. Running
+    this on a CPU is extremely time-consuming and not recommended:'
+  id: totrans-68
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们准备开始训练模型。为了重现训练过程，我们应将 `torch` 中使用的随机种子设置为固定值。然后，我们需要将所有变量发送到用于处理的设备上。由于这是一个资源密集型的计算问题，理想情况下我们应在支持
+    GPU 的机器上运行它。在 CPU 上运行会非常耗时，不推荐使用：
+- en: '[PRE14]'
+  id: totrans-69
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'We will now define the hyperparameters used to train the model. `lr` represents
+    the learning rate, `n_iter` represents the number of training iterations (or steps),
+    and `batch_size` represents the number of random cameras used in a mini-batch.
+    The batch size here is chosen according to the GPU memory you have. If you find
+    that you are running out of GPU memory, choose a smaller batch size value:'
+  id: totrans-70
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将定义用于训练模型的超参数。`lr` 表示学习率，`n_iter` 表示训练迭代次数（或步骤），`batch_size` 表示在每个小批量中使用的随机相机数。这里的批量大小根据你的
+    GPU 内存来选择。如果你发现 GPU 内存不足，请选择一个较小的批量大小值：
+- en: '[PRE15]'
+  id: totrans-71
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We are now ready to train our model. During each iteration, we should sample
+    a mini-batch of cameras randomly:'
+  id: totrans-72
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们准备训练模型了。在每次迭代中，我们应该随机采样一个小批量的相机：
+- en: '[PRE16]'
+  id: totrans-73
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'During each iteration, first, we need to obtain the rendered pixel values and
+    rendered silhouettes at the randomly sampled cameras using the NeRF model. These
+    are predicted values. This is the forward propagation step. We want to compare
+    these predictions to the ground truth to find out the training loss. Our loss
+    is a mixture of two loss functions: A, a Huber loss on the predicted silhouette
+    and the ground truth silhouette, and B, a Huber loss on the predicted color and
+    the ground truth color. Once we obtain the loss value, we can backpropagate through
+    the NeRF model and step through the optimizer:'
+  id: totrans-74
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在每次迭代中，首先，我们需要使用 NeRF 模型在随机采样的相机上获取渲染的像素值和渲染的轮廓。这些是预测值。这是前向传播步骤。我们想要将这些预测与真实值进行比较，以找出训练损失。我们的损失是两个损失函数的混合：A，基于预测轮廓和真实轮廓的
+    Huber 损失，以及 B，基于预测颜色和真实颜色的 Huber 损失。一旦我们得到损失值，我们可以通过 NeRF 模型进行反向传播，并使用优化器进行步进：
+- en: '[PRE17]'
+  id: totrans-75
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Let us visualize model performance after every 100 iterations. This will help
+    us track model progress and terminate it if something unexpected is happening.
+    This creates images in the same folder where you run the code:'
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们在每 100 次迭代后可视化模型的表现。这将帮助我们跟踪模型进展，并在发生意外情况时终止训练。这会在运行代码的相同文件夹中生成图像：
+- en: '[PRE18]'
+  id: totrans-77
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '![Figure 6.3: An intermediate visualization to keep track of model training
+    ](img/B18217_06_3.jpg)'
+  id: totrans-78
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.3：用于跟踪模型训练的中间可视化](img/B18217_06_3.jpg)'
+- en: 'Figure 6.3: An intermediate visualization to keep track of model training'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.3：用于跟踪模型训练的中间可视化
+- en: 'After the optimization is finished, we take the final resulting volumetric
+    model and render images from new angles:'
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 优化完成后，我们将使用最终的体积模型并从新角度渲染图像：
+- en: '[PRE19]'
+  id: totrans-81
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Finally, the new rendered images are shown in the figure here:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终，新的渲染图像显示在这里的图中：
+- en: '![Figure 6.4: Rendered images of the synthetic cow scene that our NeRF model
+    learned ](img/B18217_06_4.jpg)'
+  id: totrans-83
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.4：我们 NeRF 模型学习到的合成牛场景的渲染图像](img/B18217_06_4.jpg)'
+- en: 'Figure 6.4: Rendered images of the synthetic cow scene that our NeRF model
+    learned'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.4：我们 NeRF 模型学习到的合成牛场景的渲染图像
+- en: We trained a NeRF model on a synthetic cow scene in this section. In the next
+    section, we will learn more about how the NeRF model is implemented by going through
+    the code in more detail.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这一部分训练了一个 NeRF 模型，使用的是合成牛场景。接下来的部分，我们将通过更详细地分析代码来深入了解 NeRF 模型的实现。
+- en: Understanding the NeRF model architecture
+  id: totrans-86
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解 NeRF 模型架构
+- en: So far, we have used the NeRF model class without fully knowing what it looks
+    like. In this section, we will first visualize what the neural network looks like
+    and then go through the code in detail and understand how it is implemented.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们在没有完全了解 NeRF 模型的情况下使用了该模型类。在本节中，我们将首先可视化神经网络的外观，然后详细分析代码并理解它是如何实现的。
+- en: 'The neural network takes the harmonic embedding of the spatial location (x,
+    y, z) and the harmonic embedding of (θ, ∅) as its input and outputs the predicted
+    density σ and the predicted color (r, g, b). The following figure illustrates
+    the network architecture that we are going to implement in this section:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 神经网络以空间位置 (x, y, z) 的谐波嵌入和 (θ, ∅) 的谐波嵌入作为输入，并输出预测的密度 σ 和预测的颜色 (r, g, b)。下图展示了我们将在本节中实现的网络架构：
+- en: '![Figure 6.5: The simplified model architecture of the NeRF model ](img/B18217_06_5.jpg)'
+  id: totrans-89
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.5：NeRF 模型的简化模型架构](img/B18217_06_5.jpg)'
+- en: 'Figure 6.5: The simplified model architecture of the NeRF model'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.5：NeRF 模型的简化模型架构
+- en: Note
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The model architecture that we are going to implement is different from the
+    original NeRF model architecture. In this implementation, we are implementing
+    a simplified version of it. This simplified architecture makes it faster and easier
+    to train.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们要实现的模型架构与原始的 NeRF 模型架构不同。在这个实现中，我们正在实现其简化版本。这个简化架构使得训练更快、更容易。
+- en: 'Let us start defining the `NeuralRadianceField` class. We will now go through
+    different parts of this class definition. For the full definition of the class,
+    please refer to the code in the GitHub repository:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始定义 `NeuralRadianceField` 类。我们将详细介绍该类定义的不同部分。有关该类的完整定义，请参考 GitHub 仓库中的代码：
+- en: 'Each input point is a 5-dimensional vector. It was found that training the
+    model directly on this input performs poorly when representing high-frequency
+    variation in color and geometry. This is because neural networks are known to
+    be biased toward learning low-frequency functions. A good solution to this problem
+    is to map the input space to a higher dimensional space and use that for training.
+    This mapping function is a set of sinusoidal functions with fixed but unique frequencies:'
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每个输入点是一个 5 维向量。研究发现，直接在这个输入上训练模型在表示颜色和几何形状的高频变化时表现不佳。这是因为神经网络已知偏向于学习低频函数。解决此问题的一个好方法是将输入空间映射到更高维空间并利用该空间进行训练。这个映射函数是一组具有固定但唯一频率的正弦函数：
+- en: '![](img/Formula_06_001.jpg)'
+  id: totrans-95
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_001.jpg)'
+- en: 'This function is applied to each of the components of the input vector:'
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 该函数应用于输入向量的每个组件：
+- en: '[PRE20]'
+  id: totrans-97
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The neural network consists of an MLP backbone. It takes the embeddings of
+    location (x, y, z) as its input. This is a fully connected network and the activation
+    function used is `softplus`. The `softplus` function is a smoother version of
+    the ReLU activation function. The output of the backbone is a vector with a size
+    of `n_hidden_neurons`:'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 神经网络由 MLP 主干组成。它接受位置 (x, y, z) 的嵌入作为输入。这是一个全连接网络，使用的激活函数是 `softplus`。`softplus`
+    函数是 ReLU 激活函数的平滑版本。主干的输出是一个大小为 `n_hidden_neurons` 的向量：
+- en: '[PRE21]'
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We define a color layer that takes the output embeddings of the MLP backbone
+    along with the ray direction input embeddings and outputs the RGB color of the
+    input. We combine these inputs because the color output depends strongly on both
+    the location of the point and the direction of viewing and therefore, it is important
+    to provide shorter paths to make use of this neural network:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们定义了一个颜色层，它接受 MLP 主干的输出嵌入与射线方向输入嵌入，并输出输入的 RGB 颜色。我们将这些输入结合起来，因为颜色输出强烈依赖于点的位置和观察方向，因此提供更短的路径以充分利用这个神经网络非常重要：
+- en: '[PRE22]'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Next, we define the `density` layer. The density of a point is just a function
+    of its location:'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们定义 `density` 层。一个点的密度仅是其位置的函数：
+- en: '[PRE23]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Now, we need some function to take the output of `density_layer` and predict
+    the raw density:'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们需要一个函数来获取 `density_layer` 的输出，并预测原始密度：
+- en: '[PRE24]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'We do the same for obtaining colors at a certain point given the ray direction.
+    We need to apply the positional encoding function to the ray direction input first.
+    We should then concatenate it with the output of the MLP backbone:'
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们对给定光线方向的某一点颜色的获取也做了相同的处理。我们需要先对光线方向输入应用位置编码函数。然后，我们应将其与 MLP 主干的输出进行拼接：
+- en: '[PRE25]'
+  id: totrans-107
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'We define the function for forward propagation. First, we obtain embeddings.
+    Then, we pass them through the MLP backbone to obtain a set of features. We then
+    use that to obtain the densities. We use the features and the ray directions to
+    obtain the color. We return the densities and colors:'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们定义了前向传播的函数。首先，我们获得嵌入（embeddings）。然后，我们通过 MLP 主干传递它们，以获得一组特征。接着，我们利用这些特征来获得密度。我们使用特征和光线方向来获得颜色。最终，我们返回密度和颜色：
+- en: '[PRE26]'
+  id: totrans-109
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'This function is used to allow for memory-efficient processing of input rays.
+    First, the input rays are split into `n_batches` chunks and passed through the
+    `self.forward` function one at a time in a `for` loop. Combined with disabling
+    PyTorch gradient caching (`torch.no_grad()`), this allows us to render large batches
+    of rays that do not all fit into GPU memory in a single forward pass. In our case,
+    `batched_forward` is used to export a fully sized render of the radiance field
+    for visualization purposes:'
+  id: totrans-110
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 该函数用于实现输入光线的内存高效处理。首先，输入的光线被分成 `n_batches` 块，并通过 `self.forward` 函数逐一传递，在 `for`
+    循环中执行。结合禁用 PyTorch 梯度缓存（`torch.no_grad()`），这使我们能够渲染大批量的光线，即使这些光线无法完全适应 GPU 内存，也能通过单次前向传播来处理。在我们的案例中，`batched_forward`
+    用于导出辐射场的完整渲染图，以便进行可视化：
+- en: '[PRE27]'
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'For each batch, we need to run a forward pass first and then extract the `ray_densities`
+    and `ray_colors` separately to be returned as the outputs:'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于每一批次，我们需要先进行一次前向传播，然后分别提取 `ray_densities` 和 `ray_colors`，作为输出返回：
+- en: '[PRE28]'
+  id: totrans-113
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: In this section, we went through the implementation of the NeRF model. To get
+    a complete understanding of NeRF, we also need to explore the theoretical concepts
+    underlying its use in rendering volumes. In the next section, we will explore
+    this in more detail.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们介绍了 NeRF 模型的实现。为了全面理解 NeRF，我们还需要探索其在体积渲染中的理论概念。在接下来的部分中，我们将更详细地探讨这一点。
+- en: Understanding volume rendering with radiance fields
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解使用辐射场的体积渲染
+- en: 'Volume rendering allows you to create a 2D projection of a 3D image or scene.
+    In this section, we will learn about rendering a 3D scene from different viewpoints.
+    For the purposes of this section, assume that the NeRF model is fully trained
+    and that it accurately maps the input coordinates (x, y, z, d­­­x, dy, dz) to
+    an output (r, g, b, σ). Here are the definitions of these input and output coordinates:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 卷积渲染允许你创建 3D 图像或场景的 2D 投影。在本节中，我们将学习如何从不同的视角渲染 3D 场景。为了本节的目的，假设 NeRF 模型已经完全训练，并且能够准确地将输入坐标（x,
+    y, z, dx, dy, dz）映射到输出（r, g, b, σ）。以下是这些输入和输出坐标的定义：
+- en: '**(x, y, z)**: A point in the 3D scene in the World Coordinates'
+  id: totrans-117
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**(x, y, z)**：世界坐标系中 3D 场景中的一点'
+- en: '**(d­­­x, dy, dz)**: This is a unit vector that represents the direction along
+    which we are viewing the point (x, y, z)'
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**(dx, dy, dz)**：这是一个单位向量，表示我们观察点（x, y, z）时的视线方向'
+- en: '**(r, g, b)**: This is the radiance value (or the emitted color) of the point
+    (x, y, z)'
+  id: totrans-119
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**(r, g, b)**：这是点（x, y, z）处的辐射值（或发射颜色）'
+- en: '**σ**: The volume density at the point (x, y, z)'
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**σ**：点（x, y, z）处的体积密度'
+- en: In the previous chapter, you came to understand the concepts underlying volumetric
+    rendering. You used the technique of ray sampling to get volume densities and
+    colors from the volume. We called this volume sampling. In this chapter, we are
+    going to use ray sampling on the radiance field to get the volume densities and
+    colors. We can then perform ray marching to obtain the color intensities of that
+    point. The ray marching technique used in the previous chapter and what is used
+    in this chapter are conceptually similar. The difference is that 3D voxels are
+    discrete representations of 3D space whereas radiance fields are a continuous
+    representation of it (because we use a neural network to encode this representation).
+    This slightly changes the way we accumulate color intensities along a ray.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，你了解了体积渲染的基本概念。你使用射线采样技术从体积中获取体积密度和颜色。我们称这种操作为体积采样。在本章中，我们将对辐射场使用射线采样技术，获取体积密度和颜色。然后，我们可以执行射线行进（ray
+    marching）来获得该点的颜色强度。上一章中使用的射线行进技术与本章中使用的在概念上是类似的。区别在于，3D体素是3D空间的离散表示，而辐射场是其连续表示（因为我们使用神经网络来编码该表示）。这稍微改变了我们沿射线积累颜色强度的方式。
+- en: Projecting rays into the scene
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将射线投射到场景中
+- en: Imagine placing a camera at a viewpoint and pointing it towards the 3D scene
+    of interest. This is the scene on which the NeRF model is trained. To synthesize
+    a 2D projection of the scene, we first send out of ray into the 3D scene originating
+    from the viewpoint.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下将一个相机放置在一个视点，并将其指向感兴趣的3D场景。这就是NeRF模型训练的场景。为了合成该场景的2D投影，我们首先从视点发射一条射线进入3D场景。
+- en: 'The ray can be parameterized as follows:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 射线可以按如下方式参数化：
+- en: '![](img/Formula_06_002.png)'
+  id: totrans-125
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_002.png)'
+- en: Here, r is the ray starting from the origin o and traveling along the direction
+    d. It is parametrized by t, which can be varied in order to move to different
+    points on the ray. Note that r is a 3D vector representing a point in space.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，r是从原点o开始并沿方向d传播的射线。它由t参数化，可以通过改变t的值来移动到射线上的不同点。注意，r是一个3D向量，表示空间中的一个点。
+- en: Accumulating the color of a ray
+  id: totrans-127
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 积累射线的颜色
+- en: 'We can use some well-known classical color rendering techniques to render the
+    color of the ray. Before we do that, let us get a feeling for some standard definitions:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用一些知名的经典颜色渲染技术来渲染射线的颜色。在我们这样做之前，让我们先对一些标准定义有所了解：
+- en: Let us assume that we want to accumulate the color of the ray between tn (the
+    near bound) and tf (the far bound). We do not care about the ray outside of these
+    bounds.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 假设我们想要积累位于tn（近边界）和tf（远边界）之间的射线颜色。我们不关心射线在这些边界之外的部分。
+- en: We can think of volume density σ(r(t)) as the probability that the ray terminates
+    at an infinitesimal point around r(t).
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们可以将体积密度σ(r(t))看作是射线在r(t)附近的一个无限小点处终止的概率。
+- en: We can think of ![](img/Formula_06_003.png) as the color at the point r(t) on
+    the ray when viewed in along direction d.
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们可以将 ![](img/Formula_06_003.png) 看作是沿d方向观察射线在点r(t)处的颜色。
+- en: '![](img/Formula_06_004.png) will measure the accumulated volume density between
+    tn and some point t.'
+  id: totrans-132
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_06_004.png) 将测量tn与某一点t之间的累计体积密度。'
+- en: '![](img/Formula_06_005.png) will provide us with a notion of accumulated transmittance
+    along the ray from tn to some point t. The higher the accumulated volume density,
+    the lower the accumulated transmittance to the point t.'
+  id: totrans-133
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_06_005.png) 将为我们提供从tn到某一点t沿射线的累计透射率的概念。体积密度越高，累计透射率到达点t时就越低。'
+- en: 'The expected color of the ray can now be defined as follows:'
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 射线的期望颜色现在可以定义如下：
+- en: '![](img/Formula_06_006.png)'
+  id: totrans-135
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_006.png)'
+- en: Important note
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要说明
+- en: The volume density σ(r(t)) is a function of the point r(t). Most notably, this
+    does not depend on the direction vector d. This is because volume density is a
+    function of the physical location at which the point is located. The color ![](img/Formula_06_007.png)
+    is a function of both the point r(t) and the ray direction d. This is because
+    the same point in space can have different colors when viewed from different directions.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 体积密度σ(r(t))是点r(t)的一个函数。最重要的是，这不依赖于方向向量d。这是因为体积密度是一个依赖于物理位置的函数，而不是方向。颜色 ![](img/Formula_06_007.png)
+    是点r(t)和射线方向d的函数。这是因为同一点在不同方向观察时可能呈现不同的颜色。
+- en: Our NeRF model is a continuous function representing the radiance field of the
+    scene. We can use it to obtain c(r(t), d) and σ(r(t)) at various points along
+    the ray. There are many techniques for numerically estimating the integral C(r).
+    While training and visualizing the outputs of the NeRF model, we used the standard
+    `EmissionAbsorptionRaymarcher` method to accumulate the radiance along a ray.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的 NeRF 模型是一个连续函数，表示场景的辐射场。我们可以使用它来获取不同射线上的 c(r(t), d) 和 σ(r(t))。有许多技术可以用来数值估算积分
+    C(r)。在训练和可视化 NeRF 模型的输出时，我们使用了标准的 `EmissionAbsorptionRaymarcher` 方法来沿射线积累辐射。
+- en: Summary
+  id: totrans-139
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we came to understand how a neural network can be used to model
+    and represent a 3D scene. This neural network is called the NeRF model. We then
+    trained a simple NeRF model on a synthetic 3D scene. We then dug deeper into the
+    NeRF model architecture and its implementation in code. We also understood the
+    main components of the model. We then understood the principles behind rendering
+    volumes with the NeRF model. The NeRF model is used to capture a single scene.
+    Once we build this model, we can use it to render that 3D scene from different
+    angles. It is logical to wonder whether there is a way to capture multiple scenes
+    with a single model and whether we can predictably manipulate certain objects
+    and attributes in the scene. This is our topic of exploration in the next chapter
+    where we will explore the GIRAFFE model.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们了解了如何使用神经网络来建模和表示 3D 场景。这个神经网络被称为 NeRF 模型。我们随后在一个合成的 3D 场景上训练了一个简单的 NeRF
+    模型。接着，我们深入探讨了 NeRF 模型的架构及其在代码中的实现。我们还了解了模型的主要组成部分。然后，我们理解了使用 NeRF 模型渲染体积的原理。NeRF
+    模型用于捕捉单一场景。一旦我们建立了这个模型，就可以用它从不同的角度渲染这个 3D 场景。自然地，我们会想知道，是否有一种方法可以用一个模型捕捉多个场景，并且是否可以在场景中可预测地操控某些物体和属性。这是我们在下一章探索的话题，我们将在其中探讨
+    GIRAFFE 模型。
+- en: 'PART 3: State-of-the-art 3D Deep Learning Using PyTorch3D'
+  id: totrans-141
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第三部分：使用 PyTorch3D 的最先进 3D 深度学习
+- en: This part of the book will be all about using PyTorch3D to implement state-of-the-art
+    3D deep learning models and algorithms. 3D computer vision technologies are making
+    rapid progress in recent times and we will learn how to implement and use these
+    state-of-the-art 3D deep learning models in the best way possible.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书的这一部分将全程介绍如何使用 PyTorch3D 来实现最先进的 3D 深度学习模型和算法。近年来，3D 计算机视觉技术正在快速进步，我们将学习如何以最佳方式实现和使用这些最先进的
+    3D 深度学习模型。
+- en: 'This part includes the following chapter:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本部分包括以下章节：
+- en: '[*Chapter 7*](B18217_07.xhtml#_idTextAnchor094), *Exploring Controllable Neural
+    Feature Fields*'
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第 7 章*](B18217_07.xhtml#_idTextAnchor094)，*探索可控神经特征场*'
+- en: '[*Chapter 8*](B18217_08.xhtml#_idTextAnchor108)*, Modeling the Human Body in
+    3D*'
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第 8 章*](B18217_08.xhtml#_idTextAnchor108)*，3D 人体建模*'
+- en: '[*Chapter 9*](B18217_09.xhtml#_idTextAnchor124)*, Performing End-to-End View
+    Synthesis with SynSin*'
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第 9 章*](B18217_09.xhtml#_idTextAnchor124)*，使用 SynSin 进行端到端视图合成*'
+- en: '[*Chapter 10*](B18217_10.xhtml#_idTextAnchor134)*, Mesh R-CNN*'
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第 10 章*](B18217_10.xhtml#_idTextAnchor134)*，Mesh R-CNN*'

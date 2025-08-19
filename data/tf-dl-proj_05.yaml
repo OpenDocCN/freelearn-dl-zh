@@ -1,0 +1,1203 @@
+- en: Stock Price Prediction with LSTM
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基于 LSTM 的股票价格预测
+- en: In this chapter, you'll be introduced to how to predict a timeseries composed
+    of real values. Specifically, we will predict the stock price of a large company
+    listed on the NYSE stock exchange, given its historical performance.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，您将学习如何预测由真实值组成的时间序列。具体来说，我们将根据历史表现预测一家在纽约证券交易所上市的大型公司的股票价格。
+- en: 'In this chapter we will look at:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨：
+- en: How to collect the historical stock price information
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何收集历史股票价格信息
+- en: How to format the dataset for a timeseries prediction task
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何为时间序列预测任务格式化数据集
+- en: How to use regression to predict the future prices of a stock
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用回归预测股票的未来价格
+- en: Long short-term memory (LSTM) 101
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 长短期记忆（LSTM）101
+- en: How LSTM will boost the predictive performance
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: LSTM 如何提升预测性能
+- en: How to visualize the performance on the Tensorboard
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何在 Tensorboard 上可视化性能
+- en: 'Each of these bullet points is a section in this chapter. Moreover, to make
+    the chapter visually and intuitively easier to understand, we will first apply
+    each technique on a simpler signal: a cosine. A cosine is more deterministic than
+    a stock price and will help with the understanding and the potentiality of the
+    algorithm.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个要点都是本章的一个部分。此外，为了让本章在视觉和直观上更易理解，我们将首先在一个简单的信号上应用每个技术：一个余弦波。余弦波比股票价格更具确定性，有助于理解算法的潜力。
+- en: 'Note: we would like to point out that this project is just an experiment that
+    works on the simple data we have available. Please don''t use the code or the
+    same model in a real-world scenario, since it may not perform at the same level.
+    Remember: your capital is at risk, and there are no guarantees you''ll always
+    gain more.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意：我们想指出，这个项目只是一个实验，使用的是我们可以获得的简单数据。请不要在实际场景中使用这段代码或相同的模型，因为它可能无法达到同样的效果。记住：您的资金存在风险，且没有任何保证您总是能够获利。
+- en: Input datasets – cosine and stock price
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 输入数据集 – 余弦波与股票价格
+- en: As we claimed before, we will use two mono-dimensional signals as timeseries
+    for our experiment. The first is a cosine wave with some added uniform noise.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们之前所述，我们将使用两个一维信号作为实验中的时间序列。第一个是带有一定均匀噪声的余弦波。
+- en: 'This is the function to generate the cosine signal, given (as parameters) the
+    number of points, the frequency of the signal, and the absolute intensity of the
+    uniform generator for the noise. Also, in the body of the function, we''re making
+    sure to set the random seed, so we can make our experiments replicable:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是生成余弦信号的函数，给定（作为参数）数据点的数量、信号的频率以及均匀生成器的绝对强度噪声。此外，在函数体内，我们确保设置了随机种子，以便让我们的实验可复制：
+- en: '[PRE0]'
+  id: totrans-14
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'To print 10 points, one full oscillation of the cosine (therefore `frequency`
+    is `0.1`) with 0.1 magnitude noise, run:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要打印 10 个数据点，一个完整的余弦波振荡（因此 `frequency` 为 `0.1`），并加上 0.1 强度的噪声，请运行：
+- en: '[PRE1]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The output is:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出为：
+- en: '[PRE2]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: In our analysis, we will pretend this is a stock price, where each point of
+    the timeseries is a mono-dimensional feature representing the price of the stock
+    itself for that day.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的分析中，我们将假设这是一只股票的价格，其中每个时间序列的点都是一个一维特征，代表该股票在当天的价格。
+- en: The second signal, instead, comes from the real financial world. Financial data
+    can be expensive and hard to extract, that's why in this experiment we use the
+    Python library `quandl` to obtain such information. The library has been chosen
+    since it's easy to use, cheap (XX free queries per day), and great for this exercise,
+    where we want to predict only the closing price of the stock. If you're into automatic
+    trading, you should look for more information, in the premium version of the library,
+    or in some other libraries or data sources.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个信号来自真实的金融世界。金融数据可能很昂贵且难以提取，这就是为什么在这个实验中我们使用 Python 库 `quandl` 来获取这些信息。选择这个库是因为它易于使用、便宜（每天有
+    XX 次免费查询）且非常适合本次练习，我们只预测股票的收盘价。如果你对自动化交易感兴趣，可以进一步了解该库的付费版本，或者查看其他库或数据源。
+- en: 'Quandl is an API, and the Python library is a wrapper over the APIs. To see
+    what''s returned, run the following command in your prompt:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Quandl 是一个 API，Python 库是对该 API 的封装。要查看返回的内容，在命令行中运行以下命令：
+- en: '[PRE3]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: The format is a CSV, and each line contains the date, the opening price, the
+    highest and the lowest of the day, the closing, the adjusted, and some volumes.
+    The lines are sorted from the most recent to the least. The column we're interested
+    in is the `Adj. Close`, that is, the closing price after adjustments.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 格式是 CSV，每一行包含日期、开盘价、当天的最高价和最低价、收盘价、调整后的收盘价以及一些成交量数据。行按照从最近到最远的顺序排序。我们关心的列是`Adj.
+    Close`，即调整后的收盘价。
+- en: The adjusted closing price is a stock closing price after it has been amended
+    to include any dividend, split, or merge.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调整后的收盘价是指在包含任何股息、拆股或合并的修改后，股票的收盘价格。
+- en: Keep in mind that many online services show the unadjusted price or the opening
+    price, therefore the numbers may not match.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请记住，许多在线服务显示的是未调整价格或开盘价，因此数字可能不完全匹配。
+- en: Now, let's build a Python function to extract the adjusted price using the Python
+    APIs. The full documentation of the APIs is available at [https://docs.quandl.com/v1.0/docs](https://docs.quandl.com/v1.0/docs),
+    but we will just use the `quandl.get` function. Note that the default sorting
+    is ascending, that is, from the oldest price to the newest one.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们构建一个 Python 函数，通过 Python API 提取调整后的价格。API 的完整文档可以在[https://docs.quandl.com/v1.0/docs](https://docs.quandl.com/v1.0/docs)查看，但我们这里只使用`quandl.get`函数。请注意，默认排序是升序的，也就是说，从最旧的价格到最新的价格。
+- en: 'The function we''re looking for should be able to cache calls and specify an
+    initial and final timestamp to get the historical data beyond the symbol. Here''s
+    the code to do so:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们要找的函数应该能够缓存调用并指定初始和最终时间戳，以获取符号之外的历史数据。以下是实现此功能的代码：
+- en: '[PRE4]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The returned object of the function `fetch_stock_price` is a mono-dimensional
+    array, containing the stock price for the requested symbol, ordered from the `from_date` to
+    the `to_date`. Caching is done within the function, that is, if there's a cache
+    miss, then the `quandl` API is called. The `date_obj_to_str` function is just
+    a helper function, to convert  `datetime.date` to the correct string format needed
+    for the API.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数`fetch_stock_price`返回的对象是一个一维数组，包含所请求符号的股票价格，按`from_date`到`to_date`的顺序排列。缓存操作是在函数内部完成的，也就是说，如果发生缓存缺失，则调用`quandl`
+    API。`date_obj_to_str`函数只是一个帮助函数，用于将`datetime.date`转换为 API 所需的正确字符串格式。
+- en: 'Let''s print the adjusted price of the Google stock price (whose symbol is
+    GOOG) for January 2017:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们打印出 Google 股票在 2017 年 1 月的调整后价格（其符号是 GOOG）：
+- en: '[PRE5]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The output is:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出结果为：
+- en: '[PRE6]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: To have all the preceding functions available for all the scripts, we suggest
+    you put them in a Python file, for example, in the code distributed within this
+    book, they are in the `tools.py` file.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了让所有前面的函数在所有脚本中都可用，我们建议将它们放在一个 Python 文件中，例如，在本书中分发的代码里，它们位于`tools.py`文件中。
+- en: Format the dataset
+  id: totrans-35
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 格式化数据集
+- en: 'Classic machine-learning algorithms are fed with multiple observations, where
+    each of them has a pre-defined size (that is, the feature size). While working
+    with timeseries, we don''t have a pre-defined length: we want to create something
+    that works for both 10 days look-back, but also for three years look-back. How
+    is this possible?'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经典的机器学习算法需要多个观测值，每个观测值都有一个预定义的大小（即特征大小）。在处理时间序列时，我们没有预定义的长度：我们想要创建一个既能适用于回溯
+    10 天的数据，也能适用于回溯三年的数据。那么如何做到这一点呢？
+- en: 'It''s very simple, instead of varying the number of features, we will change
+    the number of observations, maintaining a constant feature size. Each observation
+    represents a temporal window of the timeseries, and by sliding the window of one
+    position on the right we create another observation. In code:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这非常简单，我们不会改变特征数量，而是改变观测值的数量，保持特征大小不变。每个观测值代表时间序列的一个时间窗口，通过将窗口向右滑动一位，我们就创建了另一个观测值。代码如下：
+- en: '[PRE7]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Given the timeseries, and the feature size, the function creates a sliding window
+    which sweeps the timeseries, producing features and labels (that is, the value
+    following the end of the sliding window, at each iteration). Finally, all the
+    observations are piled up vertically, as well as the labels. The outcome is an
+    observation with a defined number of columns, and a label vector.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 给定时间序列和特征大小，该函数创建一个滑动窗口，扫描时间序列，生成特征和标签（即，在每次迭代时，滑动窗口结束后的值）。最后，所有观测值和标签都会垂直堆叠起来。结果是一个具有定义列数的观测值，以及一个标签向量。
+- en: We suggest putting this function in the `tools.py` file, so it can be accessed
+    later.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议将这个函数放在`tools.py`文件中，这样以后可以方便访问。
+- en: 'Graphically, here''s the outcome of the operation. Starting with the cosine
+    signal, let''s first plot a couple of oscillations of it, in another Python script
+    (in the example, it''s named `1_visualization_data.py`):'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从图形上来看，下面是操作的结果。从余弦信号开始，首先我们在另一个 Python 脚本中绘制几个波动（在示例中，它被命名为`1_visualization_data.py`）：
+- en: '[PRE8]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The code is very simple; after a few imports, we plot a 20-point cosine timeseries
+    with period 10 (that is frequency 0.01):'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码非常简单；在导入了一些库之后，我们绘制了一个周期为 10（即频率为 0.01）的 20 点余弦时间序列：
+- en: '![](img/bd256b2d-8710-44ab-bdd4-a03181aef864.png)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/bd256b2d-8710-44ab-bdd4-a03181aef864.png)'
+- en: 'Let''s now format the timeseries to be ingested by the machine learning algorithm,
+    creating an observation matrix with five columns:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们将时间序列格式化，以便机器学习算法可以处理，创建一个包含五列的观察矩阵：
+- en: '[PRE9]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Starting from a timeseries with 20 points, the output will be an observation
+    matrix of size *15x5*, while the label vector will be 15 elements long. Of course,
+    by changing the feature size, the number of rows will also change.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从一个包含 20 个数据点的时间序列开始，输出将是一个大小为*15x5*的观察矩阵，而标签向量将有 15 个元素。当然，通过改变特征大小，行数也会发生变化。
+- en: 'Let''s now visualize the operation, to make it simpler to understand. For example,
+    let''s plot the first five observations of the observation matrix. Let''s also
+    print the label of each feature (in red):'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们可视化这个操作，使其更容易理解。例如，绘制观察矩阵的前五个观察值。我们还将打印每个特征的标签（用红色标记）：
+- en: '[PRE10]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'And here''s the plot:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是图示：
+- en: '![](img/0ee9e44f-03f1-4c47-b403-3d27354595cd.png)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0ee9e44f-03f1-4c47-b403-3d27354595cd.png)'
+- en: As you can see, the timeseries became an observation vector, each of them with
+    size five.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，时间序列变成了一个观察向量，每个向量的大小为五。
+- en: 'So far, we haven''t shown what the stock prices look like, therefore let''s
+    print them here as a timeseries. We selected (cherry-picked) some of the best-known
+    companies in the United States; feel free to add your favorites to see the trend
+    in the last year. In this plot, we''ll just limit ourselves to two years: 2015
+    and 2016\. We will also use the very same data in this chapter, therefore the
+    next runs will have the timeseries cached:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们还没有展示股票价格的样子，因此我们在这里将其作为时间序列打印出来。我们选择了（精心挑选）一些美国最著名的公司；你也可以随意添加自己喜欢的公司，查看过去一年的趋势。在这个图示中，我们将只限于两年：2015年和2016年。我们将在本章中使用完全相同的数据，因此接下来的运行将会缓存时间序列：
+- en: '[PRE11]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'And this is the plot of the prices:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是价格的图示：
+- en: '![](img/388ea31d-f6a1-4faa-9497-e5b40b4ce14d.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/388ea31d-f6a1-4faa-9497-e5b40b4ce14d.png)'
+- en: Each of the lines is a timeseries, and as we did for the cosine signal, in this
+    chapter it will be transformed into an observation matrix (with the `format_dataset`
+    function).
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每一条线代表一个时间序列，正如我们对余弦信号所做的那样，在本章中它将被转化为一个观察矩阵（使用`format_dataset`函数）。
+- en: Are you excited? The data is ready, now let's move on to the interesting data
+    science part of the project.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你兴奋吗？数据已经准备好，现在我们可以进入项目中有趣的数据科学部分了。
+- en: Using regression to predict the future prices of a stock
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用回归预测股票的未来价格
+- en: 'Given the observation matrix and a real value label, we are initially tempted
+    to approach the problem as a regression problem. In this case, the regression
+    is very simple: from a numerical vector, we want to predict a numerical value.
+    That''s not ideal. Treating the problem as a regression problem, we force the
+    algorithm to think that each feature is independent, while instead, they''re correlated,
+    since they''re windows of the same timeseries. Let''s start anyway with this simple
+    assumption (each feature is independent), and we will show in the next chapter
+    how performance can be increased by exploiting the temporal correlation.'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 给定观察矩阵和一个实际值标签，我们最初会倾向于将问题视为回归问题。在这种情况下，回归非常简单：从一个数值向量出发，我们希望预测一个数值。这并不是最理想的做法。将问题作为回归问题处理，我们迫使算法认为每个特征是独立的，但实际上它们是相关的，因为它们都是同一个时间序列的窗口。无论如何，我们先从这个简单的假设（每个特征是独立的）开始，在下一章中我们将展示如何通过利用时间相关性提高性能。
+- en: In order to evaluate the model, we now create a function that, given the observation
+    matrix, the true labels, and the predicted ones, will output the metrics (in terms
+    of **mean square error** (**MSE**) and **mean absolute error** (**MAE**) of the
+    predictions. It will also plot the training, testing, and predicted timeseries
+    one onto another, to visually check the performance. In order to compare the results,
+    we also include the metrics in case we don't do use any model, but we simply predict
+    the day-after value as the value of the present day (in the stock market, this
+    means that we will predict the price for tomorrow as the price the stock has today).
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了评估模型，我们现在创建一个函数，给定观测矩阵、真实标签和预测标签，它将输出预测的度量（以**均方误差**（**MSE**）和**平均绝对误差**（**MAE**）的形式）。它还会将训练、测试和预测的时间序列绘制在一起，以便直观地检查性能。为了比较结果，我们还包括了在没有使用任何模型时的度量，即我们简单地将第二天的值预测为当前的值（在股票市场中，这意味着我们将预测明天的价格为今天的股票价格）。
+- en: 'Before that, we need a helping function to reshape matrices to mono-dimensional
+    (1D) arrays. Please keep this function in the `tools.py` file, since it will be
+    used by multiple scripts:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此之前，我们需要一个辅助函数，将矩阵重塑为一维（1D）数组。请将此函数保留在`tools.py`文件中，因为多个脚本都会使用它：
+- en: '[PRE12]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Now, time for the evaluation function. We decided to put this function into
+    the `evaluate_ts.py` file, so many other scripts can access it:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，是时候编写评估函数了。我们决定将这个函数放入`evaluate_ts.py`文件中，这样其他脚本可以访问它：
+- en: '[PRE13]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Now, time to move to the modeling phase.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，是时候进入建模阶段了。
+- en: As previously, we start first with the cosine signal and then we move to the
+    stock price prediction.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如之前所述，我们先从余弦信号开始，然后转到股票价格预测。
+- en: We also suggest you put the following code in another file, for example, in
+    `2_regression_cosine.py` (you can find the code in the code bundle under this
+    name).
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还建议将以下代码放在另一个文件中，例如`2_regression_cosine.py`（你可以在代码包中找到这个文件名对应的代码）。
+- en: 'Let''s start with some imports and with the seed for `numpy` and `tensorflow`:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先导入一些库，并设置`numpy`和`tensorflow`的种子：
+- en: '[PRE14]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Then, it''s time to create the cosine signal and to transform it into an observation
+    matrix. In this example, we will use 20 as feature size, since it''s roughly the
+    equivalent number of working days in a month. The regression problem has now shaped
+    this way: given the 20 values of the cosine in the past, forecast the next day
+    value.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，是时候创建余弦信号并将其转化为观测矩阵。在这个例子中，我们将使用20作为特征大小，因为它大致相当于一个月的工作日数量。回归问题现在被设定为：给定过去20个余弦值，预测下一天的值。
+- en: 'As training and testing, we will use datasets of `250` observation each, to
+    have the equivalent of one year of data (one year contains just under `250` working
+    days). In this example, we will generate just one cosine signal, and then it will
+    be broken into two pieces: the first half will contain the train data, and the
+    second half the testing. Feel free to change them, and observe how the performance
+    changes when these parameters are changed:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练和测试时，我们将使用每个`250`观测的数据集，以相当于一年的数据（一年大约包含`250`个工作日）。在这个例子中，我们将只生成一个余弦信号，然后将其拆分成两部分：前一半包含训练数据，后一半包含测试数据。你可以自由更改这些，观察当这些参数变化时，性能如何变化：
+- en: '[PRE15]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Now, in this part of the script, we will define some parameters for Tensorflow.
+    More specifically: the learning rate, the type of optimizer to use, and the number
+    of `epoch` (that is, how many times the training dataset goes into the learner
+    during the training operation). These values are not the best, feel free to change
+    them to predict some better ones:'
+  id: totrans-74
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，在脚本的这一部分，我们将定义一些Tensorflow的参数。更具体地说：学习率、优化器类型和`epoch`数量（即训练操作中训练数据集进入学习器的次数）。这些值并不是最佳的，你可以自由更改它们，以预测更好的结果：
+- en: '[PRE16]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Finally, it''s time to prepare the observation matrices, for training and testing.
+    Keep in mind that to speed up the Tensorflow analysis, we will use `float32` (4
+    bytes long) in our analysis:'
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，是时候准备训练和测试的观测矩阵了。请记住，为了加速Tensorflow分析，我们将使用`float32`（4字节长）进行分析：
+- en: '[PRE17]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Given the datasets, let''s now define the placeholders for the observation
+    matrix and the labels. Since we''re building a generic script, we just set the
+    number of features, and not the number of observations:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 给定数据集后，我们现在定义观测矩阵和标签的占位符。由于我们正在构建一个通用脚本，我们只设置特征数量，而不设置观测数量：
+- en: '[PRE18]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Here''s the core of our project: the regression algorithm implemented in Tensorflow.'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们项目的核心：在Tensorflow中实现的回归算法。
+- en: 'We opted for the most classic way of implementing it, that is, the multiplication
+    between the observation matrix with a weights array plus the bias. What''s coming
+    out (and the returned value of this function) is the array containing the predictions
+    for all the observations contained in `x`:'
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们选择了最经典的实现方式，即将观测矩阵与权重数组相乘再加上偏置。输出的结果（也是该函数的返回值）是包含所有观测值预测结果的数组，针对`x`中的所有观测：
+- en: '[PRE19]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Now, let's define the trainable parameters of the regressor, which are the `tensorflow`
+    variables. The weights are a vector with as many values as the feature size, while
+    the bias is just a scalar.
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，让我们定义回归器的可训练参数，即`tensorflow`变量。权重是一个与特征大小相等的值的向量，而偏置则只是一个标量。
+- en: Note that we initialized the weights using a truncated normal distribution,
+    to have values close to zero, but not too extreme (as a plain normal distribution
+    could output); for the bias we instead set it to zero.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们使用截断正态分布初始化权重，以使其接近零，但不会过于极端（因为普通正态分布可能会输出极端值）；偏置则设置为零。
+- en: 'Again, feel free to change the initializations, to see the changes in performance:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次，您可以自由地更改初始化方式，以查看性能变化：
+- en: '[PRE20]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The last thing we need to define in the `tensorflow` graphs are how the predictions
+    are calculated (in our case, it''s simply the output of the function which defines
+    the model), the cost (in the example we use the MSE), and the training operator
+    (we want to minimize the MSE, using the optimizer with the learning rate set previously):'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`tensorflow`图中，我们需要定义的最后一项是如何计算预测值（在我们的例子中，它只是定义模型的函数的输出），代价（在此示例中我们使用的是MSE），以及训练操作符（我们希望最小化MSE，使用之前设置的学习率优化器）：
+- en: '[PRE21]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: We're now ready to open a `tensorflow` session, and train the model.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们准备打开`tensorflow`会话，开始训练模型。
+- en: 'We will first initialize the variables, then, in a loop, we will feed the `training`
+    dataset into the `tensorflow` graph (using the placeholders). At each iteration,
+    we will print the training MSE:'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将首先初始化变量，然后在一个循环中将`training`数据集输入到`tensorflow`图中（使用占位符）。每次迭代时，我们将打印训练MSE：
+- en: '[PRE22]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: After the training, we evaluated the MSE on the testing dataset, and finally,
+    we printed and plotted the performance of the model.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练后，我们评估了测试数据集上的MSE，最后，我们打印并绘制了模型的性能。
+- en: 'With the default values we provided in the scripts, performances are worse
+    than the non-modeling performance. With some tuning, the results improve. For
+    example, by setting the learning rate equal to 0.1 and the number of training
+    epoch to *1000*, the output of the script will be similar to this:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用我们在脚本中提供的默认值时，性能比没有模型的性能更差。通过一些调整，结果有所改善。例如，将学习率设置为0.1，训练的epoch数设置为*1000*，脚本的输出将类似于以下内容：
+- en: '[PRE23]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Training performance and testing performance are very similar (therefore we're
+    not overfitting the model), and both the MSE and the MAE are better than a no-modeling
+    prediction.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练性能和测试性能非常相似（因此我们没有对模型进行过拟合），MSE和MAE都比没有建模的预测要好。
+- en: 'That''s how the error looks for each timepoint. It seems that it''s contained
+    between +/-0.15, and doesn''t have any trend over time. Remember that the noise
+    we artificially introduced with the cosine had a magnitude of +/- 0.1 with a uniform
+    distribution:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是每个时间点的误差情况。看起来它被控制在+/-0.15之间，并且随着时间的推移没有任何趋势。请记住，我们用余弦函数人为引入的噪声大小为+/-0.1，且呈均匀分布：
+- en: '![](img/ee5cd709-ab16-4aa5-a7d8-a353f3cc155b.png)'
+  id: totrans-97
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ee5cd709-ab16-4aa5-a7d8-a353f3cc155b.png)'
+- en: Finally, the last graph shows both the training timeseries overlapped with the
+    predicted one. Not bad for a simple linear regression, right?
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，最后一张图显示了训练时间序列与预测时间序列的重叠情况。对于一个简单的线性回归模型来说，不错吧？
+- en: '![](img/3b1dd72a-c931-4c0f-8097-f3e5ad94e9fd.png)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3b1dd72a-c931-4c0f-8097-f3e5ad94e9fd.png)'
+- en: Let's now apply the same model on a stock price. We suggest you copy the content
+    of the current file to a new one, named `3_regression_stock_price.py`. Here we
+    will change only the data importing bit, leaving everything else as it is.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们将相同的模型应用于股价预测。我们建议您将当前文件的内容复制到一个新文件中，命名为`3_regression_stock_price.py`。在这里，我们将只更改数据导入部分，其他保持不变。
+- en: 'Let''s use the Microsoft stock price in this example, whose symbol is `"MSFT"`.
+    It''s simple to load the prices for this symbol for 2015/16 and format them as
+    an observation matrix. Here''s the code, also containing the casting to float32
+    and the train/test split. In this example, we have one year of training data (2015)
+    which will be used to predict the stock price for the whole of 2016:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本例中，我们使用微软股票价格，符号为 `"MSFT"`。加载此符号的2015/16年股票价格并将其格式化为观察矩阵非常简单。下面是代码，包含了将数据转换为
+    float32 类型和训练/测试集的划分。在这个例子中，我们使用了一年的训练数据（2015年），并将其用于预测整个2016年的股票价格：
+- en: '[PRE24]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'In this script, we found that the best performances have been obtained with
+    the following settings:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个脚本中，我们发现最佳表现是在以下设置下得到的：
+- en: '[PRE25]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'The output of the script should look like this:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脚本的输出应该是这样的：
+- en: '[PRE26]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Even in this case, we're not overfitting, and the simple regressor performs
+    better than no model at all (we all would bet that). At the beginning, the cost
+    is really high, but iteration after iteration, it gets very close to zero. Also,
+    the `mae` score is easy to interpret in this case, they are dollars! With a learner,
+    we would have predicted on average half a dollar closer to the real price the
+    day after; without any learner, nine times more.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即便在这种情况下，我们也没有发生过拟合，简单的回归模型比没有模型时的表现要好（我们都敢打赌）。一开始，误差确实很高，但经过一次又一次的迭代，它越来越接近零。此外，在这种情况下，`mae`（平均绝对误差）分数很容易解释，它是美元！如果使用学习算法，我们的预测结果平均距离真实价格仅半美元，而没有任何学习算法时，误差是九倍。
+- en: Let's now visually evaluate the performance of the model, impressive isn't it?
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们通过视觉评估模型的表现，令人印象深刻，不是吗？
+- en: 'This is the predicted value:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是预测值：
+- en: '![](img/e8c3f67c-a454-464a-8fdf-2c1e43f09f04.png)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e8c3f67c-a454-464a-8fdf-2c1e43f09f04.png)'
+- en: 'That''s the absolute error, with the trend line (dotted):'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是绝对误差，带有趋势线（虚线）：
+- en: '![](img/ddf36606-4d53-4c9a-940a-8e6a1145cd2f.png)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ddf36606-4d53-4c9a-940a-8e6a1145cd2f.png)'
+- en: 'And finally, the real and predicted value in the train set:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，训练集中的真实值与预测值：
+- en: '![](img/0dcb6a21-39e3-473b-9279-51027d939bc4.png)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0dcb6a21-39e3-473b-9279-51027d939bc4.png)'
+- en: Remember that those are the performances of a simple regression algorithm, without
+    exploiting the temporal correlation between features. How can we exploit it to
+    perform better?
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请记住，这些是一个简单回归算法的表现，没有利用特征之间的时间相关性。我们如何利用这一点来提升表现呢？
+- en: Long short-term memory – LSTM 101
+  id: totrans-116
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 长短期记忆 – LSTM 101
+- en: '**Long Short-Term Memory** (**LSTM**), models are a special case of RNNs, Recurrent
+    Neural Networks. A full, rigorous description of them is out of the scope of this
+    book; in this section, we will just provide the essence of them.'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**长短期记忆**（**LSTM**）模型是RNN（递归神经网络）的一种特殊情况。它们的完整且严谨的描述超出了本书的范围；在本节中，我们将仅提供它们的核心内容。'
+- en: 'You can have a look at the following books published by Packt:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以查看由 Packt 出版的以下书籍：
+- en: '[https://www.packtpub.com/big-data-and-business-intelligence/neural-network-programming-tensorflow](https://www.packtpub.com/big-data-and-business-intelligence/neural-network-programming-tensorflow)
+    Also, you can have a look at this: [https://www.packtpub.com/big-data-and-business-intelligence/neural-networks-r](https://www.packtpub.com/big-data-and-business-intelligence/neural-networks-r)'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://www.packtpub.com/big-data-and-business-intelligence/neural-network-programming-tensorflow](https://www.packtpub.com/big-data-and-business-intelligence/neural-network-programming-tensorflow)
+    另外，你还可以查看这个：[https://www.packtpub.com/big-data-and-business-intelligence/neural-networks-r](https://www.packtpub.com/big-data-and-business-intelligence/neural-networks-r)'
+- en: 'Simply speaking, RNN works on sequences: they accept multidimensional signals
+    as input, and they produce a multidimensional output signal. In the following
+    figure, there''s an example of an RNN able to cope with a timeseries of five-time
+    steps (one input for each time step). The inputs are in the bottom part of the
+    RNN, with the outputs in the top. Remember that each input/output is an N-dimensional
+    feature:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简单来说，RNN（递归神经网络）处理的是序列：它们接受多维信号作为输入，并输出多维信号。下图展示了一个RNN能够处理五个时间步的时间序列（每个时间步一个输入）。输入位于RNN的下部，输出位于上部。记住，每个输入/输出都是一个N维特征：
+- en: '![](img/c1ca1ac2-3324-4279-ad66-4e41f073c3ca.png)'
+  id: totrans-121
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c1ca1ac2-3324-4279-ad66-4e41f073c3ca.png)'
+- en: Inside, an RNN has multiple stages; each stage is connected to its input/output
+    and to the output of the previous stage. Thanks to this configuration, each output
+    is not just a function of the input of its own stage, but depends also on the
+    output of the previous stage (which, again, is a function of its input and the
+    previous output). This configuration ensures that each input influences all the
+    following outputs, or, from the other side, an output is a function of all the
+    previous and current stages inputs.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在内部，RNN具有多个阶段；每个阶段都连接到自己的输入/输出以及前一阶段的输出。得益于这种配置，每个输出不仅仅是当前阶段输入的函数，还依赖于前一阶段的输出（这个输出本身又是前一阶段输入和输出的函数）。这种配置确保了每个输入都影响所有后续输出，或者换句话说，一个输出是所有前一个和当前阶段输入的函数。
+- en: Note that not all the outputs are always used. Think about a sentiment analysis
+    task, in that case, given a sentence (the timeseries input signals), we just want
+    to get one class (positive/negative); therefore only the last output is considered
+    as output, all the others exist, but they're not used. Keep in mind that we just
+    use the last one because it's the only one with the full visibility of the sentence.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，并非所有的输出总是都会被使用。以情感分析任务为例，在这种情况下，给定一句话（即时间序列输入信号），我们只希望得到一个类别（正面/负面）；因此，只有最后一个输出被视为输出，其他所有输出虽然存在，但并未被使用。记住，我们只使用最后一个，因为它对整个句子拥有完整的可见性。
+- en: 'LSTM models are an evolution of RNNs: with long RNNs, the training phase may
+    lead to very tiny or huge gradients back-propagated throughout the network, which
+    leads the weights to zero or to infinity: that''s a problem usually expressed
+    as a vanishing/exploding gradient. To mitigate this problem, LSTMs have two outputs
+    for each stage: one is the actual output of the model, and the other one, named
+    memory, is the internal state of the stage.'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSTM模型是RNN的进化版本：在长RNN中，训练阶段可能导致非常小或者巨大的梯度在网络中反向传播，进而导致权重变为零或无限大：这是一个通常表现为梯度消失/爆炸的问题。为了缓解这个问题，LSTM在每个阶段都有两个输出：一个是模型的实际输出，另一个是内存状态，即该阶段的内部状态。
+- en: 'Both outputs are fed into the following stage, lowering the chances of having
+    vanishing or exploding gradients. Of course, this comes with a price: the complexity
+    (numbers of weights to tune) and the memory footprint of the model are larger,
+    that''s why we strongly suggest using GPU devices when training RNNs, the speed
+    up in terms of time is impressive!'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个输出会被送入下一阶段，从而降低梯度消失或爆炸的可能性。当然，这也有代价：模型的复杂性（需要调整的权重数）和内存占用更大，这就是为什么我们强烈建议在训练RNN时使用GPU设备，时间上的加速非常显著！
+- en: 'Unlike regression, RNNs need a three dimensional signal as input. Tensorflow
+    specifies the format as:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与回归不同，RNN需要一个三维的信号作为输入。Tensorflow指定的格式是：
+- en: Samples
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 样本
+- en: Time steps
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 时间步
+- en: Features
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 特性
+- en: In the preceding example, the sentiment analysis, the training tensor will have
+    the sentences on the *x*-axis, the words composing the sentence on the *y*-axis,
+    and the bag of words with the dictionary on the *z*-axis. For example, for classifying
+    a 1 M corpora in English (with about 20,000 different words), whose sentences
+    are long, up to 50 words, the tensor dimension is 1 M x 50 x 20 K.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，情感分析的训练张量会将句子放在*x*轴上，组成句子的单词放在*y*轴上，单词袋与字典放在*z*轴上。例如，对于一个包含100万条英文语料库（大约20,000个不同单词），且句子最长可达50个单词的情感分类任务，张量的维度是100万
+    x 50 x 20K。
+- en: Stock price prediction with LSTM
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用LSTM进行股票价格预测
+- en: 'Thanks to LSTM, we can exploit the temporal redundancy contained in our signals.
+    From the previous section, we learned that the observation matrix should be reformatted
+    into a 3D tensor, with three axes:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多亏了LSTM，我们可以利用信号中包含的时间冗余。通过上一节的内容，我们了解到观察矩阵应该被重新格式化为一个三维张量，具有三个轴：
+- en: The first containing the samples.
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第一个包含样本。
+- en: The second containing the timeseries.
+  id: totrans-134
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第二个包含时间序列。
+- en: The third containing the input features.
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第三个包含输入特征。
+- en: Since we're dealing with just a mono-dimensional signal, the input tensor for
+    the LSTM should have the size (None, `time_dimension`, 1), where `time_dimension`
+    is the length of the time window. Let's code now, starting with the cosine signal.
+    We suggest you name the file `4_rnn_cosine.py`.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们处理的只是单一维度的信号，LSTM的输入张量应具有大小为(None, `time_dimension`, 1)，其中`time_dimension`是时间窗口的长度。现在我们开始编写代码，从余弦信号开始。建议将文件命名为`4_rnn_cosine.py`。
+- en: 'First of all, some imports:'
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，一些导入：
+- en: '[PRE27]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Then, we set the window size to chunk the signal. This operation is similar
+    to the observation matrix creation.
+  id: totrans-139
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们设置窗口大小以对信号进行分块。这个操作类似于观察矩阵的创建。
+- en: '[PRE28]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Then, some settings for Tensorflow. At this stage, let''s start with default
+    values:'
+  id: totrans-141
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，为 Tensorflow 设置一些配置。此时，我们先从默认值开始：
+- en: '[PRE29]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Now, it''s time to fetch the noisy cosine, and reshape it to have a 3D tensor
+    shape (None, `time_dimension`, 1). This is done here:'
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，是时候提取嘈杂的余弦波，并将其重塑为一个 3D 张量形状（None, `time_dimension`, 1）。这是在这里完成的：
+- en: '[PRE30]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Exactly as in the previous script, let''s define the placeholders for Tensorflow:'
+  id: totrans-145
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 就像在之前的脚本中一样，我们定义 Tensorflow 的占位符：
+- en: '[PRE31]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Here, let''s define the model. We will use an LSTM with a variable number of
+    embeddings. Also, as described in the previous chapter, we will consider just
+    the last output of the cells through a linear regression (fully connected layer)
+    to get the prediction:'
+  id: totrans-147
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在这里，我们定义模型。我们将使用一个 LSTM，并且使用一个可变数量的嵌入层。此外，正如上一章所述，我们将只考虑通过线性回归（全连接层）得到的最后输出作为预测：
+- en: '[PRE32]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Let''s set the `trainable` variables (`weights`) as before, the `cost` function
+    and the training operator:'
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们像之前一样设置 `trainable` 变量（`weights`），`cost` 函数和训练操作符：
+- en: '[PRE33]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The output, after a hyperparameter optimization, is the following:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经过超参数优化后的输出如下：
+- en: '[PRE34]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: Performances are pretty similar to the ones we obtained with the simple linear
+    regression. Let's see if we can get better performance using a less predictable
+    signal as the stock price. We'll use the same timeseries we used in the previous
+    chapter, to compare the performance.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能与我们通过简单线性回归得到的结果非常相似。我们来看看是否可以通过使用一个像股票价格这样不太可预测的信号来获得更好的性能。我们将使用上一章中使用的相同时间序列，以便比较性能。
+- en: 'Modifying the previous program, let''s plug in the stock price timeseries instead
+    of the cosine. Modify some lines to load the stock price data:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 修改之前的程序，将股票价格时间序列代替余弦波。修改几行代码以加载股票价格数据：
+- en: '[PRE35]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Since the dynamic of this signal is wider, we''ll also need to modify the distribution
+    used to extract the initial weights. We suggest you set it to:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于这个信号的动态范围更广，我们还需要修改用于提取初始权重的分布。我们建议将其设置为：
+- en: '[PRE36]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'After a few tests, we found we hit the maximum performance with these parameters:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经过几次测试，我们发现使用这些参数时达到了最佳性能：
+- en: '[PRE37]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'The output, using these parameters is:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这些参数的输出是：
+- en: '[PRE38]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: This is 8% better than the previous model (test MSE). Remember, it comes with
+    a price! More parameters to train also means the training time is much longer
+    than the previous example (on a laptop, a few minutes, using the GPU).
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个比之前的模型（测试 MSE）提高了 8%。记住，它也有代价！更多的参数需要训练，意味着训练时间比之前的示例要长得多（在笔记本电脑上，几分钟，使用 GPU）。
+- en: 'Finally, let''s check the Tensorboard. In order to write the logs, we should
+    add the following code:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，让我们检查 Tensorboard。为了写入日志，我们应该添加以下代码：
+- en: 'At the beginning of the files, after the imports:'
+  id: totrans-164
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在文件的开头，在导入模块之后：
+- en: '[PRE39]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Also, the whole body of the `RNN` function should be inside the named-scope
+    LSTM, that is:'
+  id: totrans-166
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 此外，`RNN` 函数的整个主体应该放在命名范围 LSTM 内，即：
+- en: '[PRE40]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Similarly, the `cost` function should be wrapped in a Tensorflow scope. Also,
+    we will add the `mae` computation within the `tensorflow` graph:'
+  id: totrans-168
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 类似地，`cost` 函数应被包装在 Tensorflow 的作用域内。同时，我们会将 `mae` 的计算也加入到 `tensorflow` 图中：
+- en: '[PRE41]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Finally, the main function should look like this:'
+  id: totrans-170
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，主函数应该是这样的：
+- en: '[PRE42]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: This way, we separate the scopes of each block, and write a summary report for
+    the trained variables.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，我们将每个模块的作用域分开，并为训练的变量写一个总结报告。
+- en: 'Now, let''s launch `tensorboard`:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们启动 `tensorboard`：
+- en: '[PRE43]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'After opening the browser at `localhost:6006`, from the first tab, we can observe
+    the behavior of the MSE and MAE:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 打开浏览器并访问 `localhost:6006` 后，在第一个标签页中，我们可以观察到 MSE 和 MAE 的表现：
+- en: '![](img/7ff19868-187c-486a-b6a4-fb7a31e6c0f8.png)'
+  id: totrans-176
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7ff19868-187c-486a-b6a4-fb7a31e6c0f8.png)'
+- en: 'The trend looks very nice, it goes down until it reaches a plateau. Also, let''s
+    check the `tensorflow` graph (in the tab GRAPH). Here we can see how things are
+    connected together, and how operators are influenced by each other. You can still
+    zoom in to see exactly how LSTMs are built in Tensorflow:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 趋势看起来很不错，下降直到达到平稳期。另外，我们还可以检查 `tensorflow` 图（在 GRAPH 标签页中）。在这里，我们可以看到各个部分是如何连接在一起的，以及操作符如何相互影响。你还可以放大以精确查看
+    Tensorflow 中如何构建 LSTM：
+- en: '![](img/5d8d0039-ca3e-4b48-a0bf-d6b62244c8c2.png)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/5d8d0039-ca3e-4b48-a0bf-d6b62244c8c2.png)'
+- en: And that's the end of the project.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是项目的结束。
+- en: Possible follow - up questions
+  id: totrans-180
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 可能的后续问题
+- en: Replace the LSTM with an RNN, and then with a GRU. Who's the best performer?
+  id: totrans-181
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用 RNN 替换 LSTM，然后再用 GRU。哪个表现最好？
+- en: Instead of predicting the closing price, try predicting also the high/low the
+    day after. To do so, you can use the same features while training the model (or
+    you can just use the closing price as input).
+  id: totrans-182
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 除了预测收盘价，还可以尝试预测第二天的最高价/最低价。为此，你可以在训练模型时使用相同的特征（或者你也可以仅使用收盘价作为输入）。
+- en: 'Optimize the model for other stocks: is it better to have a generic model working
+    for all the stocks or one specific for each stock?'
+  id: totrans-183
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为其他股票优化模型：使用一个适用于所有股票的通用模型，还是为每只股票建立一个特定的模型更好？
+- en: Tune the retraining. In the example, we predicted a full year with the model.
+    Can you notice any improvement if you train the model once a month/week/day?
+  id: totrans-184
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 调整再训练。在这个例子中，我们使用模型预测了一整年的数据。如果你每月/每周/每天训练一次模型，你能发现任何改进吗？
+- en: If you have some financial experience, try building a simple trading simulator
+    and feed it with the predictions. Starting the simulation with $100, will you
+    gain or lose money after a year?
+  id: totrans-185
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你有一些金融经验，试着构建一个简单的交易模拟器，并将预测结果输入其中。从$100开始进行模拟，经过一年后，你是赚了还是亏了？
+- en: Summary
+  id: totrans-186
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter we''ve shown how to perform a prediction of a timeseries: specifically,
+    we observed how well RNN performs with real datasets as the stock prices. In the
+    next chapter, we will see another application of the RNN, for example, how to
+    perform an automatic machine translation for translating a sentence in another
+    language.'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们展示了如何进行时间序列预测：具体来说，我们观察了RNN在实际数据集（如股票价格）上的表现。在下一章，我们将看到RNN的另一个应用，例如，如何进行自动机器翻译，将一句话翻译成另一种语言。

@@ -1,0 +1,901 @@
+- en: Trust Region Policy Optimization and Proximal Policy Optimization
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 信任区域策略优化和近端策略优化
+- en: In the last chapter, we saw the use of A3C and A2C, with the former being asynchronous
+    and the latter synchronous. In this chapter, we will see another on-policy **reinforcement
+    learning** (**RL**) algorithm; two algorithms, to be precise, with a lot of similarities
+    in the mathematics, differing, however, in how they are solved. We will be introduced
+    to the algorithm called **Trust Region Policy Optimization** (**TRPO**), which
+    was introduced in 2015 by researchers at OpenAI and the University of California,
+    Berkeley (the latter is incidentally my former employer!). This algorithm, however,
+    is difficult to solve mathematically, as it involves the conjugate gradient algorithm,
+    which is relatively difficult to solve; note that first order optimization methods,
+    such as the well established Adam and **Stochastic Gradient Descent** (**SGD**),
+    cannot be used to solve the TRPO equations. We will then see how solving the policy
+    optimization equations can be combined into one, to result in the **Proximal Policy
+    Optimization** (**PPO**) algorithm, and first order optimization algorithms such
+    as Adam or SGD can be used.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们看到了A3C和A2C的使用，其中A3C是异步的，A2C是同步的。在本章中，我们将看到另一种在线策略**强化学习**（**RL**）算法；具体来说是两种数学上非常相似的算法，尽管它们在求解方式上有所不同。我们将介绍名为**信任区域策略优化**（**TRPO**）的算法，这个算法由OpenAI和加利福尼亚大学伯克利分校的研究人员于2015年提出（顺便提一下，后者是我以前的雇主！）。然而，这个算法在数学上很难求解，因为它涉及共轭梯度算法，这是一种相对较难解决的方法；需要注意的是，像广为人知的Adam和**随机梯度下降**（**SGD**）等一阶优化方法无法用来求解TRPO方程。然后，我们将看到如何将策略优化方程的求解合并成一个，从而得到**近端策略优化**（**PPO**）算法，并且可以使用像Adam或SGD这样的第一阶优化算法。
+- en: 'The following topics will be covered in this chapter:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Learning TRPO
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 学习TRPO
+- en: Learning PPO
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 学习PPO
+- en: Using PPO to solve the MountainCar problem
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用PPO解决MountainCar问题
+- en: Evaluating the performance
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 评估性能
+- en: Technical requirements
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'To successfully complete this chapter, the following software are required:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 成功完成本章所需的软件：
+- en: Python (2 and above)
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python（2及以上版本）
+- en: NumPy
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: NumPy
+- en: TensorFlow (version 1.4 or higher)
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: TensorFlow（版本1.4或更高）
+- en: Learning TRPO
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 学习TRPO
+- en: TRPO is a very popular on-policy algorithm from OpenAI and the University of
+    California, Berkeley, and was introduced in 2015\. There are many flavors of TRPO,
+    but we will learn about the vanilla TRPO version from the paper *Trust Region
+    Policy Optimization*, by *John Schulman, Sergey Levine, Philipp Moritz, Michael
+    I. Jordan, and Pieter Abbeel*, *arXiv:1502.05477*: [https://arxiv.org/abs/1502.05477](https://arxiv.org/abs/1502.05477).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TRPO是OpenAI和加利福尼亚大学伯克利分校提出的一个非常流行的在线策略算法，首次提出于2015年。TRPO有多种版本，但我们将学习论文*Trust
+    Region Policy Optimization*中的基础版本，作者为*John Schulman, Sergey Levine, Philipp Moritz,
+    Michael I. Jordan, 和 Pieter Abbeel*，*arXiv:1502.05477*：[https://arxiv.org/abs/1502.05477](https://arxiv.org/abs/1502.05477)。
+- en: TRPO involves solving a policy optimization equation subject to an additional
+    constraint on the size of the policy update. We will see these equations now.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TRPO涉及求解一个策略优化方程，并附加一个关于策略更新大小的约束。我们现在将看到这些方程。
+- en: TRPO equations
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TRPO方程
+- en: 'TRPO involves the maximization of the expectation of the ratio of the current
+    policy distribution, *π[θ]*, to the old policy distribution, *π[θ]^(old)* (that
+    is, at an earlier time step), multiplied by the advantage function, *A[t]*, subject
+    to an additional constraint that the expectation of the **Kullback-Leibler** (**KL**) divergence
+    of the old and new policy distributions is bounded by a user-specified value, *δ*:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TRPO涉及最大化当前策略分布*π[θ]*与旧策略分布*π[θ]^(old)*（即在早期时间步的策略）之比的期望值，乘以优势函数*A[t]*，并附加一个约束，即旧策略分布和新策略分布的**Kullback-Leibler**（**KL**）散度的期望值被限制在一个用户指定的值*δ*以内：
+- en: '![](img/4dbed06d-6157-49f9-8f80-676f882bc648.png)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4dbed06d-6157-49f9-8f80-676f882bc648.png)'
+- en: The first equation here is the policy objective, and the second equation is
+    an additional constraint that ensures that the policy update is gradual and does not
+    make large policy updates that can take the policy to regions that are very far
+    away in parameter space.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的第一个方程是策略目标，第二个方程是一个附加约束，确保策略更新是渐进的，不会进行大幅度的策略更新，从而避免将策略推向参数空间中非常远的区域。
+- en: Since we have two equations that need to be jointly optimized, first-order optimization
+    algorithms, such as Adam and SGD, will not work. Instead, the equations are solved
+    using the conjugate gradient algorithm, making a linear approximation to the first
+    equation, and a quadratic approximation to the second equation. This, however,
+    is mathematically involved, and so we do not present it here in this book. Instead,
+    we will proceed to the PPO algorithm, which is relatively easier to code.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们有两个方程需要联合优化，基于一阶优化算法（如 Adam 和 SGD）的方法将无法工作。相反，这些方程使用共轭梯度算法来求解，对第一个方程进行线性近似，对第二个方程进行二次近似。然而，这在数学上较为复杂，因此我们在本书中不详细展示。我们将继续介绍
+    PPO 算法，它在编码上相对简单。
+- en: Learning PPO
+  id: totrans-20
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 学习 PPO
+- en: PPO is an extension to TRPO, and was introduced in 2017 by researchers at OpenAI.
+    PPO is also an on-policy algorithm, and can be applied to discrete action problems
+    as well as continuous actions. It uses the same ratio of policy distributions
+    as in TRPO, but does not use the KL divergence constraint. Specifically, PPO uses
+    three loss functions that are combined into one. We will now see the three loss
+    functions.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PPO 是对 TRPO 的扩展，2017 年由 OpenAI 的研究人员提出。PPO 也是一种基于策略的算法，既可以应用于离散动作问题，也可以应用于连续动作。它使用与
+    TRPO 相同的策略分布比率，但不使用 KL 散度约束。具体来说，PPO 使用三种损失函数并将其合并为一个。接下来我们将看到这三种损失函数。
+- en: PPO loss functions
+  id: totrans-22
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: PPO 损失函数
+- en: 'The first of the three loss functions involved in PPO is called the clipped
+    surrogate objective. Let *r[t](θ)* denote the ratio of the new to old policy probability
+    distributions:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PPO 中涉及的三个损失函数中的第一个称为裁剪替代目标。令 *r[t](θ)* 表示新旧策略概率分布的比率：
+- en: '![](img/e30659b4-bb3e-4805-8066-2af8caa3d12d.png)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e30659b4-bb3e-4805-8066-2af8caa3d12d.png)'
+- en: 'The clipped surrogate objective is given by the following equation, where *A[t]* is
+    the advantage function and *ε* is a hyper parameter; typically, *ε* = 0.1 or 0.2
+    is used:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 裁剪替代目标由以下方程给出，其中 *A[t]* 是优势函数，*ε* 是超参数；通常，*ε* = 0.1 或 0.2 被使用：
+- en: '![](img/b89128a1-c704-4ea9-8ff7-9d07e4020a83.png)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b89128a1-c704-4ea9-8ff7-9d07e4020a83.png)'
+- en: The `clip()` function bounds the ratio between *1-ε* and *1+ε*, thus keeping
+    the ratio bounded within the range. The `min()` function is the minimum function
+    to ensure that the final objective is a lower bound on the unclipped objective.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`clip()` 函数将比率限制在 *1-ε* 和 *1+ε* 之间，从而保持比率在范围内。`min()` 函数是最小函数，确保最终目标是未裁剪目标的下界。'
+- en: 'The second loss function is the L2 norm of the state value function:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个损失函数是状态价值函数的 L2 范数：
+- en: '![](img/d07eb74a-f603-46a7-94e4-0a0f42c3dc2c.png)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d07eb74a-f603-46a7-94e4-0a0f42c3dc2c.png)'
+- en: 'The third loss is the Shannon entropy of the policy distribution, which comes
+    from information theory:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三个损失是策略分布的香农熵，它来源于信息理论：
+- en: '![](img/dacc3a5a-3e4f-446c-876b-0de7f13fc689.png)'
+  id: totrans-31
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/dacc3a5a-3e4f-446c-876b-0de7f13fc689.png)'
+- en: 'We will now combine the three losses. Note that we need to maximize *L^(clip)*
+    and *L^(entropy)*, but minimize *L^V*. So, we define our total PPO loss function
+    as in the following equation, where *c[1]* and *c[2]* are positive constants used
+    to scale the terms:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将结合这三种损失函数。请注意，我们需要最大化 *L^(clip)* 和 *L^(entropy)*，但最小化 *L^V*。因此，我们将总的 PPO
+    损失函数定义为以下方程，其中 *c[1]* 和 *c[2]* 是用于缩放项的正数常量：
+- en: '![](img/5d181518-8ba1-4033-997f-a19a79dbf602.png)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/5d181518-8ba1-4033-997f-a19a79dbf602.png)'
+- en: 'Note that, if we share the neural network parameters between the policy and
+    the value networks, then the preceding *L^(PPO)* loss function alone can be maximized.
+    On the other hand, if we have separate neural networks for the policy and the
+    value, then we can have separate loss functions as in the following equation,
+    where *L^(policy)* is maximized and *L^(value)* is minimized:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，如果我们在策略网络和价值网络之间共享神经网络参数，那么前述的 *L^(PPO)* 损失函数可以单独最大化。另一方面，如果我们为策略和价值使用独立的神经网络，那么我们可以像以下方程所示那样，分别定义损失函数，其中
+    *L^(policy)* 被最大化，而 *L^(value)* 被最小化：
+- en: '![](img/f7f691e8-e6c0-4b54-b01d-de1193e00b00.png)'
+  id: totrans-35
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f7f691e8-e6c0-4b54-b01d-de1193e00b00.png)'
+- en: Notice that the constant *c[1]* is not required in this latter setting, where
+    we have separate neural networks for the policy and the value. The neural network
+    parameters are updated over multiple iteration steps over a batch of data points,
+    where the number of update steps are specified by the user as hyper parameters.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在这种情况下，*c[1]* 常数在策略和价值使用独立神经网络的设置中并不需要。神经网络参数会在多个迭代步骤中根据一批数据点进行更新，更新步骤的数量由用户作为超参数指定。
+- en: Using PPO to solve the MountainCar problem
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用PPO解决MountainCar问题
+- en: We will solve the MountainCar problem using PPO. MountainCar involves a car
+    trapped in the valley of a mountain. It has to apply throttle to accelerate against
+    gravity and try to drive out of the valley up steep mountain walls to reach a
+    desired flag point on the top of the mountain. You can see a schematic of the
+    MountainCar problem from OpenAI Gym at [https://gym.openai.com/envs/MountainCar-v0/](https://gym.openai.com/envs/MountainCar-v0/).
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用PPO解决MountainCar问题。MountainCar问题涉及一辆被困在山谷中的汽车。它必须加速以克服重力，并尝试驶出山谷，爬上陡峭的山墙，最终到达山顶的旗帜点。你可以从OpenAI
+    Gym中查看MountainCar问题的示意图：[https://gym.openai.com/envs/MountainCar-v0/](https://gym.openai.com/envs/MountainCar-v0/)。
+- en: This problem is very challenging, as the agent cannot just apply full throttle
+    from the base of the mountain and try to reach the flag point, as the mountain
+    walls are steep and gravity will not allow the car to achieve sufficient enough
+    momentum. The optimal solution is for the car to initially go backward and then
+    step on the throttle to pick up enough momentum to overcome gravity and successfully
+    drive out of the valley. We will see that the RL agent actually learns this trick.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个问题非常具有挑战性，因为智能体不能仅仅从山脚下全力加速并尝试到达旗帜点，因为山墙非常陡峭，重力会阻止汽车获得足够的动能。最优的解决方案是汽车先向后驶，然后踩下油门，积累足够的动能来克服重力，成功地驶出山谷。我们将看到，RL智能体实际上学会了这个技巧。
+- en: 'We will code the following two files to solve MountainCar using PPO:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将编写以下两个文件来使用PPO解决MountainCar问题：
+- en: '`class_ppo.py`'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`class_ppo.py`'
+- en: '`train_test.py`'
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`train_test.py`'
+- en: Coding the class_ppo.py file
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写class_ppo.py文件
+- en: 'We will now code the `class_ppo.py` file:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将编写`class_ppo.py`文件：
+- en: '**Import packages**: First, we will import the required packages as follows:'
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**导入包**：首先，我们将按照以下方式导入所需的包：'
+- en: '[PRE0]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '**Set the neural network initializers**: Then, we will set the neural network
+    parameters (we will use two hidden layers) and the initializers for the weights
+    and biases. As we have also done in past chapters, we will use the Xavier initializer
+    for the weights and a small positive value for the initial values of the biases:'
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**设置神经网络初始化器**：然后，我们将设置神经网络的参数（我们将使用两个隐藏层）以及权重和偏置的初始化器。正如我们在过去的章节中所做的那样，我们将使用Xavier初始化器来初始化权重，偏置的初始值则设置为一个小的正值：'
+- en: '[PRE1]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: '**Define the PPO** **class**: The `PPO()` class is now defined. First, the `__init__()`
+    constructor is defined using the arguments passed to the class. Here, `sess` is
+    the TensorFlow `session`; `S_DIM` and `A_DIM` are the state and action dimensions,
+    respectively; `A_LR` and `C_LR` are the learning rates for the actor and the critic,
+    respectively; `A_UPDATE_STEPS` and `C_UPDATE_STEPS` are the number of update steps
+    used for the actor and the critic; `CLIP_METHOD` stores the epsilon value:'
+  id: totrans-49
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义PPO** **类**：现在已经定义了`PPO()`类。首先，使用传递给类的参数定义`__init__()`构造函数。这里，`sess`是TensorFlow的`session`；`S_DIM`和`A_DIM`分别是状态和动作的维度；`A_LR`和`C_LR`分别是演员和评论员的学习率；`A_UPDATE_STEPS`和`C_UPDATE_STEPS`是演员和评论员的更新步骤数；`CLIP_METHOD`存储了epsilon值：'
+- en: '[PRE2]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '**Define TensorFlow placeholders**: We will next need to define the TensorFlow
+    placeholders: `tfs` for the state, `tfdc_r` for the discounted rewards, `tfa`
+    for the actions, and `tfadv` for the advantage function:'
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义TensorFlow占位符**：接下来，我们需要定义TensorFlow的占位符：`tfs`用于状态，`tfdc_r`用于折扣奖励，`tfa`用于动作，`tfadv`用于优势函数：'
+- en: '[PRE3]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '**Define the critic**: The critic neural network is defined next. We use the
+    state (*s[t]*) placeholder, `self.tfs`, as input to the neural network. Two hidden
+    layers are used with the `nhidden1` and `nhidden2` number of neurons and the `relu`
+    activation function (both `nhidden1` and `nhidden2` were set to `64` previously).
+    The output layer has one neuron that will output the state value function *V(s[t])*,
+    and so no activation function is used for the output. We then compute the advantage
+    function as the difference between the discounted cumulative rewards, which is
+    stored in the `self.tfdc_r` placeholder and the `self.v` output that we just computed.
+    The critic loss is computed as an L2 norm and the critic is trained using the
+    Adam optimizer with the objective to minimize this L2 loss.'
+  id: totrans-53
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义评论员**：接下来定义评论员神经网络。我们使用状态(*s[t]*)占位符`self.tfs`作为神经网络的输入。使用两个隐藏层，分别由`nhidden1`和`nhidden2`个神经元组成，并使用`relu`激活函数（`nhidden1`和`nhidden2`的值之前都设定为`64`）。输出层有一个神经元，将输出状态价值函数*V(s[t])*，因此输出层不使用激活函数。接下来，我们计算优势函数，作为折扣累积奖励（存储在`self.tfdc_r`占位符中）与刚才计算的`self.v`输出之间的差异。评论员损失被计算为L2范数，并且评论员使用Adam优化器进行训练，目标是最小化该L2损失。'
+- en: 'Note that this loss is the same as *L^(value)* mentioned earlier in this chapter
+    in the theory section:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这个损失与本章理论部分之前提到的*L^(value)*相同：
+- en: '[PRE4]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '**Call the** **_build_anet** **function**: We define the actor using a `_build_anet()`
+    function that will soon be specified. Specifically, the policy distribution and
+    the list of model parameters are output from this function. We call this function
+    once for the current policy and again for the older policy. The mean and standard
+    deviation can be obtained from `self.pi` by calling the `mean()` and `stddev()`
+    functions, respectively:'
+  id: totrans-56
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**调用** **_build_anet** **函数**：我们通过一个即将指定的`_build_anet()`函数来定义actor。具体来说，该函数输出策略分布和模型参数列表。我们为当前策略调用一次此函数，再为旧策略调用一次。可以通过调用`self.pi`的`mean()`和`stddev()`函数分别获得均值和标准差：'
+- en: '[PRE5]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '**Sample actions**: From the policy distribution, `self.pi`, we can also sample
+    actions using the `sample()` function that is part of TensorFlow distributions:'
+  id: totrans-58
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**示例动作**：我们可以通过策略分布`self.pi`，使用`sample()`函数从TensorFlow的分布中采样动作：'
+- en: '[PRE6]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '**Update older policy parameters**: The older policy network parameters can
+    be updated using the new policy values simply by assigning the values from the
+    latter to the former, using TensorFlow''s `assign()` function. Note that the new
+    policy is optimized – the older policy is simply a copy of the current policy,
+    albeit from one update cycle earlier:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**更新旧策略参数**：可以通过简单地将新策略的值赋给旧策略，使用TensorFlow的`assign()`函数来更新旧策略网络的参数。请注意，新策略已经过优化——旧策略仅仅是当前策略的一个副本，尽管是来自一次更新周期之前的。'
+- en: '[PRE7]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: '**Compute policy distribution ratio**: The policy distribution ratio is computed
+    at the `self.tfa` action, and is stored in `self.ratio`. Note that, exponentially,
+    the difference of logarithms of the distributions is the same as the ratio of
+    the distributions. This ratio is then clipped to bound it between *1-ε* and *1+ε*,
+    as explained earlier in the theory:'
+  id: totrans-62
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**计算策略分布比率**：策略分布比率在`self.tfa`动作处计算，并存储在`self.ratio`中。请注意，指数地，分布的对数差异等于分布的比率。然后将这个比率裁剪，限制在*1-ε*和*1+ε*之间，正如理论部分中所解释的：'
+- en: '[PRE8]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '**Compute losses**: The total loss for the policy, as mentioned previously,
+    involves three losses that are combined when the policy and value neural networks
+    share weights. However, since we consider the other setting mentioned in the theory
+    earlier in this chapter, where we have separate neural networks for the policy
+    and the value, we will have two losses for the policy optimization. The first
+    is the minimum of the product of the unclipped ratio and the advantage function
+    and its clipped analogue—this is stored in `self.aloss`. The second loss is the
+    Shannon entropy, which is the product of the policy distribution and its logarithm,
+    summed over, and a minus sign included. This term is scaled with the hyper parameter, *c[1]*
+    = 0.01, and subtracted from the loss. For the time being, the entropy loss term
+    is set to zero, as it also is in the PPO paper. We can consider including this
+    entropy loss later to see if it makes any difference in the learning of the policy.
+    We use the Adam optimizer. Note that we need to maximize the original policy loss
+    mentioned in the theory earlier in this chapter, but the Adam optimizer has the
+    `minimize()` function, so we have included a minus sign in `self.aloss` (see the
+    first line of the following code), as maximizing a loss is the same as minimizing
+    the negative of it:'
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**计算损失**：前面提到的策略总损失包含三个损失，当策略和价值神经网络共享权重时，这些损失会结合在一起。然而，由于我们考虑到本章前面理论中提到的另一种设置，其中策略和价值各自拥有独立的神经网络，因此策略优化将有两个损失。第一个是未剪切比率与优势函数及其剪切类比的乘积的最小值——这个值存储在`self.aloss`中。第二个损失是香农熵，它是策略分布与其对数的乘积，所有值相加，并带上负号。这个项通过超参数*c[1]*
+    = 0.01进行缩放，并从损失中减去。暂时将熵损失项设置为零，就像在PPO论文中一样。我们可以考虑稍后加入此熵损失项，看看它是否对策略的学习有任何影响。我们使用Adam优化器。请注意，我们需要最大化本章前面提到的原始策略损失，但Adam优化器具有`minimize()`函数，因此我们在`self.aloss`中加入了负号（参见下面代码的第一行），因为最大化一个损失等同于最小化它的负值：'
+- en: '[PRE9]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: '**Define the** **update** **function**: The `update()` function is defined
+    next, which takes the `s` state, the `a` action, and the `r` reward as arguments.
+    It involves running a TensorFlow session on updating the old policy network parameters
+    by calling the TensorFlow `self.update_oldpi_op` operation. Then, the advantage
+    is computed, which, along with the state and action, is used to update the `A_UPDATE_STEPS` actor
+    number of iterations. Then, the critic is updated by the `C_UPDATE_STEPS` number
+    of iterations by running a TensorFlow session on the critic train operation:'
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义** **更新** **函数**：接下来定义`update()`函数，它将`state`（状态）`a`（动作）和`r`（奖励）作为参数。该函数涉及通过调用TensorFlow的`self.update_oldpi_op`操作来更新旧策略网络的参数。然后计算优势，结合状态和动作，利用`A_UPDATE_STEPS`（演员迭代次数）进行更新。接着，利用`C_UPDATE_STEPS`（评论者迭代次数）对评论者进行更新，运行TensorFlow会话以执行评论者训练操作：'
+- en: '[PRE10]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '**Define the** **_build_anet** **function**: We will next define the `_build_anet()`
+    function that was used earlier. It will compute the policy distribution, which
+    is treated as a Gaussian (that is, normal). It takes the `self.tfs` state placeholder as
+    input, has two hidden layers with the `nhidden1` and `nhidden2` neurons, and uses
+    the `relu` activation function. This is then sent to two output layers with the `A_DIM`
+     action dimension number of outputs, with one representing the mean, `mu`, and
+    the other the standard deviation, `sigma`.'
+  id: totrans-68
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义** **_build_anet** **函数**：接下来我们将定义之前使用过的`_build_anet()`函数。它将计算策略分布，该分布被视为高斯分布（即正态分布）。它以`self.tfs`状态占位符作为输入，具有两个隐藏层，分别包含`nhidden1`和`nhidden2`个神经元，并使用`relu`激活函数。然后，这个输出传递到两个输出层，这些层的输出数量是`A_DIM`动作维度，其中一个表示均值`mu`，另一个表示标准差`sigma`。'
+- en: 'Note that the mean of the actions are bounded, and so the `tanh` activation
+    function is used, including a small clipping to avoid edge values; for sigma,
+    the `softplus` activation function is used, shifted by `0.1` to avoid zero sigma
+    values. Once we have the mean and standard deviations for the actions, TensorFlow
+    distributions'' `Normal` is used to treat the policy as a Gaussian distribution.
+    We can also call `tf.get_collection()` to obtain the model parameters, and the
+    `Normal` distribution and the model parameters are returned from the function:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，动作的均值是有限制的，因此使用`tanh`激活函数，并进行小幅裁剪以避免极值；对于标准差，使用`softplus`激活函数，并将其偏移`0.1`以避免出现零的标准差。一旦我们获得了动作的均值和标准差，TensorFlow的`Normal`分布被用来将策略视为高斯分布。我们还可以调用`tf.get_collection()`来获取模型参数，`Normal`分布和模型参数将从函数中返回：
+- en: '[PRE11]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '**Define the** **choose_action** **function**: We also define a `choose_action()`
+    function to sample from the policy to obtain actions:'
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义** **choose_action** **函数**：我们还定义了一个`choose_action()`函数，从策略中采样以获取动作：'
+- en: '[PRE12]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '**Define the** **get_v** **function**: Finally, we also define a `get_v()`
+    function to return the state value by running a TensorFlow session on `self.v`:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义** **get_v** **函数**：最后，我们还定义了一个`get_v()`函数，通过在`self.v`上运行TensorFlow会话来返回状态值：'
+- en: '[PRE13]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: That concludes `class_ppo.py`. We will now code `train_test.py`.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`class_ppo.py`部分到此结束。接下来，我们将编写`train_test.py`。'
+- en: Coding train_test.py file
+  id: totrans-76
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写`train_test.py`文件
+- en: We will now code the `train_test.py` file.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将编写`train_test.py`文件。
+- en: '**Importing the packages:** First, we import the required packages:'
+  id: totrans-78
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**导入包**：首先，我们导入所需的包：'
+- en: '[PRE14]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '**Define function:** We then define a function for reward shaping that will
+    give out some extra bonus rewards and penalties for good and bad performance,
+    respectively. We do this for encouraging the car to go higher towards the side
+    of the flag which is on the mountain top, without which the learning will be slow:'
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**定义函数**：接着，我们定义了一个奖励塑造函数，该函数将根据良好或差劲的表现分别给予额外的奖励和惩罚。这样做是为了鼓励小车朝向位于山顶的旗帜一侧行驶，否则学习速度会变慢：'
+- en: '[PRE15]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We next choose `MountainCarContinuous` as the environment. The total number
+    of episodes we will train the agent for is `EP_MAX`, and we set this to `1000`.
+    The `GAMMA` discount factor is set to `0.9` and the learning rates to `2e-4`.
+    We use a batch size of `32` and perform `10` update steps per cycle. The state
+    and action dimensions are obtained and stored in `S_DIM` and `A_DIM`, respectively.
+    For the PPO `clip` parameter, `epsilon`, we use a value of `0.1`. `train_test`
+    is set to `0` for training the agent and `1` for testing:'
+  id: totrans-82
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们选择`MountainCarContinuous`作为环境。我们将训练智能体的总集数设置为`EP_MAX`，并将其设置为`1000`。`GAMMA`折扣因子设置为`0.9`，学习率为`2e-4`。我们使用`32`的批量大小，并在每个周期执行`10`次更新步骤。状态和动作维度分别存储在`S_DIM`和`A_DIM`中。对于PPO的`clip`参数`epsilon`，我们使用`0.1`的值。`train_test`在训练时设置为`0`，在测试时设置为`1`：
+- en: '[PRE16]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We create a TensorFlow session and call it `sess`. An instance of the `PPO`
+    class is created, called `ppo`. We also create a TensorFlow saver. Then, if we
+    are training from scratch, we initialize all the model parameters by calling `tf.global_variables_initializer()`,
+    or, if we are continuing the training from a saved agent or testing, then we restore
+    from the `ckpt/model` path:'
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个TensorFlow会话，并命名为`sess`。创建一个`PPO`类的实例，命名为`ppo`。我们还创建了一个TensorFlow的保存器。然后，如果我们是从头开始训练，我们通过调用`tf.global_variables_initializer()`初始化所有模型参数；如果我们是从保存的智能体继续训练或进行测试，则从`ckpt/model`路径恢复：
+- en: '[PRE17]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The main `for loop` over episodes is then defined. Inside it, we reset the
+    environment and also set buffers to empty lists. The terminal Boolean, `done`,
+    and the number of time steps, `t`, are also initialized:'
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后定义了一个主要的`for loop`，用于遍历集数。在循环内部，我们重置环境，并将缓冲区设置为空列表。终止布尔值`done`和时间步骤数`t`也被初始化：
+- en: '[PRE18]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Inside the outer loop, we have the inner `while` loop over time steps. This
+    problem involves short time steps during which the car may not significantly move,
+    and so we use sticky actions where actions are sampled from the policy only once
+    every `8` time steps. The `choose_action()` function in the `PPO` class will sample
+    the actions for a given state. A small Gaussian noise is added to the actions
+    to explore, and are clipped in the `-1.0` to `1.0` range, as required for the
+    `MountainCarContinuous` environment. The action is then fed into the environment''s
+    `step()` function, which will output the next `s_` state, `r` reward, and the
+    terminal `done` Boolean. The `reward_shaping()` function is called to shape rewards.
+    To track how far the agent is pushing its limits, we also compute its maximum
+    position and speed in `max_pos` and `max_speed`, respectively:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在外部循环中，我们有一个内层的`while`循环来处理时间步。这个问题涉及较短的时间步，在这些时间步内，汽车可能没有显著移动，因此我们使用粘性动作，其中动作每`8`个时间步才从策略中采样一次。`PPO`类中的`choose_action()`函数会为给定的状态采样动作。为了进行探索，我们会在动作中加入小的高斯噪声，并将其限制在`-1.0`到`1.0`的范围内，这是`MountainCarContinuous`环境所要求的。然后，动作被输入到环境的`step()`函数中，后者将输出下一个`s_`状态、`r`奖励以及终止标志`done`。调用`reward_shaping()`函数来调整奖励。为了跟踪智能体推动极限的程度，我们还计算它在`max_pos`和`max_speed`中分别的最大位置和速度：
+- en: '[PRE19]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'If we are in training mode, the state, action, and reward are appended to the
+    buffer. The new state is set to the current state and we proceed to the next time
+    step if the episode has not already terminated. The `ep_r` episode total rewards
+    and the `t` time step count are also updated:'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果我们处于训练模式，状态、动作和奖励会被追加到缓冲区。新的状态会被设置为当前状态，如果回合尚未结束，我们将继续进行下一个时间步。`ep_r`回合总奖励和`t`时间步数也会被更新：
+- en: '[PRE20]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'If we are in the training mode, if the number of samples is equal to a batch,
+    or if the episode has terminated, we will train the neural networks. For this,
+    the state value for the new state is first obtained using `ppo.get_v`. Then, we
+    compute the discounted rewards. The buffer lists are also converted to NumPy arrays,
+    and the buffer lists are reset to empty lists. These `bs`, `ba`, and `br` NumPy
+    arrays are then used to update the `ppo` object''s actor and critic networks:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们处于训练模式，当样本数量等于一个批次，或者回合已经结束时，我们将训练神经网络。为此，首先使用`ppo.get_v`获取新状态的状态值。然后，我们计算折扣奖励。缓冲区列表也会被转换为NumPy数组，并且缓冲区列表会被重置为空列表。接下来，这些`bs`、`ba`和`br`
+    NumPy数组将被用来更新`ppo`对象的演员和评论员网络：
+- en: '[PRE21]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'If we are in testing mode, Python is paused briefly for better visualization.
+    If the episode has terminated, the `while` loop is exited with a `break` statement.
+    Then, we print the maximum position and speed values on the screen, as well as
+    write them, along with the episode rewards, to a file called `performance.txt`.
+    Once every 10 episodes, the model is also saved by calling `saver.save`:'
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果我们处于测试模式，Python会短暂暂停以便更好地进行可视化。如果回合已结束，`while`循环会通过`break`语句退出。然后，我们会在屏幕上打印最大的位置和速度值，并将它们以及回合奖励写入名为`performance.txt`的文件中。每10个回合，我们还会通过调用`saver.save`来保存模型：
+- en: '[PRE22]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: This concludes the coding of PPO. We will next evaluate its performance on MountainCarContinuous.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这标志着PPO编码的结束。接下来我们将在MountainCarContinuous上评估其性能。
+- en: Evaluating the performance
+  id: totrans-97
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 评估性能
+- en: 'The PPO agent is trained by the following command:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PPO智能体通过以下命令进行训练：
+- en: '[PRE23]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Once the training is complete, we can test the agent by setting the following:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦训练完成，我们可以通过设置以下内容来测试智能体：
+- en: '[PRE24]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Then, we will repeat `python train_test.py` again. On visualizing the agent,
+    we can observe that the car first moves backward to climb the left mountain. Then
+    it goes full throttle and picks up enough momentum to drive past the steep slope
+    of the right mountain with the flag on top. So, the PPO agent has learned to drive
+    out of the mountain valley successfully.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们会再次运行`python train_test.py`。通过可视化智能体，我们可以观察到汽车首先向后移动，攀爬左侧的山。接着，它全速前进，获得足够的动能，成功越过右侧山峰上方的陡峭坡道。因此，PPO智能体已经学会成功驶出山谷。
+- en: Full throttle
+  id: totrans-103
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 全油门
+- en: Note that we had to navigate backward first and then step on the throttle in
+    order to have sufficient momentum to escape gravity and successfully drive out
+    of the mountain valley. What if we had just stepped on the throttle right from
+    the first step – would the car still be able to escape? Let's check by coding
+    and running `mountaincar_full_throttle.py`.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们必须先倒车，然后踩下油门，才能获得足够的动能逃脱重力并成功驶出山谷。如果我们一开始就踩下油门，汽车还能够逃脱吗？让我们通过编写并运行`mountaincar_full_throttle.py`来验证。
+- en: 'We will now set the action to `1.0`, that is, full throttle:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将动作设置为`1.0`，即全油门：
+- en: '[PRE25]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: As is evident from the video generated during the training, the car is unable
+    to escape the inexorable pull of gravity, and remains stuck at the base of the
+    mountain valley.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从训练过程中生成的视频可以看出，汽车无法逃脱重力的无情拉力，最终仍然被困在山谷的底部。
+- en: Random throttle
+  id: totrans-108
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 随机油门
+- en: 'What if we try random throttle values? We will code `mountaincar_random_throttle.py`
+    with random actions in the `-1.0` to `1.0` range:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们尝试随机的油门值呢？我们将编写`mountaincar_random_throttle.py`，在`-1.0`到`1.0`的范围内进行随机操作：
+- en: '[PRE26]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Here too, the car fails to escape gravity and remains stuck at the base. So,
+    the RL agent is required to figure out that the optimum policy here is to first
+    go backward, and then step on the throttle to escape gravity and reach the flag
+    on the mountain top.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，汽车仍然无法逃脱重力，依然被困在山谷的底部。所以，RL智能体需要明白，最优策略是先向后行驶，然后踩下油门，逃脱重力并到达山顶的旗帜处。
+- en: This concludes our MountainCar exercise with PPO.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这标志着我们的PPO MountainCar练习的结束。
+- en: Summary
+  id: totrans-113
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we were introduced to the TRPO and PPO RL algorithms. TRPO
+    involves two equations that need to be solved, with the first equation being the
+    policy objective and the second equation being a constraint on how much we can
+    update. TRPO requires second-order optimization methods, such as conjugate gradient.
+    To simplify this, the PPO algorithm was introduced, where the policy ratio is
+    clipped within a certain user-specified range so as to keep the update gradual.
+    In addition, we also saw the use of data samples collected from experience to
+    update the actor and the critic for multiple iteration steps. We trained the PPO
+    agent on the MountainCar problem, which is a challenging problem, as the actor
+    must first drive the car backward up the left mountain, and then accelerate to
+    gain sufficient momentum to overcome gravity and reach the flag point on the right
+    mountain. We also saw that a full throttle policy or a random policy will not
+    help the agent reach its goal.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们介绍了TRPO和PPO两种RL算法。TRPO涉及两个需要求解的方程，第一个方程是策略目标，第二个方程是对更新幅度的约束。TRPO需要二阶优化方法，例如共轭梯度。为了简化这一过程，PPO算法应运而生，其中策略比例被限制在一个用户指定的范围内，从而保持更新的渐进性。此外，我们还看到了使用从经验中收集的数据样本来更新演员和评论家，通过多次迭代进行训练。我们在MountainCar问题上训练了PPO智能体，这是一个具有挑战性的问题，因为演员必须先将汽车倒退上左边的山，然后加速以获得足够的动能克服重力，最终到达右边山顶的旗帜处。我们还发现，全油门策略或随机策略无法帮助智能体达到目标。
+- en: With this chapter, we have looked at several RL algorithms. In the next chapter,
+    we will apply DDPG and PPO to train an agent to drive a car autonomously.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中，我们回顾了几种强化学习（RL）算法。在下一章，我们将应用DDPG和PPO来训练一个智能体，使其能自动驾驶汽车。
+- en: Questions
+  id: totrans-116
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Can we apply Adam or SGD optimization in TRPO?
+  id: totrans-117
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以在TRPO中应用Adam或SGD优化吗？
+- en: What is the role of the entropy term in the policy optimization?
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 策略优化中的熵项有什么作用？
+- en: Why do we clip the policy ratio? What will happen if the clipping parameter
+    epsilon is large?
+  id: totrans-119
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么我们要剪辑策略比例？如果剪辑参数epsilon较大，会发生什么？
+- en: Why do we use the `tanh` activation function for `mu` and `softplus` for sigma?
+    Can we use the `tanh` activation function for sigma?
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么我们使用`tanh`激活函数作为`mu`的激活函数，而使用`softplus`作为sigma的激活函数？我们能否为sigma使用`tanh`激活函数？
+- en: Does reward shaping always help in the training?
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 奖励塑造在训练中总是有效吗？
+- en: Do we need reward shaping when we test an already trained agent?
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 测试一个已经训练好的智能体时，我们需要奖励塑造吗？
+- en: Further reading
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '*Trust Region Policy Optimization*, *John Schulman*, *Sergey Levine*, *Philipp
+    Moritz*, *Michael I. Jordan*, *Pieter Abbeel*, arXiv:1502.05477 (TRPO paper):
+    [https://arxiv.org/abs/1502.05477](https://arxiv.org/abs/1502.05477)'
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*信任域策略优化*，*约翰·舒尔曼*，*谢尔盖·莱文*，*菲利普·莫里茨*，*迈克尔·I·乔丹*，*皮特·阿贝尔*，arXiv:1502.05477
+    (TRPO论文): [https://arxiv.org/abs/1502.05477](https://arxiv.org/abs/1502.05477)'
+- en: '*Proximal Policy Optimization Algorithms*, *John Schulman*, *Filip Wolski*,
+    *Prafulla Dhariwal*, *Alec Radford*, *Oleg Klimov*, arXiv:1707.06347 (PPO paper):
+    [https://arxiv.org/abs/1707.06347](https://arxiv.org/abs/1707.06347)'
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*近端策略优化算法*，*约翰·舒尔曼*，*菲利普·沃尔斯基*，*普拉夫拉·达里瓦尔*，*亚历克·拉德福*，*奥列格·克里莫夫*，arXiv:1707.06347（PPO论文）：[https://arxiv.org/abs/1707.06347](https://arxiv.org/abs/1707.06347)'
+- en: '*Deep Reinforcement Learning Hands-On*, *Maxim Lapan*, *Packt Publishing*:
+    [https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands](https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands)'
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*深度强化学习实战*，*马克西姆·拉潘*，*Packt出版社*：[https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands](https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands)'

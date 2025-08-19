@@ -1,0 +1,3141 @@
+- en: '8'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '8'
+- en: DQN Extensions
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: DQN扩展
+- en: Since DeepMind published its paper on the deep Q-network (DQN) model in 2015,
+    many improvements have been proposed, along with tweaks to the basic architecture,
+    which, significantly, have improved the convergence, stability, and sample efficiency
+    of DeepMind’s basic DQN. In this chapter, we will take a deeper look at some of
+    those ideas.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自从DeepMind在2015年发布其深度Q网络（DQN）模型的论文以来，许多改进方案已经被提出，并对基础架构进行了调整，显著提高了DeepMind基础DQN的收敛性、稳定性和样本效率。本章将深入探讨其中的一些思想。
+- en: 'In October 2017, Hessel et al. from DeepMind published a paper called Rainbow:
+    Combining improvements in deep reinforcement learning [[Hes+18](#)], which presented
+    the six most important improvements to DQN; some were invented in 2015, but others
+    are relatively recent. In this paper, state-of-the-art results on the Atari games
+    suite were reached, just by combining those six methods.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '2017年10月，DeepMind的Hessel等人发布了一篇名为《Rainbow: Combining improvements in deep reinforcement
+    learning》的论文[[Hes+18](#)]，介绍了对DQN的六个最重要的改进；其中一些是在2015年发明的，但其他一些则较为近期。在这篇论文中，通过简单地结合这六个方法，达到了Atari游戏套件上的最先进成果。'
+- en: Since 2017, more papers have been published and state-of-the-art results have
+    been pushed further, but all the methods presented in the paper are still relevant
+    and widely used in practice. For example, in 2023, Marc Bellemare published the
+    book Distributional reinforcement learning [[BDR23](#)] about one of the paper’s
+    methods. In addition, the improvements described are relatively simple to implement
+    and understand, so I have not made any major modifications to this chapter in
+    this edition.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自2017年以来，更多的论文被发表，并且最先进的结果被进一步推动，但论文中介绍的所有方法仍然是相关的，并在实践中广泛使用。例如，在2023年，Marc
+    Bellemare出版了《Distributional reinforcement learning》一书[[BDR23](#)]，书中讨论了论文中的一种方法。此外，所描述的改进相对简单易于实现和理解，因此在本版中我没有对这一章做重大修改。
+- en: 'The DQN extensions that we will become familiar with are the following:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将熟悉的DQN扩展如下：
+- en: 'N-step DQN: How to improve convergence speed and stability with a simple unrolling
+    of the Bellman equation, and why it’s not an ultimate solution'
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: N步DQN：如何通过简单地展开贝尔曼方程提高收敛速度和稳定性，以及为什么它不是终极解决方案
+- en: 'Double DQN: How to deal with DQN overestimation of the values of the actions'
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 双DQN：如何处理DQN对动作值的高估
+- en: 'Noisy networks: How to make exploration more efficient by adding noise to the
+    network weights'
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 噪声网络：如何通过给网络权重添加噪声来提高探索效率
+- en: 'Prioritized replay buffer: Why uniform sampling of our experience is not the
+    best way to train'
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优先回放缓冲区：为什么均匀采样我们的经验不是训练的最佳方式
+- en: 'Dueling DQN: How to improve convergence speed by making our network’s architecture
+    more closely represent the problem that we are solving'
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对抗DQN：如何通过使我们的网络架构更紧密地反映我们正在解决的问题，来提高收敛速度
+- en: 'Categorical DQN: How to go beyond the single expected value of the action and
+    work with full distributions'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分类DQN：如何超越单一的期望动作值，处理完整的分布
+- en: This chapter will go through all these methods. We will analyze the ideas behind
+    them, alongside how they can be implemented and compared to the classic DQN performance.
+    Finally, we will analyze how the combined system with all the methods performs.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将介绍所有这些方法。我们将分析这些方法背后的思想，以及如何实现它们，并与经典的DQN性能进行比较。最后，我们将分析结合所有方法的系统表现。
+- en: Basic DQN
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基础DQN
+- en: To get started, we will implement the same DQN method as in Chapter [6](#),
+    but leveraging the high-level primitives described in Chapter [7](ch011.xhtml#x1-1070007).
+    This will make our code much more compact, which is good, as non-relevant details
+    won’t distract us from the method’s logic. At the same time, the purpose of this
+    book is not to teach you how to use the existing libraries but rather how to develop
+    intuition about RL methods and, if necessary, implement everything from scratch.
+    From my perspective, this is a much more valuable skill, as libraries come and
+    go, but true understanding of the domain will allow you to quickly make sense
+    of other people’s code and apply it consciously.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了开始，我们将实现与第[6](#)章相同的DQN方法，但利用第[7](ch011.xhtml#x1-1070007)章中描述的高级原语。这将使我们的代码更加简洁，这是好的，因为无关的细节不会使我们偏离方法的逻辑。同时，本书的目的并非教你如何使用现有的库，而是如何培养对强化学习方法的直觉，必要时，从零开始实现一切。从我的角度来看，这是一个更有价值的技能，因为库会不断变化，但对领域的真正理解将使你能够迅速理解他人的代码，并有意识地应用它。
+- en: 'In the basic DQN implementation, we have three modules in the Chapter08 folder
+    of the GitHub repository for this book:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基本的 DQN 实现中，我们在本书的 GitHub 仓库中的 Chapter08 文件夹中有三个模块：
+- en: 'Chapter08/lib/dqn_model.py: The DQN neural network (NN), which is the same
+    as in Chapter [6](#), so I won’t repeat it'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Chapter08/lib/dqn_model.py: DQN 神经网络（NN），与第[6](#)章相同，因此我不会重复它。'
+- en: 'Chapter08/lib/common.py: Common functions and declarations shared by the code
+    in this chapter'
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Chapter08/lib/common.py: 本章代码共享的常用函数和声明。'
+- en: 'Chapter08/01_dqn_basic.py: 77 lines of code leveraging the PTAN and Ignite
+    libraries, implementing the basic DQN method'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Chapter08/01_dqn_basic.py: 77 行代码，利用 PTAN 和 Ignite 库实现基本的 DQN 方法。'
+- en: Common library
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 公共库
+- en: 'Let’s start with the contents of lib/common.py. First of all, we have hyperparameters
+    for our Pong environment from the previous chapter. The hyperparameters are stored
+    in the dataclass object, which is a standard way to store a bunch of data fields
+    with their type annotations. This makes it easy to add another configuration set
+    for different, more complicated Atari games and allows us to experiment with hyperparameters:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从 lib/common.py 的内容开始。首先，我们有上一章中为 Pong 环境设置的超参数。这些超参数存储在一个数据类对象中，这是存储一组数据字段及其类型注释的标准方式。这样，我们可以轻松为不同、更复杂的
+    Atari 游戏添加另一个配置集，并允许我们对超参数进行实验：
+- en: '[PRE0]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The next function from lib/common.py has the name unpack_batch, and it takes
+    the batch, of transitions and converts it into the set of NumPy arrays suitable
+    for training. Every transition from ExperienceSourceFirstLast has a type of ExperienceFirstLast,
+    which is a dataclass with the following fields:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: lib/common.py 中的下一个函数名为 unpack_batch，它接收转移的批次并将其转换为适合训练的 NumPy 数组集合。来自 ExperienceSourceFirstLast
+    的每个转移都属于 ExperienceFirstLast 类型，这是一个数据类，包含以下字段：
+- en: 'state: Observation from the environment.'
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'state: 来自环境的观测值。'
+- en: 'action: Integer action taken by the agent.'
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'action: 代理执行的整数动作。'
+- en: 'reward: If we have created ExperienceSourceFirstLast with the attribute steps_count=1,
+    it’s just the immediate reward. For larger step counts, it contains the discounted
+    sum of rewards for this number of steps.'
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'reward: 如果我们创建了 ExperienceSourceFirstLast 并设置了属性 steps_count=1，那么它只是即时奖励。对于更大的步数计数，它包含了这个步数内的奖励的折扣总和。'
+- en: 'last_state: If the transition corresponds to the final step in the environment,
+    then this field is None; otherwise, it contains the last observation in the experience
+    chain.'
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'last_state: 如果转移对应于环境中的最后一步，那么这个字段为 None；否则，它包含经验链中的最后一个观测值。'
+- en: 'The code of unpack_batch is as follows:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: unpack_batch 的代码如下：
+- en: '[PRE1]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Note how we handle the final transitions in the batch. To avoid the special
+    handling of such cases, for terminal transitions, we store the initial state in
+    the last_states array. To make our calculations of the Bellman update correct,
+    we have to mask such batch entries during the loss calculation using the dones
+    array. Another solution would be to calculate the value of the last states only
+    for non-terminal transitions, but it would make our loss function logic a bit
+    more complicated.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意我们如何处理批次中的最终转移。为了避免对这种情况的特殊处理，对于终止转移，我们将初始状态存储在 last_states 数组中。为了使我们的 Bellman
+    更新计算正确，我们必须在损失计算时使用 dones 数组对这些批次条目进行掩码。另一种解决方案是仅对非终止转移计算最后状态的值，但这会使我们的损失函数逻辑稍微复杂一些。
+- en: 'Calculation of the DQN loss function is provided by the calc_loss_dqn function,
+    and the code is almost the same as in Chapter [6](#). One small addition is torch.no_grad(),
+    which stops the PyTorch calculation graph from being recorded for the target net:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DQN 损失函数的计算由 calc_loss_dqn 函数提供，代码几乎与第[6](#)章相同。唯一的小改动是 torch.no_grad()，它阻止了
+    PyTorch 计算图被记录到目标网络中：
+- en: '[PRE2]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Besides those core DQN functions, common.py provides several utilities related
+    to our training loop, data generation, and TensorBoard tracking. The first such
+    utility is a small class that implements epsilon decay during the training. Epsilon
+    defines the probability of taking the random action by the agent. It should be
+    decayed from 1.0 in the beginning (fully random agent) to some small number, like
+    0.02 or 0.01\. The code is trivial but is needed in almost any DQN, so it is provided
+    by the following little class:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了核心的 DQN 函数外，common.py 还提供了与训练循环、数据生成和 TensorBoard 跟踪相关的多个实用工具。第一个这样的工具是一个小类，它在训练过程中实现了
+    epsilon 衰减。Epsilon 定义了代理执行随机动作的概率。它应从 1.0 开始（完全随机的代理），逐渐衰减到某个小值，比如 0.02 或 0.01。这个代码非常简单，但几乎在任何
+    DQN 中都需要，因此通过以下小类提供：
+- en: '[PRE3]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Another small function is batch_generator, which takes ExperienceReplayBuffer
+    (the PTAN class described in Chapter [7](ch011.xhtml#x1-1070007)) and infinitely
+    generates training batches sampled from the buffer. In the beginning, the function
+    ensures that the buffer contains the required amount of samples:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个小函数是 batch_generator，它接收 ExperienceReplayBuffer（PTAN 类，在第[7](ch011.xhtml#x1-1070007)章中描述）并无限次生成从缓冲区中采样的训练批次。开始时，函数确保缓冲区包含所需数量的样本：
+- en: '[PRE4]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Finally, a lengthy, but nevertheless very useful, function called setup_ignite
+    attaches the needed Ignite handlers, showing the training progress and writing
+    metrics to TensorBoard. Let’s look at this function piece by piece:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，一个冗长但非常有用的函数叫做 setup_ignite，它附加了所需的 Ignite 处理器，显示训练进度并将度量写入 TensorBoard。让我们一块儿看这个函数：
+- en: '[PRE5]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Initially, setup_ignite attaches two Ignite handlers provided by PTAN:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最初，setup_ignite 附加了 PTAN 提供的两个 Ignite 处理器：
+- en: EndOfEpisodeHandler, which emits the Ignite event every time a game episode
+    ends. It can also fire an event when the averaged reward for episodes crosses
+    some boundary. We use this to detect when the game is finally solved.
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: EndOfEpisodeHandler，每当游戏回合结束时，它会触发 Ignite 事件。当回合的平均奖励超过某个边界时，它还可以触发事件。我们用它来检测游戏何时最终解决。
+- en: EpisodeFPSHandler, a small class that tracks the time the episode has taken
+    and the amount of interactions that we have had with the environment. From this,
+    we calculate frames per second (FPS), which is an important performance metric
+    to track.
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: EpisodeFPSHandler，这是一个小类，跟踪每个回合所花费的时间以及我们与环境交互的次数。根据这些信息，我们计算每秒帧数（FPS），它是一个重要的性能度量指标。
+- en: 'Then, we install two event handlers:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们安装两个事件处理器：
+- en: '[PRE6]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: One of the event handlers is called at the end of an episode. It will show information
+    about the completed episode on the console. Another function will be called when
+    the average reward grows above the boundary defined in the hyperparameters (18.0
+    in the case of Pong). This function shows a message about the solved game and
+    stops the training.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中一个事件处理器会在回合结束时被调用。它将在控制台上显示有关已完成回合的信息。另一个函数会在平均奖励超过超参数中定义的边界时被调用（在 Pong 的情况下是
+    18.0）。此函数显示关于已解决游戏的消息，并停止训练。
+- en: 'The rest of the function is related to the TensorBoard data that we want to
+    track. First, we create a TensorboardLogger:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数的其余部分与我们想要跟踪的 TensorBoard 数据有关。首先，我们创建一个 TensorboardLogger：
+- en: '[PRE7]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: This is a special class provided by Ignite to write into TensorBoard. Our processing
+    function will return the loss value, so we attach the RunningAverage transformation
+    (also provided by Ignite) to get a smoothed version of the loss over time.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是 Ignite 提供的一个特殊类，用于写入 TensorBoard。我们的处理函数将返回损失值，因此我们附加了 RunningAverage 转换（同样由
+    Ignite 提供），以获取随时间平滑的损失版本。
+- en: 'Next, we attach the metrics we want to track to the Ignite events:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将要跟踪的度量值附加到 Ignite 事件：
+- en: '[PRE8]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'TensorboardLogger can track two groups of values from Ignite: outputs (values
+    returned by the transformation function) and metrics (calculated during the training
+    and kept in the engine state). EndOfEpisodeHandler and EpisodeFPSHandler provide
+    metrics, which are updated at the end of every game episode. So, we attach OutputHandler,
+    which will write into TensorBoard information about the episode every time it
+    is completed.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorboardLogger 可以跟踪来自 Ignite 的两组值：输出（由转换函数返回的值）和度量（在训练过程中计算并保存在引擎状态中）。EndOfEpisodeHandler
+    和 EpisodeFPSHandler 提供度量，这些度量在每个游戏回合结束时更新。因此，我们附加了 OutputHandler，每当回合完成时，它将把有关该回合的信息写入
+    TensorBoard。
+- en: 'Next, we track another group of values, metrics from the training process:
+    loss, FPS, and, possibly, some custom metrics relevant to the specific extension’s
+    logic:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们跟踪训练过程中的另一组值，训练过程中的度量值：损失、FPS，以及可能与特定扩展逻辑相关的自定义度量：
+- en: '[PRE9]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Those values are updated every training iteration, but we are going to do millions
+    of iterations, so we will store values in TensorBoard every 100 training iterations;
+    otherwise, the data files will be huge. All this functionality might look too
+    complicated, but it provides us with the unified set of metrics gathered from
+    the training process. In fact, Ignite is not very tricky, given the flexibility
+    it provides. That’s it for common.py.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些值会在每次训练迭代时更新，但我们将进行数百万次迭代，因此我们每进行 100 次训练迭代就将值存储到 TensorBoard；否则，数据文件会非常大。所有这些功能看起来可能很复杂，但它为我们提供了从训练过程中收集的统一度量集。事实上，Ignite
+    并不复杂，考虑到它所提供的灵活性。common.py 就到这里。
+- en: Implementation
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: 'Now, let’s take a look at 01_dqn_basic.py, which creates the needed classes
+    and starts the training. I’m going to omit non-relevant code and focus only on
+    important pieces (the full version is available in the GitHub repo). First, we
+    create the environment:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们看一下 01_dqn_basic.py，它创建了所需的类并开始训练。我将省略不相关的代码，只关注重要部分（完整版本可以在 GitHub 仓库中找到）。首先，我们创建环境：
+- en: '[PRE10]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Here, we apply a set of standard wrappers. We discussed them in Chapter [6](#)
+    and will also touch upon them in the next chapter, when we optimize the performance
+    of the Pong solver. Then, we create the DQN model and the target network.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们应用一组标准包装器。我们在第[6](#)章中讨论了这些包装器，并且在下一章中，当我们优化 Pong 求解器的性能时，还会再次涉及到它们。然后，我们创建
+    DQN 模型和目标网络。
+- en: 'Next, we create the agent, passing it an epsilon-greedy action selector:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建代理，并传入一个 epsilon-greedy 动作选择器：
+- en: '[PRE11]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: During the training, epsilon will be decreased by the EpsilonTracker class that
+    we have already discussed. This will decrease the amount of randomly selected
+    actions and give more control to our NN.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，epsilon 将由我们之前讨论过的 EpsilonTracker 类进行减少。这将减少随机选择的动作数量，并给予我们的神经网络更多的控制权。
+- en: 'The next two very important objects are ExperienceSourceFirstLast and ExperienceReplayBuffer:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，两个非常重要的对象是 ExperienceSourceFirstLast 和 ExperienceReplayBuffer：
+- en: '[PRE12]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: ExperienceSourceFirstLast takes the agent and environment and provides transitions
+    over game episodes. Those transitions will be kept in the experience replay buffer.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ExperienceSourceFirstLast 接收代理和环境，并在游戏回合中提供过渡。这些过渡将被保存在经验回放缓冲区中。
+- en: 'Then we create an optimizer and define the processing function:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们创建优化器并定义处理函数：
+- en: '[PRE13]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: The processing function will be called for every batch of transitions to train
+    the model. To do this, we call the common.calc_loss_dqn function and then backpropagate
+    on the result. This function also asks EpsilonTracker to decrease the epsilon
+    and does periodical target network synchronization.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理函数将在每批过渡时被调用以训练模型。为此，我们调用 common.calc_loss_dqn 函数，然后对结果进行反向传播。该函数还会要求 EpsilonTracker
+    减少 epsilon，并进行定期的目标网络同步。
+- en: 'And, finally, we create the Ignite Engine object:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们创建 Ignite Engine 对象：
+- en: '[PRE14]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: We configure it using a function from common.py, and run our training process.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用来自 common.py 的函数进行配置，并运行训练过程。
+- en: Hyperparameter tuning
+  id: totrans-69
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: To make our comparison of DQN extensions fair, we also need to tune hyperparameters.
+    This is essential because even for the same game (Pong), using the fixed set of
+    training parameters might give less optimal results when we change the details
+    of the method.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使我们对 DQN 扩展的比较更加公平，我们还需要调优超参数。这一点至关重要，因为即使对于相同的游戏（Pong），使用固定的训练参数集可能在我们改变方法细节时给出较差的结果。
+- en: 'In principle, every explicit or implicit constant in our code could be tuned,
+    such as:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原则上，我们代码中的每个显式或隐式常量都可以进行调优，例如：
+- en: 'Network configuration: Amount and size of layers, activation function, dropout,
+    etc.'
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网络配置：层的数量和大小，激活函数，dropout 等
+- en: 'Optimization parameters: Method (vanilla SGD, Adam, AdaGrad, etc.), learning
+    rate, and other optimizer parameters'
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化参数：方法（原生 SGD、Adam、AdaGrad 等）、学习率和其他优化器参数
+- en: 'Exploration parameters: Decay rate of 𝜖, final 𝜖 value'
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 探索参数：𝜖 的衰减率，最终 𝜖 值
+- en: Discount factor γ in Bellman equation
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Bellman 方程中的折扣因子 γ
+- en: But every new parameter we tune has a multiplicative effect on the amount of
+    trial training we need to perform, so having too many hyperparameters might require
+    hundreds or even thousands of trainings. Large companies like Google and Meta
+    have access to a much larger amount of GPUs than individual researchers like us,
+    so we need to keep the balance there.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，我们调整的每个新参数都会对所需的试验训练量产生乘法效应，因此调节过多的超参数可能需要进行数百次甚至上千次训练。像 Google 和 Meta 这样的大公司拥有比我们这些个人研究者更多的
+    GPU 资源，所以我们需要在这里保持平衡。
+- en: 'In my case, I’m going to demonstrate how hyperparameter tuning is done in general,
+    but we’ll do the search only on a few values:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我的例子中，我将演示如何进行超参数调优，但我们只会在少数几个值上进行搜索：
+- en: Learning rate
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 学习率
+- en: Discount factor γ
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 折扣因子 γ
+- en: Parameters specific to the DQN extension we’re considering
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们正在考虑的 DQN 扩展特定的参数
+- en: 'There are several libraries that might be helpful with hyperparameter tuning.
+    Here, I’m using Ray Tune ([https://docs.ray.io/en/latest/tune/index.xhtml](https://docs.ray.io/en/latest/tune/index.xhtml)),
+    which is a part of the Ray project — a distributed computing framework for ML
+    and DL. At a high level, you need to define:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个库可能对超参数调整有所帮助。这里，我使用的是Ray Tune（[https://docs.ray.io/en/latest/tune/index.xhtml](https://docs.ray.io/en/latest/tune/index.xhtml)），它是Ray项目的一部分——一个用于机器学习和深度学习的分布式计算框架。从高层次来看，你需要定义：
+- en: The hyperparameter space you want to explore (boundaries for values to sample
+    from or an explicit list of values to try)
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你希望探索的超参数空间（值的边界或显式列出的尝试值列表）
+- en: The function that performs the training with specific values of hyperparameters
+    and returns the metric you want to optimize with the tuning
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该函数执行使用特定超参数值的训练，并返回你想要优化的度量。
+- en: 'This might look very similar to ML problems, and in fact it is — this is also
+    an optimization problem. But there are substantial differences: the function we’re
+    optimizing is not differentiable (so you cannot perform the gradient descent to
+    push your hyperparameters towards the desired direction of the metric) and the
+    optimization space might be discrete (you cannot train the network with the number
+    of layers equal to 2.435, for example, since we cannot take the derivative of
+    a non-smooth function).'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可能看起来与机器学习问题非常相似，事实上它确实是——这也是一个优化问题。但它有一些显著的不同：我们正在优化的函数是不可微分的（因此无法执行梯度下降来推动超参数朝向期望的度量方向），而且优化空间可能是离散的（例如，你无法用2.435层的神经网络进行训练，因为我们无法对一个不平滑的函数求导）。
+- en: In later chapters, we’ll touch on this problem slightly in the context of black-box
+    optimization methods (Chapter [17](ch021.xhtml#x1-31100017)) and RL in discrete
+    optimizations (Chapter [21](ch025.xhtml#x1-39100021)), but for now, we’ll use
+    the simplest approach — a random search of hyperparameters. In this case, the
+    ray.tune library randomly samples concrete parameters several times and calls
+    the function to obtain the metric. The smallest (or highest) metric corresponds
+    to the best hyperparameter combination found in this run.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在后续章节中，我们会稍微触及一下这个问题，讨论黑箱优化方法（第[17章](ch021.xhtml#x1-31100017)）和离散优化中的强化学习（第[21章](ch025.xhtml#x1-39100021)），但现在我们将使用最简单的方法——超参数的随机搜索。在这种情况下，`ray.tune`库会随机多次采样具体的参数，并调用函数以获得度量。最小（或最大）的度量值对应于在此次运行中找到的最佳超参数组合。
+- en: In this chapter, our metric (optimization objective) will be the number of games
+    the agent needs to play before solving the game (reaching a mean score of greater
+    than 18 for Pong).
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们的度量（优化目标）将是代理需要玩多少局游戏才能解决游戏（即在Pong中达到大于18的平均得分）。
+- en: To illustrate the effect of tuning, for every DQN extension, we check the training
+    dynamics using a fixed set of parameters (the same as in Chapter [6](#)), and
+    the dynamics using the best hyperparameters found after 20-30 rounds of tuning.
+    If you wish, you can do your own experiments, optimizing more hyperparameters.
+    Most likely, this will allow you to find a better configuration for the training.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明调整的效果，对于每个DQN扩展，我们使用一组固定的参数（与第[6章](#)相同）检查训练动态，并使用在20-30轮调整后找到的最佳超参数进行训练。如果你愿意，你可以做自己的实验，优化更多的超参数。最有可能的是，这将使你能够找到一个更好的训练配置。
+- en: 'The core of the process is implemented in the common.tune_params function.
+    Let’s take a look at its code. We start with the type declaration and hyperparameter
+    space:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个过程的核心实现是在`common.tune_params`函数中。让我们看看它的代码。我们从类型声明和超参数空间开始：
+- en: '[PRE15]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Here, we first define the type for the training function, which takes the Hyperparams
+    dataclass torch.device to use and a dictionary with extra parameters (as some
+    DQN extensions we’re going to present might require extra parameters besides those
+    declared in Hyperparams).
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们首先定义训练函数的类型，它接收一个`Hyperparams`数据类、一个要使用的`torch.device`，以及一个包含额外参数的字典（因为我们即将介绍的某些DQN扩展可能需要除了在`Hyperparams`中声明的参数以外的额外参数）。
+- en: The result of the function is either the int value, which will be the amount
+    of games we played before reaching the score of 18, or None if we decided to stop
+    the training early. This is required, as some hyperparameter combinations might
+    fail to converge or converge too slowly, so to save time we stop the training
+    without waiting for too long.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数的结果可以是一个整数值，表示在达到18分的得分之前我们玩了多少局游戏，或者是None，如果我们决定提前停止训练。这是必需的，因为某些超参数组合可能无法收敛或收敛得太慢，因此为了节省时间，我们会在不等待太久的情况下停止训练。
+- en: Then we define the hyperparameter search space — which is a dict with string
+    keys (parameter name) and the tune declaration of possible values to explore.
+    It could be a probability distribution (uniform, loguniform, normal, etc.) or
+    an explicit list of values to try. You can also use tune.grid_search declaration
+    with a list of values. In that case, all the values will be tried.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们定义超参数搜索空间——这是一个具有字符串键（参数名）和可能值探索的 `tune` 声明的字典。它可以是一个概率分布（均匀、对数均匀、正态等）或要尝试的显式值列表。你还可以使用
+    `tune.grid_search` 声明，提供一个值列表。在这种情况下，将尝试所有值。
+- en: In our case, we sample the learning rate from the loguniform distribution and
+    gamma from the list of 6 values ranging from 0.9 to 0.995.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的例子中，我们从对数均匀分布中采样学习率，并从一个包含 6 个值（范围从 0.9 到 0.995）的列表中采样 gamma。
+- en: 'Next, we have the tune_params function:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们有 `tune_params` 函数：
+- en: '[PRE16]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'This function is given the following arguments:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数给定以下参数：
+- en: Basic set of hyperparameters that will be used for training
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于训练的基础超参数集
+- en: Training function
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练函数
+- en: Torch device to use
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用的 Torch 设备
+- en: Amount of samples to perform during the round
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在回合中执行的样本数量
+- en: Additional dictionary with search space
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 具有搜索空间的附加字典
+- en: Inside this function, we have an objective function, which creates the Hyperparameters
+    object from the sampled dict, calls the training function, and returns the dictionary
+    (which is a requirement of the ray.tune library).
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此函数中，我们有一个目标函数，它从采样的字典中创建 `Hyperparameters` 对象，调用训练函数，并返回字典（这是 ray.tune 库的要求）。
+- en: 'The rest of the tune_params function is simple:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tune_params` 函数的其余部分很简单：'
+- en: '[PRE17]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Here, we wrap the objective function to pass the torch device and take into
+    account GPU resources. This is needed to allow Ray to properly parallelize the
+    tuning process. If you have multiple GPUs installed on the machine, it will run
+    several trainings in parallel. Then, we just create the Tuner object and ask it
+    to perform the hyperparameter search.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们包装目标函数，以传递 Torch 设备并考虑 GPU 资源。这是为了让 Ray 能够正确地并行化调优过程。如果你机器上安装了多个 GPU，它将并行运行多个训练。然后，我们只需创建
+    `Tuner` 对象，并要求它执行超参数搜索。
+- en: 'The final piece relevant to hyperparameter tuning is in the setup_ignite function.
+    It checks for situations when the training process is not converging, so we stop
+    the training to avoid infinite waiting. To do this, we install the Ignite event
+    handler if we’re in the hyperparameter tuning mode:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与超参数调优相关的最后一部分代码在 `setup_ignite` 函数中。它检查训练过程是否没有收敛，如果没有收敛，则停止训练以避免无限等待。为此，我们在超参数调优模式下安装
+    Ignite 事件处理程序：
+- en: '[PRE18]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Here, we check for two conditions:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们检查两个条件：
+- en: If the mean reward is lower than tuner_reward_min (which is an argument to the
+    setup_ignite function and equal to -19 by default) after 100 games (provided in
+    the tuner_reward_episode argument). This means that it’s quite unlikely that we’ll
+    converge at all.
+  id: totrans-109
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果平均奖励低于 `tuner_reward_min`（这是 `setup_ignite` 函数的一个参数，默认为 -19），并且在 100 局游戏后（由
+    `tuner_reward_episode` 参数提供），这意味着我们几乎不可能收敛。
+- en: We played more than max_episodes amount of games and still haven’t solved the
+    game. In the default config, we set this limit to 500 games.
+  id: totrans-110
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们已经玩了超过 `max_episodes` 局游戏，仍然没有解决游戏。在默认配置中，我们将此限制设置为 500 局游戏。
+- en: In both cases, we stop the training and set the solved attribute to False, which
+    will return a high constant metric value in our tuning process.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两种情况下，我们都会停止训练并将 `solved` 属性设置为 `False`，这将在调优过程中返回一个较高的常数指标值。
+- en: That’s it for the hyperparameter tuning code. Before we run it and check the
+    results, let’s first start a single training using the parameters we used in Chapter [6](#).
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是超参数调优代码的全部内容。在运行并检查结果之前，让我们首先使用我们在第 [6](#) 章中使用的参数开始一次单次训练。
+- en: Results with common parameters
+  id: totrans-113
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用常见参数的结果
+- en: If we run the training with the argument --params common, we’ll train the Pong
+    game using hyperparameters from the common.py module. As an option, you can use
+    the --params best command line to train on the best values for this particular
+    DQN extension.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们使用参数 `--params common` 运行训练，我们将使用来自 `common.py` 模块的超参数训练 Pong 游戏。作为选项，你可以使用
+    `--params best` 命令行来训练该 DQN 扩展的最佳值。
+- en: 'Okay, let’s start the training using the following command:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好的，让我们使用以下命令开始训练：
+- en: '[PRE19]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Every line in the output is written at the end of the game episode, showing
+    the episode reward, a count of steps, the speed, and the total training time.
+    For the basic DQN version and common hyperparameters, it usually takes about 700K
+    frames and about 400 games to reach the mean reward of 18, so be patient. During
+    the training, we can check the dynamics of the training process in TensorBoard,
+    which shows charts for epsilon, raw reward values, average reward, and speed.
+    The following charts show the reward and the number of steps for episodes (the
+    bottom x axis shows the wall clock time, and the top axis is the episode number):'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出中的每一行都是在游戏回合结束时写入的，显示回合奖励、步数、速度和总训练时间。对于基础的DQN版本和常见的超参数，通常需要大约70万帧和约400局游戏才能达到18的平均奖励，因此需要耐心。在训练过程中，我们可以在TensorBoard中查看训练过程的动态，里面显示了ε值、原始奖励值、平均奖励和速度的图表。以下图表显示了每回合的奖励和步数（底部x轴表示墙钟时间，顶部x轴表示回合数）：
+- en: '![PIC](img/B22150_08_01.png)'
+  id: totrans-118
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_01.png)'
+- en: 'Figure 8.1: Plots with reward (left) and count of steps per episode (right)'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.1：奖励图（左）和每回合步数图（右）
+- en: '![PIC](img/B22150_08_02.png)'
+  id: totrans-120
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_02.png)'
+- en: 'Figure 8.2: Plots with training speed (left) and average training loss (right)'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.2：训练速度图（左）和平均训练损失图（右）
+- en: It is also worth noting how the count of steps per episode changes during the
+    training. Initially, it increases, as our network starts winning more and more
+    games, but after a certain level, the count of steps decreases 2x and stays almost
+    constant. This is driven by our γ parameter, which discounts the agent’s reward
+    over time, so it tries not just to accumulate as much of a reward as possible,
+    but also to do it efficiently.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还值得注意的是每回合步数在训练过程中是如何变化的。最开始时，步数增加，因为我们的网络开始赢得越来越多的游戏，但在达到某个水平后，步数减少了2倍并几乎保持不变。这是由我们的γ参数驱动的，它会随着时间的推移折扣智能体的奖励，所以它不仅仅是尽可能多地积累奖励，还要高效地完成任务。
+- en: Tuned baseline DQN
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 调整过的基准 DQN
+- en: 'After running the baseline DQN with the command-line argument --tune 30 (which
+    took about a day on one GPU), I was able to find the following parameters, which
+    solves Pong in 340 episodes (instead of 360):'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用命令行参数--tune 30（这在一块GPU上花费了大约一天）运行基准DQN之后，我找到了以下参数，这可以在340回合内解决Pong问题（而不是360回合）：
+- en: '[PRE20]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: As you can see, the learning rate is almost the same as before (10^(−4)), but
+    gamma is lower (0.98 versus 0.99). This might be an indication that Pong has relatively
+    short subtrajectories with action-reward causality, so decreasing the γ has a
+    stabilizing effect on the training.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，学习率几乎与之前一样（10^(−4)），但γ值较低（0.98对比0.99）。这可能表明Pong有相对较短的子轨迹与动作-奖励因果关系，因此减少γ对训练有稳定作用。
+- en: 'In the following figure, you can see a comparison of the reward and steps per
+    episode for both tuned and untuned versions (and the difference is quite minor):'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下图中，你可以看到调整过和未调整版本的奖励与每个回合步数的比较（区别非常小）：
+- en: '![PIC](img/B22150_08_03.png)'
+  id: totrans-128
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_03.png)'
+- en: 'Figure 8.3: Plots with reward (left) and count of steps per episode (right)
+    for tuned and untuned hyperparameters'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.3：调整过的和未调整超参数的奖励图（左）和每回合步数图（右）
+- en: Now we have our baseline DQN version and are ready to explore method modifications
+    proposed by Hessel et al.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了基准DQN版本，并准备探索Hessel等人提出的改进方法。
+- en: N-step DQN
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: N步DQN
+- en: 'The first improvement that we will implement and evaluate is quite an old one.
+    It was first introduced by Sutton in the paper Learning to Predict by the Methods
+    of Temporal Differences [[Sut88](#)]. To get the idea, let’s look at the Bellman
+    update used in Q-learning once again:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将要实现并评估的第一个改进是一个比较老的方法。它最早由Sutton在论文《通过时间差分方法学习预测》[[Sut88](#)]中提出。为了理解这个方法，我们再看一遍Q-learning中使用的Bellman更新：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq26.png)'
+  id: totrans-133
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq26.png)'
+- en: 'This equation is recursive, which means that we can express Q(s[t+1],a[t+1])
+    in terms of itself, which gives us this result:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个方程是递归的，这意味着我们可以用自身来表示Q(s[t+1],a[t+1])，从而得到这个结果：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq27.png)'
+  id: totrans-135
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq27.png)'
+- en: 'Value r[a,t+1] means local reward at time t + 1, after issuing action a. However,
+    if we assume that action a at step t + 1 was chosen optimally, or close to optimally,
+    we can omit the max[a] operation and obtain this:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值r[a,t+1]表示在时间t + 1时发出动作a后的局部奖励。然而，如果我们假设在t + 1步时的动作a是最优选择或接近最优选择，我们可以省略max[a]操作，得到以下结果：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq28.png)'
+  id: totrans-137
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq28.png)'
+- en: 'This value can be unrolled again and again any number of times. As you may
+    guess, this unrolling can be easily applied to our DQN update by replacing one-step
+    transition sampling with longer transition sequences of n-steps. To understand
+    why this unrolling will help us to speed up training, let’s consider the example
+    illustrated in Figure [8.4](#x1-131004r4). Here, we have a simple environment
+    of four states (s[1], s[2], s[3], s[4]) and the only action available at every
+    state, except s[4], which is a terminal state:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个值可以反复展开，次数不限。正如你可能猜到的，这种展开可以轻松应用到我们的 DQN 更新中，通过用更长的 n 步转移序列替换一步转移采样。为了理解为什么这种展开可以帮助我们加速训练，让我们考虑图
+    [8.4](#x1-131004r4) 中的示例。这里，我们有一个简单的四状态环境（s[1]、s[2]、s[3]、s[4]），除了终止状态 s[4] 外，每个状态都有唯一可执行的动作：
+- en: '![ssssararar1234123 ](img/B22150_08_04.png)'
+  id: totrans-139
+  prefs: []
+  type: TYPE_IMG
+  zh: '![ssssararar1234123 ](img/B22150_08_04.png)'
+- en: 'Figure 8.4: A transition diagram for a simple environment'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.4：一个简单环境的转移图
+- en: 'So, what happens in a one-step case? We have three total updates possible (we
+    don’t use max, as there is only one action available):'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，一步情况下会发生什么呢？我们总共有三个更新是可能的（我们不使用 max，因为只有一个可执行动作）：
+- en: Q(s[1],a) ←r[1] + γQ(s[2],a)
+  id: totrans-142
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Q(s[1],a) ←r[1] + γQ(s[2],a)
+- en: Q(s[2],a) ←r[2] + γQ(s[3],a)
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Q(s[2],a) ←r[2] + γQ(s[3],a)
+- en: Q(s[3],a) ←r[3]
+  id: totrans-144
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Q(s[3],a) ←r[3]
+- en: Let’s imagine that, at the beginning of the training, we complete the preceding
+    updates in this order. The first two updates will be useless, as our current Q(s[2],a)
+    and Q(s[3],a) are incorrect and contain initial random values. The only useful
+    update will be update 3, which will correctly assign reward r[3] to the state
+    s[3] prior to the terminal state.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设在训练开始时，我们按照这个顺序完成之前的更新。前两个更新将没有用，因为我们当前的 Q(s[2],a) 和 Q(s[3],a) 是不正确的，且包含初始的随机值。唯一有用的更新是更新
+    3，它会将奖励 r[3] 正确地分配给终止状态之前的状态 s[3]。
+- en: Now let’s perform the updates over and over again. On the second iteration,
+    the correct value will be assigned to Q(s[2],a), but the update of Q(s[1],a) will
+    still be noisy. Only on the third iteration will we get the valid values for every
+    Q. So, even in a one-step case, it takes three steps to propagate the correct
+    values to all the states.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们一次次执行这些更新。在第二次迭代时，Q(s[2],a) 会被赋予正确的值，但 Q(s[1],a) 的更新仍然会带有噪声。直到第三次迭代，我们才会为每个
+    Q 获得有效的值。所以，即使是在一步情况下，也需要三步才能将正确的值传播到所有状态。
+- en: 'Now let’s consider a two-step case. This situation again has three updates:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们考虑一个两步的情况。这个情况同样有三个更新：
+- en: Q(s[1],a) ←r[1] + γr[2] + γ²Q(s[3],a)
+  id: totrans-148
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Q(s[1],a) ←r[1] + γr[2] + γ²Q(s[3],a)
+- en: Q(s[2],a) ←r[2] + γr[3]
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Q(s[2],a) ←r[2] + γr[3]
+- en: Q(s[3],a) ←r[3]
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Q(s[3],a) ←r[3]
+- en: In this case, on the first loop over the updates, the correct values will be
+    assigned to both Q(s[2],a) and Q(s[3],a). On the second iteration, the value of
+    Q(s[1],a) will also be properly updated. So, multiple steps improve the propagation
+    speed of values, which improves convergence. You may be thinking, “If it’s so
+    helpful, let’s unroll the Bellman equation, say, 100 steps ahead. Will it speed
+    up our convergence 100 times?” Unfortunately, the answer is no. Despite our expectations,
+    our DQN will fail to converge at all.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，在第一次更新循环中，正确的值将分别分配给 Q(s[2],a) 和 Q(s[3],a)。在第二次迭代中，Q(s[1],a) 的值也将得到正确更新。因此，多步操作提高了值的传播速度，从而改善了收敛性。你可能会想，“如果这样这么有帮助，那我们不妨将
+    Bellman 方程展开 100 步。这样会让我们的收敛速度加快 100 倍吗？”不幸的是，答案是否定的。尽管我们有所期待，我们的 DQN 完全无法收敛。
+- en: To understand why, let’s again return to our unrolling process, especially where
+    we dropped the max[a]. Was it correct? Strictly speaking, no. We omitted the max
+    operation at the intermediate step, assuming that our action selection during
+    experience gathering (or our policy) was optimal. What if it wasn’t, for example,
+    at the beginning of the training, when our agent acted randomly? In that case,
+    our calculated value for Q(s[t],a[t]) may be smaller than the optimal value of
+    the state (as some steps have been taken randomly, but not following the most
+    promising paths by maximizing the Q-value). The more steps on which we unroll
+    the Bellman equation, the more incorrect our update could be.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解为什么如此，我们再次回到我们的展开过程，特别是我们省略了 max[a]。这样做对吗？严格来说，答案是否定的。我们在中间步骤省略了 max 操作，假设我们在经验收集过程中（或者我们的策略）是最优的。假如不是呢？例如，在训练初期，我们的智能体是随机行为的。在这种情况下，我们计算出的
+    Q(s[t],a[t]) 值可能小于该状态的最优值（因为某些步骤是随机执行的，而不是通过最大化 Q 值来遵循最有希望的路径）。我们展开 Bellman 方程的步数越多，我们的更新可能就越不准确。
+- en: Our large experience replay buffer will make the situation even worse, as it
+    will increase the chance of getting transitions obtained from the old bad policy
+    (dictated by old bad approximations of Q). This will lead to a wrong update of
+    the current Q approximation, so it can easily break our training progress. This
+    problem is a fundamental characteristic of RL methods, as was briefly mentioned
+    in Chapter [4](ch008.xhtml#x1-740004), when we talked about RL methods’ taxonomy.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的大型经验回放缓冲区将使情况变得更糟，因为它会增加从旧的糟糕策略（由旧的糟糕Q近似所决定）获得过渡的机会。这将导致当前Q近似的错误更新，从而很容易破坏我们的训练进程。这个问题是强化学习方法的一个基本特征，正如我们在第[4](ch008.xhtml#x1-740004)章简要提到的，当时我们讨论了强化学习方法的分类。
+- en: 'There are two large classes of methods:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两大类方法：
+- en: 'Off-policy methods: The first class of off-policy methods doesn’t depend on
+    the “freshness of data.” For example, a simple DQN is off-policy, which means
+    that we can use very old data sampled from the environment several million steps
+    ago, and this data will still be useful for learning. That’s because we are just
+    updating the value of the action, Q(s[t],a[t]), with the immediate reward, plus
+    the discounted current approximation of the best action’s value. Even if action
+    a[t] was sampled randomly, it doesn’t matter because for this particular action
+    a[t], in the state s[t], our update will be correct. That’s why in off-policy
+    methods, we can use a very large experience buffer to make our data closer to
+    being independent and identically distributed (iid) .'
+  id: totrans-155
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于非策略的方法：第一类基于非策略的方法不依赖于“数据的新鲜度”。例如，简单的DQN就是基于非策略的，这意味着我们可以使用几百万步之前从环境中采样的非常旧的数据，这些数据仍然对学习有用。这是因为我们只是用即时奖励加上最佳行动价值的当前折扣近似来更新动作的价值Q(s[t],a[t])。即使动作a[t]是随机采样的，也无关紧要，因为对于这个特定的动作a[t]，在状态s[t]下，我们的更新是正确的。这就是为什么在基于非策略的方法中，我们可以使用一个非常大的经验缓冲区，使我们的数据更接近独立同分布（iid）。
+- en: 'On-policy methods: On the other hand, on-policy methods heavily depend on the
+    training data to be sampled according to the current policy that we are updating.
+    That happens because on-policy methods try to improve the current policy indirectly
+    (as in the previous n-step DQN) or directly (all of Part 3 of the book is devoted
+    to such methods).'
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于策略的方法：另一方面，基于策略的方法严重依赖于根据我们正在更新的当前策略来采样的训练数据。这是因为基于策略的方法试图间接（如之前的n步DQN）或直接（本书第三部分的内容完全是关于这种方法）改进当前策略。
+- en: So, which class of methods is better? Well, it depends. Off-policy methods allow
+    you to train on the previous large history of data or even on human demonstrations,
+    but they usually are slower to converge. On-policy methods are typically faster,
+    but require much more fresh data from the environment, which can be costly. Just
+    imagine a self-driving car trained with the on-policy method. It will cost you
+    a lot of crashed cars before the system learns that walls and trees are things
+    that it should avoid!
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，哪种方法更好呢？嗯，这取决于。基于非策略的方法允许你在先前的大量数据历史上进行训练，甚至在人工示范上进行训练，但它们通常收敛较慢。基于策略的方法通常更快，但需要更多来自环境的新鲜数据，这可能会很昂贵。试想一下，使用基于策略的方法训练一个自动驾驶汽车。在系统学会避开墙壁和树木之前，你得花费大量的撞车成本！
+- en: 'You may have a question: why are we talking about an n-step DQN if this “n-stepness”
+    turns it into an on-policy method, which will make our large experience buffer
+    useless? In practice, this is usually not black and white. You may still use an
+    n-step DQN if it will help to speed up DQNs, but you need to be modest with the
+    selection of n. Small values of two or three usually work well, because our trajectories
+    in the experience buffer are not that different from one-step transitions. In
+    such cases, convergence speed usually improves proportionally, but large values
+    of n can break the training process. So, the number of steps should be tuned,
+    but convergence speeding up usually makes it worth doing.'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会有一个问题：为什么我们要讨论一个n步DQN，如果这个“n步性”会使它变成一个基于策略的方法，这将使我们的大型经验缓冲区变得没用？实际上，这通常不是非黑即白的。你仍然可以使用n步DQN，如果它有助于加速DQN的训练，但你需要在选择n时保持谨慎。小的值，如二或三，通常效果很好，因为我们在经验缓冲区中的轨迹与一步过渡差别不大。在这种情况下，收敛速度通常会成比例地提高，但n值过大可能会破坏训练过程。因此，步数应该进行调优，但加速收敛通常使得这样做是值得的。
+- en: Implementation
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: 'As the ExperienceSourceFirstLast class already supports the multi-step Bellman
+    unroll, our n-step version of a DQN is extremely simple. There are only two modifications
+    that we need to make to the basic DQN to turn it into an n-step version:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于ExperienceSourceFirstLast类已经支持多步Bellman展开，因此我们的n步版本的DQN非常简单。我们只需要对基础DQN进行两个修改，就能将其转换为n步版本：
+- en: Pass the count of steps that we want to unroll on ExperienceSourceFirstLast
+    creation in the steps_count parameter.
+  id: totrans-161
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在ExperienceSourceFirstLast创建时，通过steps_count参数传递我们希望展开的步骤数。
+- en: Pass the correct gamma to the calc_loss_dqn function. This modification is really
+    easy to overlook, which could be harmful to convergence. As our Bellman is now
+    n-steps, the discount coefficient for the last state in the experience chain will
+    no longer be just γ, but γ^n.
+  id: totrans-162
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将正确的gamma值传递给calc_loss_dqn函数。这个修改非常容易被忽视，但却可能对收敛性产生不利影响。由于我们的Bellman现在是n步的，经验链中最后一个状态的折扣系数将不再是γ，而是γ^n。
+- en: 'You can find the whole example in Chapter08/02_dqn_n_steps.py, with only the
+    modified lines shown here:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在Chapter08/02_dqn_n_steps.py中找到整个示例，这里只展示了修改过的行：
+- en: '[PRE21]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: The n_steps value is a count of steps passed in command-line arguments; the
+    default is to use four steps.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: n_steps值是在命令行参数中传递的步数计数；默认使用四步。
+- en: 'Another modification is in gamma passed to the calc_loss_dqn function:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个修改是在传递给calc_loss_dqn函数的gamma值：
+- en: '[PRE22]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Results
+  id: totrans-168
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'The training module Chapter08/02_dqn_n_steps.py can be started as before, with
+    the additional command-line option -n, which gives a count of steps to unroll
+    the Bellman equation. These are charts for our baseline and n-step DQN (using
+    a common set of parameters), with n being equal to 2 and 3\. As you can see, the
+    Bellman unroll has given a significant convergence speedup:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练模块Chapter08/02_dqn_n_steps.py可以像以前一样启动，增加了命令行选项-n，表示展开Bellman方程的步骤数。这些是我们基线和n步DQN的图表（使用相同的参数集），其中n值为2和3。正如你所见，Bellman展开大大加速了收敛速度：
+- en: '![PIC](img/B22150_08_05.png)'
+  id: totrans-170
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_05.png)'
+- en: 'Figure 8.5: The reward and number of steps for basic (one-step) DQN and n-step
+    versions'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.5：基本（单步）DQN和n步版本的奖励和步骤数
+- en: 'As you can see in the diagram, the three-step DQN converges significantly faster
+    than the simple DQN, which is a nice improvement. So, what about a larger n? Figure [8.6](#x1-133004r6)
+    shows the reward dynamics for n = 3…6:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如图所示，三步DQN的收敛速度显著快于简单DQN，这是一个不错的改进。那么，n值更大呢？图[8.6](#x1-133004r6)展示了n = 3…6的奖励动态：
+- en: '![PIC](img/B22150_08_06.png)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_06.png)'
+- en: 'Figure 8.6: Reward dynamics for cases with n = 3…6 with common hyperparameters'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.6：n = 3…6的奖励动态，使用相同的超参数
+- en: As you can see, going from three steps to four has given some improvement, but
+    it is much less than before. The variant with n = 5 is worse and very close to
+    n = 2\. The same is true for n = 6\. So, in our case, n = 3 looks optimal.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，从三步到四步有所提升，但远不如之前的改进。n = 5的变体表现更差，几乎与n = 2相当。n = 6也是如此。所以，在我们的情况下，n = 3看起来是最优的。
+- en: Hyperparameter tuning
+  id: totrans-176
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: 'In this extension, hyperparameter tuning was done individually for every n
+    from 2 to 7\. The following table shows the best parameters and number of games
+    they require to solve the game:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个扩展中，超参数调优是针对每个n值从2到7单独进行的。以下表格显示了最佳参数以及它们解决游戏所需的游戏次数：
+- en: '| n | Learning rate | γ | Games |'
+  id: totrans-178
+  prefs: []
+  type: TYPE_TB
+  zh: '| n | 学习率 | γ | 游戏次数 |'
+- en: '| 2 | 3.97 ⋅ 10^(−5) | 0.98 | 293 |'
+  id: totrans-179
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2 | 3.97 ⋅ 10^(−5) | 0.98 | 293 |'
+- en: '| 3 | 7.82 ⋅ 10^(−5) | 0.98 | 260 |'
+  id: totrans-180
+  prefs: []
+  type: TYPE_TB
+  zh: '| 3 | 7.82 ⋅ 10^(−5) | 0.98 | 260 |'
+- en: '| 4 | 6.07 ⋅ 10^(−5) | 0.98 | 290 |'
+  id: totrans-181
+  prefs: []
+  type: TYPE_TB
+  zh: '| 4 | 6.07 ⋅ 10^(−5) | 0.98 | 290 |'
+- en: '| 5 | 7.52 ⋅ 10^(−5) | 0.99 | 268 |'
+  id: totrans-182
+  prefs: []
+  type: TYPE_TB
+  zh: '| 5 | 7.52 ⋅ 10^(−5) | 0.99 | 268 |'
+- en: '| 6 | 6.78 ⋅ 10^(−5) | 0.995 | 261 |'
+  id: totrans-183
+  prefs: []
+  type: TYPE_TB
+  zh: '| 6 | 6.78 ⋅ 10^(−5) | 0.995 | 261 |'
+- en: '| 7 | 8.59 ⋅ 10^(−5) | 0.98 | 284 |'
+  id: totrans-184
+  prefs: []
+  type: TYPE_TB
+  zh: '| 7 | 8.59 ⋅ 10^(−5) | 0.98 | 284 |'
+- en: 'Table 8.1: The best hyperparameters (learning rate and gamma) for every n'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表8.1：每个n值的最佳超参数（学习率和gamma）
+- en: This table also confirms the conclusions of the untuned version comparison —
+    unrolling the Bellman equation for two and three steps improves the convergence,
+    but a further increase of n produces worse results. n = 6 gives us a comparable
+    result to n = 3, but the outcomes for n = 4 and n = 5 are worse, so we should
+    stop at n = 3.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这张表格也验证了未调优版本比较的结论——对两步和三步展开Bellman方程可以提高收敛性，但进一步增加n会导致更差的结果。n = 6的结果与n = 3相当，但n
+    = 4和n = 5的结果更差，因此我们应该停在n = 3。
+- en: Figure [8.7](#x1-134003r7) compares the training dynamics of tuned versions
+    of the baseline and N-step DQN with n = 2 and n = 3.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图[8.7](#x1-134003r7)比较了基线和N步DQN调优版本的训练动态，分别为n = 2和n = 3。
+- en: '![PIC](img/B22150_08_07.png)'
+  id: totrans-188
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_07.png)'
+- en: 'Figure 8.7: The reward and number of steps after hyperparameter tuning'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.7：超参数调整后的奖励和步数
+- en: Double DQN
+  id: totrans-190
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Double DQN
+- en: The next fruitful idea on how to improve a basic DQN came from DeepMind researchers
+    in the paper titled Deep reinforcement learning with double Q-learning [[VGS16](#)].
+    In the paper, the authors demonstrated that the basic DQN tends to overestimate
+    values for Q, which may be harmful to training performance and sometimes can lead
+    to suboptimal policies. The root cause of this is the max operation in the Bellman
+    equation, but the strict proof is a bit complicated (you can find the full explanation
+    in the paper). As a solution to this problem, the authors proposed modifying the
+    Bellman update a bit.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何改进基本DQN的下一个富有成效的想法来自DeepMind研究人员在标题为深度强化学习中的双重Q学习的论文中[[VGS16](#)]。在论文中，作者证明了基本DQN倾向于高估Q值，这可能对训练性能有害，并且有时可能导致次优策略。这背后的根本原因是Bellman方程中的max操作，但其严格证明有点复杂（您可以在论文中找到完整的解释）。作为解决这个问题的方法，作者建议稍微修改贝尔曼更新。
+- en: 'In the basic DQN, our target value for Q looked like this:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基本DQN中，我们的Q的目标值看起来像这样：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq29.png)'
+  id: totrans-193
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq29.png)'
+- en: 'Q′(s[t+1],a) was Q-values calculated using our target network, the weights
+    of which are copied from the trained network every n steps. The authors of the
+    paper proposed choosing actions for the next state using the trained network,
+    but taking values of Q from the target network. So, the new expression for target
+    Q-values will look like this:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Q′(s[t+1],a) 是使用我们的目标网络计算的Q值，其权重每隔n步从训练网络复制一次。论文的作者建议选择使用训练网络为下一个状态选择动作，但从目标网络获取Q值。因此，目标Q值的新表达式如下所示：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq30.png)'
+  id: totrans-195
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq30.png)'
+- en: The authors proved that this simple tweak fixes overestimation completely, and
+    they called this new architecture double DQN.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作者证明了这个简单的小改进完全修复了高估问题，并称这种新架构为双重DQN。
+- en: Implementation
+  id: totrans-197
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实施
+- en: The core implementation is very simple. What we need to do is slightly modify
+    our loss function. But let’s go a step further and compare action values produced
+    by basic DQN and double DQN. According to the paper author’s our baseline DQN
+    should have consistently higher values predicted for the same states than the
+    double DQN version. To do this, we store a random held-out set of states and periodically
+    calculate the mean value of the best action for every state in the evaluation
+    set.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 核心实现非常简单。我们需要做的是稍微修改我们的损失函数。但是让我们再进一步，比较基本DQN和双重DQN生成的动作值。根据论文作者的说法，我们的基线DQN应该对于相同状态的预测值始终较高。为了做到这一点，我们存储一组随机保留的状态，并周期性地计算评估集中每个状态的最佳动作的均值。
+- en: 'The complete example is in Chapter08/03_dqn_double.py. Let’s first take a look
+    at the loss function:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整的示例位于Chapter08/03_dqn_double.py中。让我们先看一下损失函数：
+- en: '[PRE23]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'We will use this function instead of common.calc_loss_dqn and they both share
+    lots of code. The main difference is in the next Q-values estimation:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用这个函数而不是common.calc_loss_dqn，它们都共享大量代码。主要区别在于下一个Q值的估计：
+- en: '[PRE24]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: The preceding code snippet calculates the loss in a slightly different way.
+    In the double DQN version, we calculate the best action to take in the next state
+    using our main trained network, but values corresponding to this action come from
+    the target network.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码片段以稍微不同的方式计算损失。在双重DQN版本中，我们使用我们的主训练网络计算下一个状态中要采取的最佳动作，但与此动作对应的值来自目标网络。
+- en: This part could be implemented in a faster way, by combining next_states_v with
+    states_v and calling our main network only once, but it will make the code less
+    clear.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这部分可以通过将next_states_v与states_v合并，并仅调用我们的主网络一次来更快地实现，但这会使代码不太清晰。
+- en: 'The rest of the function is the same: we mask completed episodes and compute
+    the mean squared error (MSE) loss between Q-values predicted by the network and
+    approximated Q-values.'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数的其余部分与之相同：我们遮盖已完成的剧集，并计算网络预测的Q值与近似Q值之间的均方误差（MSE）损失。
+- en: 'The last function that we consider calculates the values of our held-out state:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们考虑的最后一个函数计算了我们保留状态的值：
+- en: '[PRE25]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'There is nothing complicated here: we just split our held-out states array
+    into equal chunks and pass every chunk to the network to obtain action values.
+    From those values, we choose the action with the largest value (for every state)
+    and calculate the mean of such values. As our array with states is fixed for the
+    whole training process, and this array is large enough (in the code, we store
+    1,000 states), we can compare the dynamics of this mean value in both DQN variants.
+    The rest of the 03_dqn_double.py file is almost the same; the two differences
+    are usage of our tweaked loss function and keeping a randomly sampled 1,000 states
+    for periodical evaluation. This happens in the process_batch function:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里并没有什么复杂的内容：我们只是将保留的状态数组划分成相等的块，并将每个块传递给网络以获得动作值。从这些值中，我们选择最大值的动作（对于每个状态），并计算这些值的平均值。由于我们的状态数组在整个训练过程中是固定的，并且这个数组足够大（在代码中，我们存储了1,000个状态），我们可以比较这两个
+    DQN 变体中的均值动态。03_dqn_double.py 文件中的其余部分几乎相同；两个不同之处是使用了我们调整过的损失函数，并且定期评估时保持了随机抽取的1,000个状态。这一过程发生在
+    process_batch 函数中：
+- en: '[PRE26]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Results
+  id: totrans-210
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: My experiments show that with common hyperparameters, double DQN has a negative
+    effect on reward dynamics. Sometimes, double DQN leads to better initial dynamics
+    and the trained agent learns how to win more games faster, but reaching the end
+    reward boundary takes longer. You can perform your own experiment on other games
+    or try parameters from the original paper.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我的实验表明，使用常见的超参数时，双重 DQN 对奖励动态有负面影响。有时，双重 DQN 会导致更好的初始动态，训练的智能体学会如何更快地赢得更多的游戏，但达到最终奖励边界需要更长时间。你可以在其他游戏上进行自己的实验，或者尝试原始论文中的参数。
+- en: 'The following are reward charts from the experiment where double DQN was a
+    bit better than the baseline version:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是实验中的奖励图表，其中双重 DQN 稍微优于基线版本：
+- en: '![PIC](img/B22150_08_08.png)'
+  id: totrans-213
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_08.png)'
+- en: 'Figure 8.8: Reward dynamics for double and baseline DQN'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.8：双重 DQN 和基线 DQN 的奖励动态
+- en: Besides the standard metrics, the example also outputs the mean value for the
+    held-out set of states, which are shown in Figure [8.9](#x1-137004r9).
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了标准度量外，示例还输出了保留状态集的均值，这些均值显示在图 [8.9](#x1-137004r9) 中。
+- en: '![PIC](img/B22150_08_09.png)'
+  id: totrans-216
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_09.png)'
+- en: 'Figure 8.9: Values predicted by the network for held-out states'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.9：网络预测的保留状态的值
+- en: As you can see, the basic DQN does an overestimation of values, so values decrease
+    after a certain level. In contrast, the double DQN grows more consistently. In
+    my experiments, the double DQN has only a small effect on the training time, but
+    this doesn’t necessarily mean that the double DQN is useless, as Pong is a simple
+    environment. In more complicated games, the double DQN could give better results.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，基本的 DQN 会高估值，因此值在达到某一水平后会下降。相比之下，双重 DQN 则增长得更加稳定。在我的实验中，双重 DQN 对训练时间的影响很小，但这并不一定意味着双重
+    DQN 没有用，因为 Pong 是一个简单的环境。在更复杂的游戏中，双重 DQN 可能会给出更好的结果。
+- en: Hyperparameter tuning
+  id: totrans-219
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调节
+- en: The tuning of hyperparameters also wasn’t very successful for the double DQN.
+    After 30 trials, the best values for the learning rate and gamma were able to
+    solve Pong in 412 games, which is worse than the baseline DQN.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于双重 DQN，超参数调节也不是特别成功。经过30次实验后，学习率和gamma的最佳值能在412局游戏内解决 Pong 问题，但这比基线 DQN 更差。
+- en: Noisy networks
+  id: totrans-221
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 噪声网络
+- en: 'The next improvement that we are going to look at addresses another RL problem:
+    exploration of the environment. The paper that we will draw from is called Noisy
+    networks for exploration [[For+17](#)] and it has a very simple idea for learning
+    exploration characteristics during training instead of having a separate schedule
+    related to exploration.'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一步改进是针对另一个 RL 问题：环境探索。我们将参考的论文叫做《Noisy networks for exploration》[[For+17](#)]，它提出了一个非常简单的想法，即在训练过程中学习探索特征，而不是依赖与探索相关的独立调度。
+- en: A classical DQN achieves exploration by choosing random actions with a specially
+    defined hyperparameter 𝜖, which is slowly decreased over time from 1.0 (fully
+    random actions) to some small ratio of 0.1 or 0.02\. This process works well for
+    simple environments with short episodes, without much non-stationarity during
+    the game; but even in such simple cases, it requires tuning to make the training
+    processes efficient.
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个经典的 DQN 通过选择随机动作来实现探索，这依赖于一个特别定义的超参数𝜖，该超参数会随着时间的推移从1.0（完全随机动作）逐渐降低至一个较小的比率，例如0.1或0.02。这个过程在简单的环境中表现良好，尤其是在游戏中没有太多非平稳性的短期回合内；但是即使是在这些简单的情况下，也需要调参来提高训练过程的效率。
+- en: In the Noisy Networks paper, the authors proposed a quite simple solution that,
+    nevertheless, works well. They add noise to the weights of fully connected layers
+    of the network and adjust the parameters of this noise during training using backpropagation.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在《噪声网络》论文中，作者提出了一个相当简单的解决方案，尽管如此，它仍然表现得非常有效。他们向网络的全连接层的权重中添加噪声，并在训练过程中通过反向传播调整这些噪声的参数。
+- en: This method shouldn’t be confused with “the network decides where to explore
+    more,” which is a much more complex approach that also has widespread support
+    (for example, see articles about intrinsic motivation and count-based exploration
+    methods [[Ost+17](#)], [[Mar+17](#)]). We will discuss advanced exploration techniques
+    in Chapter [21](ch025.xhtml#x1-39100021).
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法不应与“网络决定在哪些地方探索更多”混淆，这是一种更加复杂的方法，并且得到了广泛的支持（例如，参见关于内在动机和基于计数的探索方法的文章[[Ost+17](#)]，[
+    [Mar+17](#) ]）。我们将在第[21](ch025.xhtml#x1-39100021)章讨论高级探索技术。
+- en: 'The authors proposed two ways of adding the noise, both of which work according
+    to their experiments, but they have different computational overheads:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作者提出了两种添加噪声的方式，实验表明这两种方法都有效，但它们有不同的计算开销：
+- en: 'Independent Gaussian noise: For every weight in a fully connected layer, we
+    have a random value that we draw from the normal distribution. Parameters of the
+    noise, μ and σ, are stored inside the layer and get trained using backpropagation
+    in the same way that we train weights of the standard linear layer. The output
+    of such a “noisy layer” is calculated in the same way as in a linear layer.'
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 独立高斯噪声：对于每个全连接层的权重，我们都有一个从正态分布中抽取的随机值。噪声的参数μ和σ存储在该层内，并通过反向传播进行训练，就像训练标准线性层的权重一样。这种“噪声层”的输出计算方式与线性层相同。
+- en: 'Factorized Gaussian noise: To minimize the number of random values to be sampled,
+    the authors proposed keeping only two random vectors: one with the size of the
+    input and another with the size of the output of the layer. Then, a random matrix
+    for the layer is created by calculating the outer product of the vectors.'
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分解高斯噪声：为了最小化需要采样的随机值数量，作者建议只保留两个随机向量：一个是输入大小，另一个是层的输出大小。然后，通过计算这两个向量的外积，创建层的随机矩阵。
+- en: Implementation
+  id: totrans-229
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: In PyTorch, both methods can be easily implemented in a very straightforward
+    way. What we need to do is create our own custom nn.Linear layer with weights
+    calculated as w[i,j] = μ[i,j] + σ[i,j] ⋅𝜖[i,j], where μ and σ are trainable parameters
+    and 𝜖 ∼𝒩(0,1) is random noise sampled from the normal distribution after every
+    optimization step.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在PyTorch中，两种方法都可以非常直接地实现。我们需要做的是创建自定义的nn.Linear层，权重计算方式为w[i,j] = μ[i,j] + σ[i,j]
+    ⋅𝜖[i,j]，其中μ和σ是可训练参数，𝜖∼𝒩(0,1)是每次优化步骤后从正态分布中采样的随机噪声。
+- en: 'Previous editions of the book used my implementation of both methods, but now
+    we’ll simply use the implementation from the popular TorchRL library I mentioned
+    in Chapter [7](ch011.xhtml#x1-1070007). Let’s take a look at relevant parts of
+    the implementation (the full code can be found in torchrl/modules/models/exploration.py
+    in the TorchRL repository). The following is the constructor of the NoisyLinear
+    class, which creates all the parameters we need to optimize:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书的早期版本使用了我自己实现的这两种方法，但现在我们将直接使用我在第[7](ch011.xhtml#x1-1070007)章提到的流行TorchRL库中的实现。我们来看一下实现的相关部分（完整代码可以在TorchRL仓库中的torchrl/modules/models/exploration.py中找到）。以下是NoisyLinear类的构造函数，它创建了我们需要优化的所有参数：
+- en: '[PRE27]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: In the constructor, we create matrices for μ and σ. This implementation inherits
+    from torch.nn.Linear, but calls the nn.Module.__init__() method, so normal Linear
+    weights and bias buffers are not created.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在构造函数中，我们为μ和σ创建了矩阵。此实现继承自torch.nn.Linear，但调用了nn.Module.__init__()方法，因此不会创建标准Linear权重和偏置缓冲区。
+- en: To make new matrices trainable, we need to wrap their tensors in an nn.Parameter.
+    The register_buffer method creates a tensor in the network that won’t be updated
+    during backpropagation, but will be handled by the nn.Module machinery (for example,
+    it will be copied to the GPU with the cuda() call). An extra parameter and buffer
+    are created for the bias of the layer. At the end, we call the reset_parameters()
+    and reset_noise() methods, which perform the initialization of the created trainable
+    parameters and the buffer with the epsilon value.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使新的矩阵可训练，我们需要将它们的张量包装在nn.Parameter中。register_buffer方法在网络中创建一个不会在反向传播期间更新的张量，但会由nn.Module机制处理（例如，它会通过cuda()调用被复制到GPU）。为层的偏置创建了额外的参数和缓冲区。最后，我们调用reset_parameters()和reset_noise()方法，执行创建的可训练参数和带有epsilon值的缓冲区的初始化。
+- en: 'In the following three methods, we initialize the trainable parameters μ and
+    σ according to the paper:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下三个方法中，我们根据论文初始化可训练参数μ和σ：
+- en: '[PRE28]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: The matrix for μ is initialized with uniform random values. The initial value
+    for σ is constant depending on the count of neurons in the layer.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: μ的矩阵初始化为均匀随机值。σ的初始值是常量，取决于层中神经元的数量。
+- en: 'For the noise initialization, factorized Gaussian noise is used – we sample
+    two random vectors and calculate the outer product to get the matrix for 𝜖. The
+    outer product is a linear algebra operation when two vectors of the same size
+    are producing the square matrix filled with product of all combination of each
+    vector’s element. The rest is simple: we redefine the weight and bias properties,
+    which are expected in nn.Linear layer, so NoisyLinear could be used everywhere
+    nn.Linear is used:'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于噪声初始化，使用了因式分解高斯噪声——我们采样两个随机向量并计算外积以获得𝜖的矩阵。外积是一个线性代数操作，当两个大小相同的向量产生一个填充了每个向量元素组合乘积的方阵时就会发生。其余的很简单：我们重新定义权重和偏置属性，这些属性在nn.Linear层中是预期的，因此NoisyLinear可以在任何使用nn.Linear的地方使用：
+- en: '[PRE29]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: This implementation is simple, but has one very subtle nuance — the 𝜖 values
+    are not updated after every optimization step (and it is not mentioned in the
+    documentation). This issue is already reported in the TorchRL repo, but for the
+    current stable release, we have to call the reset_noise() method explicitly. Hopefully,
+    it will be fixed and the NoisyLinear layer will update the noise automatically.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个实现很简单，但有一个非常微妙的细节——𝜖值在每次优化步骤后并不会更新（文档中没有提到这一点）。这个问题已经在TorchRL仓库中报告，但在当前稳定版本中，我们必须显式调用reset_noise()方法。希望这个问题能得到修复，NoisyLinear层能够自动更新噪声。
+- en: From the implementation point of view, that’s it. What we now need to do to
+    turn the classic DQN into a noisy network variant is just replace nn.Linear (which
+    are the two last layers in our DQN network) with the NoisyLinear layer. Of course,
+    you have to remove all the code related to the epsilon-greedy strategy.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从实现角度来看，就是这样。现在我们需要做的就是将经典的DQN转换为噪声网络变体，只需将nn.Linear（这是我们DQN网络中的最后两层）替换为NoisyLinear层。当然，您需要移除与epsilon-greedy策略相关的所有代码。
+- en: To check the internal noise level during training, we can monitor the signal-to-noise
+    ratio (SNR) of our noisy layers, which is RMS(μ)∕RMS(σ), where RMS is the root
+    mean square of the corresponding weights. In our case, the SNR shows how many
+    times the stationary component of the noisy layer is larger than the injected
+    noise.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在训练期间检查内部噪声水平，我们可以监控噪声层的信噪比（SNR），其计算方式为RMS(μ)∕RMS(σ)，其中RMS是相应权重的均方根。在我们的例子中，SNR显示噪声层的静态成分比注入噪声大多少倍。
+- en: Results
+  id: totrans-243
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'After the training, the TensorBoard charts show much better training dynamics.
+    The model was able to reach the mean score of 18 after 250 games, which is an
+    improvement in comparison to 350 for the baseline DQN. But because of extra operations
+    required for noisy networks, their training is a bit slower (194 FPS versus 240
+    FPS for the baseline), so, time-wise, the difference is less impressive. But still,
+    the results look good:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练后，TensorBoard图表显示出更好的训练动态。模型在250局游戏后达到了平均得分18，相比基准DQN的350分有所提升。但由于噪声网络需要额外的操作，它们的训练速度稍慢（194
+    FPS对比基准的240 FPS），所以在时间上，差异不那么引人注目。但仍然，结果看起来很好：
+- en: '![PIC](img/B22150_08_10.png)'
+  id: totrans-245
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_10.png)'
+- en: 'Figure 8.10: Noisy networks compared to the baseline DQN'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.10：与基准DQN相比的噪声网络
+- en: After checking the SNR chart (Figure [8.11](#x1-141004r11)), you may notice
+    that both layers’ noise levels have decreased very quickly.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在查看信噪比（SNR）图表（图[8.11](#x1-141004r11)）后，您可能会注意到两个层的噪声水平都迅速下降了。
+- en: '![PIC](img/B22150_08_11.png)'
+  id: totrans-248
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_11.png)'
+- en: 'Figure 8.11: SNR change in layer 1 (left) and layer 2 (right)'
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.11：第1层（左）和第2层（右）的SNR变化
+- en: The first layer has gone from ![1 2](img/eq31.png) to almost ![-1- 2.6](img/eq32.png)
+    ratio of noise. The second layer is even more interesting, as its noise level
+    decreased from ![1 4](img/eq33.png) in the beginning to ![1- 16](img/eq34.png),
+    but after 450K frames (roughly the same time as when raw rewards climbed close
+    to the 20 score), the level of noise in the last layer started to increase again,
+    pushing the agent to explore the environment more. This makes a lot of sense,
+    as after reaching high score levels, the agent basically knows how to play at
+    a good level, but still needs to “polish” its actions to improve the results even
+    more.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一层的噪声比率已经从![1 2](img/eq31.png)变化到接近![ -1- 2.6](img/eq32.png)。第二层更有趣，因为它的噪声水平从最初的![1
+    4](img/eq33.png)降低到了![1- 16](img/eq34.png)，但在450K帧之后（大致与原始奖励接近20分时的时间相同），最后一层的噪声水平开始再次上升，推动代理更深入地探索环境。这是非常有意义的，因为在达到高分水平后，代理基本上已经知道如何玩得很好，但仍然需要“打磨”自己的行动，以进一步提高结果。
+- en: Hyperparameter tuning
+  id: totrans-251
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: 'After the tuning, the best set of parameters was able to solve the game after
+    273 rounds, which is an improvement over the baseline:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调优后，最佳参数集能够在273轮后解决游戏问题，相比基准方法有了改进：
+- en: '[PRE30]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'The following are charts comparing the reward dynamics and steps for tuned
+    baseline DQN and tuned noisy networks:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是调优后的基准DQN与调优后的噪声网络奖励动态和步数的比较图：
+- en: '![PIC](img/B22150_08_12.png)'
+  id: totrans-255
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_12.png)'
+- en: 'Figure 8.12: Comparison of tuned baseline DQN and tuned noisy network'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.12：调优后的基准DQN与调优后的噪声网络比较
+- en: 'On both charts, we see improvements introduced by noisy networks: it takes
+    fewer games to reach a score of 21 and during the training, games have a smaller
+    amount of steps.'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在两张图中，我们看到噪声网络带来的改进：达到21分所需的游戏次数减少，并且在训练过程中，游戏的步数减少。
+- en: Prioritized replay buffer
+  id: totrans-258
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 优先级回放缓冲区
+- en: The next very useful idea on how to improve DQN training was proposed in 2015
+    in the paper Prioritized experience replay [[Sch+15](#)]. This method tries to
+    improve the efficiency of samples in the replay buffer by prioritizing those samples
+    according to the training loss.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一项关于如何改进DQN训练的非常有用的想法是在2015年提出的，出现在论文《优先经验回放》[[Sch+15](#)]中。这种方法尝试通过根据训练损失对回放缓冲区中的样本进行优先级排序，从而提高样本的效率。
+- en: The basic DQN used the replay buffer to break the correlation between immediate
+    transitions in our episodes. As we discussed in Chapter [6](#), the examples we
+    experience during the episode will be highly correlated, as most of the time,
+    the environment is ”smooth” and doesn’t change much according to our actions.
+    However, the stochastic gradient descent (SGD) method assumes that the data we
+    use for training has an iid property. To solve this problem, the classic DQN method
+    uses a large buffer of transitions, randomly and uniformly sampled to get the
+    next training batch.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基本的DQN使用回放缓冲区来打破我们回合中即时转移之间的相关性。正如我们在第[6](#)章讨论的那样，我们在回合中经历的示例会高度相关，因为大多数时候，环境是“平滑”的，并且根据我们的行动变化不大。然而，随机梯度下降（SGD）方法假设我们用于训练的数据具有独立同分布（iid）特性。为了解决这个问题，经典DQN方法使用了一个大容量的转移缓冲区，并通过随机均匀采样来获取下一个训练批次。
+- en: The authors of the paper questioned this uniform random sample policy and proved
+    that by assigning priorities to buffer samples, according to training loss and
+    sampling the buffer proportional to those priorities, we can significantly improve
+    convergence and the policy quality of the DQN. This method’s basic idea could
+    be explained as “train more on data that surprises you.” The tricky point here
+    is to keep the balance of training on an “unusual” sample and training on the
+    rest of the buffer. If we focus only on a small subset of the buffer, we can lose
+    our i.i.d. property and simply overfit on this subset.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 论文的作者质疑了这种均匀随机采样策略，并证明通过根据训练损失给缓冲区样本分配优先级，并按优先级比例采样缓冲区样本，我们可以显著提高DQN的收敛性和策略质量。该方法的基本思想可以用“对令你感到惊讶的数据进行更多训练”来解释。这里的关键点是保持在“异常”样本上进行训练与在缓冲区其余部分上训练之间的平衡。如果我们仅关注缓冲区的一小部分样本，可能会丧失独立同分布（i.i.d.）特性，简单地在这个子集上过拟合。
+- en: From the mathematical point of view, the priority of every sample in the buffer
+    is calculated as ![ pα ∑kipα- k](img/eq35.png), where p[i] is the priority of
+    the i-th sample in the buffer and α is the number that shows how much emphasis
+    we give to the priority. If α = 0, our sampling will become uniform as in the
+    classic DQN method. Larger values for α put more stress on samples with higher
+    priority. So, it’s another hyperparameter to tune, and the starting value of α
+    proposed by the paper is 0.6.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从数学角度来看，缓冲区中每个样本的优先级计算公式为 ![ pα ∑kipα- k](img/eq35.png)，其中 p[i] 是缓冲区中第 i 个样本的优先级，α
+    是表示我们对优先级给予多少重视的参数。如果 α = 0，我们的采样将像经典的 DQN 方法一样变得均匀。较大的 α 值则会更加强调高优先级的样本。因此，这是另一个需要调节的超参数，论文中建议的
+    α 初始值为 0.6。
+- en: There were several options proposed in the paper for how to define the priority,
+    and the most popular is to make it proportional to the loss for this particular
+    example in the Bellman update. New samples added to the buffer need to be assigned
+    a maximum value of priority to be sure that they will be sampled soon.
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 论文中提出了几种定义优先级的选项，其中最流行的是将其与这个特定样本在贝尔曼更新中的损失成比例。新加入缓冲区的样本需要被赋予一个最大优先级值，以确保它们能尽快被采样。
+- en: By adjusting the priorities for the samples, we are introducing bias into our
+    data distribution (we sample some transitions much more frequently than others),
+    which we need to compensate for if SGD is to work. To get this result, the authors
+    of the study used sample weights, which needed to be multiplied by the individual
+    sample loss. The value of the weight for each sample is defined as w[i] = (N ⋅P(i))^(−β),
+    where β is another hyperparameter that should be between 0 and 1.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过调整样本的优先级，我们实际上是在数据分布中引入偏差（我们比其他转换更频繁地采样某些转换），如果希望SGD能够有效工作，我们需要对这种偏差进行补偿。为了得到这个结果，研究的作者使用了样本权重，这些权重需要与单个样本的损失相乘。每个样本的权重值定义为
+    w[i] = (N ⋅P(i))^(−β)，其中 β 是另一个超参数，应该在0和1之间。
+- en: With β = 1, the bias introduced by the sampling is fully compensated for, but
+    the authors showed that it’s good for convergence to start with β between 0 and
+    1 and slowly increase it to 1 during the training.
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 β = 1 时，采样引入的偏差得到了完全补偿，但作者表明，开始时将 β 设置在 0 到 1 之间，并在训练过程中逐渐增加到 1，有利于收敛。
+- en: Implementation
+  id: totrans-266
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: 'To implement this method, we have to introduce certain changes in our code:'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这个方法，我们必须在代码中做出一些特定的修改：
+- en: First of all, we need a new replay buffer that will track priorities, sample
+    a batch according to them, calculate weights, and let us update priorities after
+    the loss has become known.
+  id: totrans-268
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 首先，我们需要一个新的重放缓冲区，它将跟踪优先级、根据优先级采样批次、计算权重，并在损失值已知后让我们更新优先级。
+- en: The second change will be the loss function itself. Now we not only need to
+    incorporate weights for every sample, but we need to pass loss values back to
+    the replay buffer to adjust the priorities of the sampled transitions.
+  id: totrans-269
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第二个变化将是损失函数本身。现在我们不仅需要为每个样本引入权重，还需要将损失值回传到重放缓冲区，以调整采样转换的优先级。
+- en: In the main module, Chapter08/05_dqn_prio_replay.py, we have all those changes
+    implemented. For the sake of simplicity, the new priority replay buffer class
+    uses a very similar storage scheme to our previous replay buffer. Unfortunately,
+    new requirements for prioritization make it impossible to implement sampling in
+    𝒪(1) time (in other words, sampling time will grow with an increase in buffer
+    size). If we are using simple lists, every time that we sample a new batch, we
+    need to process all the priorities, which makes our sampling have 𝒪(N) time complexity
+    in proportion to the buffer size. It’s not a big deal if our buffer is small,
+    such as 100k samples, but may become an issue for real-life large buffers of millions
+    of transitions. There are other storage schemes that support efficient sampling
+    in 𝒪(log N) time, for example, using the segment tree data structure. There are
+    different versions of such optimized buffers available in various libraries –
+    for example, in TorchRL.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在主模块 Chapter08/05_dqn_prio_replay.py 中，我们已经实现了所有这些修改。为了简化，新的优先级重放缓冲区类使用与我们之前的重放缓冲区非常相似的存储方案。不幸的是，新的优先级要求使得无法以
+    𝒪(1) 时间复杂度实现采样（换句话说，采样时间将随着缓冲区大小的增加而增长）。如果我们使用简单的列表，每次采样新的一批样本时，我们需要处理所有优先级，这使得我们的采样时间复杂度与缓冲区大小成正比，达到
+    𝒪(N)。如果我们的缓冲区很小，比如100k样本，这并不是什么大问题，但对于现实中的大型缓冲区，样本数量达到数百万时，这可能成为一个问题。有其他支持在 𝒪(log
+    N) 时间内进行高效采样的存储方案，例如，使用线段树数据结构。各种库中都有这些优化后的缓冲区版本——例如，TorchRL中就有。
+- en: The PTAN library also provides an efficient prioritized replay buffer in the
+    class ptan.experience.PrioritizedReplayBuffer. You can update the example to use
+    the more efficient version and check the effect on training performance.
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PTAN库还提供了一个高效的优先级重放缓冲区，位于类ptan.experience.PrioritizedReplayBuffer中。您可以更新示例，使用更高效的版本，并检查其对训练性能的影响。
+- en: But, for now, let’s take a look at the naïve version, whose source code you
+    will find in lib/dqn_extra.py.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，现在让我们先看看朴素版本，其源代码可以在lib/dqn_extra.py中找到。
+- en: 'In the beginning, we define parameters for the β increase rate:'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始时，我们定义了β增加率的参数：
+- en: '[PRE31]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: Our beta will be changed from 0.4 to 1.0 during the first 100k frames.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的β将在前100k帧中从0.4变化到1.0。
+- en: 'Next comes the prioritized replay buffer class:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来是优先级重放缓冲区类：
+- en: '[PRE32]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: The class for the priority replay buffer inherits from the simple replay buffer
+    in PTAN, which stores samples in a circular buffer (it allows us to keep a fixed
+    amount of entries without reallocating the list). Our subclass uses a NumPy array
+    to keep priorities.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优先级重放缓冲区的类继承自PTAN中的简单重放缓冲区，该缓冲区将样本存储在一个循环缓冲区中（它允许我们保持固定数量的条目，而无需重新分配列表）。我们的子类使用NumPy数组来保持优先级。
+- en: 'The update_beta() method needs to be called periodically to increase beta according
+    to a schedule. The populate() method needs to pull the given number of transitions
+    from the ExperienceSource object and store them in the buffer:'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要定期调用update_beta()方法，以根据计划增加β值。populate()方法需要从ExperienceSource对象中提取给定数量的转换并将其存储在缓冲区中：
+- en: '[PRE33]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'As our storage for the transitions is implemented as a circular buffer, we
+    have two different situations with this buffer:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们的转换存储实现为循环缓冲区，因此我们在此缓冲区中有两种不同的情况：
+- en: When our buffer hasn’t reached the maximum capacity, we just need to append
+    a new transition to the buffer.
+  id: totrans-282
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当我们的缓冲区尚未达到最大容量时，我们只需要将新的转换追加到缓冲区中。
+- en: If the buffer is already full, we need to overwrite the oldest transition, which
+    is tracked by the pos class field, and adjust this position modulo buffer’s size.
+  id: totrans-283
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果缓冲区已经满了，我们需要覆盖最旧的转换，该转换由pos类字段跟踪，并调整该位置为缓冲区大小的模。
+- en: 'In the sample method, we need to convert priorities to probabilities using
+    our α hyperparameter:'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在示例方法中，我们需要使用我们的α超参数将优先级转换为概率：
+- en: '[PRE34]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Then, using those probabilities, we sample our buffer to obtain a batch of
+    samples:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，使用这些概率，我们从缓冲区中采样，以获得一批样本：
+- en: '[PRE35]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'As the last step, we calculate weights for samples in the batch:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一步，我们计算批处理中样本的权重：
+- en: '[PRE36]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'This returns three objects: the batch, indices, and weights. Indices for batch
+    samples are required to update priorities for sampled items.'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数返回三个对象：批处理、索引和权重。批处理样本的索引是更新采样项目优先级所必需的。
+- en: 'The last function of the priority replay buffer allows us to update new priorities
+    for the processed batch:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优先级重放缓冲区的最后一个函数允许我们更新处理过的批次的新优先级：
+- en: '[PRE37]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: It’s the responsibility of the caller to use this function with the calculated
+    losses for the batch.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调用者有责任在批处理的损失计算后使用此函数。
+- en: 'The next custom function that we have in our example is the loss calculation.
+    As the MSELoss class in PyTorch doesn’t support weights (which is understandable,
+    as MSE is loss used in regression problems, but weighting of the samples is commonly
+    utilized in classification losses), we need to calculate the MSE and explicitly
+    multiply the result on the weights:'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们示例中的下一个自定义函数是损失计算。由于PyTorch中的MSELoss类不支持权重（这是可以理解的，因为MSE是回归问题中使用的损失，但样本加权通常用于分类损失），我们需要计算MSE并显式地将结果与权重相乘：
+- en: '[PRE38]'
+  id: totrans-295
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: In the last part of the loss calculation, we implement the same MSE loss but
+    write our expression explicitly, rather than using the library. This allows us
+    to take into account the weights of samples and keep individual loss values for
+    every sample. Those values will be passed to the priority replay buffer to update
+    priorities. A small value is added to every loss to handle the situation of zero
+    loss value, which will lead to zero priority for an entry in the replay buffer.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在损失计算的最后部分，我们实现了相同的MSE损失，但显式地写出了我们的表达式，而不是使用库函数。这样可以考虑样本的权重，并为每个样本保持单独的损失值。这些值将传递给优先级重放缓冲区以更新优先级。每个损失值都会加上一个小值，以处理损失值为零的情况，这种情况会导致重放缓冲区中条目的优先级为零。
+- en: 'In the main section of our program, we have only two updates: the creation
+    of the replay buffer and our processing function. Buffer creation is straightforward,
+    so we will only take a look at a new processing function:'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们程序的主要部分，只有两个更新：回放缓冲区的创建和我们的处理函数。缓冲区创建很简单，所以我们只需要看一下新的处理函数：
+- en: '[PRE39]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'There are several changes here:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有几个变化：
+- en: 'Our batch now contains three entities: the batch of data, indices of sampled
+    items, and samples’ weights.'
+  id: totrans-300
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 现在我们的批次包含三种实体：数据批次、采样项的索引和样本的权重。
+- en: We call our new loss function, which accepts weights and returns the additional
+    items’ priorities. They are passed to the buffer.update_priorities() function
+    to reprioritize items that we have sampled.
+  id: totrans-301
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们称之为新的损失函数，它接受权重并返回额外项的优先级。这些优先级会传递给 `buffer.update_priorities()` 函数，以便重新调整我们采样的项的优先级。
+- en: We call the update_beta() method of the buffer to change the beta parameter
+    according to the schedule.
+  id: totrans-302
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们调用缓冲区的 `update_beta()` 方法，根据计划改变 beta 参数。
+- en: Results
+  id: totrans-303
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'This example can be trained as usual. According to my experiments, the prioritized
+    replay buffer took almost the same absolute time to solve the environment: almost
+    an hour. But it took fewer training iterations and fewer episodes. So, wall clock
+    time is the same mostly due to the less efficient replay buffer, which, of course,
+    could be resolved by proper 𝒪(log N) implementation of the buffer.'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个例子可以像往常一样训练。根据我的实验，优先级回放缓冲区几乎花费了相同的时间来解决环境：差不多一个小时。但它花费了更少的训练迭代和回合。因此，墙时钟时间几乎相同，主要是由于回放缓冲区效率较低，当然，这可以通过适当的
+    𝒪(log N) 实现来解决缓冲区的问题。
+- en: 'Here is the comparison of reward dynamics of the baseline and prioritized replay
+    buffer (right). The x axis is the game episodes:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是基线与优先级回放缓冲区（右侧）奖励动态的比较。横坐标是游戏回合：
+- en: '![PIC](img/B22150_08_13.png)'
+  id: totrans-306
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_08_13.png)'
+- en: 'Figure 8.13: Reward dynamics for prioritized replay buffer in comparison to
+    basic DQN'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.13：与基础 DQN 比较的优先级回放缓冲区奖励动态
+- en: 'Another difference to note on the TensorBoard charts is a much lower loss for
+    the prioritized replay buffer. The following chart shows the comparison:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorBoard 图表中还可以看到另一个不同之处，就是优先级回放缓冲区的损失值明显较低。以下图表展示了这一比较：
+- en: '![PIC](img/B22150_08_14.png)'
+  id: totrans-309
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_08_14.png)'
+- en: 'Figure 8.14: The comparison of loss during the training'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.14：训练过程中损失的比较
+- en: 'Lower loss value is also expected and is a good sign that our implementation
+    works. The idea of prioritization is to train more on samples with high loss value,
+    so training becomes more efficient. But there is a danger here: loss value during
+    the training is not the primary objective to optimize; we can have very low loss,
+    but due to a lack of exploration, the final policy learned could be far from being
+    optimal.'
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 较低的损失值也是可以预期的，并且是我们实现有效的良好迹象。优先级的核心思想是更多地训练那些损失值较高的样本，使得训练更加高效。但这里有一个风险：训练中的损失值并不是优化的主要目标；我们可以有非常低的损失值，但由于缺乏探索，最终学习到的策略可能远未达到最优。
+- en: Hyperparameter tuning
+  id: totrans-312
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: 'Hyperparameter tuning for the prioritized replay buffer was done with an additional
+    parameter for α, which was sampled from a fixed list of values ranging from 0.3
+    to 0.9 (with steps of 0.1). The best combination was able to solve Pong after
+    330 episodes and had α = 0.6 (the same as in the paper):'
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对优先级回放缓冲区的超参数调优是通过为 α 引入一个额外的参数进行的，α 的值从 0.3 到 0.9（步长为 0.1）之间的固定列表中采样。最佳组合能够在
+    330 个回合后解决 Pong 问题，并且 α = 0.6（与论文中的相同）：
+- en: '[PRE40]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'The following are charts comparing the tuned baseline DQN with the tuned prioritized
+    replay buffer:'
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是比较调整后的基线 DQN 与调整后的优先级回放缓冲区的图表：
+- en: '![PIC](img/B22150_08_15.png)'
+  id: totrans-316
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_08_15.png)'
+- en: 'Figure 8.15: Comparison of tuned baseline DQN and tuned prioritized replay
+    buffer'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.15：调整后的基线 DQN 和调整后的优先级回放缓冲区比较
+- en: Here, we see the prioritized replay buffer had faster gameplay improvement,
+    but it took almost the same amount of games to reach score 21\. On the right chart
+    (with the amount of game steps), the prioritized replay buffer was also a bit
+    better.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们看到优先级回放缓冲区的游戏玩法改进更快，但达到 21 分所需的游戏数量几乎相同。在右边的图表（以游戏步骤为单位）中，优先级回放缓冲区的表现也略优。
+- en: Dueling DQN
+  id: totrans-319
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 对抗 DQN
+- en: 'This improvement to DQN was proposed in 2015, in the paper called Dueling network
+    architectures for deep reinforcement learning [[Wan+16](#)]. The core observation
+    of this paper is that the Q-values, Q(s,a), that our network is trying to approximate
+    can be divided into quantities: the value of the state, V (s), and the advantage
+    of actions in this state, A(s,a).'
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一改进于 2015 年在论文《Dueling Network Architectures for Deep Reinforcement Learning》中提出
+    [[Wan+16](#)]。这篇论文的核心观点是，网络试图近似的 Q 值 Q(s,a) 可以分为两个部分：状态的值 V (s) 和该状态下动作的优势 A(s,a)。
+- en: You have seen the quantity V (s) before, as it was the core of the value iteration
+    method from Chapter [5](ch009.xhtml#x1-820005). It is just equal to the discounted
+    expected reward achievable from this state. The advantage A(s,a) is supposed to
+    bridge the gap from V (s) to Q(s,a), as, by definition, Q(s,a) = V (s) + A(s,a).
+    In other words, the advantage A(s,a) is just the delta, saying how much extra
+    reward some particular action from the state brings us. The advantage could be
+    positive or negative and, in general, could have any magnitude. For example, at
+    some tipping point, the choice of one action over another can cost us a lot of
+    the total reward.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你之前见过 V (s) 这一量，它是第 [5](ch009.xhtml#x1-820005) 章中值迭代方法的核心。它等于从该状态出发可以获得的折扣预期奖励。优势
+    A(s,a) 旨在弥合 V (s) 和 Q(s,a) 之间的差距，因为根据定义，Q(s,a) = V (s) + A(s,a)。换句话说，优势 A(s,a)
+    只是增量，表示从该状态采取某一特定动作带来的额外奖励。优势可以是正值也可以是负值，通常可以具有任何大小。例如，在某个临界点，选择某一动作而非另一动作可能会让我们失去很多总奖励。
+- en: 'The Dueling paper’s contribution was an explicit separation of the value and
+    the advantage in the network’s architecture, which brought better training stability,
+    faster convergence, and better results on the Atari benchmark. The architecture
+    difference from the classic DQN network is shown in the following illustration.
+    The classic DQN network (top) takes features from the convolution layer and, using
+    fully connected layers, transforms them into a vector of Q-values, one for each
+    action. On the other hand, dueling DQN (bottom) takes convolution features and
+    processes them using two independent paths: one path is responsible for V (s)
+    prediction, which is just a single number, and another path predicts individual
+    advantage values, having the same dimension as Q-values in the classic case. After
+    that, we add V (s) to every value of A(s,a) to obtain Q(s,a), which is used and
+    trained as normal. Figure [8.16](#x1-147004r16) (from the paper) compares the
+    basic DQN and dueling DQN:'
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Dueling 论文的贡献在于明确区分了网络架构中的价值和优势，这带来了更好的训练稳定性、更快的收敛速度以及在 Atari 基准测试中更好的结果。与经典
+    DQN 网络的架构差异如下图所示。经典的 DQN 网络（上图）从卷积层提取特征，并通过全连接层将其转换为 Q 值向量，每个动作对应一个 Q 值。另一方面，Dueling
+    DQN（下图）从卷积层提取特征，并通过两条独立的路径处理它们：一条路径负责预测 V (s)，即一个单一的数值，另一条路径预测各个动作的优势值，维度与经典情况下的
+    Q 值相同。之后，我们将 V (s) 加到每个 A(s,a) 的值上，从而得到 Q(s,a)，这个值像通常的 Q 值一样被使用并训练。图 [8.16](#x1-147004r16)（来自论文）比较了基本的
+    DQN 和 Dueling DQN：
+- en: '![PIC](img/file58.png)'
+  id: totrans-323
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file58.png)'
+- en: 'Figure 8.16: A basic DQN (top) and dueling architecture (bottom)'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.16：基本的 DQN（上图）和 Dueling 架构（下图）
+- en: 'These changes in the architecture are not enough to make sure that the network
+    will learn V (s) and A(s,a) as we want it to. Nothing prevents the network, for
+    example, from predicting some state, V (s) = 0, and A(s) = [1,2,3,4], which is
+    completely wrong, as the predicted V (s) is not the expected value of the state.
+    We have yet another constraint to set: we want the mean value of the advantage
+    of any state to be zero. In that case, the correct prediction for the preceding
+    example will be V (s) = 2.5 and A(s) = [−1.5,−0.5,0.5,1.5].'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些架构的变化并不足以确保网络按我们希望的方式学习 V (s) 和 A(s,a)。例如，网络可能预测某个状态的 V (s) = 0 和 A(s) = [1,2,3,4]，这种情况是完全错误的，因为预测的
+    V (s) 不是该状态的期望值。我们还需要设定一个额外的约束：我们希望任何状态下优势的均值为零。在这种情况下，前述例子的正确预测应该是 V (s) = 2.5
+    和 A(s) = [−1.5,−0.5,0.5,1.5]。
+- en: 'This constraint could be enforced in various ways, for example, via the loss
+    function; but in the Dueling paper, the authors proposed the very elegant solution
+    of subtracting the mean value of the advantage from the Q expression in the network,
+    which effectively pulls the mean for the advantage to zero:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个约束可以通过多种方式强制执行，例如通过损失函数；但在 Dueling 论文中，作者提出了一种非常优雅的解决方案：从网络的 Q 表达式中减去优势的均值，这样可以有效地将优势的均值拉至零：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq36.png)'
+  id: totrans-327
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq36.png)'
+- en: 'This keeps the changes that need to be made in the classic DQN very simple:
+    to convert it to the double DQN, you need to change only the network architecture,
+    without affecting other pieces of the implementation.'
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这使得将经典DQN转变为双DQN的修改非常简单：只需要改变网络架构，而不影响实现的其他部分。
+- en: Implementation
+  id: totrans-329
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: The complete example is available in Chapter08/06_dqn_dueling.py. All the changes
+    sit in the network architecture, so here, I’ll only show the network class (which
+    is in the lib/dqn_extra.py module).
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整的示例可以在Chapter08/06_dqn_dueling.py中找到。所有的改动都在网络架构中，因此这里我只展示网络类（位于lib/dqn_extra.py模块中）。
+- en: 'The convolution part is exactly the same as before:'
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 卷积部分与之前完全相同：
+- en: '[PRE41]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Instead of defining a single path of fully connected layers, we create two
+    different transformations: one for advantages and one for value prediction:'
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们没有定义一个单一的完全连接层路径，而是创建了两种不同的变换：一种用于优势，另一种用于价值预测：
+- en: '[PRE42]'
+  id: totrans-334
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Also, to keep the number of parameters in the model comparable to the original
+    network, the inner dimension in both paths is decreased from 512 to 256\. The
+    changes in the forward() function are also very simple, thanks to PyTorch’s expressiveness:'
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，为了保持模型中的参数数量与原始网络相当，两条路径中的内部维度从512减少到256。得益于PyTorch的表达能力，forward()函数中的变化也非常简单：
+- en: '[PRE43]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Here, we calculate the value and advantage for our batch of samples and add
+    them together, subtracting the mean of the advantage to obtain the final Q-values.
+    A subtle, but important, difference lies in calculating the mean along the second
+    dimension of the tensor, which produces a vector of the mean advantage for every
+    sample in our batch.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们计算批次样本的价值和优势并将它们加在一起，减去优势的均值以获得最终的Q值。一个微妙但重要的区别是在计算张量的第二维度上的均值，这会为我们批次中的每个样本生成一个均值优势的向量。
+- en: Results
+  id: totrans-338
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'After training a dueling DQN, we can compare it to the classic DQN convergence
+    on our Pong benchmark. Dueling architecture has faster convergence in comparison
+    to the basic DQN version:'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练一个对抗DQN后，我们可以将其与经典DQN在Pong基准测试中的收敛性进行比较。与基础DQN版本相比，对抗架构的收敛速度更快：
+- en: '![PIC](img/B22150_08_17.png)'
+  id: totrans-340
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_08_17.png)'
+- en: 'Figure 8.17: The reward dynamic of dueling DQN compared to the baseline version'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.17：对抗DQN与基线版本的奖励动态比较
+- en: 'Our example also outputs the advantage and value for a fixed set of states,
+    shown in the following charts. They meet our expectations: the advantage is not
+    very different from zero, but the value improves over time (and resembles the
+    value from the Double DQN section):'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的示例还输出了对于一组固定状态的优势和价值，如下图所示。它们符合我们的预期：优势与零差异不大，但随着时间推移，价值在不断提高（并且类似于Double
+    DQN部分中的值）：
+- en: '![PIC](img/B22150_08_18.png)'
+  id: totrans-343
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_08_18.png)'
+- en: 'Figure 8.18: Mean advantage (left) and value (right) on a fixed set of states'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.18：固定状态集上的均值优势（左）和价值（右）
+- en: Hyperparameter tuning
+  id: totrans-345
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调整
+- en: The tuning of the hyperparameters was not very fruitful. After 30 tuning iterations,
+    there were no combinations of learning rate and gamma that were able to converge
+    faster than the common set of parameters.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 超参数的调整并未带来很大收获。在30次调整迭代后，没有任何学习率和gamma的组合能够比常用参数组合更快收敛。
+- en: Categorical DQN
+  id: totrans-347
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 类别化DQN
+- en: The last, and the most complicated, method in our DQN improvements toolbox is
+    from the paper published by DeepMind in June 2017, called A distributional perspective
+    on reinforcement learning [[BDM17](#)]. Although this paper is a few years old
+    now, it remains highly relevant, and active research is still ongoing in this
+    area. The book Distributional reinforcement learning was published in 2023, where
+    the same authors describe the method in greater detail [[BDR23](#)].
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的DQN改进工具箱中的最后一种方法，也是最复杂的一种，来自DeepMind于2017年6月发表的论文《强化学习的分布式视角》[[BDM17](#)]。尽管这篇论文已经有几年历史，但它仍然非常相关，且这一领域的研究仍在持续进行中。2023年出版的《分布式强化学习》一书中，作者们更详细地描述了该方法[[BDR23](#)]。
+- en: In the paper, the authors questioned the fundamental pieces of Q-learning —
+    Q-values — and tried to replace them with a more generic Q-value probability distribution.
+    Let’s try to understand the idea. Both the Q-learning and value iteration methods
+    work with the values of the actions or states represented as simple numbers and
+    showing how much total reward we can achieve from a state, or an action and a
+    state. However, is it practical to squeeze all future possible rewards into one
+    number? In complicated environments, the future could be stochastic, giving us
+    different values with different probabilities.
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在论文中，作者质疑了Q学习中的基本元素——Q值——并尝试用更通用的Q值概率分布来替代它们。让我们来理解这个概念。Q学习和价值迭代方法都使用表示动作或状态的数值，展示从某个状态或某个动作和状态组合中能够获得多少总奖励。然而，将所有未来可能的奖励压缩成一个数字，实际可行吗？在复杂的环境中，未来可能是随机的，会给我们带来不同的值和不同的概率。
+- en: 'For example, imagine the commuter scenario when you regularly drive from home
+    to work. Most of the time, the traffic isn’t that heavy, and it takes you around
+    30 minutes to reach your destination. It’s not exactly 30 minutes, but on average
+    it’s 30\. From time to time, something happens, like road repairs or an accident,
+    and due to traffic jams, it takes you three times longer to get to work. The probability
+    of your commute time can be represented as a distribution of the “commute time”
+    random variable, and it is shown in the following chart:'
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 比如，想象一下你每天从家里开车去上班的通勤情境。大多数时候，交通不算太堵，通常你能在大约30分钟内到达目的地。这并不一定是准确的30分钟，但平均下来是30分钟。偶尔，也会发生一些情况，比如道路维修或事故，导致交通堵塞，你的通勤时间可能是平常的三倍。你的通勤时间的概率可以用“通勤时间”这一随机变量的分布来表示，分布如下图所示：
+- en: '![PIC](img/B22150_08_19.png)'
+  id: totrans-351
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_19.png)'
+- en: 'Figure 8.19: The probability distribution of commute time'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.19：通勤时间的概率分布
+- en: 'Now, imagine that you have an alternative way to get to work: the train. It
+    takes a bit longer, as you need to get from home to the train station and from
+    the station to the office, but they are much more reliable than traveling by car
+    (in some contries, like Germany, it might not be the case, but let’s consider
+    Swiss trains for our example). Say, for instance, that the train commute time
+    is 40 minutes on average, with a small chance of train disruption, which adds
+    20 minutes of extra time to the journey. The distribution of the train commute
+    is shown in the following graph:'
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，假设你有另一种上班的方式：坐火车。虽然需要稍微多花点时间，因为你需要从家里到火车站，再从火车站到办公室，但相比开车，火车更可靠（在一些国家，如德国，情况可能不同，但我们假设使用瑞士的火车作为例子）。比如说，火车的通勤时间平均是40分钟，偶尔会有火车延误的情况，通常会增加20分钟的额外时间。火车通勤时间的分布如下图所示：
+- en: '![PIC](img/B22150_08_20.png)'
+  id: totrans-354
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_20.png)'
+- en: 'Figure 8.20: The probability distribution of train commute time'
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.20：开车通勤时间的概率分布
+- en: Imagine that now we want to make the decision on how to commute. If we know
+    only the mean time for both car and train, a car looks more attractive, as on
+    average it takes 35.43 minutes to travel, which is better than 40.54 minutes for
+    the train.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设现在我们要做出通勤方式的选择。如果我们只知道开车和火车的平均通勤时间，那么开车看起来更有吸引力，因为开车的平均通勤时间是35.43分钟，比火车的40.54分钟要短。
+- en: However, if we look at full distributions, we may decide to go by train, as
+    even in the worst-case scenario, it will be one hour of commuting versus one hour
+    and 30 minutes. Switching to statistical language, the car distribution has much
+    higher variance, so in situations when you really have to be at the office in
+    60 minutes max, the train is better.
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果我们看完整的分布图，我们可能会选择坐火车，因为即使在最坏的情况下，火车的通勤时间也只有一个小时，而开车则是一个小时30分钟。换成统计语言，开车的分布具有更高的方差，因此在你必须在60分钟内到达办公室的情况下，火车更为合适。
+- en: The situation becomes even more complicated in the Markov decision process (MDP)
+    scenario, when the sequence of decisions needs to be made and every decision might
+    influence the future situation. In the commute example, it might be the time of
+    an important meeting that you need to arrange given the way that you are going
+    to commute. In that case, working with mean reward values might mean losing lots
+    of information about the underlying environment dynamics.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在马尔可夫决策过程（MDP）场景中，情况变得更加复杂，因为决策需要按顺序进行，而且每个决策可能会影响未来的情况。比如在通勤例子中，可能是你需要安排一个重要会议的时间，而这个安排可能会受到你选择的通勤方式的影响。在这种情况下，使用均值奖励值可能会丧失关于环境动态的很多信息。
+- en: Exactly the same idea was proposed by the authors of Distributional Perspective
+    on Reinforcement Learning [9]. Why do we limit ourselves by trying to predict
+    an average value for an action, when the underlying value may have a complicated
+    underlying distribution? Maybe it will help us to work with distributions directly.
+    The results presented in the paper show that, in fact, this idea could be helpful,
+    but at the cost of introducing a more complicated method. I’m not going to put
+    a strict mathematical definition here, but the overall idea is to predict the
+    distribution of value for every action, similar to the distributions for our car/train
+    example. As the next step, the authors showed that the Bellman equation can be
+    generalized for a distribution case, and it will have the form Z(x,a)![D =](img/eq37.png)R(x,a)
+    + γZ(x′,a′), which is very similar to the familiar Bellman equation, but now Z(x,a)
+    and R(x,a) are the probability distributions and are not single numbers. The notation
+    A![ D =](img/eq37.png)B indicates eqality of distributions A and B.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完全相同的观点是由《强化学习的分布式视角》一文的作者提出的[9]。为什么我们要限制自己，试图为一个动作预测一个平均值，而忽略了其潜在值可能具有复杂的分布？也许直接处理分布会对我们有所帮助。论文中展示的结果表明，事实上，这个想法可能是有帮助的，但代价是引入了更复杂的方法。我在这里不会给出严格的数学定义，但总体思路是为每个动作预测值的分布，类似于我们汽车/火车例子中的分布。作为下一步，作者们展示了贝尔曼方程可以推广到分布的情况，并且它的形式为Z(x,a)![D
+    =](img/eq37.png)R(x,a) + γZ(x′,a′)，这与我们熟悉的贝尔曼方程非常相似，但现在Z(x,a)和R(x,a)是概率分布，而不是单一数值。符号A![
+    D =](img/eq37.png)B表示分布A和B的相等。
+- en: The resulting distribution can be used to train our network to give better predictions
+    of value distribution for every action of the given state, exactly in the same
+    way as with Q-learning. The only difference will be in the loss function, which
+    now has to be replaced with something suitable for distribution comparison. There
+    are several alternatives available, for example, Kullback-Leibler (KL) divergence
+    (or cross-entropy loss), which is used in classification problems, or the Wasserstein
+    metric. In the paper, the authors gave theoretical justification for the Wasserstein
+    metric, but when they tried to apply it in practice, they faced limitations. So,
+    in the end, the paper used KL divergence.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 得到的分布可以用来训练我们的网络，以便为给定状态下的每个动作提供更好的值分布预测，方法与Q学习完全相同。唯一的区别在于损失函数，现在必须用适合分布比较的内容替代它。这里有几个可用的替代方法，例如，Kullback-Leibler（KL）散度（或交叉熵损失），它通常用于分类问题，或者Wasserstein度量。在论文中，作者为Wasserstein度量提供了理论依据，但在实践中尝试应用时，遇到了一些限制。所以，最终论文中使用了KL散度。
+- en: Implementation
+  id: totrans-361
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: As mentioned, the method is quite complex, so it took me a while to implement
+    it and make sure it was working. The complete code is in Chapter08/07_dqn_distrib.py,
+    which uses the distr_projection function in lib/dqn_extra.py to perform distribution
+    projection. Before we check it, I need to say a few words about the implementation
+    logic.
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，这个方法相当复杂，所以我花了一些时间来实现它并确保其正常工作。完整代码在Chapter08/07_dqn_distrib.py中，其中使用了lib/dqn_extra.py中的distr_projection函数来执行分布投影。在检查之前，我需要先简单说明一下实现逻辑。
+- en: The central part of the method is the probability distribution, which we are
+    approximating. There are lots of ways to represent the distribution, but the authors
+    of the paper chose a quite generic parametric distribution, which is basically
+    a fixed number of values placed regularly on a values range. The range of values
+    should cover the range of possible accumulated discounted reward. In the paper,
+    the authors did experiments with various numbers of atoms, but the best results
+    were obtained with the range split on N_ATOMS=51 intervals in the range of values
+    from Vmin=-10 to Vmax=10.
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 方法的核心部分是我们正在逼近的概率分布。有很多方法可以表示这个分布，但论文的作者选择了一个相当通用的参数化分布，基本上是将一组固定数值均匀分布在一个数值范围上。这个数值范围应该覆盖可能的累计折扣奖励范围。在论文中，作者做了多个不同数量的原子实验，但最佳结果是在值的范围从Vmin=-10到Vmax=10中将范围划分为N_ATOMS=51个区间时获得的。
+- en: 'For every atom (we have 51 of them), our network predicts the probability that
+    the future discounted value will fall into this atom’s range. The central part
+    of the method is the code, which performs the contraction of distribution of the
+    next state’s best action using gamma, adds local reward to the distribution, and
+    projects the results back into our original atoms. This logic is implemented in
+    the dqn_extra.distr_projection function. In the beginning, we allocate the array
+    that will keep the result of the projection:'
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于每个原子（我们有 51 个），我们的网络预测未来折扣值落在此原子范围内的概率。方法的核心部分是代码，它执行下一个状态最佳动作的分布收缩，使用 gamma，向分布中添加局部奖励，并将结果投影回到原始原子中。这个逻辑在
+    dqn_extra.distr_projection 函数中实现。一开始，我们分配了一个数组来保存投影结果：
+- en: '[PRE44]'
+  id: totrans-365
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'This function expects the batch of distributions with a shape (batch_size,
+    N_ATOMS), the array of rewards, flags for completed episodes, and our hyperparameters:
+    Vmin, Vmax, N_ATOMS, and gamma. The delta_z variable is the width of every atom
+    in our value range.'
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数接受形状为(batch_size, N_ATOMS)的分布批次，奖励数组，已完成回合的标志以及我们的超参数：Vmin, Vmax, N_ATOMS
+    和 gamma。delta_z 变量表示我们值范围中每个原子的宽度。
+- en: 'In the following code, we iterate over every atom in the original distribution
+    that we have and calculate the place that this atom will be projected to by the
+    Bellman operator, taking into account our value bounds:'
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们遍历原始分布中的每个原子，并计算该原子将由 Bellman 操作符投影到的位置，同时考虑我们的值范围：
+- en: '[PRE45]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: For example, the very first atom, with index 0, corresponds with the value Vmin=-10,
+    but for the sample with reward +1 will be projected into the value −10 ⋅ 0.99
+    + 1 = −8.9\. In other words, it will be shifted to the right (assume gamma=0.99).
+    If the value falls beyond our value range given by Vmin and Vmax, we clip it to
+    the bounds.
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，第一个原子，索引为 0，对应的值为 Vmin=-10，但对于奖励 +1 的样本，将投影到值 −10 ⋅ 0.99 + 1 = −8.9。换句话说，它将向右移动（假设
+    gamma=0.99）。如果该值超出了由 Vmin 和 Vmax 给出的值范围，我们会将其裁剪到边界内。
+- en: 'In the next line, we calculate the atom numbers that our samples have projected:'
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一行，我们计算样本投影到的原子编号：
+- en: '[PRE46]'
+  id: totrans-371
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: Of course, samples can be projected between atoms. In such situations, we spread
+    the value in the original distribution at the source atom between the two atoms
+    that it falls between. This spreading should be carefully handled, as our target
+    atom can land exactly at some atom’s position. In that case, we just need to add
+    the source distribution value to the target atom.
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，样本可以投影到原子之间。在这种情况下，我们将源原子中的值分配到其之间的两个原子中。这个分配需要小心处理，因为目标原子可能恰好落在某个原子的位置。在这种情况下，我们只需要将源分布值添加到目标原子。
+- en: 'The following code handles the situation when the projected atom lands exactly
+    on the target atom. Otherwise, b_j won’t be the integer value and variables l
+    and u (which correspond to the indices of atoms below and above the projected
+    point):'
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下代码处理当投影原子正好落在目标原子上的情况。否则，b_j 将不是整数值，变量 l 和 u（分别对应投影点下方和上方的原子索引）：
+- en: '[PRE47]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'When the projected point lands between atoms, we need to spread the probability
+    of the source atom between the atoms below and above. This is carried out by two
+    lines in the following code:'
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当投影点落在原子之间时，我们需要将源原子的概率分配到下方和上方的原子之间。这通过以下代码中的两行来实现：
+- en: '[PRE48]'
+  id: totrans-376
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: Of course, we need to properly handle the final transitions of episodes. In
+    that case, our projection shouldn’t take into account the next distribution and
+    should just have a 1 probability corresponding to the reward obtained.
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，我们需要正确处理回合的最终过渡。在这种情况下，我们的投影不应考虑下一个分布，而应仅具有与获得的奖励对应的 1 的概率。
+- en: 'However, we again need to take into account our atoms and properly distribute
+    this probability if the reward value falls between atoms. This case is handled
+    by the following code branch, which zeroes the resulting distribution for samples
+    with the done flag set and then calculates the resulting projection:'
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，我们需要再次考虑原子，并在奖励值落在原子之间时，正确地分配概率。此情况由以下代码分支处理，该分支会为已设置“done”标志的样本将结果分布归零，然后计算最终的投影结果：
+- en: '[PRE49]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: To give you an illustration of what this function does, let’s look at artificially
+    made distributions processed by this function (Figure [8.21](#x1-152038r21)).
+    I used them to debug the function and make sure that it worked as intended. The
+    code for these checks is in Chapter08/adhoc/distr_test.py.
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了给你演示这个函数的作用，让我们看一下通过该函数处理的人工制作的分布图（图表[8.21](#x1-152038r21)）。我用它们来调试函数并确保其按预期工作。这些检查的代码在Chapter08/adhoc/distr_test.py中。
+- en: '![PIC](img/B22150_08_21.png)'
+  id: totrans-381
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_21.png)'
+- en: 'Figure 8.21: The sample of the probability distribution transformation applied
+    to a normal distribution'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图表8.21：应用于正态分布的概率分布变换的样本
+- en: The top chart of Figure [8.21](#x1-152038r21) (named Source) is a normal distribution
+    with μ = 0 and σ = 3\. The second chart (named Projected) is obtained from distribution
+    projection with γ = 0.9 and is shifted to the right with reward=2.
+  id: totrans-383
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图表顶部的[8.21](#x1-152038r21)（名为源）是一个正态分布，其中μ = 0，σ = 3。第二张图（名为投影）是从分布投影得到的，γ =
+    0.9，并且向右偏移，reward=2。
+- en: In the situation where we pass done=True with the same data, the result will
+    be different and is shown in Figure [8.22](#x1-152040r22). In such cases, the
+    source distribution will be ignored completely, and the result will have only
+    the reward projected.
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们传递done=True的情况下，使用相同数据，结果将会有所不同，并显示在图表[8.22](#x1-152040r22)中。在这种情况下，源分布将被完全忽略，结果将只有预期奖励。
+- en: '![PIC](img/B22150_08_22.png)'
+  id: totrans-385
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_22.png)'
+- en: 'Figure 8.22: The projection of distribution for the final step in the episode'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图表8.22：在剧集最后一步的分布投影
+- en: The implementation of this method is in Chapter08/07_dqn_distrib.py, which has
+    an optional command-line parameter, --img-path. If this option is given, it has
+    to be a directory where plots with a probability distribution from a fixed set
+    of states will be stored during the training. This is useful to monitor how the
+    model converges from uniform probability in the beginning of the training to a
+    more spiked weight of probability masses. Sample images from my experiments are
+    shown in Figure [8.24](#x1-153003r24) and Figure [8.25](#x1-153005r25).
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方法的实现位于Chapter08/07_dqn_distrib.py中，它具有一个可选的命令行参数--img-path。如果给出此选项，它必须是一个目录，在训练期间将以固定状态的概率分布存储图像。这对于监视模型如何从开始的均匀概率收敛到更多尖峰概率质量很有用。我的实验中的示例图像显示在图表[8.24](#x1-153003r24)和图表[8.25](#x1-153005r25)中。
+- en: I’m going to show only essential pieces of the implementation here. The core
+    of the method, the distr_projection function, was already covered, and it is the
+    most complicated piece. What is still missing is the network architecture and
+    modified loss function, which we will describe here.
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我这里只展示实现的基本部分。方法的核心部分，distr_projection函数已经覆盖过了，它是最复杂的部分。现在缺失的是网络架构和修改的损失函数，我们将在这里描述它们。
+- en: 'Let’s start with the network, which is in lib/dqn_extra.py, in the DistributionalDQN
+    class:'
+  id: totrans-389
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从网络开始，该网络位于lib/dqn_extra.py中，在DistributionalDQN类中：
+- en: '[PRE50]'
+  id: totrans-390
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: The main difference is the output of the fully connected layer. Now it outputs
+    the vector of n_actions * N_ATOMS values, which is 6 × 51 = 306 for Pong. For
+    every action, it needs to predict the probability distribution on 51 atoms. Every
+    atom (called support) has a value, which corresponds to a particular reward. Those
+    atoms’ rewards are evenly distributed from -10 to 10, which gives a grid with
+    step 0.4\. Those supports are stored in the network’s buffer.
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主要区别在于全连接层的输出。现在它输出n_actions * N_ATOMS值的向量，即6×51 = 306对于Pong。对于每个动作，它需要预测51个原子上的概率分布。每个原子（称为支持）具有一个值，该值对应于特定的奖励。这些原子的奖励均匀分布在-10到10之间，这给出了步长为0.4的网格。这些支持存储在网络的缓冲区中。
+- en: 'The forward() method returns the predicted probability distribution as a 3D
+    tensor (batch, actions, and supports):'
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: forward()方法将预测的概率分布作为3D张量（批次，动作和支持）返回：
+- en: '[PRE51]'
+  id: totrans-393
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: Besides forward(), we define the both() method, which calculates the probability
+    distribution for atoms and Q-values in one call.
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了forward()，我们还定义了both()方法，它一次计算原子和Q值的概率分布。
+- en: 'The network also defines several helper functions to simplify the calculation
+    of Q-values and apply softmax on the probability distribution:'
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络还定义了几个辅助函数，以简化Q值的计算并在概率分布上应用softmax：
+- en: '[PRE52]'
+  id: totrans-396
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'The final change is the new loss function that has to apply distribution projection
+    instead of the Bellman equation, and calculate KL divergence between predicted
+    and projected distributions:'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后的变化是新的损失函数，它必须应用分布投影，而不是贝尔曼方程，并计算预测分布与投影分布之间的 KL 散度：
+- en: '[PRE53]'
+  id: totrans-398
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'The preceding code is not very complicated; it just prepares to call distr_projection
+    and KL divergence, which is defined as:'
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的代码并不复杂；它只是准备调用 distr_projection 和 KL 散度，定义如下：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq38.png)'
+  id: totrans-400
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq38.png)'
+- en: To calculate the logarithm of probability, we use the PyTorch log_softmax function,
+    which combines both log and softmax in a numerically stable way.
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了计算概率的对数，我们使用 PyTorch 的 log_softmax 函数，它以数值稳定的方式将对数和 softmax 结合在一起。
+- en: Results
+  id: totrans-402
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: From my experiments, the distributional version of DQN converged a bit slower
+    and less stably than the original DQN, which is not surprising, as the network
+    output is now 51 times larger and the loss function has changed. Without hyperparameter
+    tuning (which will be described in the next subsection), the distributional version
+    requires 20% more episodes to solve the game.
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据我的实验，分布式版本的 DQN 收敛速度稍慢且不太稳定，低于原始的 DQN，这并不令人惊讶，因为网络输出现在大了 51 倍，且损失函数发生了变化。如果没有进行超参数调优（将在下一小节中描述），分布式版本需要多
+    20% 的回合数才能解决游戏。
+- en: Another factor that might be important here is that Pong is just too simple
+    a game to draw conclusions. In the A Distributional Perspective paper, the authors
+    reported state-of-the-art scores (at the time of publishing in 2017) for more
+    than half of the games from the Atari benchmark (Pong was not among them).
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个可能重要的因素是，Pong 游戏太简单，难以得出结论。在《A Distributional Perspective》一文中，作者报告了当时（2017年出版）大部分
+    Atari 基准游戏的最先进得分（Pong 并不在其中）。
+- en: 'The following are charts comparing reward dynamics and loss for the distributional
+    DQN. As you can see, the reward dynamics for the distributional method is worse
+    than the baseline DQN:'
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是比较分布式 DQN 奖励动态和损失的图表。正如你所看到的，分布式方法的奖励动态比基准 DQN 差：
+- en: '![PIC](img/B22150_08_23.png)'
+  id: totrans-406
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_08_23.png)'
+- en: 'Figure 8.23: Reward dynamics (left) and loss decrease (right)'
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.23：奖励动态（左）和损失下降（右）
+- en: 'It might be interesting to look into the dynamics of the probability distribution
+    during the training. If you start the training with the --img-path parameter (providing
+    the directory name), the training process will save plots with the probability
+    distribution for a fixed set of states. For example, the following figure shows
+    the probability distribution for all six actions for one state at the beginning
+    of the training (after 30k frames):'
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能有趣的是，观察训练过程中概率分布的动态。如果你使用`--img-path`参数（提供目录名）开始训练，训练过程将会保存一个固定状态集的概率分布图。例如，以下图示展示了训练开始时（经过
+    30k 帧）一个状态下所有六个动作的概率分布：
+- en: '![PIC](img/file68.png)'
+  id: totrans-409
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/file68.png)'
+- en: 'Figure 8.24: Probability distribution at the beginning of training'
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.24：训练开始时的概率分布
+- en: 'All the distributions are very wide (as the network hasn’t converged yet),
+    and the peak in the middle corresponds to the negative reward that the network
+    expects to get from its actions. The same state after 500k frames of training
+    is shown in the following figure:'
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有的分布都很宽（因为网络还未收敛），中间的峰值对应于网络期望从其动作中获得的负奖励。经过 500k 帧训练后的相同状态如下图所示：
+- en: '![PIC](img/file69.png)'
+  id: totrans-412
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/file69.png)'
+- en: 'Figure 8.25: Probability distribution produced by the trained network'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.25：训练网络产生的概率分布
+- en: Now we can see that different actions have different distributions. The first
+    action (which corresponds to the NOOP, the do nothing action) has its distribution
+    shifted to the left, so doing nothing in this state usually leads to losing. The
+    fifth action, which is RIGHTFIRE, has the mean value shifted to the right, so
+    this action leads to a better score.
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以看到，不同的动作有不同的分布。第一个动作（对应于 NOOP，即不做任何动作）其分布向左偏移，因此在该状态下通常什么也不做会导致失败。第五个动作，即
+    RIGHTFIRE，其均值向右偏移，因此这个动作会带来更好的得分。
+- en: Hyperparameter tuning
+  id: totrans-415
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: The tuning of hyperparameters was not very fruitful. After 30 tuning iterations,
+    there were no combinations of learning rate and gamma that were able to converge
+    faster than the common set of parameters.
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 超参数调优的效果并不显著。经过 30 次调优迭代后，没有任何学习率和 gamma 的组合能够比常规的参数集更快地收敛。
+- en: Combining everything
+  id: totrans-417
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 综合所有内容
+- en: 'You have now seen all the DQN improvements mentioned in the paper Rainbow:
+    Combining Improvements in Deep Reinforcement Learning, but it was done in an incremental
+    way, which (I hope) was helpful to understand the idea and implementation of every
+    improvement. The main point of the paper was to combine those improvements and
+    check the results. In the final example, I’ve decided to exclude categorical DQN
+    and double DQN from the final system, as they haven’t shown too much improvement
+    on our guinea pig environment. If you want, you can add them and try using a different
+    game. The complete example is available in Chapter08/08_dqn_rainbow.py.'
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '你现在已经看到了论文《Rainbow: Combining Improvements in Deep Reinforcement Learning》中提到的所有
+    DQN 改进，但这些改进是以递增方式完成的，（我希望）这种方式有助于理解每个改进的思路和实现。论文的主要内容是将这些改进结合起来并检查结果。在最终的示例中，我决定将类别
+    DQN 和双重 DQN 从最终系统中排除，因为它们在我们的试验环境中并未带来太大的改进。如果你愿意，你可以将它们添加进来并尝试使用不同的游戏。完整的示例代码可以在
+    Chapter08/08_dqn_rainbow.py 中找到。'
+- en: 'First of all, we need to define our network architecture and the methods that
+    have contributed to it:'
+  id: totrans-419
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要定义我们的网络架构以及为其做出贡献的方法：
+- en: 'Dueling DQN: Our network will have two separate paths for the value of the
+    state distribution and advantage distribution. On the output, both paths will
+    be summed together, providing the final value probability distributions for actions.
+    To force the advantage distribution to have a zero mean, we will subtract the
+    distribution with the mean advantage in every atom.'
+  id: totrans-420
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对抗 DQN：我们的网络将有两个独立的路径，一个用于状态分布的价值，另一个用于优势分布。在输出端，这两个路径将相加，从而提供动作的最终价值概率分布。为了强制优势分布具有零均值，我们将在每个原子中减去具有均值优势的分布。
+- en: 'Noisy networks: Our linear layers in the value and advantage paths will be
+    noisy variants of nn.Linear.'
+  id: totrans-421
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 噪声网络：我们在价值和优势路径中的线性层将是 nn.Linear 的噪声变体。
+- en: In addition to network architecture changes, we will use the prioritized replay
+    buffer to keep environment transitions and sample them proportionally to the MSE
+    loss.
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了网络架构的变化，我们还将使用优先回放缓冲区来保持环境转移，并按比例从 MSE 损失中采样。
+- en: Finally, we will unroll the Bellman equation to n-steps.
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们将展开 Bellman 方程，使用 n 步法。
+- en: I’m not going to repeat all the code, as individual methods have already been
+    given in the preceding sections, and it should be obvious what the final result
+    of combining the methods will look like. If you have any trouble, you can find
+    the code on GitHub.
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我不打算重复所有的代码，因为前面的章节已经给出了各个方法，而且结合这些方法的最终结果应该是显而易见的。如果你遇到任何问题，可以在 GitHub 上找到代码。
+- en: Results
+  id: totrans-425
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'The following are charts comparing the smoothed reward and count of steps with
+    the baseline DQN. In both, we can see significant improvement in terms of the
+    amount of games played:'
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是与基准 DQN 比较的平滑奖励和步骤计数图表。在这两者中，我们都可以看到游戏数量方面的显著改善：
+- en: '![PIC](img/B22150_08_26.png)'
+  id: totrans-427
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_26.png)'
+- en: 'Figure 8.26: Comparison of baseline DQN with combined system'
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.26：基准 DQN 与组合系统的比较
+- en: 'In addition to the averaged reward, it is worth checking the raw reward chart,
+    which is even more dramatic than the smoothed reward. It shows that our system
+    was able to jump from the negative outcome to the positive very quickly – after
+    just 100 games, it won almost every game. So, it took us another 100 games to
+    make the smoothed reward reach +18:'
+  id: totrans-429
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了平均奖励，值得检查一下原始奖励图表，结果比平滑奖励更为戏剧化。它显示我们的系统能够非常迅速地从负面结果跳跃到正面——仅仅经过 100 场游戏，它几乎赢得了每一场比赛。因此，我们又花了
+    100 场比赛才使平滑奖励达到 +18：
+- en: '![PIC](img/B22150_08_27.png)'
+  id: totrans-430
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_27.png)'
+- en: 'Figure 8.27: Raw reward for combined system'
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.27：组合系统的原始奖励
+- en: 'As a downside, the combined system is slower than the baseline, as we have
+    a more complicated NN architecture and prioritized replay buffer. The FPS chart
+    shows that the combined system starts at 170 FPS and degrades to 130 FPS due to
+    the 𝒪(n) buffer complexity:'
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个缺点，组合系统的速度比基准系统慢，因为我们采用了更复杂的神经网络架构和优先回放缓冲区。FPS 图表显示，组合系统从 170 FPS 开始，因𝒪(n)缓冲区复杂性而降至
+    130 FPS：
+- en: '![PIC](img/B22150_08_28.png)'
+  id: totrans-433
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_28.png)'
+- en: 'Figure 8.28: Performance comparison (in frames per second)'
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.28：性能比较（以每秒帧数计）
+- en: Hyperparameter tuning
+  id: totrans-435
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: 'Tuning was done as before and was able to further improve the combined system
+    training in terms of games played before solving the game. The following are charts
+    comparing the tuned baseline DQN with the tuned combined system:'
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调优仍然像之前那样进行，且在“解决游戏前玩过的游戏数”方面，能够进一步提升组合系统的训练效果。以下是调优后的基线DQN与调优后的组合系统的比较图表：
+- en: '![PIC](img/B22150_08_29.png)'
+  id: totrans-437
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_29.png)'
+- en: 'Figure 8.29: Comparison of tuned baseline DQN with tuned combined system'
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.29：已调优基线DQN与已调优组合系统的对比
+- en: 'Another chart showing the effect of the tuning is the comparison of raw game
+    rewards before and after the tuning. The tuned system starts to get the maximum
+    score even earlier — just after 40 games, which is quite impressive:'
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个显示调优效果的图表是对比调优前后的原始游戏奖励。调优后的系统开始在40局游戏后就获得最高分，这非常令人印象深刻：
+- en: '![PIC](img/B22150_08_30.png)'
+  id: totrans-440
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_08_30.png)'
+- en: 'Figure 8.30: Raw reward for untuned and tuned combined DQN'
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.30：未调优和已调优组合DQN的原始奖励
+- en: Summary
+  id: totrans-442
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we have walked through and implemented a lot of DQN improvements
+    that have been discovered by researchers since the first DQN paper was published
+    in 2015\. This list is far from complete. First of all, for the list of methods,
+    I used the paper Rainbow: Combining improvements in deep reinforcement learning
+    [[Hes+18](#)], which was published by DeepMind, so the list of methods is definitely
+    biased to DeepMind papers. Secondly, RL is so active nowadays that new papers
+    come out almost every day, which makes it very hard to keep up, even if we limit
+    ourselves to one kind of RL model, such as a DQN. The goal of this chapter was
+    to give you a practical view of different ideas that the field has developed.'
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们回顾并实现了自2015年首次发布DQN论文以来，研究人员发现的许多DQN改进。这份清单远未完整。首先，关于方法列表，我使用了DeepMind发布的论文《Rainbow：结合深度强化学习的改进》[[Hes+18](#)]，因此方法列表无疑偏向于DeepMind的论文。其次，强化学习如今发展非常迅速，几乎每天都有新论文发布，即使我们只局限于一种强化学习模型，比如DQN，也很难跟上进展。本章的目标是让你了解该领域已经发展出的一些不同的实际方法。
+- en: In the next chapter, we will continue discussing practical DQN applications
+    from an engineering perspective by talking about ways to improve DQN performance
+    without touching the underlying method.
+  id: totrans-444
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将继续从工程角度讨论DQN的实际应用，谈论如何在不触及底层方法的情况下提升DQN的性能。
+- en: Join our community on Discord
+  id: totrans-445
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 加入我们的Discord社区
+- en: Read this book alongside other users, Deep Learning experts, and the author
+    himself. Ask questions, provide solutions to other readers, chat with the author
+    via Ask Me Anything sessions, and much more. Scan the QR code or visit the link
+    to join the community. [https://packt.link/rl](https://packt.link/rl)
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其他用户、深度学习专家以及作者本人一起阅读本书。提问、为其他读者提供解决方案，通过“问我任何问题”环节与作者聊天，更多内容尽在其中。扫描二维码或访问链接加入社区。[https://packt.link/rl](https://packt.link/rl)
+- en: '![PIC](img/file1.png)'
+  id: totrans-447
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file1.png)'

@@ -1,0 +1,1812 @@
+- en: Latent Space Interpolation with MusicVAE
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用MusicVAE进行潜在空间插值
+- en: In this chapter, we'll learn about the importance of continuous latent space
+    of **Variational** **Autoencoders** (**VAEs**) and its importance in music generation
+    compared to standard **Autoencoders** (**AEs**). We'll use the MusicVAE model,
+    a hierarchical recurrent VAE, from Magenta to sample sequences and then interpolate
+    between them, effectively morphing smoothly from one to another. We'll then see
+    how to add groove, or humanization, to an existing sequence using the GrooVAE
+    model. We'll finish by looking at the TensorFlow code used to build the VAE model.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将了解**变分自编码器**（**VAEs**）的连续潜在空间的重要性，以及它在音乐生成中的重要性，相较于标准的**自编码器**（**AEs**）。我们将使用Magenta中的MusicVAE模型，这是一个层次递归的VAE，来生成序列并在它们之间进行插值，从而实现平滑地从一个序列过渡到另一个序列。接着，我们将看到如何使用GrooVAE模型为现有序列添加律动或人性化处理。最后，我们将看看用于构建VAE模型的TensorFlow代码。
+- en: 'The following topics will be covered in this chapter:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Continuous latent space in VAEs
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: VAEs中的连续潜在空间
+- en: Score transformation with MusicVAE and GrooVAE
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用MusicVAE和GrooVAE进行乐谱转换
+- en: Understanding TensorFlow code
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解TensorFlow代码
+- en: Technical requirements
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'In this chapter, we''ll use the following tools:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将使用以下工具：
+- en: A **command line** or **bash** to launch Magenta from the Terminal
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**命令行**或**bash**用来从终端启动Magenta'
+- en: '**Python** and its libraries to write music generation code using Magenta'
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用**Python**及其库编写音乐生成代码，配合Magenta使用
+- en: '**Magenta** to generate music in MIDI'
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用**Magenta**生成MIDI音乐
+- en: '**MuseScore** or **FluidSynth** to listen to the generated MIDI'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**MuseScore**或**FluidSynth**用来播放生成的MIDI'
+- en: In Magenta, we'll make the use of the **MusicVAE** and **GrooVAE** models. We'll
+    be explaining these models in depth, but if you feel like you need more information,
+    the model's README in Magenta's source code ([github.com/tensorflow/magenta/tree/master/magenta/models](https://github.com/tensorflow/magenta/tree/master/magenta/models))
+    is a good place to start. You can also take a look at Magenta's code, which is
+    well documented. We also provide additional content in the last section, *Further
+    reading*.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Magenta中，我们将使用**MusicVAE**和**GrooVAE**模型。我们将深入讲解这些模型，但如果你觉得需要更多信息，可以参考Magenta源代码中的模型README([github.com/tensorflow/magenta/tree/master/magenta/models](https://github.com/tensorflow/magenta/tree/master/magenta/models))，这是一个很好的起点。你还可以查看Magenta的代码，它有很好的文档记录。我们还在最后一节*进一步阅读*中提供了额外的内容。
+- en: The code for this chapter is in this book's code GitHub in the `Chapter04` folder,
+    located at [github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter04](https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter04).
+    The examples and code snippets will suppose you are located in this chapter's
+    folder. For this chapter, you should go to `cd Chapter04` before you start.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的代码可以在本书的GitHub代码库中的`Chapter04`文件夹里找到，地址是[github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter04](https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter04)。示例和代码片段假设你已进入本章的文件夹。在开始之前，你应进入`cd
+    Chapter04`。
+- en: Check out the following video to see the Code in Action: [http://bit.ly/3176ylN](http://bit.ly/3176ylN)
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查看以下视频，观看代码实战：[http://bit.ly/3176ylN](http://bit.ly/3176ylN)
+- en: Continuous latent space in VAEs
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: VAEs中的连续潜在空间
+- en: In [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml), *Generating Drum
+    Sequences with the Drums RNN*, we saw how we can use an RNN (LSTM) and a beam
+    search to iteratively generate a sequence, by taking an input and then predicting,
+    note by note, which next note is the most probable. That enabled us to use a primer
+    as a basis for the generation, using it to set a starting melody or a certain
+    key.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第2章](b60deee5-c58f-45eb-88a2-23718802e580.xhtml)，*使用Drums RNN生成鼓点序列*中，我们展示了如何使用RNN（LSTM）和束搜索来迭代地生成序列，通过输入并逐个音符地预测下一个最可能的音符。这使我们能够使用引导音作为生成的基础，设置一个起始旋律或某个特定的调性。
+- en: Using that technique is useful, but it has its limitations. What if we wanted
+    to start with a primer and explore variations around it, and not just in a random
+    way, but in a desired **specific direction**? For example, we could have a two-bars
+    melody for a bass line, and we would like to hear how it sounds when played more
+    as an arpeggio. Another example would be transitioning smoothly between two melodies.
+    This is where the RNN models we previously saw fall short and where VAEs comes
+    into play.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这种技术是有益的，但也有其局限性。如果我们希望从一个起点开始，探索围绕它的变化，而不仅仅是随机地变化，而是沿着**特定方向**变化，那该怎么办呢？例如，我们可能有一个用于低音线的两小节旋律，并希望听到它作为琶音演奏时的效果。另一个例子是平滑地在两段旋律之间过渡。这正是我们之前看到的RNN模型的不足之处，也是VAE的优势所在。
+- en: Before getting into the specifics of VAEs and how they are implemented in MusicVAE,
+    let's first introduce standard AEs.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入了解VAE及其在MusicVAE中的实现之前，让我们先介绍一下标准的AE。
+- en: The latent space in standard AEs
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 标准AE中的潜在空间
+- en: An AE network is a pair of two connected networks, an **encoder** and a **decoder**,
+    where the encoder produces an **embedding** from an input that the decoder will
+    try to replicate. The embedding is a dense representation of the input, where
+    useless features have been dropped, but is still representative enough so that
+    the decoder can try and reproduce the input.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AE网络是一对连接的网络，包含一个**编码器**和一个**解码器**，其中编码器从输入中生成一个**嵌入**，而解码器会尝试重现该嵌入。嵌入是输入的密集表示，其中无用的特征已被去除，但仍然足够具有代表性，以便解码器能够尝试重建输入。
+- en: What's the use of the encoder and decoder pair if the decoder merely tries to
+    reproduce the input? Its main use is **dimensionality reduction**, where the input
+    can be represented in a lower spatial resolution (with fewer dimensions) while
+    still keeping its meaning. This forces the network to discover significant features
+    to be encoded in the hidden layer nodes.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果解码器仅仅尝试重现输入，那么编码器和解码器的组合有什么用呢？它的主要用途是**降维**，在降维的过程中，输入可以以较低的空间分辨率（即更少的维度）表示，同时仍然保持其含义。这迫使网络发现重要的特征并将其编码在隐藏层节点中。
+- en: 'In the following diagram, we illustrate a VAE network, which is separated into
+    three main parts—the hidden layer nodes (latent space or latent variables) in
+    the middle, the encoder on the left, and the decoder on the right:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下图中，我们展示了一个VAE网络，它分为三个主要部分——中间的隐藏层节点（潜在空间或潜在变量）、左侧的编码器和右侧的解码器：
+- en: '![](img/043aa5d4-f3a3-414a-a0d3-edec46f86a10.png)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/043aa5d4-f3a3-414a-a0d3-edec46f86a10.png)'
+- en: Regarding the network training, the loss function, called **reconstruction loss**,
+    is defined such as the network is penalized for creating outputs different from
+    the input.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于网络训练，损失函数被称为**重构损失**，定义为网络在创建与输入不同的输出时受到惩罚。
+- en: Generation is possible by instantiating the latent variables, which produces
+    the embeddings, and then decoding that to produce a new output. Unfortunately,
+    the learned latent space of the AE might not be continuous, which is a major shortcoming
+    of that architecture, making its real-world usages limited. A latent space that
+    is not continuous means that sampling a point at random might result in a vector
+    that the decoder cannot make sense of. This is because the encoder hasn't learned
+    how to handle that specific point and cannot generalize from its other learning.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成是通过实例化潜在变量来实现的，潜在变量生成嵌入，然后解码该嵌入以产生新的输出。不幸的是，AE学习到的潜在空间可能不是连续的，这是该架构的一个重大缺点，限制了其在实际应用中的使用。非连续的潜在空间意味着随机采样一个点可能会导致解码器无法理解的向量。这是因为编码器尚未学会如何处理该特定点，无法从其他学习中进行泛化。
+- en: 'In the following diagram, the black point marked by ? falls in such a space,
+    meaning the encoder won''t be able to reconstruct the input from it. This is an
+    example visualization of samples of the latent space (for three classes), with
+    the axis representing the first two dimensions of the latent space and the colors
+    representing three classes, which shows the formation of distinct clusters:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下图中，黑色的点由?标记，位于这样的空间中，意味着编码器无法从中重构输入。这是潜在空间样本（针对三个类别）的可视化示例，轴表示潜在空间的前两个维度，颜色表示三个类别，显示了不同簇的形成：
+- en: '![](img/7aa4d654-12d4-4087-84a9-5d30b6b349c5.png)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7aa4d654-12d4-4087-84a9-5d30b6b349c5.png)'
+- en: This is fine if you are just replicating an input, but what if you want to sample
+    from the latent space or interpolate between two inputs? In the diagram, you can
+    see that the black data point (denoted with a question mark) falls in a region
+    the decoder won't be able to make sense of. This is why the discontinuous latent
+    space from AEs is a problem for our use case.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你只是复制输入，那这样做没问题，但如果你想从潜在空间中采样或者在两个输入之间进行插值呢？在图示中，你可以看到黑色数据点（用问号表示）落在一个解码器无法理解的区域。这就是自编码器（AEs）中不连续的潜在空间对于我们的应用场景是一个问题的原因。
+- en: Now, let's see how a VAE solves that problem.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们来看一下变分自编码器（VAE）是如何解决这个问题的。
+- en: Using VAEs in generating music
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用VAE生成音乐
+- en: 'There is one property in VAEs that makes them useful for generating music (or
+    any generation) is that their latent space is **continuous**. To achieve that,
+    the encoder doesn''t output a vector, but rather two vectors: a vector of means
+    called **µ** (mu) and a vector of standard deviations called **σ** (sigma). Therefore,
+    latent variables, often called **z** by convention, follow a probability distribution
+    of *P(z)*, often a Gaussian distribution.'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: VAE有一个特性使其在生成音乐（或任何生成任务）时非常有用，那就是它们的潜在空间是**连续的**。为了实现这一点，编码器并不是输出一个向量，而是输出两个向量：一个表示均值的向量，称为**µ**（mu），以及一个表示标准差的向量，称为**σ**（sigma）。因此，潜在变量，通常按惯例称为**z**，遵循一个概率分布*P(z)*，通常是高斯分布。
+- en: 'In other words, the mean of the vector controls where the encoding of the input
+    should be located and the standard deviation controls the size of the area around
+    it, making the latent space continuous. Reusing the previous example, an example
+    plot of the latent space, with the *x* and *y* axes representing its first two
+    dimensions, for three classes represented by three colors, you can see the clusters
+    now cover an area instead of being discrete:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，向量的均值控制输入编码应该位于哪里，标准差控制其周围区域的大小，使得潜在空间变得连续。以之前的例子为例，潜在空间的一个示意图，其中*x*轴和*y*轴表示前两个维度，三个由不同颜色表示的类别，你可以看到这些簇现在覆盖了一个区域，而不是离散的：
+- en: '![](img/5a6f6e91-8f39-4257-882a-209640b9c800.png)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/5a6f6e91-8f39-4257-882a-209640b9c800.png)'
+- en: 'Here is the VAE network, where you can see the change in the hidden layer with
+    µ and σ:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是VAE网络，你可以看到隐藏层中µ和σ的变化：
+- en: '![](img/6c5991fc-730a-4dfa-a1fd-cc494dc6350c.png)'
+  id: totrans-35
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6c5991fc-730a-4dfa-a1fd-cc494dc6350c.png)'
+- en: This network architecture is very powerful for generating music and is often
+    considered in a class of model called generative models. One property of that
+    type of model is that the generation is stochastic, meaning that for a given input
+    (and the same values of mean and standard deviation), the sampling will make the
+    encoding vary a little for each pass.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种网络架构在生成音乐方面非常强大，通常被认为属于一种被称为生成模型的模型类别。此类模型的一个特性是生成过程是随机的，这意味着对于一个给定的输入（以及相同的均值和标准差），每次采样都会使编码略有变化。
+- en: 'This model has multiple properties that are really interesting for music generation,
+    such as the following:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个模型有多个非常适合音乐生成的特性，以下是其中一些：
+- en: '**Expression**: A musical sequence can be mapped to the latent space and reconstructed
+    from it.'
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**表达性**：一个音乐序列可以映射到潜在空间，并从中重建。'
+- en: '**Realism**: Any point of the latent space represents a realistic example.'
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**现实性**：潜在空间中的每一个点都代表一个现实的例子。'
+- en: '**Smoothness**: Samples from nearby points are similar.'
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**平滑性**：来自附近点的样本是相似的。'
+- en: We'll be explaining more on VAE in this chapter, but this minimal introduction
+    is important to understand the code we're about to write.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将进一步讲解VAE，但这段简短的介绍对理解我们即将编写的代码非常重要。
+- en: Score transformation with MusicVAE and GrooVAE
+  id: totrans-42
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用MusicVAE和GrooVAE的乐谱变换
+- en: In the previous chapters, we've learned to generate various parts of a score.
+    We've generated percussion and monophonic and polyphonic melodies and learned
+    about expressive timing. This section builds on that foundation and shows how
+    to manipulate the generated scores and transform them. In our example, we'll sample
+    two small scores from the latent space, we'll then interpolate between the two
+    samples (progressively going from the first sample to the second sample), and
+    finally, we'll add some groove (or **humanization**, see the following information
+    box for more information) on the resulting score.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们学习了如何生成乐谱的各个部分。我们已经生成了打击乐和单声部、复声部旋律，并了解了表现性时值。本节内容在此基础上进行扩展，展示了如何操作和转换生成的乐谱。在我们的示例中，我们将从潜在空间中采样两个小乐谱，接着我们将在这两个样本之间进行插值（逐步从第一个样本过渡到第二个样本），最后我们将为生成的乐谱添加一些律动（或称**人性化**，更多信息请参考下方信息框）。
+- en: 'For our example, we''ll work on percussion since adding groove in MusicVAE
+    only works on drums. We''ll be using different configurations and pre-trained
+    models in MusicVAE to perform the following steps. Remember, there are more pre-trained
+    models in Magenta than we can present here (see the first section, *Technical
+    requirements*, for a link to the README that contains all of them):'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们的示例，我们将重点研究打击乐，因为在MusicVAE中，只有打击乐能添加律动。我们将在MusicVAE中使用不同的配置和预训练模型来执行以下步骤。请记住，Magenta中有比我们在此展示的更多预训练模型（参见第一部分，*技术要求*，了解包含所有模型的README链接）：
+- en: '**Sample:** By using the `cat-drums_2bar_small` configuration and pre-trained
+    model, we sample two different scores of two bars each. We could do the same thing
+    for the melody by using the `cat-mel_2bar_big` configuration.'
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**样本：**通过使用`cat-drums_2bar_small`配置和预训练模型，我们从潜在空间中采样了两个不同的2小节乐谱。对于旋律，我们可以通过使用`cat-mel_2bar_big`配置来做同样的操作。'
+- en: '**Interpolate**: By using the same configuration, we can interpolate between
+    the two generated scores. What interpolation means is that it will progressively
+    change the score, going from the first sample to the second. By asking a different
+    number of outputs, we can decide how gradually we go between the two samples.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**插值：**通过使用相同的配置，我们可以在两个生成的乐谱之间进行插值。插值的意思是它会逐步改变乐谱，从第一个样本过渡到第二个样本。通过请求不同数量的输出，我们可以决定在两个样本之间过渡的渐变程度。'
+- en: '**Groove:** By using the `groovae_2bar_humanize` configuration, we can then
+    humanize the previous 16-bars sequence by adding groove.'
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**律动：**通过使用`groovae_2bar_humanize`配置，我们可以通过加入律动来使之前的16小节序列更具人性化。'
+- en: 'Here is a diagram explaining the different steps of our example:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是一个解释我们示例中不同步骤的图示：
+- en: '![](img/b4ce57e4-ba59-4e18-b043-070c5664a709.png)'
+  id: totrans-49
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b4ce57e4-ba59-4e18-b043-070c5664a709.png)'
+- en: First, we'll be sampling `sample1` and `sample2` (2 bars each). Then, we'll
+    ask the interpolation for 4 output sequences ("i1", "i2", "i3", and "i4") of 2
+    bars each. The resulting 6 output sequences of 12 bars will contain the 2 input
+    sequences in both ends, plus the score progression of 6 sequences in between.
+    Finally, we'll add groove to the whole sequence.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将采样`sample1`和`sample2`（每个2小节）。然后，我们会请求插值生成4个输出序列（“i1”，“i2”，“i3”和“i4”），每个序列为2小节。最终生成的6个输出序列总共12小节，包含了两端的2个输入序列，以及中间6个序列的乐谱进展。最后，我们将为整个序列添加律动。
+- en: 'If you remember from the last chapter, in the *Performance music with the Performance
+    RNN* section, we introduced what **groove** or **humanization** is and how to
+    generate sequences that feel less robotic. This boils down to two things: expressive
+    timing and dynamics. The former changes the timing of the notes so that they don''t
+    fall exactly on step boundaries, while the latter changes the force at which each
+    note is played (its velocity) to emulate a human playing an instrument.'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你记得上一章中的*Performance music with the Performance RNN*部分，我们介绍了什么是**律动**或**人性化**，以及如何生成感觉不那么机械的序列。这归结为两点：表现性时值和动态。前者改变了音符的时值，使其不完全落在节拍边界上，后者则改变了每个音符的力度（即速度），以模拟人类演奏乐器的感觉。
+- en: We'll be explaining more on these configurations as we go along. If you want
+    to try out the examples for the melody instead of the percussion, follow the example
+    by changing the mentions of `cat-drums_2bar_small` to `cat-mel_2bar_big`. We'll
+    also be looking at other models, including the melody model, later in this chapter.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的内容中，我们将进一步解释这些配置。如果你想尝试旋律的示例而不是打击乐，只需将`cat-drums_2bar_small`替换为`cat-mel_2bar_big`。我们稍后也会在本章中介绍其他模型，包括旋律模型。
+- en: Initializing the model
+  id: totrans-53
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 初始化模型
+- en: Before sampling, interpolating, and grooving, we need to initialize the model
+    that we're going to use. The first thing you'll notice is that MusicVAE doesn't
+    have a similar interface to the previous chapters; it has its own interface and
+    model definition. This means the code we've written up to now cannot be reused,
+    except for some things such as MIDI and plot files handling.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在进行采样、插值和旋律时，我们需要初始化将要使用的模型。你首先会注意到，MusicVAE没有像前几章那样的接口；它有自己独特的接口和模型定义。这意味着到目前为止我们写的代码不能复用，除了一些像MIDI和图表文件处理的内容。
+- en: You can follow this example in the `chapter_04_example_01.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在本章源代码中的`chapter_04_example_01.py`文件中查看这个示例。源代码中有更多的注释和内容，所以你应该去查看一下。
+- en: 'The pre-trained MusicVAE models are not packaged in bundles (the `.mag` files)
+    unlike in the previous chapters. A model and a configuration now correspond to
+    a **checkpoint**, which is slightly less expressive than bundles. We''ve already
+    briefly explained what a checkpoint is and we''ll be looking into this in detail
+    in [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml), *Training Magenta
+    Models*. Just remember for now that checkpoints are used in TensorFlow to save
+    the model state that occurs during training, making it easy to reload the model''s
+    state at a later time:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预训练的MusicVAE模型不像前几章那样被打包成捆绑包（`.mag`文件）。现在，模型和配置对应的是一个**检查点**，它的表现形式略逊于捆绑包。我们已经简要地解释了检查点是什么，接下来会在[第7章](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml)《训练Magenta模型》中详细探讨这一点。现在记住，检查点是用于TensorFlow中保存训练过程中模型状态的，使得我们能够在之后轻松地重新加载模型的状态：
+- en: 'Let''s first make a `download_checkpoint` method that downloads a checkpoint
+    corresponding to a model:'
+  id: totrans-57
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先我们来实现一个`download_checkpoint`方法，下载与模型对应的检查点：
+- en: '[PRE0]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: You don't have to worry too much about the details of this method; basically,
+    it downloads the checkpoint from online storage. It is analogous to the `download_bundle` method from
+    `magenta.music.notebook_utils`, which we've been using in the previous chapters.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不必过于担心这个方法的细节；基本上，它是从在线存储中下载检查点。它类似于我们在前几章中使用的`magenta.music.notebook_utils`中的`download_bundle`方法。
+- en: 'We can now write a `get_model` method that instantiates the MusicVAE model
+    using the checkpoint:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在可以编写一个`get_model`方法，使用检查点实例化MusicVAE模型：
+- en: '[PRE1]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: In this method, we first download the checkpoint for the given model name with
+    our `download_checkpoint` method. Then, we instantiate the `TrainedModel` class
+    from `magenta.models.music_vae` with the checkpoint, `batch_size=8`. This value
+    defines how many sequences the model will process at the same time.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个方法中，我们首先使用`download_checkpoint`方法下载给定模型名称的检查点。然后，我们用检查点`batch_size=8`实例化`magenta.models.music_vae`中的`TrainedModel`类。这个值定义了模型同时处理多少个序列。
+- en: Having a batch size that's too big will result in wasted overhead; a batch size
+    too small will result in multiple passes, probably making the whole code run slower.
+    Unlike during training, the batch size doesn't need to be big. In this example,
+    the sample uses two sequences, the interpolation two sequences, and the humanizing
+    code six sequences, so if we wanted to nitpick, we could change `batch_size` to
+    match each call.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 批处理大小过大会导致浪费开销；批处理大小过小则会导致多次传递，可能会使整个代码运行得更慢。与训练过程中不同，批处理大小不需要太大。在这个示例中，采样使用两个序列，插值使用两个序列，而人性化代码使用六个序列，因此如果我们想挑剔一下，完全可以修改`batch_size`来匹配每个调用。
+- en: For the first argument of `TrainedModel`, we pass an instance of `Config`. Each
+    model corresponds to a configuration in the `models/music_vae/configs.py` file.
+    If you look at the content of that file, you'll probably recognize some content
+    we already saw. For example, let's take the configuration named `cat-drums_2bar_small` from
+    `CONFIG_MAP`, which is the configuration we'll be using for sampling.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`TrainedModel`的第一个参数，我们传入一个`Config`的实例。每个模型在`models/music_vae/configs.py`文件中都有对应的配置。如果你查看该文件的内容，你可能会认出一些我们已经看到的内容。例如，拿`CONFIG_MAP`中的配置`cat-drums_2bar_small`来举例，这是我们将在采样时使用的配置。
+- en: Now, follow the reference of the `data_converter` attribute, you'll end up in
+    a class named `DrumsConverter` in `models.music_vae.data`. In the `__init__` method,
+    you can see classes and methods we've already covered in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml),
+    *Generating Drum Sequences with the Drums RNN* for the DrumsRNN models, such as
+    the `MultiDrumOneHotEncoding` class that we explained in the section, *Encoding
+    percussion events as classes*.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，按照 `data_converter` 属性的参考，你将进入一个名为 `DrumsConverter` 的类，位于 `models.music_vae.data`
+    中。在 `__init__` 方法中，你可以看到我们之前在[第 2 章](b60deee5-c58f-45eb-88a2-23718802e580.xhtml)中讨论过的类和方法，*使用
+    Drums RNN 生成鼓序列*，这些类和方法也用于 DrumsRNN 模型，例如我们在 *将打击乐事件编码为类* 部分解释的 `MultiDrumOneHotEncoding`
+    类。
+- en: The MusicVAE code builds on the content we previously saw, adding a new layer
+    that enables the conversion of note sequences to Tensforflow tensors. We'll be
+    looking into the TensorFlow code in more detail in the *Understanding TensorFlow
+    2.0 code*section.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MusicVAE 代码在我们之前看到的内容的基础上构建，添加了一个新的层，使得能够将音符序列转换为 TensorFlow 张量。我们将在*理解 TensorFlow
+    2.0 代码*部分更详细地探讨 TensorFlow 代码。
+- en: Sampling the latent space
+  id: totrans-67
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 采样潜空间
+- en: Now that we can download and initialize our MusicVAE models, we can sample (analogous
+    to generate) sequences. Remembering what we've learned from the previous section
+    on VAEs, we know that we can sample any point in the latent space, by instantiating
+    the latent variables corresponding to our probability distribution and then decoding
+    the embeddings.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以下载并初始化我们的 MusicVAE 模型，我们可以进行采样（类似于生成）序列。回想我们在上一节关于 VAE 的内容，我们知道我们可以通过实例化与概率分布相对应的潜变量，并解码嵌入，来采样潜空间中的任何一点。
+- en: Until now, we've been using the term **generate** when speaking of creating
+    a new sequence. That term refers to the generation algorithm we described in [Chapter
+    2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml), *Generating Drum Sequences with
+    the Drums RNN*, and that was also used in [Chapter 3](48023567-4100-492a-a28e-53b18a63e01e.xhtml),
+    *Generating Polyphonic Melodies*.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们一直在使用**生成**这个术语来表示创建一个新的序列。这个术语指的是我们在[第 2 章](b60deee5-c58f-45eb-88a2-23718802e580.xhtml)中描述的生成算法，*使用
+    Drums RNN 生成鼓序列*，该算法也在[第 3 章](48023567-4100-492a-a28e-53b18a63e01e.xhtml)中使用，*生成复音旋律*。
+- en: We're now using the term **sample** when speaking of creating a new sequence.
+    This refers to the act of sampling (because we're effectively sampling a probability
+    distribution) the latent space and differs from the generation algorithm we previously
+    described.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们使用**采样**这个术语来表示创建一个新的序列。这指的是采样的行为（因为我们实际上是在采样一个概率分布）并且与我们之前描述的生成算法不同。
+- en: Writing the sampling code
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写采样代码
+- en: 'Let''s now write the first method for our example, the `sample` method:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们为示例编写第一个方法，`sample` 方法：
+- en: 'First, let''s define the method, which takes a model name as an input and returns
+    a list of two generated `NoteSequence` objects:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，让我们定义这个方法，它接受一个模型名称作为输入，并返回一个包含两个生成的 `NoteSequence` 对象的列表：
+- en: '[PRE2]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: In this method, we first instantiate the model using our previous `get_model`
+    method. We then call the `sample` method, asking for `n=2` sequences that the
+    method will return. We are keeping the default temperature (which is 1.0, for
+    all models), but we can change it using the `temperature` parameter. Finally,
+    we save the MIDI files and the plot files using the `save_midi` and `save_plot` methods respectively,
+    from the previous chapter, present in the `utils.py` file.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个方法中，我们首先使用之前的 `get_model` 方法实例化模型。然后我们调用 `sample` 方法，请求返回 `n=2` 个序列。我们保持默认的温度（所有模型的默认值为
+    1.0），但也可以通过 `temperature` 参数进行更改。最后，我们使用来自前一章的 `save_midi` 和 `save_plot` 方法分别保存
+    MIDI 文件和绘图文件，这些方法位于 `utils.py` 文件中。
+- en: 'Let''s call the sample method we created:'
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们调用我们创建的采样方法：
+- en: '[PRE3]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: You might have noticed that the pre-trained model, `cat-drums_2bar_small.lokl`, has
+    `.lokl` suffixed. There's also a `.hikl` model, which refers to the KL divergence
+    during training. We'll be explaining that in the next section, *Refining the loss
+    function with KL divergence*.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能已经注意到，预训练模型 `cat-drums_2bar_small.lokl` 具有 `.lokl` 后缀。还有一个 `.hikl` 模型，表示训练过程中使用的
+    KL 散度。我们将在下一节*通过 KL 散度细化损失函数*中解释这个内容。
+- en: In the previous snippet, `num_bar_per_sample` and `num_steps_per_sample` define
+    the number of bars and steps respectively for each sample. The configuration we
+    are using, `cat-drums_2bar_small`, is a small 9 classes drum kit configuration,
+    similar to the one we saw in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml).
+    For our example, we'll use 32 steps (2 bars).
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在之前的代码片段中，`num_bar_per_sample`和`num_steps_per_sample`分别定义了每个样本的条数和步骤数。我们使用的配置`cat-drums_2bar_small`是一个小型的9类鼓组配置，类似于我们在[第2章](b60deee5-c58f-45eb-88a2-23718802e580.xhtml)中看到的配置。对于我们的示例，我们将使用32个步骤（2小节）。
+- en: 'Let''s open the `output/sample/music_vae_00_TIMESTAMP.html` file, changing `TIMESTAMP`
+    for the printed value in the console. Here is the first generated sample we are
+    going to work with:'
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 打开`output/sample/music_vae_00_TIMESTAMP.html`文件，将`TIMESTAMP`替换为控制台中打印的值。这里是我们要处理的第一个生成样本：
+- en: '![](img/747b12cd-3237-4133-9049-a0412f20a9b7.png)'
+  id: totrans-81
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/747b12cd-3237-4133-9049-a0412f20a9b7.png)'
+- en: Notice we've activated the velocity output in Visual MIDI, meaning the notes
+    don't quite fill the whole vertical space because the default velocity in Magenta
+    is 100 (remember MIDI values go from 0 to 127). Because we'll be adding groove
+    later, we need to see the notes' velocity.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，我们在Visual MIDI中启用了力度输出，这意味着音符没有填满整个垂直空间，因为Magenta中的默认力度是100（记住MIDI值从0到127）。由于我们稍后会添加节奏，因此需要查看音符的力度。
+- en: 'Let''s open the `output/sample/music_vae_01_TIMESTAMP.html` file, changing `TIMESTAMP`
+    for the printed value in the console. Here is the second sample:'
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 打开`output/sample/music_vae_01_TIMESTAMP.html`文件，将`TIMESTAMP`替换为控制台中打印的值。这里是第二个生成的样本：
+- en: '![](img/d9995a10-42e9-436f-85fd-59e2eb32a1b2.png)'
+  id: totrans-84
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d9995a10-42e9-436f-85fd-59e2eb32a1b2.png)'
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synthesizer, refer to the following command depending on your
+    platform and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要听生成的MIDI，请使用您的软件合成器或MuseScore。对于软件合成器，根据您的平台使用以下命令，并将`PATH_TO_SF2`和`PATH_TO_MIDI`替换为正确的值：
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: We now have two 2 bar samples to work with; we'll be interpolating between them
+    in the next section.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在有两个2小节的样本可以使用；接下来我们将在这两个样本之间进行插值。
+- en: Refining the loss function with KL divergence
+  id: totrans-90
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用KL散度优化损失函数
+- en: 'You might have noticed in the previous code snippet that the `cat-drums_2bar_small.lokl` checkpoint we
+    are using is suffixed with `lokl.` This is because this configuration has two
+    different trained checkpoints: `lokl` and `hikl`. The first one has been trained
+    for more realistic sampling, while the second one has been trained for better
+    reconstruction and interpolation. We''ve used the first one in the previous code
+    for sampling, and we''ll use the second one in the next section for interpolation.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码片段中，您可能已经注意到我们使用的`cat-drums_2bar_small.lokl`检查点后缀为`lokl`。这是因为该配置有两个不同的训练检查点：`lokl`和`hikl`。第一个检查点已针对更真实的采样进行了训练，而第二个检查点则是为了更好的重构和插值训练的。我们在之前的代码中使用了第一个检查点进行采样，接下来我们将在下一节使用第二个检查点进行插值。
+- en: 'But what do `lokl` and `hikl` mean exactly? These refer to **low** or **high**
+    **Kulback**-**Leibler** (**KL**) divergence. The KL divergence measures how much
+    two probability distributions diverge from each other. Reusing our previous example,
+    we can show that we want to minimize the KL divergence to achieve smoothness during
+    interpolation:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么`lokl`和`hikl`到底是什么意思呢？它们分别表示**低**或**高**的**Kulback**-**Leibler**（**KL**）散度。KL散度用于衡量两个概率分布的差异。通过我们之前的示例，我们可以展示我们希望最小化KL散度，以便在插值过程中实现平滑效果：
+- en: '![](img/f24e53ff-0e1e-482e-ba66-157e1c7e88ab.png)'
+  id: totrans-93
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f24e53ff-0e1e-482e-ba66-157e1c7e88ab.png)'
+- en: This is an example visualization of samples of the latent space (for 3 classes),
+    with the axis representing the first 2 dimensions of the latent space, and the
+    colors representing 3 classes. On the left, we have encodings that are fairly
+    close to one another, enabling smooth interpolation. On the right, we have clusters
+    that are further apart, which means the interpolation will be harder but might
+    result in a better sampling because the clusters are more distinct.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个潜在空间样本的可视化示例（针对3个类别），其中轴表示潜在空间的前两个维度，颜色表示3个类别。在左侧，我们有相互接近的编码，能够实现平滑的插值。在右侧，我们有更加分散的聚类，这意味着插值会更加困难，但可能会生成更好的样本，因为这些聚类更加明确。
+- en: The KL loss function sums all the KL divergences with the standard normal. Alone,
+    the KL loss results in a random cluster centered around the prior (a round blob
+    around 0), which is not really useful by itself. By **combining** the reconstruction
+    loss function and the KL loss function, we achieve clusters of similar encodings
+    that are densely packed around the latent space origin.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: KL损失函数会将所有KL散度与标准正态分布进行求和。单独的KL损失会导致围绕先验（接近0的圆形斑点）生成一个随机集群，这本身并没有太大用处。通过**结合**重构损失函数和KL损失函数，我们能够实现相似编码的聚类，这些聚类密集地围绕潜在空间的原点。
+- en: You can look at the implementation of the model loss function in Magenta's code
+    in the `MusicVAE` class, in the `magenta.models.music_vae` package, in the `_compute_model_loss`
+    function.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以查看Magenta代码中`MusicVAE`类的模型损失函数实现，位置在`magenta.models.music_vae`包中的`_compute_model_loss`函数。
+- en: During training, the KL divergence is tuned using the hyperparameters, `free_bits`
+    and `max_beta`. By increasing the effect of the KL loss (which means decreasing
+    `free_bits` or increasing `max_beta`), you'll have a model that produces better
+    random samples but is worse at reconstruction.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，KL散度会通过超参数`free_bits`和`max_beta`进行调节。通过增加KL损失的效果（即减小`free_bits`或增大`max_beta`），你将得到一个能够生成更好随机样本但在重构方面表现较差的模型。
+- en: Sampling from the same area of the latent space
+  id: totrans-98
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从潜在空间的相同区域进行采样
+- en: 'What is interesting for sampling is that we can reuse the same `z` variable
+    for each of the generated sequences in the same batch. That is useful for generating
+    sequences from the same area of the latent space. For example, to generate 2 sequences
+    of 64 steps (4 bars) using the same `z` variable for both, we would be using the
+    following code:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 采样的一个有趣之处是，我们可以在同一个批次中重用相同的`z`变量来生成每个序列。这对于从潜在空间的相同区域生成序列非常有用。例如，要使用相同的`z`变量生成2个64步（4小节）的序列，我们将使用以下代码：
+- en: '[PRE4]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Sampling from the command line
+  id: totrans-101
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从命令行进行采样
+- en: 'You can also call the model sampling from the command line. The example from
+    this section can be called using the following command line:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以通过命令行调用模型采样。本节中的示例可以通过以下命令行来调用：
+- en: '[PRE5]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Interpolating between two samples
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在两个样本之间插值
+- en: We now have 2 generated samples and we want to interpolate between the two of
+    them, with 4 intermediate sequences in between, resulting in a continuous 6 sequences
+    of 2 bars each, for a 12 bars total sequence.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在有了2个生成的样本，并且想要在它们之间插值，插入4个中间序列，最终生成一个连续的6个2小节的序列，总共是12小节的序列。
+- en: Getting the sequence length right
+  id: totrans-106
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 获取正确的序列长度
+- en: For our example, we used `length=32` when calling the `sample` method on the
+    model, so the return of the method are sequences of 2 bars each. You should know
+    that the sequence length is important in MusicVAE since each model works on different
+    sequence lengths—`cat-drums_2bar_small` works on 2 bar sequences, while `hierdec-mel_16bar`
+    works on 16 bar sequences.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的示例中，我们在调用模型的`sample`方法时使用了`length=32`，因此该方法的返回值是每个2小节的序列。你应该知道，序列长度在MusicVAE中很重要，因为每个模型处理的序列长度不同——`cat-drums_2bar_small`处理的是2小节的序列，而`hierdec-mel_16bar`处理的是16小节的序列。
+- en: 'When sampling, Magenta won''t complain, because it can generate a longer sequence
+    and then truncate it. But during interpolation, you''ll end up with an exception
+    like this, meaning that you haven''t asked for the proper number of steps:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在采样时，Magenta不会报错，因为它可以生成一个更长的序列，然后将其截断。但是在插值过程中，你会遇到像这样的异常，意味着你没有请求正确数量的步数：
+- en: '[PRE6]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Exceptions in MusicVAE are especially cryptic and the encoder is quite finicky,
+    so we'll try listing the common mistakes and their associated exception.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MusicVAE中，异常信息特别难懂，而且编码器非常挑剔，所以我们会尽量列出常见的错误及其相关的异常。
+- en: Writing the interpolation code
+  id: totrans-111
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写插值代码
+- en: 'Let''s now write the second method for our example, the `interpolate` method:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们来为示例编写第二种方法，即`interpolate`方法：
+- en: 'First, let''s define the method, which takes a list of two `NoteSequence` objects
+    as an input and returns a 16 bar interpolated sequence:'
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，定义该方法，它接收两个`NoteSequence`对象的列表作为输入，并返回一个16小节的插值序列：
+- en: '[PRE7]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: We first instantiate the model, then we call the `interpolate` method with the
+    first and last sample using the parameters, `start_sequence` and `end_sequence`
+    respectively, the number of output sequences of 6 using the `num_steps` parameter (be
+    careful it has nothing to do with the sequence length in steps) and the `length`
+    parameter of 2 bars (in steps). The interpolation result is a list of six `NoteSequence`
+    objects, each of 2 bars.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先实例化模型，然后使用`start_sequence`和`end_sequence`参数分别调用`interpolate`方法，第一个和最后一个样本的输出序列数量为6，使用`num_steps`参数（小心，它与步骤中的序列长度无关），并且`length`参数设置为2小节（以步骤为单位）。插值结果是一个包含六个`NoteSequence`对象的列表，每个对象包含2小节。
+- en: We then concatenate the elements of the list to form a single `NoteSequence` object
+    of 12 bars using `concatenate_sequences` from `magenta.music.sequence_lib`. The
+    second argument (`[4] * num_output`) is a list containing the time in seconds
+    of each element of the first argument. We should remember that this is necessary
+    because `NoteSequence` doesn't define a start and an end, so a 2 bars sequence
+    ending with silence concatenated with another sequence of 2 bars won't result
+    in a 4 bars sequence.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们使用`magenta.music.sequence_lib`中的`concatenate_sequences`将列表中的元素连接成一个12小节的单一`NoteSequence`对象。第二个参数（`[4]
+    * num_output`）是一个包含每个元素时间（以秒为单位）的列表。我们应该记住，这是必要的，因为`NoteSequence`没有定义开始和结束，所以一个以静音结束的2小节序列与另一个2小节序列连接后，不会得到一个4小节的序列。
+- en: When calling the `interpolate` method, a `NoExtractedExamplesError` exception
+    could occur if the input sequences are not quantized or an input sequence is empty,
+    for example. Remember you also have to ask for the proper length or you'll receive
+    `MultipleExtractedExamplesError`.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调用`interpolate`方法时，如果输入序列没有量化，或者输入序列为空，例如，可能会出现`NoExtractedExamplesError`异常。记住，你还必须请求正确的长度，否则会收到`MultipleExtractedExamplesError`。
+- en: 'We can then call the `interpolate` method:'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们可以调用`interpolate`方法：
+- en: '[PRE8]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Let''s open the `output/merge/music_vae_00_TIMESTAMP.html` file, changing `TIMESTAMP`
+    for the printed value in the console. Corresponding to our samples, we have this
+    interpolated sequence:'
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们打开`output/merge/music_vae_00_TIMESTAMP.html`文件，将`TIMESTAMP`替换为控制台中打印的值。对应我们的样本，我们得到了这个插值序列：
+- en: '![](img/35e0d58a-f0b8-4279-af0e-dc1019573af4.png)'
+  id: totrans-121
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/35e0d58a-f0b8-4279-af0e-dc1019573af4.png)'
+- en: We've marked every 2 bars with a different background alpha. You can locate
+    the first sample we've generated in the previous section between 0 and 4 seconds,
+    with a darker background. Then, 4 new interpolated chunks can be located between
+    4 and 20 seconds. Finally, you can see the second input sample on the right between
+    20 and 24 seconds.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们为每两个小节标记了不同的背景透明度。你可以在前一节中找到我们生成的第一个样本，它位于0到4秒之间，背景较暗。然后，4个新的插值块可以位于4到20秒之间。最后，你可以看到第二个输入样本，它位于20到24秒之间。
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要听生成的MIDI，请使用你的软件合成器或MuseScore。对于软件合成器，根据你的平台，使用以下命令并将`PATH_TO_SF2`和`PATH_TO_MIDI`替换为正确的值：
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-125
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: Interpolating between two sequences is a hard problem, but MusicVAE does it
+    well and the result in our example is quite impressive. You should try other generations
+    with different lengths and listen to them.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在两个序列之间进行插值是一个困难的问题，但MusicVAE做得很好，我们的示例结果相当令人印象深刻。你应该尝试其他长度的生成，并听一听它们。
+- en: Interpolating from the command line
+  id: totrans-128
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从命令行进行插值
+- en: 'You can also call the interpolation from the command line. The example from
+    this section can be called using the following command line (you''ll need to download
+    the checkpoint by yourself):'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以从命令行调用插值操作。本节中的示例可以使用以下命令行调用（你需要自己下载检查点）：
+- en: '[PRE9]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: By changing the `SAMPLE_1.mid` and `SAMPLE_2.mid` file names for a previous
+    sampled file from the previous sampling section, you'll be able to interpolate
+    between the two sequences.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过更改 `SAMPLE_1.mid` 和 `SAMPLE_2.mid` 文件名为之前采样部分中的文件，你将能够在两个序列之间进行插值。
+- en: Humanizing the sequence
+  id: totrans-132
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 人性化序列
+- en: Finally, we'll be adding humanization (or **groove**) to the generated sequence.
+    The groove models are part of GrooVAE (pronounced *groovay*) and are present in
+    MusicVAE's code.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们将为生成的序列添加人性化（或**groove**）。groove 模型是 GrooVAE（发音为 *groovay*）的一部分，并且已经包含在
+    MusicVAE 的代码中。
+- en: Writing the humanizing code
+  id: totrans-134
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写人性化代码
+- en: 'Let''s now write the last method of our example, the `groove` method:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们编写我们示例中的最后一个方法，`groove` 方法：
+- en: 'First, let''s define the method, which takes `NoteSequence` as input and returns
+    a humanized sequence:'
+  id: totrans-136
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，让我们定义这个方法，它接受 `NoteSequence` 作为输入并返回一个人性化的序列：
+- en: '[PRE10]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: First, we download the model. Then, we split the sequence in chunks of 4 seconds,
+    because we need chunks of 2 bars for the model to handle. We then call the `encode`
+    function, followed by the `decode` function. Unfortunately, there isn't a `groove`
+    method on the model yet.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们下载模型。然后，我们将序列分割成 4 秒的块，因为模型需要 2 小节的块才能处理。接着，我们调用 `encode` 函数，再调用 `decode`
+    函数。不幸的是，模型中目前还没有 `groove` 方法。
+- en: The `encode` method takes a list of sequence that it will encode, returning
+    the `encoding` vector (also called z or latent vector), `mu` and `sigma`. We won't
+    be using `mu` and `sigma` here but we left them for clarity. The resulting shape
+    of the encoding array is *(6, 256)*, where 6 is the number of split sequences,
+    and 256 is the encoding size that is defined in the model, explained in a later
+    section, *Building the hidden layer*.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`encode` 方法接受一个序列列表，它将对这些序列进行编码，返回 `encoding` 向量（也叫做 z 向量或潜在向量）、`mu` 和 `sigma`。我们在这里不会使用
+    `mu` 和 `sigma`，但为了清晰起见，我们保留了它们。编码数组的最终形状是 *(6, 256)*，其中 6 是分割序列的数量，256 是在模型中定义的编码大小，在稍后的部分“构建隐藏层”中会详细解释。'
+- en: As for the `interpolate` method, the call to the `encode` method might throw
+    an exception if the sequences are not properly formed.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `interpolate` 方法，如果序列没有正确构建，调用 `encode` 方法可能会抛出异常。
+- en: Then, the `decode` method takes the previous `encoding` value and the number
+    of steps per sample and tries to reproduce the input, resulting in a list of 6
+    humanized sequences of 2 bars each.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，`decode` 方法接受前一个 `encoding` 值和每个样本的步数，并尝试重现输入，结果是一个包含 6 个 2 小节的人性化序列的列表。
+- en: Finally, we concatenate the sequences like in the interpolate code snippet.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们像插值代码片段一样连接这些序列。
+- en: 'Let''s try calling the `groove` method:'
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们试着调用 `groove` 方法：
+- en: '[PRE11]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The returned sequence, `generated_groove_sequence`, is our final sequence for
+    this example.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 返回的序列，`generated_groove_sequence`，是我们这个示例的最终序列。
+- en: 'Let''s open the `output/groove/music_vae_00_TIMESTAMP.html` file, changing
+    `TIMESTAMP` for the printed value in the console. Corresponding to our interpolated
+    sequence, we have this humanized sequence:'
+  id: totrans-146
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们打开 `output/groove/music_vae_00_TIMESTAMP.html` 文件，将 `TIMESTAMP` 替换为控制台中打印的值。对应我们的插值序列，我们有这个人性化的序列：
+- en: '![](img/807d45f4-2bea-4dab-bf69-41b102ec67fc.png)'
+  id: totrans-147
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/807d45f4-2bea-4dab-bf69-41b102ec67fc.png)'
+- en: Let's look at the resulting plot file. First, the notes' velocities are dynamic
+    now, for example, with notes being played louder to mark the end or the start
+    of a beat like a real drummer would do. You can see an example of that on the
+    bass drum between the 20 and 24 seconds mark. Then, notice that the notes are
+    played with expressive timing, meaning the notes do not fall exactly on steps
+    beginning and end. Finally, some notes are not being played anymore, while others
+    have been added to the resulting score.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看生成的图表文件。首先，音符的音量现在是动态的，例如，音符在标记节拍的开始或结束时会更响亮，就像一个真实的鼓手一样。你可以在 20 到 24 秒之间的低音鼓上看到一个例子。然后，注意到音符是以富有表现力的节奏播放的，这意味着音符并不完全落在节奏的开始和结束上。最后，一些音符不再播放，而其他一些音符被添加到生成的乐谱中。
+- en: 'To listen to the generated MIDI, use your software synthesizer but **NOT MuseScore** since
+    it will have a hard time with the expressive timing and you might hear a different
+    score than what you actually have. For the software synth, refer to the following
+    command depending on your platform and replace `PATH_TO_SF2` and `PATH_TO_MIDI`
+    with the proper values:'
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要聆听生成的 MIDI，请使用你的软件合成器，但**不要使用 MuseScore**，因为它在处理富有表现力的节奏时会遇到困难，可能会听到与实际乐谱不同的音符。对于软件合成器，请根据你的平台使用以下命令，并替换
+    `PATH_TO_SF2` 和 `PATH_TO_MIDI` 为正确的路径：
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-150
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-151
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-152
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: To learn more about groove and humanization, you can refer to the last section,
+    *Further reading*, for more information on the topic, which is thoroughly explained
+    in the GrooVAE blog post and GrooVAE paper.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要了解更多关于groove和人性化的信息，可以参考最后一节，*Further reading*，它在GrooVAE博客文章和GrooVAE论文中有详细解释。
+- en: Humanizing from the command line
+  id: totrans-154
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从命令行进行人性化处理
+- en: Unfortunately, the humanization methods cannot be called from the command line
+    for now. We will see other ways of humanizing a sequence in [Chapter 9](8018122a-b28e-44ff-8533-5061a0ad356b.xhtml),
+    *Making Magenta Interact with Music Applications*.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，目前无法从命令行调用人性化方法。我们将在[第9章](8018122a-b28e-44ff-8533-5061a0ad356b.xhtml)《让Magenta与音乐应用互动》中看到其他的序列人性化方法，*Making
+    Magenta Interact with Music Applications*。
+- en: More interpolation on melodies
+  id: totrans-156
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 对旋律进行更多插值
+- en: 'In the previous sections, we''ve been doing sampling and interpolation on drum
+    sequences. By changing the code a bit, we can also do the same thing on melodies.
+    Unfortunately, you won''t be able to humanize the sequence since the GrooVAE model
+    was trained on percussion data:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在之前的章节中，我们对鼓乐序列进行了采样和插值。通过稍微修改代码，我们也可以对旋律进行同样的操作。不幸的是，由于GrooVAE模型是基于打击乐数据训练的，你无法对旋律进行人性化处理：
+- en: You can follow this example in the `chapter_04_example_02.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在本章源代码中的`chapter_04_example_02.py`文件中找到这个例子。源代码中有更多注释和内容，建议你去查看。
+- en: 'To make that happen, we change the calling code and keep the `sample` and `interpolate`
+    methods as they are. We''ll generate a sightly longer sequence with 10 interpolations
+    instead of 6\. Here is the code (warning: the checkpoint size is 1.6 GB):'
+  id: totrans-159
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为了实现这个，我们修改了调用代码，保持`sample`和`interpolate`方法不变。我们将生成一个稍长的序列，进行10次插值，而不是6次。以下是代码（警告：检查点的大小为1.6GB）：
+- en: '[PRE12]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: You'll notice we're using the `cat-mel_2bar_big` configuration for both the
+    sampling and the interpolation.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你会注意到，我们在采样和插值时都使用了`cat-mel_2bar_big`配置。
+- en: 'Let''s open the generated `output/merge/cat-mel_2bar_big_00_TIMESTAMP.html` file
+    by replacing `TIMESTAMP` with the proper value. A generated output looks like
+    this:'
+  id: totrans-162
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们通过替换`TIMESTAMP`为适当的值，打开生成的`output/merge/cat-mel_2bar_big_00_TIMESTAMP.html`文件。生成的输出如下所示：
+- en: '![](img/1b5e2e30-1541-4519-bcfb-06ee60a37e56.png)'
+  id: totrans-163
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/1b5e2e30-1541-4519-bcfb-06ee60a37e56.png)'
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  id: totrans-164
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要收听生成的MIDI，可以使用你的软件合成器或MuseScore。对于软件合成器，请根据你的平台使用以下命令，并将`PATH_TO_SF2`和`PATH_TO_MIDI`替换为正确的路径：
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-165
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-166
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-167
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: Sampling the whole band
+  id: totrans-168
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 采样整个乐队
+- en: 'In the previous sections, we''ve been sampling and interpolating for drums
+    and melodies. Now, we''ll sample a trio of percussion, melody, and bass at the
+    same time using one of the bigger models. This is perhaps one of the most impressive
+    models because it can generate rather long sequences of 16 bars at once, using
+    multiple instruments that work well together:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们已经对鼓乐和旋律进行过采样和插值。现在，我们将同时采样一组三重奏（打击乐、旋律和低音），并使用一个较大的模型。这也许是最令人印象深刻的模型之一，因为它可以一次生成较长的16小节序列，并使用多种互相协调的乐器：
+- en: You can follow this example in the `chapter_04_example_03.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在本章源代码中的`chapter_04_example_03.py`文件中找到这个例子。源代码中有更多注释和内容，建议你去查看。
+- en: 'For that example, we use our `sample` method with the `hierdec-trio_16bar`
+    pre-trained model name as an argument (warning: the checkpoint size is 2.6GB):'
+  id: totrans-171
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在这个例子中，我们使用`sample`方法，并将`hierdec-trio_16bar`预训练模型名称作为参数传入（警告：检查点的大小为2.6GB）：
+- en: '[PRE13]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Let''s open the generated `output/sample/hierdec-trio_16bar_00_TIMESTAMP.html` file
+    by replacing `TIMESTAMP` with the proper value. A generated output looks like
+    this:'
+  id: totrans-173
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 打开生成的 `output/sample/hierdec-trio_16bar_00_TIMESTAMP.html` 文件，将 `TIMESTAMP`
+    替换为正确的值。生成的输出如下所示：
+- en: '![](img/48f1a28e-ceb2-4d46-9184-a7ebebf7edfb.png)'
+  id: totrans-174
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/48f1a28e-ceb2-4d46-9184-a7ebebf7edfb.png)'
+- en: By using the `coloring=Coloring.INSTRUMENT` parameter in Visual MIDI, we can
+    color each instrument with a separate color. It is hard to read because the bass
+    line is on the same pitch as the drum line, but you can see the three instruments
+    in the diagram.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Visual MIDI 中使用 `coloring=Coloring.INSTRUMENT` 参数，我们可以为每个乐器设置不同的颜色。由于低音线与鼓线在相同的音高上，因此难以阅读，但你可以在图表中看到这三种乐器。
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  id: totrans-176
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要收听生成的 MIDI，请使用你的软件合成器或 MuseScore。对于软件合成器，根据你的平台使用以下命令，并将 `PATH_TO_SF2` 和 `PATH_TO_MIDI`
+    替换为正确的值：
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-177
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-178
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  id: totrans-179
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+- en: You can hear that the generated MIDI has three instruments, and your synthesizer
+    should assign a different instrument sound for each track (normally, a piano,
+    a bass, and a drum). This is the only pre-trained model in Magenta that can generate
+    multiple instruments at the same time, see the first section, *Technical requirements*,
+    for a link to the README, which lists all of the available pre-trained models.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以听到生成的 MIDI 包含三种乐器，并且你的合成器应该为每个轨道分配不同的乐器音色（通常是钢琴、低音和鼓）。这是 Magenta 中唯一能够同时生成多个乐器的预训练模型，查看第一部分，*技术要求*，获取
+    README 的链接，里面列出了所有可用的预训练模型。
+- en: What is interesting in that model is that the long term structure of the 16
+    bars sequence is kept using a special type of decoder called `HierarchicalLstmDecoder`.
+    That architecture adds another layer between the latent code and the decoder,
+    called a **conductor**, which is an RNN that outputs a new embedding for each
+    bar of the output. The decoder layer then proceeds to decode each bar.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该模型的有趣之处在于，16小节序列的长期结构通过一种特殊类型的解码器 `HierarchicalLstmDecoder` 得以保持。该架构在潜在编码和解码器之间增加了一个额外层，称为
+    **指挥器**，它是一个 RNN，每个小节的输出会产生一个新的嵌入。解码器层然后继续解码每个小节。
+- en: To learn more about the hierarchical encoder and decoder architecture, you can
+    refer to the last section, *Further reading*, for more information on the topic,
+    which is thoroughly explained in the MusicVAE blog post and MusicVAE paper.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要了解更多关于层次化编码器和解码器架构的信息，可以参考最后一部分，*进一步阅读*，获取关于该主题的更多信息，这在 MusicVAE 博客文章和 MusicVAE
+    论文中有详细说明。
+- en: An overview of other pre-trained models
+  id: totrans-183
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 其他预训练模型的概述
+- en: We already saw many pre-trained models present in MusicVAE and there are some
+    more that are interesting but cannot be covered in depth here. Remember you can
+    find the full list of them in the README, see the first section, *Technical requirements*,
+    for the link to it.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经看到许多在 MusicVAE 中预训练的模型，还有一些有趣的模型，但在这里无法深入探讨。请记住，你可以在 README 中找到它们的完整列表，查看第一部分，*技术要求*，获取链接。
+- en: 'Here''s an overview of some of them we find interesting:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们发现一些有趣的模型概述：
+- en: The `nade-drums_2bar_full` model is a drums pre-trained model similar to the
+    one from our example, but using the 61 classes from General MIDI instead of 9
+    classes. The model is bigger though. You can see which classes are encoded and
+    what they correspond to in the `data.py` file in the `magenta.models.music_vae`
+    module.
+  id: totrans-186
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`nade-drums_2bar_full` 模型是一个类似于我们示例的鼓类预训练模型，但使用了来自 General MIDI 的 61 类，而不是
+    9 类。不过该模型较大。你可以在 `magenta.models.music_vae` 模块中的 `data.py` 文件中查看编码的类及其对应的内容。'
+- en: The `groovae_2bar_tap_fixed_velocity` pre-trained model converts a "tap" pattern
+    into a full-fledged drum rhythm while keeping the same groove. A "tap" sequence
+    is a sequence that you could be taking from another rhythm, or even by tapping
+    on your desk with your finger. In other words, it is a single note sequence, with
+    groove, that can be transformed into a drum pattern. Usage of this would be to
+    record a bass line from a real instrument, then "tap" the rhythm (or convert it
+    from the audio), and then feed it to the network to sample a drum pattern that
+    fits the same groove as the bass line.
+  id: totrans-187
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`groovae_2bar_tap_fixed_velocity`预训练模型可以将“tap”模式转换为完整的鼓节奏，同时保持相同的groove。 “tap”序列是从另一个节奏中获取的序列，甚至是通过用手指敲击桌子获取的序列。换句话说，它是一个带有groove的单音序列，可以转换为鼓模式。使用它的方法是从真实乐器中录制低音部，然后“tap”节奏（或从音频中转换），然后将其馈送到网络中，以采样与低音部相符的鼓模式。'
+- en: The `groovae_2bar_add_closed_hh` pre-trained model adds or replaces hi-hat on
+    an existing groove.
+  id: totrans-188
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`groovae_2bar_add_closed_hh`预训练模型在现有的groove上添加或替换闭合的hi-hat。'
+- en: Understanding TensorFlow code
+  id: totrans-189
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解TensorFlow代码。
+- en: In this section, we'll take a quick look at the TensorFlow code to understand
+    a bit more how the sampling, interpolating, and humanizing code works. This will
+    also make references to the first section of this chapter, *Continuous latent
+    space in VAEs*, so that we make sense of both the theory and the hands-on practice
+    we've had.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将快速查看TensorFlow代码，以更深入地了解采样、插值和人性化代码的工作原理。这也将参考本章节的第一部分，“VAE中的连续潜在空间”，以便我们能够理解理论和我们已经进行的实际操作。
+- en: But first, let's do an overview of the model's initialization code. For this
+    section, we'll take the `cat-drums_2bar_small` configuration as an example and
+    the same model initialization code we've been using for this chapter, meaning `batch_size`
+    of 8.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但首先，让我们先看一下模型初始化代码的概述。在本节中，我们将以`cat-drums_2bar_small`配置为例，并使用本章节已经介绍过的相同模型初始化代码，即`batch_size`为8。
+- en: Building the VAE graph
+  id: totrans-192
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建VAE图。
+- en: We'll start by looking at the `TrainedModel` constructor in the `models.music_vae.trained_model`
+    module. By taking the configuration values, `z_size`, `enc_rnn_size`, and `dec_rnn_size`,
+    from the config map we've already introduced in a previous section, *Initializing
+    the model*, we can find relevant information about the encoder's RNN, the hidden
+    layer, and the decoder's RNN.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从`models.music_vae.trained_model`模块中的`TrainedModel`构造函数开始。通过从我们已经在前一节“初始化模型”中介绍过的配置映射中获取`z_size`、`enc_rnn_size`和`dec_rnn_size`的配置值，我们可以找到关于编码器的RNN、隐藏层和解码器的RNN的相关信息。
+- en: Notice the encoder is `BidirectionalLstmEncoder` and the decoder is `CategoricalLstmDecoder`,
+    both from the `magenta.models.music_vae.lstm_models` module.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意编码器是`BidirectionalLstmEncoder`，解码器是`CategoricalLstmDecoder`，都来自`magenta.models.music_vae.lstm_models`模块。
+- en: Building an encoder with BidirectionalLstmEncoder
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用BidirectionalLstmEncoder构建编码器。
+- en: 'Let''s first have a look at the encoder''s RNN, which is initialized in the
+    `BidirectionalLstmEncoder` class of the `magenta.models.music_vae.lstm_models`
+    module, in the `build` method, where the encoding layer gets initialized as follows:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们首先看看编码器的RNN，在`magenta.models.music_vae.lstm_models`模块的`BidirectionalLstmEncoder`类中初始化，在`build`方法中，编码层的初始化如下：
+- en: '[PRE14]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'You can see in the `rnn_cell` method from the `magenta.models.music_vae.lstm_utils`
+    module that the layer is `LSTMBlockCell` (from the `tensorflow.contrib.rnn`  module)
+    with 512 units and a dropout wrapper:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`magenta.models.music_vae.lstm_utils`模块中的`rnn_cell`方法中，可以看到层是`LSTMBlockCell`（来自`tensorflow.contrib.rnn`模块），具有512个单元和一个dropout包装器：
+- en: '[PRE15]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'In the `DrumsConverter` class from the `magenta.models.music_vae.data` module
+    (instantiated in the `configs.py` file), you can see that we use the same `MutltiDrumOneHotEncoding`
+    class that we explained in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml):'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`magenta.models.music_vae.data`模块中的`DrumsConverter`类（在`configs.py`文件中实例化）中，可以看到我们使用了相同的`MutltiDrumOneHotEncoding`类，这个类我们在[第2章](b60deee5-c58f-45eb-88a2-23718802e580.xhtml)中已经解释过：
+- en: '[PRE16]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: The melody configurations will use the `OneHotMelodyConverter` class.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 旋律配置将使用`OneHotMelodyConverter`类。
+- en: Building a decoder with CategoricalLstmDecoder
+  id: totrans-203
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建一个使用CategoricalLstmDecoder的解码器。
+- en: 'Then, let''s look at the decoder''s RNN initialization in the `BaseLstmDecoder`
+    class of the `magenta.models.music_vae.lstm_models` module, in the `build` method,
+    where the decoding layer get initialized as follows:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，让我们看看解码器的RNN初始化，在`magenta.models.music_vae.lstm_models`模块的`BaseLstmDecoder`类中，在`build`方法中，解码层的初始化如下：
+- en: '[PRE17]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Here, `output_depth` will be 512\. The output layer is initialized as a dense
+    layer, followed by 2 layers of `LSTMBlockCell` of 256 units each.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，`output_depth`将是512。输出层被初始化为一个密集层，后面接着两层256单元的`LSTMBlockCell`。
+- en: 'You can also find the information on the encoder and decoder of your current
+    configuration in the console during execution:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以在执行过程中通过控制台查看当前配置的编码器和解码器信息：
+- en: '[PRE18]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Building the hidden layer
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建隐藏层
+- en: 'Finally, the hidden layer initialization is in the `MusicVAE` class of the
+    `magenta.models.music_vae.base_model` module, in the `encode` method:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，隐藏层的初始化位于`magenta.models.music_vae.base_model`模块中的`MusicVAE`类的`encode`方法中：
+- en: '[PRE19]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Both the `mu` and `sigma` layers are densely connected to the previous `encoder_output`
+    value with a shape of *(8, 256)*, where 8 corresponds to `batch_size` and 256
+    corresponds to `z_size`. The method returns `MultivariateNormalDiag`, which is
+    a normal distribution with `mu` and `sigma` as parameters:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mu`和`sigma`层与之前的`encoder_output`值密集连接，形状为*(8, 256)*，其中8对应于`batch_size`，256对应于`z_size`。该方法返回`MultivariateNormalDiag`，这是一个以`mu`和`sigma`为参数的正态分布：'
+- en: '![](img/f66e73a4-effb-4f2d-9cd1-2b88c67b8611.png)'
+  id: totrans-213
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f66e73a4-effb-4f2d-9cd1-2b88c67b8611.png)'
+- en: Looking at the sample method
+  id: totrans-214
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 查看`sample`方法
+- en: 'Let''s now look at the `sample` method content, located in the `TrainedModel`
+    class of the `models.music_vae.trained_model` module. The core of the method is
+    as follows:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看一下位于`models.music_vae.trained_model`模块的`TrainedModel`类中的`sample`方法。该方法的核心如下：
+- en: '[PRE20]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: The method will split the number of required samples, `n`, in batches of maximum
+    `batch_size`, then sample `z_input` from the standard normal distribution of size
+    *(8, 256)* using `randn`, and finally run the model using those values. Remember,
+    `z` is the embedding, so essentially what we are doing here is instantiating the
+    latent variables and then decoding them.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方法会将所需样本的数量`n`拆分为最大`batch_size`的小批量，然后使用`randn`从标准正态分布中采样大小为*(8, 256)*的`z_input`，最后使用这些值运行模型。记住，`z`是嵌入，因此我们在这里做的基本上是实例化潜在变量，然后对其进行解码。
+- en: Remembering what we saw in the previous section, *Sampling from the same area
+    of the latent space*, we know that `z` might be sampled only once if we are reusing
+    the same `z` variable.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回想我们在上一节看到的内容——*从潜在空间的相同区域进行采样*，我们知道如果我们复用相同的`z`变量，`z`可能只会被采样一次。
+- en: 'The samples are then converted back to sequences by calling the one-hot decoding
+    of the samples:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，通过调用样本的单热解码，将样本转换回序列：
+- en: '[PRE21]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Looking at the interpolate method
+  id: totrans-221
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 查看`interpolate`方法
+- en: 'The interpolate method, located in the `TrainedModel` class, is pretty short:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TrainedModel`类中的`interpolate`方法非常简短：'
+- en: '[PRE22]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: What we are doing here is encoding the start and end sequence and getting back
+    only the `mu` value from the encodings, using it to instantiate `z`, then decoding
+    `z` for the resulting list of interpolated sequences.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这里做的是对开始和结束序列进行编码，并从编码中仅返回`mu`值，利用它实例化`z`，然后对`z`进行解码，得到插值序列的结果列表。
+- en: But what is that `_slerp` method that instantiates `z`? Well, "slerp" stands
+    for "spherical linear interpolation", and it calculates the direction between
+    the first sequence and the second sequence so that the interpolation can move
+    in the latent space in the proper direction.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，那个实例化`z`的`_slerp`方法是什么呢？“slerp”代表“球形线性插值”，它计算第一个序列和第二个序列之间的方向，从而使插值能够在潜在空间中沿正确的方向移动。
+- en: We won't worry too much about the implementation details of the `slerp` method;
+    we'll just remember the diagram from the section, *The latent space in standard
+    autoencoders*, which showed how moving in a specific direction in the latent space
+    would resulting in a transition from one sequence to another. By decoding at regular
+    intervals along that direction, we end up with sequences that progressively goes
+    from one to another.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不需要过于担心` slerp`方法的实现细节；我们只需记住“标准自编码器中的潜在空间”这一部分的图示，该图示展示了在潜在空间中朝某个特定方向移动将导致从一个序列到另一个序列的过渡。通过沿着该方向定期解码，我们最终得到一个逐步从一个序列过渡到另一个序列的结果。
+- en: Looking at the groove method
+  id: totrans-227
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 查看`groove`方法
+- en: 'Finally, let''s have a look at our `groove` method. As a reminder, the `groove`
+    method is not present in Magenta so we had to write it ourselves:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，让我们来看看我们的`groove`方法。提醒一下，`groove`方法在Magenta中没有，因此我们不得不自己编写它：
+- en: '[PRE23]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Apart from variable naming, this code snippet is almost identical to the `interpolate`
+    method, but instead of using the µ value to instantiate the latent variables to
+    move in a direction, we're just encoding the sequences and then decoding them
+    with the model.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了变量命名之外，这段代码与`interpolate`方法几乎相同，但它不是使用µ值来实例化潜在变量以朝某个方向移动，而是直接对序列进行编码，然后通过模型进行解码。
+- en: Summary
+  id: totrans-231
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we looked at sampling, interpolating, and humanizing scores
+    using a variational autoencoder with the MusicVAE and GrooVAE models.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们研究了如何使用变分自编码器以及MusicVAE和GrooVAE模型来采样、插值和人性化音乐乐谱。
+- en: We first explained what is latent space in AE and how dimensionality reduction
+    is used in an encoder and decoder pair to force the network to learn important
+    features during the training phase. We also learned about VAEs and their continuous
+    latent space, making it possible to sample any point in the space as well as interpolate
+    smoothly between two points, both very useful tools in music generation.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先解释了在AE中什么是潜在空间，以及如何在编码器和解码器对中使用降维方法来强制网络在训练阶段学习重要特征。我们还了解了VAE及其连续的潜在空间，使得我们可以从空间中的任何一点进行采样，并且能够在两个点之间平滑地插值，这两者在音乐生成中都非常有用。
+- en: Then, we wrote code to sample and transform a sequence. We learned how to initialize
+    a model from a pre-trained checkpoint, sample the latent space, interpolate between
+    two sequences, and humanize a sequence. Along the way, we've learned important
+    information on VAEs, such as the definition of the loss function and the KL divergence.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们编写了代码来采样并转换一个序列。我们学习了如何从一个预训练的检查点初始化模型，采样潜在空间，在两个序列之间进行插值，并且使序列更具人性化。在这个过程中，我们了解了VAE的一些重要信息，比如损失函数的定义和KL散度。
+- en: Finally, we looked at TensorFlow code to understand how the VAE graph is built.
+    We showed the building code for the encoder, the decoder, and the hidden layer
+    and explained the layers configurations and shapes. We also looked at the sample,
+    interpolate, and groove methods, by explaining their implementations.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们查看了TensorFlow代码，以理解VAE图的构建过程。我们展示了编码器、解码器和隐藏层的构建代码，并解释了各层的配置和形状。我们还详细讲解了采样、插值和Groove方法的实现。
+- en: This chapter marks the end of the content aimed at models generating symbolic
+    data. With the previous chapters, we've had a deep look at the most important
+    models for generating and handling MIDI. The next chapter, *Audio Generation with
+    NSynth and GANSynth*, will look at generating sub-symbolic content, such as audio.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章标志着关于生成符号数据的模型内容的结束。在前几章中，我们深入探讨了生成和处理MIDI的最重要的模型。下一章，*使用NSynth和GANSynth生成音频*，将讨论生成亚符号内容，如音频。
+- en: Questions
+  id: totrans-237
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 问题
+- en: What is the main use of the encoder and decoder pair in AE and what is a major
+    shortcoming of such design?
+  id: totrans-238
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: AE中编码器和解码器对的主要用途是什么？这种设计的主要缺点是什么？
+- en: How is the loss function defined in AE?
+  id: totrans-239
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: AE中损失函数是如何定义的？
+- en: What is the main improvement in VAE on AE, and how is that achieved?
+  id: totrans-240
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: VAE相比AE的主要改进是什么？这一改进是如何实现的？
+- en: What is KL divergence and what is its impact on the loss function?
+  id: totrans-241
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: KL散度是什么，它对损失函数有什么影响？
+- en: What is the code to sample `z` with a batch size of 4 and `z` size of 512?
+  id: totrans-242
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如何使用批量大小为4且`z`大小为512的代码来采样`z`？
+- en: What is the usage of the **slerp** method during interpolation?
+  id: totrans-243
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**slerp**方法在插值过程中有什么作用？'
+- en: Further reading
+  id: totrans-244
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '**MusicVAE: Creating a palette for musical scores with machine learning**:
+    Magenta''s team blog post on MusicVAE, explaining in more detail what we''ve seen
+    in this chapter ([magenta.tensorflow.org/music-vae](https://magenta.tensorflow.org/music-vae))'
+  id: totrans-245
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**MusicVAE: 使用机器学习为音乐乐谱创造调色板**：Magenta团队博客文章介绍了MusicVAE，更详细地解释了我们在本章中看到的内容（[magenta.tensorflow.org/music-vae](https://magenta.tensorflow.org/music-vae)）'
+- en: '**A Hierarchical Latent Vector Model for Learning Long-Term Structure in Music**:
+    Magenta''s team paper on MusicVAE, a very approachable and interesting read ([arxiv.org/abs/1803.05428](https://arxiv.org/abs/1803.05428))'
+  id: totrans-246
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**一种层次化潜在向量模型用于学习音乐中的长期结构**：Magenta团队关于MusicVAE的论文，非常易于理解且有趣的阅读（[arxiv.org/abs/1803.05428](https://arxiv.org/abs/1803.05428)）'
+- en: '**GrooVAE: Generating and Controlling Expressive Drum Performances**: Magenta''s
+    team blog post on GrooveVAE, explaining in more detail what we''ve seen in this
+    chapter ([magenta.tensorflow.org/groovae](https://magenta.tensorflow.org/groovae))'
+  id: totrans-247
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**GrooVAE: 生成与控制表现力十足的鼓乐演奏**：Magenta团队博客文章介绍了GrooveVAE，更详细地解释了我们在本章中看到的内容（[magenta.tensorflow.org/groovae](https://magenta.tensorflow.org/groovae)）'
+- en: '**Learning to Groove with Inverse Sequence Transformations**: Magenta''s team
+    paper on GrooVAE, very approachable and interesting read ([arxiv.org/abs/1905.06118](https://arxiv.org/abs/1905.06118))'
+  id: totrans-248
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**通过逆序列转换学习节奏**：Magenta团队关于GrooVAE的论文，非常易懂且有趣 ([arxiv.org/abs/1905.06118](https://arxiv.org/abs/1905.06118))'
+- en: '**Groove MIDI Dataset**: The dataset used for the GrooVAE training, composed
+    of 13.6 hours of aligned MIDI and synthesized audio ([magenta.tensorflow.org/datasets/groove](https://magenta.tensorflow.org/datasets/groove))'
+  id: totrans-249
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Groove MIDI数据集**：用于GrooVAE训练的数据集，包含13.6小时的对齐MIDI和合成音频 ([magenta.tensorflow.org/datasets/groove](https://magenta.tensorflow.org/datasets/groove))'
+- en: '**Using Artificial Intelligence to Augment Human Intelligence**: An interesting
+    read on AI interfaces enabled by latent space type models ([distill.pub/2017/aia/](https://distill.pub/2017/aia/))'
+  id: totrans-250
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**使用人工智能增强人类智能**：一本关于通过潜在空间类型模型启用的AI接口的有趣读物 ([distill.pub/2017/aia/](https://distill.pub/2017/aia/))'
+- en: '**Intuitively Understanding Variational Autoencoders**: An intuitive introduction
+    to VAE, very clear ([www.topbots.com/intuitively-understanding-variational-autoencoders/](https://www.topbots.com/intuitively-understanding-variational-autoencoders/))'
+  id: totrans-251
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**直观理解变分自编码器**：对VAE的直观介绍，非常清晰 ([www.topbots.com/intuitively-understanding-variational-autoencoders/](https://www.topbots.com/intuitively-understanding-variational-autoencoders/))'
+- en: '**Tutorial - What is a variational autoencoder?**: A more in-depth overview
+    of VAEs ([jaan.io/what-is-variational-autoencoder-vae-tutorial](https://jaan.io/what-is-variational-autoencoder-vae-tutorial))'
+  id: totrans-252
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**教程 - 什么是变分自编码器？**：关于VAE的更深入概述 ([jaan.io/what-is-variational-autoencoder-vae-tutorial](https://jaan.io/what-is-variational-autoencoder-vae-tutorial))'
+- en: '**Autoencoders — Guide and Code in TensorFlow 2.0**: Hands-on code for AE and
+    VAE in TensorFlow 2.0 ([medium.com/red-buffer/autoencoders-guide-and-code-in-tensorflow-2-0-a4101571ce56](https://medium.com/red-buffer/autoencoders-guide-and-code-in-tensorflow-2-0-a4101571ce56))'
+  id: totrans-253
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**自编码器 — TensorFlow 2.0中的指南和代码**：关于AE和VAE在TensorFlow 2.0中的实战代码 ([medium.com/red-buffer/autoencoders-guide-and-code-in-tensorflow-2-0-a4101571ce56](https://medium.com/red-buffer/autoencoders-guide-and-code-in-tensorflow-2-0-a4101571ce56))'
+- en: '**Kullback-Leibler Divergence Explained**: The KL divergence explained from
+    a statistical viewpoint ([www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained](https://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained))'
+  id: totrans-254
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Kullback-Leibler散度解释**：从统计学角度解释KL散度 ([www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained](https://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained))'
+- en: '**An Introduction to Variational Autoencoders**: Good and complete paper on
+    VAEs ([arxiv.org/pdf/1906.02691.pdf](https://arxiv.org/pdf/1906.02691.pdf))'
+  id: totrans-255
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**变分自编码器简介**：关于VAE的良好且完整的论文 ([arxiv.org/pdf/1906.02691.pdf](https://arxiv.org/pdf/1906.02691.pdf))'

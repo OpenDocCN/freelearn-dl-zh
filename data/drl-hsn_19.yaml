@@ -1,0 +1,1464 @@
+- en: '19'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '19'
+- en: Reinforcement Learning with Human Feedback
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过人类反馈的强化学习
+- en: In this chapter, we’ll take a look at a relatively recent method that addresses
+    situations when the desired behavior is hard to define via the explicit reward
+    function – reinforcement learning with human feedback (RLHF) . This is also related
+    to exploration (as the method allows humans to push learning in a new direction),
+    the problem we discussed in Chapter [18](ch022.xhtml#x1-32800018). Surprisingly,
+    the method, initially developed for a very specific subproblem in the RL domain,
+    turned out to be enormously successful in the large language models (LLMs). Nowadays,
+    RLHF is at the core of modern LLM training pipelines, and without it, the recent
+    fascinating progress wouldn’t have been possible.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将介绍一种相对较新的方法，解决了当期望的行为很难通过明确的奖励函数定义时的情况——通过人类反馈的强化学习（RLHF）。这也与探索相关（因为该方法允许人类推动学习朝着新的方向发展），这是我们在第[18章](ch022.xhtml#x1-32800018)中讨论过的问题。令人惊讶的是，这种方法最初是为强化学习领域中的一个非常特定的子问题开发的，结果在大型语言模型（LLM）中取得了巨大的成功。如今，RLHF已成为现代LLM训练流程的核心，没有它，近期的惊人进展是不可能实现的。
+- en: As this book is not about LLMs and modern chatbots, we will focus purely on
+    the original paper from OpenAI and Google by Christiano et al., Deep reinforcement
+    learning from human preferences [[Chr+17](#)], which describes the RLHF method
+    applied to RL problems and environments. But in the overview of the method, I
+    will explain a bit about how this method is used in LLM training.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于本书并不涉及LLM和现代聊天机器人，我们将纯粹聚焦于OpenAI和Google的Christiano等人所提出的原始论文《来自人类偏好的深度强化学习》[[Chr+17](#)]，该论文描述了RLHF方法如何应用于强化学习问题和环境。但在方法概述中，我会简要解释这种方法是如何在LLM训练中使用的。
+- en: 'In this chapter, we will:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将：
+- en: Take a look at human feedback in RL to address problems with unclear reward
+    objectives and exploration.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 看看人类反馈在强化学习中的应用，以解决奖励目标不明确和探索的问题。
+- en: Implement an RLHF pipeline from scratch and check it on the SeaQuest Atari game
+    to teach it new behavior.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从零开始实现一个RLHF流程，并在SeaQuest Atari游戏中进行测试，以教会它新的行为。
+- en: Reward functions in complex environments
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复杂环境中的奖励函数
+- en: 'Before we go into the details of the RLHF method, let’s start by discussing
+    the underlying motivation of the concept. As we discussed in Chapter [1](ch005.xhtml#x1-190001),
+    the reward is the core concept in RL. Without a reward, we’re blind — all the
+    methods we’ve already discussed are heavily dependent on the reward value provided
+    by the environment:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入讨论RLHF方法之前，让我们先讨论一下这一概念背后的动机。正如我们在第[1章](ch005.xhtml#x1-190001)中讨论的，奖励是强化学习的核心概念。没有奖励，我们就像瞎子——我们已经讨论过的所有方法都严重依赖于环境提供的奖励值：
+- en: In value-based methods (Part 2 of the book), we used the reward to approximate
+    the Q-value to evaluate the actions and choose the most prominent one.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在基于价值的方法（本书第2部分）中，我们使用奖励来近似Q值，以评估行为并选择最优的行动。
+- en: In policy-based methods (Part 3), the reward was used even more directly — as
+    a scale for the Policy Gradient. With all the math removed, we basically optimized
+    our policy to prefer actions that bring more accumulated future reward.
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在基于策略的方法（第3部分）中，奖励的使用更加直接——作为策略梯度的尺度。去掉所有数学内容后，我们基本上优化了我们的策略，以偏好那些能够带来更多累计未来奖励的行为。
+- en: 'In black-box methods (Chapter [17](ch021.xhtml#x1-31100017)), we used the reward
+    to make a decision about agent variants: should they be kept for the future or
+    discarded?'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在黑箱方法（第[17章](ch021.xhtml#x1-31100017)）中，我们使用奖励来做出关于代理变体的决策：应该保留它们以供将来使用，还是丢弃？
+- en: In almost all the RL environments we’ve experimented with, the reward function
+    was predefined for us — in Atari games, we had the score; in the FrozenLake environment,
+    it was an explicit target position; in simulated robots, it was the distance travelled,
+    etc. The only exception was in Chapter [10](ch014.xhtml#x1-16900010), where we
+    implemented the environment (stock trading system) ourselves and had to decide
+    how the reward was to be shaped. But even in that example, it was fairly obvious
+    what should be used as a reward.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们实验过的几乎所有强化学习环境中，奖励函数都是预定义的——在Atari游戏中，我们有得分；在FrozenLake环境中，它是一个明确的目标位置；在模拟机器人中，它是行进的距离，等等。唯一的例外是在第[10章](ch014.xhtml#x1-16900010)，我们自己实现了环境（股票交易系统），并且必须决定如何设计奖励。即便在那个例子中，应该使用什么作为奖励也相当明显。
+- en: Unfortunately, in real-life situations, it is not always that easy to formulate
+    what should be used as a reward. Let’s look at a couple of examples. If we are
+    training the chatbot to solve a set of tasks, it’s important to not only ensure
+    the tasks are completed correctly but also consider the style in which they are
+    done. What if we ask the system “What’s the weather forecast for tomorrow?” and
+    it replies correctly but in a rude manner? Should it be punished for this with
+    a negative reward and to what extent? What should we do in the opposite situation
+    — a very polite answer but the information given is wrong? If we just optimize
+    one single criterion (like the correctness of information), we might get a system
+    that “works” but is not usable in real life – just because it is so awkward that
+    nobody wants to use it.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，在现实生活中，确定应作为奖励的内容并非总是那么简单。让我们来看几个例子。如果我们在训练聊天机器人解决一组任务时，除了确保任务正确完成外，还必须考虑完成任务的方式。如果我们问系统“明天的天气预报是什么？”它回答正确但语气粗鲁，应该因其不礼貌的回答而受到负面奖励吗？如果是相反的情况——回答非常礼貌，但信息错误呢？如果我们只优化一个标准（比如信息的正确性），我们可能会得到一个“能工作”的系统，但它在现实生活中却不可用——因为它太笨拙，没人愿意使用。
+- en: 'Another example of a “single optimization factor” is the transportation of
+    goods from point A to point B. Transport companies don’t just try to maximize
+    their profits by all means. In addition, they have tons of restrictions and regulations,
+    like driving rules, working hours, labour legislation, etc. If we optimize only
+    one criterion in our system, we might eventually get “Drive through the neighbor’s
+    fence – this is the fastest way.” So, in real life, having a single value we want
+    to maximize is an exception rather than the norm. Most of the time, we have several
+    parameters that contribute to the final result and we need to find some sort of
+    balance between them. Even in the Atari games we’ve already seen, the score might
+    be calculated as the sum of different “subgoals.” A very good example of this
+    is the SeaQuest game we experimented with in the previous chapter. If you haven’t
+    played it before, you can do it in your browser to get a better understanding:
+    [https://www.retrogames.cz/play_221-Atari2600.php](https://www.retrogames.cz/play_221-Atari2600.php).'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个“单一优化因素”的例子是从A点到B点的货物运输。运输公司并不仅仅通过一切手段最大化他们的利润。此外，他们还面临着大量的限制和规定，如驾驶规则、工作时间、劳动法规等。如果我们仅在系统中优化一个标准，最终可能会得到“穿越邻居的栅栏——这是最快的路。”因此，在现实生活中，追求单一的最大化标准是例外而非常态。大多数情况下，我们有多个参数共同作用于最终结果，我们需要在它们之间找到某种平衡。即使在我们之前见过的雅达利游戏中，分数也可能是不同“子目标”之和的结果。一个非常好的例子是我们在上一章实验过的《SeaQuest》游戏。如果你以前没玩过，可以在浏览器中进行体验，以更好地理解：[https://www.retrogames.cz/play_221-Atari2600.php](https://www.retrogames.cz/play_221-Atari2600.php)。
+- en: 'In this game, you’re controlling the submarine and you are scored for the following
+    activities:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这款游戏中，你控制潜艇，并根据以下活动获得分数：
+- en: Shooting evil fish and enemy submarines
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 射击邪恶的鱼类和敌方潜艇
+- en: Saving divers and bringing them back to the surface
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 救援潜水员并将他们带回水面
+- en: Avoiding enemy fire and ships on the surface (they appear in later levels of
+    the game)
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 避免敌人火力和水面上的船只（它们出现在游戏的后期关卡）
+- en: As the level of oxygen is limited, your submarine has to go to the surface from
+    time to time to refill the reserves. Most of the modern RL methods have no problem
+    discovering the reward for shooting fish and submarines — starting with trial
+    and error, after just a couple of hours of training, the agent learns how to get
+    the reward from firing.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于氧气有限，潜艇必须定期上浮以补充氧气。大多数现代强化学习方法在发现射击鱼类和潜艇的奖励时没有问题——从试错开始，经过几小时的训练，智能体就能学会如何通过射击获得奖励。
+- en: But discovering scoring from saving divers is much trickier, as the reward for
+    them is given only after collecting six divers and getting to the surface. Oxygen
+    replenishment is also hard to discover by trial and error, as our neural network
+    has no prior idea about oxygen, submarines, and how the sudden death of your submarine
+    might be related to the gauge at the bottom of the screen. Our RL method with
+    𝜖-greedy exploration could be seen as a newborn baby randomly pushing buttons
+    and being rewarded for correct sequences of actions, which might take lots of
+    time before the correct lengthy sequence has been executed.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但发现通过拯救潜水员来得分要困难得多，因为只有在收集了六个潜水员并成功到达水面后才会给予奖励。通过试错法发现氧气补充也很困难，因为我们的神经网络对氧气、潜水艇以及潜水艇突然死亡如何与屏幕底部的仪表相关联没有先验知识。我们的强化学习方法与𝜖-贪婪探索可以看作是一个刚出生的婴儿随机按按钮并因正确的动作序列而获得奖励，这可能需要很长时间才能执行正确的长序列。
+- en: As a result, most of the training episodes in SeaQuest are limited by the average
+    score of 300 and 500 game steps. The submarine just dies from a lack of oxygen
+    and random surface visits are too rare to discover that the game might be played
+    for much longer. At the same time, people who haven’t seen the game before can
+    figure out how to refill the oxygen and save divers in just several minutes of
+    gameplay.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果是，在《SeaQuest》中的大多数训练回合都受到平均得分300和500游戏步骤的限制。潜水艇因缺氧而死，随机的表面访问过于稀少，以至于无法发现游戏可以玩得更久。同时，从未见过这个游戏的人能够在几分钟的游戏时间里找出如何补充氧气并拯救潜水员。
+- en: Potentially, we could help our agent and explain somehow why oxygen is important
+    by adding it to the reward function (as an extra reward for refilling the oxygen,
+    for example), but it might start the vicious circle of tweaking the environment
+    here and there – exactly those efforts we’ve tried to avoid by using RL methods.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 潜在地，我们可以通过将氧气纳入奖励函数（例如作为补充氧气的额外奖励）来帮助我们的智能体，并以某种方式解释氧气为何重要，但这可能会引发环境调整的恶性循环——正是我们通过使用强化学习方法所试图避免的那些努力。
+- en: And, as you might already have guessed, RLHF is exactly the approach that allows
+    us to avoid this low-level reward function tweaking, allowing humans to give feedback
+    to the agent’s behavior.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所料，RLHF正是能够让我们避免这种低级奖励函数调整的方法，使得人类能够对智能体的行为提供反馈。
+- en: Theoretical background
+  id: totrans-24
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理论背景
+- en: Let’s take a look at the original RLHF method published in 2017 by OpenAI and
+    Google researchers [[Chr+17](#)]. Since the publication (and especially after
+    ChatGPT’s release), this method has been an area of active research. For recent
+    developments, you can the check papers at [https://github.com/opendilab/awesome-RLHF](https://github.com/opendilab/awesome-RLHF).
+    In addition, we’ll discuss the role of RLHF in the LLM training process.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下OpenAI和Google研究人员在2017年发布的原始RLHF方法[[Chr+17](#)]。自从这篇论文发布后（尤其是在ChatGPT发布之后），该方法成为了一个活跃的研究领域。有关最新的进展，你可以查看[https://github.com/opendilab/awesome-RLHF](https://github.com/opendilab/awesome-RLHF)上的论文。此外，我们还将讨论RLHF在大语言模型（LLM）训练过程中的作用。
+- en: Method overview
+  id: totrans-26
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 方法概述
+- en: 'The authors of the paper experimented with two classes of problems: several
+    environments from MuJoCo simulated robotics (similar to the continuous control
+    problems we discussed in Chapter [15](ch019.xhtml#x1-27200015) and Chapter [16](ch020.xhtml#x1-29000016))
+    and several Atari games.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 论文的作者实验了两类问题：几种来自MuJoCo模拟机器人环境（类似于我们在第[15](ch019.xhtml#x1-27200015)章和第[16](ch020.xhtml#x1-29000016)章讨论的连续控制问题）和几种Atari游戏。
+- en: The core idea is to keep the original RL model, but replace the reward from
+    the environment with a neural network called reward predictor, which is trained
+    on data gathered by humans. This network (represented as r̂ (o,a) in the paper
+    ) takes the observation and the action and returns the float value of immediate
+    reward for the action.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 核心思想是保持原始的强化学习模型，但用一个神经网络替代来自环境的奖励，这个神经网络叫做奖励预测器，它是通过人类收集的数据进行训练的。这个网络（在论文中表示为r̂(o,a)）接受观察和动作，并返回该动作的即时奖励浮动值。
+- en: 'The training data for this reward predictor is not provided directly by humans,
+    but deducted from human preferences: people are shown two short video clips with
+    examples of the agent’s behavior and asked the question “Which one is better?”.
+    In other words, the training data for the reward predictor is two episode segments
+    σ¹ and σ² (fixed-length sequences of (o[t],a[t]) with observations and actions)
+    and label μ from the human indicating which of the two is preferred. The given
+    answer options are “first,” “second,” “both are good,” and “cannot judge.”'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该奖励预测器的训练数据并非直接由人类提供，而是从人类偏好中推断出来：人们会看到两个短视频片段，其中展示了智能体的行为，并被问到“哪一个更好？”换句话说，奖励预测器的训练数据是两个情节片段
+    σ¹ 和 σ²（包含观察和动作的固定长度序列 (o[t],a[t])) 和来自人类的标签 μ，表示哪个片段更受偏好。给定的答案选项有“第一个”，“第二个”，“两个都好”和“无法判断”。
+- en: 'The network r̂ (o,a) is trained from this data using cross-entropy loss between
+    labels and the function p̂[σ¹ ≻σ²], which is an estimation of the probability
+    of the human preferring segment σ¹ over σ²:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络 r̂ (o,a) 是通过使用标签与函数 p̂[σ¹ ≻σ²] 之间的交叉熵损失来训练的，p̂[σ¹ ≻σ²] 是对人类偏好 σ¹ 相较于 σ² 的概率的估计：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq71.png)'
+  id: totrans-31
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq71.png)'
+- en: 'In other words, we sum the rewards predicted for every step in the segment,
+    exponentiate every reward, and normalize the sum. The cross-entropy loss is calculated
+    using the standard formula for the binary classification:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，我们对片段中的每一步预测奖励进行求和，取每个奖励的指数，然后对总和进行归一化。交叉熵损失是使用二分类的标准公式计算的：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq72.png)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq72.png)'
+- en: 'Values for μ[1] and μ[2] are assigned based on the human’s judgement. If the
+    first segment was preferred over the second, then μ[1] = 1 and μ[2] = 0\. If the
+    second segment was better, then μ[2] = 1 and μ[1] = 0\. If the human decided that
+    both segments are good, then both μ are set to 0.5\. Such a reward model has several
+    benefits in comparison to different approaches:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: μ[1] 和 μ[2] 的值是根据人类的判断分配的。如果第一个片段比第二个片段更受偏好，则 μ[1] = 1，μ[2] = 0。若第二个片段更好，则 μ[2]
+    = 1，μ[1] = 0。如果人类认为两个片段都很好，则两个 μ 都设置为 0.5。与其他方法相比，这种奖励模型有几个优点：
+- en: By using a neural network for reward prediction, we can significantly reduce
+    the required number of labels. An extreme case would be to ask humans to label
+    every action of the policy, but this is prohibitively expensive in the case of
+    RL, where millions of interactions take place within the environment. In the case
+    of high-level goals, this might be an almost impossible thing to do.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过使用神经网络进行奖励预测，我们可以显著减少所需的标签数量。极端情况下，可能要求人类标注策略的每个动作，但在强化学习的情况下，这是不可行的，因为在环境中会有数百万次交互发生。在高层目标的情况下，这几乎是不可能完成的任务。
+- en: We give the network feedback not only about good behavior but also about behavior
+    that we don’t like. If you remember, in Chapter [14](ch018.xhtml#x1-24700014),
+    we used the recorded human demonstrations to train the web automation agent. But
+    human demonstrations only show positive examples (“do this”) and have no way of
+    including negative examples (“don’t do that”). In addition, human demonstrations
+    are harder to collect and might contain more errors.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们不仅给网络反馈好的行为，还给它反馈我们不喜欢的行为。如果你记得，在第[14](ch018.xhtml#x1-24700014)章中，我们使用记录下来的人工示范来训练网络自动化代理。但人工示范只展示了正面例子（“做这个”），没有办法包含负面例子（“不要做那个”）。此外，人工示范更难收集，且可能包含更多的错误。
+- en: By asking for human preferences, we can handle problems where humans can recognize
+    the behavior we want, but not necessarily reproduce it. For example, controlling
+    the four-legged Ant robot from Chapter [16](ch020.xhtml#x1-29000016) might be
+    very challenging for humans. At the same time, we don’t have problems detecting
+    when the robot is behaving normally or the policy is wrong.
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过询问人类偏好，我们可以处理那些人类能够识别我们想要的行为，但不一定能复制的情况。例如，控制第[16](ch020.xhtml#x1-29000016)章中的四足蚂蚁机器人对人类来说可能非常具有挑战性。同时，我们也没有检测出机器人行为正常或策略错误时的困难。
+- en: 'In the RLHF paper, the authors experimented with different approaches to the
+    reward model training and its usage in the RL training process. In their setup,
+    three different processes were running in parallel:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 RLHF 论文中，作者实验了不同的奖励模型训练方法及其在强化学习训练过程中的使用。在他们的设置中，三种不同的过程同时运行：
+- en: The RL training method (A2C) used the current r̂ (o,a) network for reward prediction.
+    Random trajectory segments σ = (o[i],a[i]) were stored in the labeling database.
+  id: totrans-39
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用的 RL 训练方法（A2C）使用当前的 r̂ (o, a) 网络进行奖励预测。随机轨迹段 σ = (o[i], a[i]) 被存储在标注数据库中。
+- en: Human labelers sampled pairs of segments (σ¹,σ²) and assigned their labels μ,
+    which were stored in the labeling database.
+  id: totrans-40
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 人类标注者采样了一对段落（σ¹, σ²），并为其分配标签 μ，标签被存储在标注数据库中。
+- en: The reward model r̂ (o,a) was periodically trained on labeled pairs from the
+    database and sent to the RL training process.
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 奖励模型 r̂ (o, a) 会定期在来自数据库的标注对上进行训练，并发送到 RL 训练过程中。
+- en: This process is shown in Figure [19.1](#x1-352009r1).
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该过程如图[19.1](#x1-352009r1)所示。
+- en: '![ DB: TTserrgaaminiennts 11 22 rˆrσσσμRewla(Labo,,re,aσσdls),μ ](img/B22150_19_01.png)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![ DB: TTserrgaaminiennts 11 22 rˆrσσσμRewla(Labo,,re,aσσdls),μ ](img/B22150_19_01.png)'
+- en: 'Figure 19.1: RLHF structure'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '图 19.1: RLHF 结构'
+- en: 'As discussed earlier, the paper addressed two classes of problems: Atari games
+    and continuous control. On both classes, the results were not especially spectacular
+    — sometimes traditional RL was better than RLHF, sometimes not. But where RLHF
+    really stood out was the LLM training pipeline. Let’s briefly discuss why it happened
+    before we start our RLHF experiments.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，本文讨论了两类问题：Atari 游戏和连续控制。在这两类问题上，结果并不特别显著——有时传统的 RL 比 RLHF 更好，有时则相反。但 RLHF
+    真正突出的地方是在大语言模型（LLM）的训练流程中。我们在开始 RLHF 实验之前，简要讨论一下为什么会发生这种情况。
+- en: RLHF and LLMs
+  id: totrans-46
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: RLHF 和 LLMs
+- en: 'ChatGPT, released at the end of 2022, has quickly become a really big thing.
+    For the general audience, it was even more influential than AlexNet in 2012, as
+    AlexNet was “techy stuff”—it pushed the boundaries but it was much harder to explain
+    what was so special about it. ChatGPT was different: just a month after release,
+    it had surpassed a user base of 100M users and almost everybody was talking about
+    it.'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ChatGPT 于 2022 年底发布，很快成为了一个大热话题。对于普通用户来说，它甚至比 2012 年的 AlexNet 还要有影响力，因为 AlexNet
+    是“技术性的东西”——它推动了边界，但很难解释它到底有多特别。ChatGPT 不一样：发布仅一个月后，它的用户数量就突破了 1 亿，而几乎每个人都在谈论它。
+- en: At the heart of ChatGPT (and any modern LLM) training pipeline is RLHF. So,
+    very quickly, this method of fine-tuning large models has become popular and has
+    grown in terms of research interest. As this is not a book about LLMs, I will
+    just give a quick description of the pipeline and how RLHF is incorporated there,
+    as, from my perspective, this is an interesting use case.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ChatGPT（以及任何现代 LLM）训练流程的核心是 RLHF。因此，这种微调大模型的方法迅速流行开来，并且在研究兴趣上也有所增长。由于这不是一本关于
+    LLM 的书，我将简要描述该流程以及 RLHF 是如何融入其中的，因为从我的角度来看，这是一个有趣的应用案例。
+- en: 'From a high level, LLM training consists of three stages:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从高层次来看，LLM 训练由三个阶段组成：
+- en: 'Pretraining: Here, we perform the initial training of the language model on
+    a huge corpus of texts. Basically, we take all the information we can possibly
+    get and do unsupervised training of the language model. The volume (and costs)
+    are enormous — the RedPajama dataset used for LLaMA training contains 1.2 trillion
+    tokens (which is approximately 15 million books).'
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 预训练：在这里，我们在一个庞大的文本语料库上对语言模型进行初步训练。基本上，我们会尽可能获取所有的信息并进行无监督的语言模型训练。数据量（及其成本）是巨大的——用于
+    LLaMA 训练的 RedPajama 数据集包含 1.2 万亿个标记（大约相当于 1500 万本书）。
+- en: At this stage, our randomly-initialized model learns regularities and deep connections
+    of the language. But because the data volume is huge, we cannot just curate this
+    data — it could be fake news, hate speech posts, and other weird stuff you can
+    easily find on the internet.
+  id: totrans-51
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这个阶段，我们的随机初始化模型学习语言的规律性和深层次的联系。但由于数据量庞大，我们不能仅仅挑选这些数据——它们可能是假新闻、仇恨言论帖子，或是你在互联网上随便可以找到的其他怪异内容。
+- en: 'Supervised fine-tuning: In this step, we fine-tune the model on predefined
+    curated example dialogues. The dataset used here is manually created and validated
+    for correctness and the volume is significantly lower — around 10K–100K example
+    dialogues.'
+  id: totrans-52
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 监督微调：在这一步，我们会在预定义的精选示例对话上对模型进行微调。此处使用的数据集是手动创建并验证正确性的，数据量显著较小——大约为 10K-100K
+    个示例对话。
+- en: This data is normally created by experts in the field and requires lots of effort
+    to make and double-check it.
+  id: totrans-53
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这些数据通常由该领域的专家创建，需要大量的精力来制作并进行复核。
+- en: 'RLHF fine-tuning (also known as ”model alignment”): This step uses the same
+    process we’ve already described: pairs of generated dialogues are presented to
+    users for labeling, the reward model is trained on those labels, and this reward
+    model is used in the RL algorithm to fine-tune the LLM model to follow the human’s
+    preferences. The number of labeled samples is larger than on the supervised fine-tuning
+    step (around 1M pairs), but because comparing two dialogues is a much simpler
+    task than creating a proper dialogue from scratch, this is not a problem.'
+  id: totrans-54
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: RLHF 微调（也称为“模型对齐”）：这一步使用了我们已经描述过的相同过程：生成的对话对呈现给用户进行标注，奖励模型基于这些标签进行训练，并在 RL 算法中使用这个奖励模型来微调
+    LLM 模型，使其遵循人类的偏好。标注样本的数量比监督微调步骤要多（大约 1M 对），但因为比较两个对话要比从头开始创建一个合适的对话简单得多，所以这不是问题。
+- en: 'As you might guess, the first step is the most expensive and lengthy: you have
+    to crunch terabytes of texts and feed them through transformers. But at the same
+    time, the importance of the steps is totally different. In the last step, the
+    system not only learns what the best solution to the presented problem is but
+    also has feedback about generating it in a socially acceptable way.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你可能猜到的，第一步是最耗费资源和时间的：你必须处理大量的文本并通过变换器进行处理。但同时，这些步骤的重要性是完全不同的。在最后一步，系统不仅学习如何解决呈现的问题，还会得到生成问题答案时是否符合社会接受方式的反馈。
+- en: The RLHF method is very suitable for this task — with just pairs of dialogues,
+    it can learn the reward model that represents the labelers’ implicit “preference
+    model” for such a complicated thing as the chatbot. Doing this explicitly (via
+    the reward function, for example) might be a very challenging problem with lots
+    of uncertainty.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RLHF 方法非常适合这个任务——只需要一对对话，它就能学习代表标注者隐式“偏好模型”的奖励模型，应用于像聊天机器人这样复杂的事物。显式地做这件事（例如通过奖励函数）可能是一个具有很大不确定性的挑战性问题。
+- en: RLHF experiments
+  id: totrans-57
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: RLHF 实验
+- en: To get a better understanding of the pipeline we’ve just discussed, let’s implement
+    it ourselves (as “doing is the best way to learn something”). In the previous
+    chapter, we tried the Atari SeaQuest environment, which is tricky from the exploration
+    point of view, so it is logical to take this environment and check what we can
+    achieve with human feedback.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更好地理解我们刚才讨论的流程，让我们自己动手实现它（因为“做是最好的学习方法”）。在上一章中，我们尝试了 Atari SeaQuest 环境，从探索角度来看，这个环境有一定难度，因此利用这个环境并检查我们能通过人类反馈取得什么成就是合乎逻辑的。
+- en: 'To limit the scope of the chapter and make the example more reproducible, I
+    made the following modifications to the experiments described in the RLHF paper
+    [[Chr+17](#)]:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了限制本章的范围并使例子更具可复现性，我对 RLHF 论文 [[Chr+17](#)] 中描述的实验进行了以下修改：
+- en: I focused on a single SeaQuest environment. The goal was to improve the agent’s
+    gameplay in comparison to the A2C results we got in Chapter [18](ch022.xhtml#x1-32800018)
+    — an average score of 400 and episodes of 500 steps (due to the lack of oxygen).
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我专注于单一的 SeaQuest 环境。目标是提高代理在与第 [18](ch022.xhtml#x1-32800018) 章中 A2C 结果的对比中的游戏表现——平均得分为
+    400，回合步数为 500 步（由于缺氧）。
+- en: 'Instead of asynchronous labeling and reward model training, I split them into
+    separate steps:'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我将其从异步标注和奖励模型训练的过程，分成了单独的步骤：
+- en: A2C training was performed, storing trajectory segments in local files. This
+    training might optionally load and use a reward model network, which would allow
+    us to iterate on reward models, labeling more samples after the training.
+  id: totrans-62
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行了 A2C 训练，将轨迹段存储在本地文件中。此训练可选择性地加载并使用奖励模型网络，这使得我们可以在训练后迭代奖励模型，标记更多的样本。
+- en: The web UI allowed me to label random pairs of trajectory segments, storing
+    the labels in a JSON file.
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Web UI 让我可以为随机的轨迹段对打上标签，并将标签存储在一个 JSON 文件中。
+- en: The reward model was trained on those segments and labels. The result of the
+    training was stored on disk.
+  id: totrans-64
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 奖励模型在这些段落和标签上进行了训练。训练结果被存储在磁盘上。
+- en: 'I avoided all the variations with the reward model training: no L2 regularization,
+    no ensemble, etc.'
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我避免了所有与奖励模型训练相关的变体：没有 L2 正则化，没有集成方法等。
+- en: 'The number of labels was significantly smaller: in every experiment, I labeling
+    an extra 100 pairs of episode segments and retrained the models.'
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 标签的数量显著减少：在每次实验中，我标记了额外的 100 对回合段，并重新训练了模型。
+- en: Actions were explicitly added to the reward model. For the details, check the
+    section Reward model.
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 动作明确地加入了奖励模型中。详情请参阅“奖励模型”一节。
+- en: The reward model was used in A2C training for the fine-tuning of the best mode
+    saved. For context, in the paper, the model was trained from scratch and improved
+    with parallel RLHF labeling and reward model retraining.
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 奖励模型在 A2C 训练中用于对保存的最佳模型进行微调。为了说明背景，在论文中，模型是从零开始训练的，并通过并行的 RLHF 标注和奖励模型重训练得到了改善。
+- en: Initial training using A2C
+  id: totrans-69
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 A2C 进行初始训练
+- en: To get the first model (let’s call it “version 0” or v0 for short), I used standard
+    A2C code with the same Atari wrappers we’ve already discussed several times in
+    this book so far.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了获得第一个模型（我们称之为“版本 0”或简称 v0），我使用了标准的 A2C 代码，并配合本书前面已经多次讨论过的 Atari 包装器。
+- en: To start the training, you need to run the Chapter19/01_a2c.py module, and besides
+    basic A2C training, it contains a command-line option that enables the usage of
+    the reward model (which we covered in earlier chapters), but we don’t need it
+    in this step.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要开始训练，您需要运行 Chapter19/01_a2c.py 模块，除了基本的 A2C 训练外，它还包含一个命令行选项，用于启用奖励模型（我们在前面的章节中介绍过），但在此步骤中我们不需要它。
+- en: 'For now, to start the training of the basic model, use the following command
+    line:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前，要开始基本模型的训练，请使用以下命令行：
+- en: '[PRE0]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Here is the description of the command-line options:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是命令行选项的描述：
+- en: '--dev: The name of the device used for computation.'
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '--dev: 用于计算的设备名称。'
+- en: '-n: The name of the run, used in TensorBoard.'
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '-n: 运行的名称，用于 TensorBoard。'
+- en: '--save: The directory name where the best models after the testing will be
+    stored. Every 100 batches, we perform 10 test episodes of the current model on
+    SeaQuest with disabled reward clipping (to get the original score range) and if
+    the best reward or the count of steps for any of those 10 rounds is better than
+    our previous record, we save the model into the file. Those files will be used
+    later for fine-tuning.'
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '--save: 在测试后将存储最佳模型的目录名称。每训练 100 批次，我们会对当前模型在 SeaQuest 上进行 10 次测试剧集，禁用奖励剪切（以获取原始分数范围），如果这
+    10 轮中的最佳奖励或步骤数超过我们之前的记录，我们会将模型保存到文件中。这些文件稍后将用于微调。'
+- en: '--db-path: The directory name where random episode segments will be stored
+    during the training. This data will be used for the labeling and training of the
+    reward model later.'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '--db-path: 在训练过程中将存储随机剧集片段的目录名称。这些数据稍后将用于奖励模型的标注和训练。'
+- en: 'Let’s discuss the episode segments database (DB for short). Its structure is
+    very simple: every environment used for training (in total, we have 16 of them)
+    has an identifier from 0 to 15, which is used as a subdirectory under the directory
+    given in the --db-path command-line argument. So, every environment stores random
+    segments independently in its own directory. The storage logic is implemented
+    in a Gym API Wrapper subclass, which is called EpisodeRecorderWrapper and is in
+    the lib/rlhf.py module.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们讨论一下剧集片段数据库（简称 DB）。其结构非常简单：每个用于训练的环境（总共有 16 个）都有一个从 0 到 15 的标识符，这个标识符用作 --db-path
+    命令行参数所给定目录下的子目录。因此，每个环境都会在自己的目录中独立存储随机片段。存储逻辑是通过 Gym API Wrapper 子类实现的，这个子类叫做
+    `EpisodeRecorderWrapper`，位于 lib/rlhf.py 模块中。
+- en: 'Let’s take a look at the source code of the wrapper. Initially, we declare
+    two hyperparameters, EPISODE_STEPS, which defines the length of segments, and
+    START_PROB, which is the probability of starting the episode recording:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下包装器的源代码。最初，我们声明了两个超参数，EPISODE_STEPS，它定义了片段的长度，以及 START_PROB，它表示开始剧集记录的概率：
+- en: '[PRE1]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: We store the episode segment as a list of EpisodeStep objects, which is just
+    an observation and the action we’re taking at this step. The method that resets
+    the environment is very simple — it updates the wrapper’s _step_idx field(which
+    is a counter of the steps we’ve done in this environment) and stores the observation
+    in the _prev_obs field, depending on the _is_store field. This field is True if
+    we’re in the middle of segment recording.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将剧集片段存储为一系列 `EpisodeStep` 对象，这些对象只是我们在该步骤中所采取的观察和动作。重置环境的方法非常简单——它会更新包装器的
+    _step_idx 字段（这是我们在该环境中已执行步骤的计数器），并根据 _is_store 字段将观察值存储在 _prev_obs 字段中。如果 _is_store
+    字段为 True，则表示我们正在进行片段记录。
+- en: 'Our segments have a fixed number of environment steps (50 by default) and they
+    are recorded independent of episode boundaries (in other words, if we started
+    the segment recording shortly before the submarine’s death, we’ll record the beginning
+    of the next episode after the reset() method):'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的片段有固定数量的环境步骤（默认为 50 步），它们独立于剧集边界进行记录（换句话说，如果我们在潜艇死亡前不久开始片段记录，那么在调用 reset()
+    方法后，我们会记录下一剧集的开始）：
+- en: '[PRE2]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: If you want, you can experiment with this logic as, in principle, observations
+    after the end of the episode are independent from observations and actions before
+    the end of the episode. But it will make the handling of episode segment data
+    more complicated, as the length will become variable.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你愿意，你可以尝试这种逻辑，因为原则上，剧集结束后的观察数据与剧集结束前的观察和动作是独立的。但这样会使剧集片段数据的处理更复杂，因为数据长度将变得可变。
+- en: 'The main logic of the wrapper is in the step() method and it is also not very
+    complicated. On every action, we store the step if we’re in the middle of recording;
+    otherwise, we generate a random number to make the decision to start the recording:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 包装器的主要逻辑在step()方法中，也不是很复杂。每次动作时，如果我们正在录制，就存储该步骤；否则，我们会生成一个随机数来决定是否开始录制：
+- en: '[PRE3]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: By default, the probability of starting the recording is small (START_PROB =
+    0.00005, which is a 0.005% chance), but because of the large number of steps we’re
+    doing during the training, we still have plenty of segments to label. For example,
+    after 12M environment steps (about 5 hours of training), the database contains
+    2,500 recorded segments, which occupy 12GB of disk.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，开始录制的概率很小（START_PROB = 0.00005，即0.005%的几率），但由于训练过程中我们进行的大量步骤，我们仍然有足够的片段可以标注。例如，在1200万环境步骤（约5小时的训练）之后，数据库中包含了2,500个录制的片段，占用了12GB的磁盘空间。
+- en: 'The method step() uses the function store_segment() to store the list of EpisodeStep
+    objects, and it is just the pickle.dumps() call for the list of steps:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 方法step()使用函数store_segment()存储EpisodeStep对象的列表，这实际上是对步骤列表的pickle.dumps()调用：
+- en: '[PRE4]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Before we get to the training results, I need to mention one small but important
+    detail about the wrapper’s usage. To make the labeling easier, the observations
+    we store in the DB are taken before the standard Atari wrappers. This increases
+    the size of the data we have to store, but human labelers will see the original
+    colorful Atari screen in the original resolution (160 × 192) instead of a downscaled
+    picture in shades of gray.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论训练结果之前，我需要提到一个关于包装器使用的小细节，虽然它不大，但很重要。为了让标注更容易，我们存储在数据库中的观察数据是来自标准Atari包装器之前的。这虽然增加了我们需要存储的数据量，但人工标注者将看到原始的、色彩丰富的Atari屏幕，分辨率为原始的160
+    × 192，而不是降级后的灰度图像。
+- en: 'To achieve that, the wrapper is applied right after the original Gymnasium
+    environment before the Atari wrappers. The following is the relevant piece of
+    code in the 01_a2c.py module:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这一点，包装器在原始Gymnasium环境之后、Atari包装器之前应用。以下是01_a2c.py模块中的相关代码片段：
+- en: '[PRE5]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The training process hyperparameters were taken from the paper (LR decrease
+    schedule, network architecture, count of environments, etc). I let it train for
+    5 hours and 12M observations. The charts with testing results are shown in Figure [19.2](#x1-355105r2).
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练过程的超参数来自论文（学习率下降计划、网络架构、环境数量等）。我让它训练了5小时，进行了1200万次观察。测试结果的图表显示在图[19.2](#x1-355105r2)中。
+- en: '![PIC](img/B22150_19_02.png)'
+  id: totrans-95
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_19_02.png)'
+- en: 'Figure 19.2: The reward (left) and steps (right) during the A2C training'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.2：A2C训练过程中的奖励（左）和步骤（右）
+- en: The best model was able to reach the reward level of 460 (without reward clipping
+    in the environment), which is good but is much worse than the results that could
+    be achieved if you refill the oxygen from time to time.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最佳模型能够达到460的奖励水平（环境中没有奖励裁剪），虽然很不错，但与时不时补充氧气所能达到的结果相比要差得多。
+- en: The video of this model’s gameplay is available at [https://youtu.be/R_H3pXu-7cw](https://youtu.be/R_H3pXu-7cw).
+    As you can see from the video, our agent mastered shooting the fish almost perfectly,
+    but got stuck on the local optima of floating at the bottom (maybe because it
+    is safer, as enemy submarines are not present there) and has no idea about the
+    oxygen refilling.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该模型的游戏视频可以在[https://youtu.be/R_H3pXu-7cw](https://youtu.be/R_H3pXu-7cw)观看。正如你从视频中看到的，我们的智能体几乎完美地掌握了射击鱼类的技巧，但它在浮在底部的局部最优解上卡住了（可能因为在那里更安全，敌方潜艇不在那里），并且对氧气补充一无所知。
+- en: You can record your own video from the model file using the tool 01_play.py,
+    which takes the model filename.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用工具01_play.py从模型文件录制自己的视频，输入模型文件名即可。
+- en: Labeling process
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 标注过程
+- en: During the A2C training, we got 12GB of 2,500 random episode segments. Each
+    segment contains 50 steps with screen observations and actions the agent took
+    on every step. Now we are ready for the labeling process of the RLHF pipeline.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在A2C训练过程中，我们获得了12GB的2,500个随机剧集片段。每个片段包含50个步骤，包含屏幕观察和智能体在每一步采取的动作。现在我们已经准备好进行RLHF管道的标注过程。
+- en: During the labeling, we need to randomly sample pairs of episode segments and
+    show them to the human, asking the question “Which one is better?”. The answer
+    should be stored for reward model training. Exactly this logic is implemented
+    in 02_label_ui.py.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在标注过程中，我们需要随机抽取剧集片段对并展示给用户，询问“哪个更好？”。答案应存储用于奖励模型的训练。正是这个逻辑在 02_label_ui.py 中实现。
+- en: 'The UI of the labeling process is implemented as a web application that uses
+    the NiceGUI library ([https://nicegui.io/](https://nicegui.io/)). NiceGUI allows
+    a modern web application UI to be implemented in Python and provides a rich set
+    of interactive UI widgets, like buttons, lists, pop-up dialogs, etc. In principle,
+    you don’t need to know JavaScript and CSS (but it won’t harm if you’re familiar
+    with them). If you have never used NiceGUI before, that’s not a problem; you just
+    need to install it with the following command in your Python environment:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标注过程的 UI 作为一个 web 应用实现，使用了 NiceGUI 库（[https://nicegui.io/](https://nicegui.io/)）。NiceGUI
+    允许用 Python 实现现代 web 应用 UI，并提供了一套丰富的交互式 UI 控件，如按钮、列表、弹出对话框等。原则上，你不需要了解 JavaScript
+    和 CSS（但如果你熟悉它们也无妨）。如果你以前从未使用过 NiceGUI，也没问题；你只需在 Python 环境中通过以下命令安装它：
+- en: '[PRE6]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'To start the labeling UI (after installing the NiceGUI package), you need to
+    specify the path to the DB with stored episode segments:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启动标注 UI（在安装 NiceGUI 包之后），你需要指定存储剧集片段的数据库路径：
+- en: '[PRE7]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The interface is available via HTTP (so, open it in your browser) and listens
+    on port 8080 on all machine interfaces, which is convenient if you start it on
+    a remote server (but you need to be aware of the possible risk of external access,
+    as the labeling UI has no authentification and authorization at all). If you want
+    to change the port or limit the scope to the specific network interface, just
+    tweak 02_label_ui.py. Let’s look at a screenshot of the labelling interface:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 界面通过 HTTP 提供服务（所以，可以在浏览器中打开），并监听所有机器接口上的 8080 端口，这在你将其部署到远程服务器时非常方便（但你需要意识到可能的外部访问风险，因为标注
+    UI 完全没有身份验证和授权）。如果你想更改端口或将范围限制到特定的网络接口，只需修改 02_label_ui.py。让我们看一下标注界面的截图：
+- en: '![PIC](img/file290.png)'
+  id: totrans-108
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file290.png)'
+- en: 'Figure 19.3: The labeling UI section with DB information'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 19.3：带有数据库信息的标注 UI 部分
+- en: 'This interface is very basic: on the left, there are three links to different
+    sections of the UI functionality:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个界面非常基础：左侧有三个链接，指向 UI 功能的不同部分：
+- en: Overview shows the path to the database, the total count of segments it contains,
+    and the amount of labels already created.
+  id: totrans-111
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 概览显示数据库路径、其中包含的片段总数以及已创建的标签数量。
+- en: Label new data samples random pairs of segments and allows you to label them.
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 标注新数据样本随机配对片段并允许你为其添加标签。
+- en: Existing labels shows all the labels and allows you to modify the labels if
+    needed.
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: “现有标签”显示所有标签，并允许在需要时修改标签。
+- en: 'If needed, the list with links could be hidden or shown by clicking on the
+    top-left button (with three horizontal lines). The most time has been spent on
+    the Label new data section, shown in Figure ??:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如有需要，可以通过点击左上角的按钮（带有三个横线）隐藏或显示包含链接的列表。最多的时间花费在“标注新数据”部分，见图 ??：
+- en: '![PIC](img/file291.png)'
+  id: totrans-115
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file291.png)'
+- en: 'Figure 19.4: The interface for adding new labels (for better visualization,
+    refer to https://packt.link/gbp/9781835882702 )'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 19.4：添加新标签的界面（为了更好地可视化，参考 https://packt.link/gbp/9781835882702）
+- en: 'Here, we have a list of 20 randomly sampled pairs of episode segments we can
+    label. When the entry in the list is selected, the interface shows both segments
+    (as animated GIFs generated by the code on the fly). The user can click one of
+    three buttons to add the label:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里我们有一个包含 20 对随机抽取的剧集片段的列表，可以进行标注。当列表中的条目被选择时，界面会显示这两段片段（作为代码实时生成的动画 GIF）。用户可以点击三个按钮中的一个来添加标签：
+- en: '#1 IS BETTER (1): Marks the first segment as preferred. Such entries will have
+    μ[1] = 1.0 and μ[2] = 0.0 during the reward model training.'
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '#1 更好（1）：将第一个片段标记为首选。在奖励模型训练过程中，这样的条目会有 μ[1] = 1.0 和 μ[2] = 0.0。'
+- en: 'BOTH ARE GOOD (0): Marks both segments as equally good (or bad), assigning
+    μ[1] = 0.5 and μ[2] = 0.5.'
+  id: totrans-119
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 两者都好（0）：将两个片段标记为同样好（或差），赋值 μ[1] = 0.5 和 μ[2] = 0.5。
+- en: '#2 IS BETTER (2): Marks the second segment as preferred (μ[1] = 0.0 and μ[2]
+    = 1.0).'
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '#2 更好（2）：将第二个片段标记为首选（μ[1] = 0.0 和 μ[2] = 1.0）。'
+- en: Instead of clicking the UI buttons, you can use the keyboard keys 0 (“both are
+    good”), 1 (“the first is better”), or 2 (“the second is better”) to assign the
+    label. Once the label is assigned, the UI automatically selects the next unlabeled
+    entry in the list, so the labeling process could be done with the keyboard only.
+    When you’re done with all the labels in the list, you can click the RESAMPLE LIST
+    button to load 20 new samples for labeling.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过使用键盘上的0（“两者都好”）、1（“第一个更好”）或2（“第二个更好”）来分配标签，而无需点击UI按钮。标签分配完成后，UI会自动选择列表中的下一个未标记条目，这样整个标记过程仅使用键盘就能完成。当你完成列表中的所有标签后，可以点击RESAMPLE
+    LIST按钮加载20个新的样本进行标记。
+- en: 'After every label has been assigned (with UI button clicks or key presses),
+    the labels are stored in the JSON file labels.json in the root of the DB directory.
+    The file has a trivial JSON-line format where every line is an entry containing
+    paths to both segments (relative to the DB root) and assigned labels:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每个标签被分配后（通过点击UI按钮或按下键盘键），这些标签会存储在DB目录根目录下的JSON文件labels.json中。该文件采用简单的JSON行格式，每行都是一个包含段落路径（相对于DB根目录）和已分配标签的条目：
+- en: '[PRE8]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: If needed, existing labels could be reviewed using the Existing labels link
+    (shown in Figure [19.5](#x1-356021r5)), which shows almost the same interface
+    as Label new data, but instead of sampling 20 fresh pairs, it shows already labeled
+    pairs. Those pairs could be changed by clicking the buttons or using the keyboard
+    shortcuts described earlier.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要，可以通过使用“现有标签”链接（如图[19.5](#x1-356021r5)所示）来查看现有标签，该界面几乎与“标记新数据”相同，不同之处在于它显示的不是20个新采样的对，而是已经标记的对。这些对可以通过点击按钮或使用前面描述的键盘快捷键进行更改。
+- en: '![PIC](img/file292.png)'
+  id: totrans-125
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file292.png)'
+- en: 'Figure 19.5: The interface for reviewing and editing old labels (for better
+    visualization, refer to https://packt.link/gbp/9781835882702 )'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.5：查看和编辑旧标签的界面（为了更好的可视化，参见https://packt.link/gbp/9781835882702 ）
+- en: 'During my experiments, I did the first round of labeling 100 pairs paying most
+    attention to the rare cases when the submarine was on the surface (marking them
+    as good) and more frequent situations when oxygen was low (marking them as bad).
+    In other situations, I prefer the segments where fish were properly hit. With
+    some labels at hand, we’re ready to go on to the next step: reward model training.'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我的实验中，我进行了第一轮标记，共标记了100对样本，主要关注潜水艇出现在水面上的罕见情况（标记为好）和氧气不足时更为常见的情况（标记为坏）。在其他情况下，我更倾向于选择那些鱼群被正确击中的段落。有了这些标签，我们就可以进入下一步：奖励模型训练。
+- en: Reward model training
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 奖励模型训练
+- en: 'The reward model network has most of the structure taken from the paper, with
+    the only difference in handling actions. In the paper, the authors do not specify
+    how actions are taken into account besides stating “For the reward predictor,
+    we use 84 × 84 images as inputs (the same as the inputs to the policy), and stack
+    4 frames for a total 84 × 84 × 4 input tensor.” From that, I made an assumption
+    that the reward model deducts actions “implicitly” from the dynamics between the
+    frames. I haven’t tried this approach in my experiment and instead decided to
+    show the actions to the network explicitly by concatenating one-hot encoding to
+    the vectors obtained from the convolution layers. As an exercise, you can change
+    my code to use the approach from the paper and compare the results. The rest of
+    the architecture and training parameters are the same as in the paper. Let’s take
+    a look at the reward model network code:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 奖励模型网络大多数结构来自论文，唯一的不同在于如何处理动作。在论文中，作者没有明确说明如何考虑动作，只是提到“对于奖励预测器，我们使用84 × 84的图像作为输入（与策略的输入相同），并将4帧图像堆叠在一起，形成总共84
+    × 84 × 4的输入张量。”根据这一点，我假设奖励模型通过帧之间的动态“隐式”地扣除动作。我在实验中没有尝试这种方法，而是决定通过将one-hot编码与从卷积层获得的向量拼接在一起，显式地向网络展示动作。作为一个练习，你可以修改我的代码，使用论文中的方法并比较结果。其余的架构和训练参数与论文中的相同。接下来，让我们看一下奖励模型网络的代码：
+- en: '[PRE9]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: As you can see, convolution layers are combined with batch normalization, dropout,
+    and the leaky ReLU activation function.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所看到的，卷积层与批量归一化、丢弃层和leaky ReLU激活函数结合使用。
+- en: 'The training of the reward model is implemented in 03_reward_train.py and has
+    nothing complicated. We load labeled data from JSON files (you can pass several
+    databases in the command line to use for the training), use 20% of the data for
+    the testing, and compute the binary cross entropy objective, which is implemented
+    in the calc_loss() function:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 奖励模型的训练在 03_reward_train.py 中实现，过程没有什么复杂的。我们从 JSON 文件中加载标注数据（你可以在命令行中传递多个数据库来用于训练），使用
+    20% 的数据进行测试，并计算二元交叉熵目标，这在 calc_loss() 函数中实现：
+- en: '[PRE10]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Initially, our observations and actions tensors had the following structure:
+    (batch,time,colors,height,width) for observations and (batch,time,actions) for
+    actions, where time is the sequence’s time dimension. More concretely, observation
+    tensors had the size 64 × 50 × 3 × 210 × 160 and actions had the size 64 × 50
+    × 18.'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最初，我们的观察和动作张量具有以下结构：观察为(batch,time,colors,height,width)，动作为(batch,time,actions)，其中
+    time 是序列的时间维度。更具体地说，观察张量的大小为 64 × 50 × 3 × 210 × 160，动作的大小为 64 × 50 × 18。
+- en: As the first step in loss calculation, we flatten the first two dimensions,
+    getting rid of the time dimension and applying the model to compute the reward
+    value r̂(o,a). After that, we return the time dimension and sum along it according
+    to the paper’s formula we’ve already discussed. Then our computation of loss is
+    the application of the torch function to compute the binary cross entropy.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为损失计算的第一步，我们展平前两个维度，去除时间维度，并应用模型计算奖励值 r̂(o,a)。之后，我们恢复时间维度，并根据我们已经讨论过的论文公式沿时间维度求和。然后，我们的损失计算是应用
+    torch 函数来计算二元交叉熵。
+- en: On every epoch of the training, we compute the test loss (on 20% of the data)
+    and save the reward model if the new loss is lower than the previous minimum of
+    the test loss. If the train loss grows for four epochs in a row, we stop the training.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每个训练周期中，我们计算测试损失（基于 20% 的数据），并在新损失低于先前测试损失的最小值时保存奖励模型。如果训练损失连续四个周期增长，我们将停止训练。
+- en: 'With the number of labels set in the previous section (a couple of hundred),
+    the training is very quick — it takes about a dozen epochs and several minutes.
+    The following is the example training process. The command-line argument -o specifies
+    the directory name where the best model will be saved:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节中设置的标签数量（几百个）下，训练非常快速——大约十几个周期和几分钟时间。以下是示例训练过程。命令行参数 -o 指定保存最佳模型的目录名称：
+- en: '[PRE11]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Combining A2C with the reward model
+  id: totrans-139
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将 A2C 与奖励模型相结合
+- en: 'Once the reward model is trained, we can finally try it for use in RL training.
+    To do that, we use the same tool 01_a2c.py but give it a couple of extra arguments:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦奖励模型训练完成，我们最终可以尝试将其用于 RL 训练。为此，我们使用相同的工具 01_a2c.py，但提供几个额外的参数：
+- en: '-r or --reward: This gives the path to the reward model to be loaded and used.
+    With this option, we don’t use the environment reward but, instead, use the model
+    to get the reward from the observation and action we decided to take. This is
+    implemented as an additional environment wrapper; we’ll take a look shortly.'
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: -r 或 --reward：这是奖励模型的路径，用于加载和使用。通过此选项，我们不使用环境奖励，而是使用模型从我们决定采取的观察和动作中获得奖励。这作为额外的环境包装器实现；我们稍后会详细介绍。
+- en: '-m or --model: This is the path to the actor model (stored on the previous
+    A2C round of training) to be loaded. As I’m doing fine-tuning with RLHF instead
+    of training with the reward model from scratch, the actor model is needed. In
+    principle, you can try to use the reward model to train from scratch, but my experiments
+    were not very successful.'
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: -m 或 --model：这是要加载的演员模型的路径（存储在先前 A2C 训练轮次中）。由于我正在使用 RLHF 进行微调，而不是从头开始使用奖励模型训练，因此需要演员模型。原则上，你可以尝试使用奖励模型从零开始训练，但我的实验结果并不十分成功。
+- en: '--finetune: This enables the fine-tuning mode: convolution layers are frozen
+    and LR is decreased 10 times. Without those modifications, the actor very quickly
+    unlearns all the prior knowledge and the reward drops to almost zero.'
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: --finetune：启用微调模式：卷积层被冻结，学习率降低 10 倍。没有这些修改，演员很快就会忘记所有先前的知识，奖励几乎降到零。
+- en: 'So, to use the reward model we’ve just trained, the command line will look
+    like this:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，要使用我们刚刚训练的奖励模型，命令行看起来像这样：
+- en: ./01_a2c.py --dev cuda -n v1 -r rw/reward-v0.dat --save save/v1 -m save/v0/model_rw=460-steps=580.dat
+    --finetune
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ./01_a2c.py --dev cuda -n v1 -r rw/reward-v0.dat --save save/v1 -m save/v0/model_rw=460-steps=580.dat
+    --finetune
+- en: Before checking the experiment results, let’s take a look at how the reward
+    model is used in the RL training process. To minimize the changes needed, I implemented
+    an environment wrapper, which is added between the original environment and Atari
+    wrappers, because the reward model needs an unscaled full-color game image.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在检查实验结果之前，让我们看看奖励模型如何在RL训练过程中使用。为了最小化所需的改动，我实现了一个环境包装器，它被添加在原始环境和Atari包装器之间，因为奖励模型需要一个未经缩放的全彩游戏图像。
+- en: 'The code of the wrapper is in lib/rlhf.py and is called RewardModelWrapper.
+    The constructor of the wrapper loads the model from the data file and assigns
+    a couple of fields. According to the paper, the reward predicted by the reward
+    model is normalized to have zero mean and unit variance, so to do the normalization,
+    the wrapper maintains the last 100 rewards in collections.deque. Besides normalization,
+    the wrapper can have a queue for metrics to be sent. The metrics contain information
+    about normalization values and the real sum from the underlying environment:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 包装器的代码在lib/rlhf.py中，名为RewardModelWrapper。包装器的构造函数从数据文件中加载模型并分配一些字段。根据论文，奖励模型预测的奖励经过标准化，使其均值为零，方差为一。因此，为了进行标准化，包装器维护了最后100个奖励值，使用collections.deque。此外，包装器还可以有一个队列，用于发送指标。该指标包含关于标准化值和来自底层环境的真实总和的信息：
+- en: '[PRE12]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'In the reset() method, we just remember the observation and reset the reward
+    counter:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在reset()方法中，我们只需要记住观察并重置奖励计数器：
+- en: '[PRE13]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'The main logic of the wrapper is in the step() function, but it is not very
+    complicated: we apply the model to the observation and the action, normalize the
+    reward, and return it instead of the real one. The model application is not very
+    efficient from a performance perspective and could be optimized (as we have several
+    environments working in parallel), but I decided to implement the simple version
+    first, leaving optimizations as an excercise for you:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 包装器的主要逻辑在step()函数中，但并不复杂：我们将模型应用于观察和动作，标准化奖励，并返回它，而不是返回真实的奖励。从性能角度来看，模型应用效率不是很高，可能需要优化（因为我们有多个环境并行运行），但我决定先实现简单版本，把优化留给你作为练习：
+- en: '[PRE14]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The rest of the training is the same. We just inject the new wrapper into the
+    environment-creating function if the reward model file is given in the command
+    line:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 剩下的训练部分相同。我们只需在环境创建函数中注入新的包装器（如果命令行中给定了奖励模型文件）：
+- en: '[PRE15]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: With this code, we can now combine the previous model with the labels we made
+    before.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这段代码，我们现在可以将之前的模型与之前制作的标签结合起来。
+- en: Fine-tuning with 100 labels
+  id: totrans-156
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用100个标签进行微调
+- en: 'I ran the training with the best model from the basic A2C training, which,
+    on testing, achieved a reward of 460 in 580 steps. In addition, I enabled sampling
+    of episode segments into the new DB directory (v1 in this case), so the full command
+    line was the following:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我使用从基本A2C训练中得到的最佳模型进行了训练，在测试中，该模型在580步内获得了460的奖励。此外，我启用了将回合片段采样到新DB目录（此处为v1）的功能，因此完整的命令行如下：
+- en: './01_a2c.py --dev cuda -n v1 -r rw/reward-v0.dat --save save/v1 -m save/v0/model_rw=460-steps=580.dat
+    --finetune --db-path v1 This model started to overfit quite quickly and after
+    2M steps (3 hours), I stopped the training. Figure [19.6](#x1-359003r6) shows
+    the test results (reward and count of steps):'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ./01_a2c.py --dev cuda -n v1 -r rw/reward-v0.dat --save save/v1 -m save/v0/model_rw=460-steps=580.dat
+    --finetune --db-path v1 该模型很快就开始过拟合，在2M步（3小时）后，我停止了训练。图[19.6](#x1-359003r6)显示了测试结果（奖励和步骤数）：
+- en: '![PIC](img/B22150_19_06.png)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_19_06.png)'
+- en: 'Figure 19.6: Test reward (left) and steps (right) during the fine-tuning'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.6：微调过程中测试奖励（左）和步骤（右）
+- en: 'Figure [19.7](#x1-359004r7) shows the training reward (predicted by the model)
+    and the total loss:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图[19.7](#x1-359004r7)显示了训练奖励（由模型预测）和总损失：
+- en: '![PIC](img/B22150_19_07.png)'
+  id: totrans-162
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_19_07.png)'
+- en: 'Figure 19.7: Training reward (left) and total loss (right) during the fine-tuning'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.7：微调过程中训练奖励（左）和总损失（右）
+- en: The best model was stored at the 500K training step and it was able to get a
+    reward of 900 in 1,120 steps. In comparison to the original model, this is quite
+    an improvement.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最佳模型保存在500K训练步时，它能够在1,120步内获得900的奖励。与原始模型相比，这是一个相当大的改进。
+- en: 'A video recording of this model is available here: [https://youtu.be/LnPwuyVrj9g](https://youtu.be/LnPwuyVrj9g).
+    From the gameplay, we see that the agent learned how to refill the oxygen and
+    is now spending some time in the middle of the screen. I also had the impression
+    that it picked divers more intentionally (but I haven’t done specific labeling
+    for this behavior). So, overall, the method works and it is quite impressive that
+    we can teach the agent something new with just 100 labels.'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该模型的视频记录可以在这里查看：[https://youtu.be/LnPwuyVrj9g](https://youtu.be/LnPwuyVrj9g)。从游戏玩法来看，我们看到代理学会了如何补充氧气，并且现在在屏幕中央停留了一段时间。我也有印象它更有意地选择了潜水员（但我并没有为这种行为做具体标注）。总体来说，这个方法有效，并且仅凭100个标签就能教会代理一些新东西，真的很令人印象深刻。
+- en: Let’s try to improve the model further with more labeling.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们通过更多的标注进一步改进模型。
+- en: The second round of the experiment
+  id: totrans-167
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 第二轮实验
+- en: 'On the second round, I did more labeling: 50 pairs from the v0 DB and 50 pairs
+    from segments stored during the fine-tuning (v1 DB). The database generated during
+    the fine-tuning (v1) contains many more segments with the submarine floating on
+    the surface, which confirms that our pipeline is working as expected. During the
+    labeling, I also put more emphasis on oxygen refill segments.'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第二轮实验中，我做了更多的标注：50对来自v0数据库，50对来自微调过程中存储的片段（v1数据库）。在微调过程中生成的数据库（v1）包含了更多的潜艇漂浮在水面的片段，这证明我们的管道运行正常。在标注时，我也更加重视氧气补充的片段。
+- en: After labeling, I retrained the reward model, which only took several minutes.
+    Then, fine-tuning of the best v1 model (with a reward of 900 and 1,120 steps)
+    was performed using the reward model.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标注后，我重新训练了奖励模型，这只用了几分钟。然后，使用奖励模型对最佳v1模型（奖励为900，步数为1,120）进行了微调。
+- en: 'Figure [19.8](#x1-360002r8) and Figure [19.9](#x1-360003r9) contain charts
+    with test results, training the reward, and the loss:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图[19.8](#x1-360002r8)和图[19.9](#x1-360003r9)包含了测试结果的图表、奖励训练和损失：
+- en: '![PIC](img/B22150_19_08.png)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_19_08.png)'
+- en: 'Figure 19.8: Test reward (left) and steps (right) during the fine-tuning'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.8：微调过程中的测试奖励（左）和步数（右）
+- en: '![PIC](img/B22150_19_09.png)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_19_09.png)'
+- en: 'Figure 19.9: Training reward (left) and total loss (right) during the fine-tuning'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.9：微调过程中的训练奖励（左）和总损失（右）
+- en: 'After 1.5M steps (2 hours), the training got stuck, but the best model wasn’t
+    better than the best model of v1: the best model got a reward of 860 in 1,084
+    steps.'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在1.5M步（2小时）之后，训练停滞了，但最佳模型并不比v1的最佳模型更好：最佳模型在1,084步中获得了860的奖励。
+- en: The third round of the experiment
+  id: totrans-176
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 第三轮实验
+- en: Here, I paid more attention during the labeling, trying to prioritize not just
+    oxygen refill, but also better fish shooting and diver pickup. Unfortunately,
+    100 pairs gave just a couple of examples of divers, so more labeling is needed
+    to teach the agent this behavior.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我在标注时更加注意，不仅优先考虑氧气补充，还考虑了更好的鱼类射击和潜水员接取。不幸的是，100对标签中只出现了几个潜水员的例子，因此需要更多的标注来教会代理这种行为。
+- en: Regarding the divers, it might be that the agent doesn’t pick them up just because
+    they are very hard to distinguish from the background, so on a grayscale image,
+    they are invisible. To fix that, we can tweak the contrast in our Atari wrappers.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于潜水员，代理可能没有接取他们，因为潜水员与背景非常难以区分，在灰度图像中是不可见的。为了解决这个问题，我们可以调整Atari包装器中的对比度。
+- en: After the reward model retraining, A2C fine-tuning was started. I also ran it
+    for almost 2M steps for 3 hours and the results were interesting. At the end of
+    the training (check Figure [19.10](#x1-361003r10) and Figure [19.11](#x1-361004r11)),
+    the boat during the testing reached 5,000 steps (which is the limit I set in the
+    environment), but the score was fairly low. Most likely, the submarine just stayed
+    on the surface, which is very safe, but not what we want – this could be because
+    of labeled samples. Strangely, when I tried to record the video of those later
+    models, their behavior was different and the number of steps was much lower, which
+    could be an indication of some testing bug.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在奖励模型重新训练后，开始了A2C的微调。我也运行了大约2M步，持续了3小时，结果很有趣。在训练结束时（查看图[19.10](#x1-361003r10)和图[19.11](#x1-361004r11)），测试中的船只达到了5,000步（这是我在环境中设定的限制），但得分相对较低。很可能，潜艇只是停留在水面上，这是非常安全的，但这不是我们想要的——这可能是由于标注样本的原因。奇怪的是，当我尝试录制这些后期模型的视频时，它们的行为发生了变化，步数也明显较低，这可能是测试中的某个bug。
+- en: '![PIC](img/B22150_19_10.png)'
+  id: totrans-180
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_19_10.png)'
+- en: 'Figure 19.10: Test reward (left) and steps (right) during the fine-tuning'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.10：微调过程中的测试奖励（左）和步骤数（右）
+- en: '![PIC](img/B22150_19_11.png)'
+  id: totrans-182
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_19_11.png)'
+- en: 'Figure 19.11: Training reward (left) and total loss (right) during the fine-tuning'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图19.11：微调过程中训练奖励（左）和总损失（右）
+- en: 'Before the overfitting, the training generated several policies that were better
+    than the v2 models. For example, in this recording, the agent refilled the oxygen
+    twice and got a score of 1,820 during the 1,613 steps: [https://youtu.be/DVe_9b3gdxU](https://youtu.be/DVe_9b3gdxU).'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在过拟合之前，训练生成了几种比v2模型更好的策略。例如，在这个录音中，代理进行了两次氧气补充，并在1,613步中获得了1,820分：[https://youtu.be/DVe_9b3gdxU](https://youtu.be/DVe_9b3gdxU)。
+- en: Overall results
+  id: totrans-185
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 总体结果
+- en: In the following table, I have summarized the information about the experiment
+    rounds and the results we got.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下表中，我总结了实验回合的相关信息和我们得到的结果。
+- en: '| Step | Labels | Reward | Steps | Video |'
+  id: totrans-187
+  prefs: []
+  type: TYPE_TB
+  zh: '| 步骤 | 标签 | 奖励 | 步骤数 | 视频 |'
+- en: '| Initial | None | 460 | 580 | [https://youtu.be/R_H3pXu-7cw](https://youtu.be/R_H3pXu-7cw)
+    |'
+  id: totrans-188
+  prefs: []
+  type: TYPE_TB
+  zh: '| 初始 | 无 | 460 | 580 | [https://youtu.be/R_H3pXu-7cw](https://youtu.be/R_H3pXu-7cw)
+    |'
+- en: '| v1 | 100 | 900 | 1120 | [https://youtu.be/LnPwuyVrj9g](https://youtu.be/LnPwuyVrj9g)
+    |'
+  id: totrans-189
+  prefs: []
+  type: TYPE_TB
+  zh: '| v1 | 100 | 900 | 1120 | [https://youtu.be/LnPwuyVrj9g](https://youtu.be/LnPwuyVrj9g)
+    |'
+- en: '| v2 | 200 | 860 | 1083 |  |'
+  id: totrans-190
+  prefs: []
+  type: TYPE_TB
+  zh: '| v2 | 200 | 860 | 1083 |  |'
+- en: '| v3 | 300 | 1820 | 1613 | [https://youtu.be/DVe_9b3gdxU](https://youtu.be/DVe_9b3gdxU)
+    |'
+  id: totrans-191
+  prefs: []
+  type: TYPE_TB
+  zh: '| v3 | 300 | 1820 | 1613 | [https://youtu.be/DVe_9b3gdxU](https://youtu.be/DVe_9b3gdxU)
+    |'
+- en: 'Table 19.1: Summary of experiment rounds'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表19.1：实验回合总结
+- en: As you can see, with just 300 labels, we were able to increase the scoring by
+    almost 4 times. As an exercise, you can try to teach the agent to pick up divers,
+    which might result in a much better score if done properly.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所看到的，凭借仅仅300个标签，我们成功将分数提高了近4倍。作为一个练习，你可以尝试教代理捡起潜水员，如果做得好，可能会得到更好的成绩。
+- en: Another experiment that might be worth doing is to fine-tune the original v0
+    model, instead of the best models from the previous step. It might lead to better
+    results, as the training has more time before overfitting.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个可能值得尝试的实验是微调原始v0模型，而不是前一步中的最佳模型。这可能会导致更好的结果，因为训练在过拟合之前有更多时间。
+- en: Summary
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we’ve taken a look at the recent addition of RLHF to the RL
+    toolbox. This method, at the core of the LLM training pipeline, allows you to
+    increase the quality of models. In the chapter, we implemented RLHF and applied
+    it to the SeaQuest Atari game, which should have illustrated to you how this method
+    could be used in RL pipelines for model improvement.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们了解了RLHF在RL工具箱中的新加入。这种方法是LLM训练流程的核心，可以提高模型的质量。在本章中，我们实现了RLHF，并将其应用于SeaQuest
+    Atari游戏，这应该向你展示了这种方法如何在RL流水线中用于模型改进。
+- en: 'In the next chapter, we’ll discuss a different family of RL methods: AlphaGo,
+    AlphaZero, and MuZero.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将讨论另一类RL方法：AlphaGo、AlphaZero和MuZero。

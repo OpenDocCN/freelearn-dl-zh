@@ -1,0 +1,890 @@
+- en: Asynchronous Methods - A3C and A2C
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 异步方法 - A3C 和 A2C
+- en: We looked at the DDPG algorithm in the previous chapter. One of the main drawbacks
+    of the DDPG algorithm (as well as the DQN algorithm that we saw earlier) is the
+    use of a replay buffer to obtain independent and identically distributed samples
+    of data for training. Using a replay buffer consumes a lot of memory, which is
+    not desirable for robust RL applications. To overcome this problem, researchers
+    at Google DeepMind came up with an on-policy algorithm called **Asynchronous Advantage
+    Actor Critic** (**A3C**). A3C does not use a replay buffer; instead, it uses parallel
+    worker processors, where different instances of the environment are created and
+    the experience samples are collected. Once a finite and fixed number of samples
+    are collected, they are used to compute the policy gradients, which are asynchronously
+    sent to a central processor that updates the policy. This updated policy is then
+    sent back to the worker processors. The use of parallel processors to experience
+    different scenarios of the environment gives rise to independent and identically
+    distributed samples that can be used to train the policy. This chapter will cover
+    A3C, and will also briefly touch upon a variant of it called the **Advantage Actor
+    Critic** (**A2C**).
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在上一章中看过 DDPG 算法。DDPG 算法（以及之前看到的 DQN 算法）的一个主要缺点是使用重放缓冲区来获取独立同分布的数据样本进行训练。使用重放缓冲区会消耗大量内存，这在强健的
+    RL 应用中是不可取的。为了解决这个问题，Google DeepMind 的研究人员提出了一种叫做 **异步优势演员评论家**（**A3C**）的在线算法。A3C
+    不使用重放缓冲区；而是使用并行工作处理器，在这里创建环境的不同实例并收集经验样本。一旦收集到有限且固定数量的样本，它们将用于计算策略梯度，并异步发送到中央处理器更新策略。更新后的策略随后会发送回工作处理器。使用并行处理器体验环境的不同场景可以产生独立同分布的样本，这些样本可以用来训练策略。本章将介绍
+    A3C，同时也会简要提到它的一个变种，叫做 **优势演员评论家**（**A2C**）。
+- en: 'The following topics will be covered in this chapter:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: The A3C algorithm
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: A3C 算法
+- en: The A3C algorithm applied to CartPole
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: A3C 算法应用于 CartPole
+- en: The A3C algorithm applied to LunarLander
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: A3C 算法应用于 LunarLander
+- en: The A2C algorithm
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: A2C 算法
+- en: 'In this chapter, you will learn about the A3C and A2C algorithms, as well as
+    how to code them using Python and TensorFlow. We will also apply the A3C algorithm
+    to solving two OpenAI Gym problems: CartPole and LunarLander.'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，您将了解 A3C 和 A2C 算法，并学习如何使用 Python 和 TensorFlow 编写代码。我们还将把 A3C 算法应用于解决两个
+    OpenAI Gym 问题：CartPole 和 LunarLander。
+- en: Technical requirements
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'To successfully complete this chapter, some knowledge of the following will
+    be of great help:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要顺利完成本章，以下知识将非常有帮助：
+- en: TensorFlow (version 1.4 or higher)
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: TensorFlow（版本 1.4 或更高）
+- en: Python (version 2 or 3)
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python（版本 2 或 3）
+- en: NumPy
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: NumPy
+- en: The A3C algorithm
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: A3C 算法
+- en: As we mentioned earlier, we have parallel workers in A3C, and each worker will
+    compute the policy gradients and pass them on to the central (or master) processor.
+    The A3C paper also uses the `advantage` function to reduce variance in the policy
+    gradients. The `loss` functions consist of three losses, which are weighted and
+    added; they include the value loss, the policy loss, and an entropy regularization
+    term. The value loss, *L[v]*, is an L2 loss of the state value and the target
+    value, with the latter computed as a discounted sum of the rewards. The policy
+    loss, *L[p]*, is the product of the logarithm of the policy distribution and the
+    `advantage` function, *A*. The entropy regularization, *L[e]*, is the Shannon
+    entropy, which is computed as the product of the policy distribution and its logarithm,
+    with a minus sign included. The entropy regularization term is like a bonus for
+    exploration; the higher the entropy, the better regularized the ensuing policy
+    is. These three terms are weighted as 0.5, 1, and -0.005, respectively.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，A3C 中有并行工作者，每个工作者将计算策略梯度并将其传递给中央（或主）处理器。A3C 论文还使用 `advantage` 函数来减少策略梯度中的方差。`loss`
+    函数由三部分组成，它们加权相加；包括价值损失、策略损失和熵正则化项。价值损失，*L[v]*，是状态值和目标值的 L2 损失，后者是通过折扣奖励和奖励总和计算得出的。策略损失，*L[p]*，是策略分布的对数与
+    `advantage` 函数 *A* 的乘积。熵正则化，*L[e]*，是香农熵，它是策略分布与其对数的乘积，并带有负号。熵正则化项类似于探索的奖励；熵越高，策略的正则化效果越好。这三项的加权分别为
+    0.5、1 和 -0.005。
+- en: Loss functions
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 损失函数
+- en: 'The value loss is computed as the weighted sum of three loss terms: the value
+    loss, *L[v]*, the policy loss, *L[p]*, and the entropy regularization term, *L[e]*,
+    which are evaluated as follows:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值损失计算为三个损失项的加权和：值损失 *L[v]*，策略损失 *L[p]* 和熵正则化项 *L[e]*，它们的计算方式如下：
+- en: '![](img/24dfebf5-0c27-4d51-bdd1-fa075fbf0e84.png)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/24dfebf5-0c27-4d51-bdd1-fa075fbf0e84.png)'
+- en: '*L* is the total loss, which has to be minimized. Note that we would like to
+    maximize the `advantage` function, so we have a minus sign in *L[p]*, as we are
+    minimizing *L*. Likewise, we would like to maximize the entropy term, and since
+    we are minimizing *L*, we have a minus sign in the term *-0.005 L[e]* in *L.*'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*L* 是总损失，需要最小化。注意，我们希望最大化 `advantage` 函数，因此在 *L[p]* 中有一个负号，因为我们在最小化 *L*。同样，我们希望最大化熵项，而由于我们在最小化
+    *L*，因此在 *L* 中有一个负号的项 *-0.005 L[e]*。'
+- en: CartPole and LunarLander
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: CartPole 和 LunarLander
+- en: In this section, we will apply A3C to OpenAI Gym's CartPole and LunarLander.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将 A3C 应用于 OpenAI Gym 的 CartPole 和 LunarLander。
+- en: CartPole
+  id: totrans-21
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: CartPole
+- en: CartPole consists of a vertical pole on a cart that needs to be balanced by
+    moving the cart either to the left or to the right. The state dimension is four
+    and the action dimension is two for CartPole.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CartPole 由一个垂直的杆子和一个推车组成，需要通过将推车向左或向右移动来保持平衡。CartPole 的状态维度为四，动作维度为二。
+- en: Check out the following link for more details on CartPole: [https://gym.openai.com/envs/CartPole-v0/](https://gym.openai.com/envs/CartPole-v0/).
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更多关于 CartPole 的详情，请查看以下链接：[https://gym.openai.com/envs/CartPole-v0/](https://gym.openai.com/envs/CartPole-v0/)。
+- en: LunarLander
+  id: totrans-24
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: LunarLander
+- en: 'LunarLander, as the name suggests, involves the landing of a lander on the
+    lunar surface. For example, when Apollo 11''s Eagle lander touched down on the
+    moon''s surface in 1969, the astronauts Neil Armstrong and Buzz Aldrin had to
+    control the rocket thrusters during the final phase of the descent and safely
+    land the spacecraft on the surface. After this, of course, Armstrong walked on
+    the moon and remarked the now famous sentence: "*One small step for a man, one
+    giant leap for mankind*". In LunarLander, there are two yellow flags on the lunar
+    surface, and the goal is to land the spacecraft between these flags. Fuel in the
+    lander is infinite, unlike the case in Apollo 11''s Eagle lander. The state dimension
+    is eight and the action dimension is four for LunarLander, with the four actions
+    being do nothing, fire the left thruster, fire the main thruster, or fire the
+    right thruster.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LunarLander，顾名思义，涉及着陆器在月球表面着陆。例如，当阿波罗 11号的鹰号着陆器在1969年着陆月球表面时，宇航员尼尔·阿姆斯特朗和巴兹·奥尔德林必须在下降的最后阶段控制火箭推进器，并安全地将航天器降落到月球表面。之后，阿姆斯特朗走上月球并说道那句如今家喻户晓的话：“*人类的一小步，
+    mankind 的一大步*”。在 LunarLander 中，月球表面有两面黄色旗帜，目标是将航天器降落在这两面旗帜之间。与阿波罗11号的鹰号着陆器不同，LunarLander
+    的燃料是无限的。LunarLander 的状态维度为八，动作维度为四，四个动作分别是：不做任何操作、启动左侧推进器、启动主推进器，或者启动右侧推进器。
+- en: Check out the following link for a schematic of the environment: [https://gym.openai.com/envs/LunarLander-v2/](https://gym.openai.com/envs/LunarLander-v2/).
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查看以下链接，获取环境的示意图：[https://gym.openai.com/envs/LunarLander-v2/](https://gym.openai.com/envs/LunarLander-v2/)。
+- en: The A3C algorithm applied to CartPole
+  id: totrans-27
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: A3C 算法应用于 CartPole
+- en: 'Here, we will code A3C in TensorFlow and apply it so that we can train an agent
+    to learn the CartPole problem. The following code files will be required to code:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将用 TensorFlow 编写 A3C 并应用它，以便训练一个代理来学习 CartPole 问题。编写代码时需要以下代码文件：
+- en: '`cartpole.py`: This will start the training or testing process'
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`cartpole.py`：此文件将启动训练或测试过程'
+- en: '`a3c.py`: This is where the A3C algorithm is coded'
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`a3c.py`：此文件中编写了 A3C 算法'
+- en: '`utils.py`: This includes utility functions'
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`utils.py`：此文件包含实用函数'
+- en: Coding cartpole.py
+  id: totrans-32
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写 cartpole.py
+- en: 'We will now code `cartpole.py`. Follow these steps to get started:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将开始编写 `cartpole.py`。请按照以下步骤开始：
+- en: 'First, we import the packages:'
+  id: totrans-34
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们导入相关包：
+- en: '[PRE0]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Next, we set the parameters for the problem. We only need to train for `200`
+    episodes (yes, CartPole is an easy problem!). We set the discount factor gamma
+    to `0.99`. The state and action dimensions are `4` and `2`, respectively, for
+    CartPole. If you want to load a pre-trained model and resume training, set `load_model`
+    to `True`; for fresh training from scratch, set this to `False`. We will also
+    set the `model_path`:'
+  id: totrans-36
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们设置问题的参数。我们只需训练 `200` 个回合（没错，CartPole 是个简单问题！）。我们将折扣因子 gamma 设置为 `0.99`。CartPole
+    的状态和动作维度分别为 `4` 和 `2`。如果你想加载一个预训练的模型并继续训练，请将 `load_model` 设置为 `True`；如果从头开始训练，请将其设置为
+    `False`。我们还将设置 `model_path`：
+- en: '[PRE1]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We reset the TensorFlow graph and also create a directory for storing our model.
+    We will refer to the master processor as CPU 0\. Worker threads have non-zero
+    CPU numbers. The master processor will undertake the following: first, it will
+    create a count of global variables in the `global_episodes` object. The total
+    number of worker threads will be stored in `num_workers`, and we can use Python''s
+    multiprocessing library to obtain the number of available processors in our system
+    by calling `cpu_count()`. We will use the Adam optimizer and store it in an object
+    called `trainer`, along with an appropriate learning rate. We will later define
+    an actor critic class called `AC`, so we must first create a master network object
+    of the type `AC` class, called `master_network`. We will also pass the appropriate
+    arguments to the class'' constructor. Then, for each worker thread, we will create
+    a separate instance of the CartPole environment and an instance of a `Worker`
+    class, which will soon be defined. Finally, for saving the model, we will also
+    create a TensorFlow saver:'
+  id: totrans-38
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们重置 TensorFlow 图，并创建一个用于存储模型的目录。我们将主处理器称为 CPU 0，工作线程的 CPU 编号为非零值。主处理器将执行以下任务：首先，它将创建一个
+    `global_episodes` 对象，用于计算全局变量的数量。工作线程的总数将存储在 `num_workers` 中，我们可以通过调用 Python 的
+    multiprocessing 库中的 `cpu_count()` 来获取系统中可用的处理器数量。我们将使用 Adam 优化器，并将其存储在名为 `trainer`
+    的对象中，同时设定适当的学习率。接着，我们将定义一个名为 `AC` 的演员-评论家类，因此我们必须首先创建一个 `AC` 类型的主网络对象，命名为 `master_network`，并传递适当的参数给该类的构造函数。然后，对于每个工作线程，我们将创建一个独立的
+    CartPole 环境实例和一个 `Worker` 类实例（稍后定义）。最后，为了保存模型，我们还将创建一个 TensorFlow saver：
+- en: '[PRE2]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We then start the TensorFlow session. Inside it, we create a TensorFlow coordinator
+    for the different workers. Then, we either load or restore a pre-trained model
+    or run `tf.global_variables_initializer()` to assign initial values for all the
+    weights and biases:'
+  id: totrans-40
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们启动 TensorFlow 会话。在会话中，我们为不同的工作线程创建一个 TensorFlow 协调器。接着，我们要么加载或恢复一个预训练的模型，要么运行
+    `tf.global_variables_initializer()` 来为所有权重和偏差分配初始值：
+- en: '[PRE3]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Then, we start the `worker_threads`. Specifically, we call the `work()` function,
+    which is part of the `Worker()` class (to be defined soon). `threading.Thread()`
+    will assign one thread to each `worker`. By calling `start()`, we initiate the
+    `worker` thread. In the end, we need to join the threads so that they wait until
+    all the threads finish before they terminate:'
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们启动 `worker_threads`。具体来说，我们调用 `work()` 函数，它是 `Worker()` 类的一部分（稍后定义）。`threading.Thread()`
+    将为每个 `worker` 分配一个线程。通过调用 `start()`，我们启动了 `worker` 线程。最后，我们需要合并这些线程，确保它们在所有线程完成之前不会终止：
+- en: '[PRE4]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: You can find out more about TensorFlow coordinators at [https://www.tensorflow.org/api_docs/python/tf/train/Coordinator](https://www.tensorflow.org/api_docs/python/tf/train/Coordinator).
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在 [https://www.tensorflow.org/api_docs/python/tf/train/Coordinator](https://www.tensorflow.org/api_docs/python/tf/train/Coordinator)
+    了解更多关于 TensorFlow 协调器的信息。
+- en: Coding a3c.py
+  id: totrans-45
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写 a3c.py
+- en: 'We will now code `a3c.py`. This involves the following steps:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将编写 `a3c.py`。这涉及以下步骤：
+- en: Import the packages
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入包
+- en: Set the initializers for weights and biases
+  id: totrans-48
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 设置权重和偏差的初始化器
+- en: Define the `AC` class
+  id: totrans-49
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义 `AC` 类
+- en: Define the `Worker` class
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义 `Worker` 类
+- en: 'First, we need to import the necessary packages:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要导入必要的包：
+- en: '[PRE5]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Then, we need to set the initializers for the weights and biases; specifically,
+    we use the Xavier initializer for the weights and zero bias. For the last output
+    layer of the network, the weights are uniform random numbers within a specified
+    range:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们需要为权重和偏差设置初始化器；具体来说，我们使用 Xavier 初始化器来初始化权重，并使用零初始化偏差。对于网络的最后输出层，权重是指定范围内的均匀随机数：
+- en: '[PRE6]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: The AC class
+  id: totrans-55
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: AC 类
+- en: 'We will now describe the `AC `class, which is also part of `a3c.py`. We define
+    the constructor of the `AC `class with an input placeholder, two fully connected
+    hidden layers with `256` and `128` neurons, respectively, and the `elu` activation
+    function. This is followed by the policy network with the `softmax` activation,
+    since our actions our discrete for CartPole. In addition, we also have a value
+    network with no activation function. Note that we share the same hidden layers
+    for both the policy and value, unlike in past examples:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将描述 `AC` 类，它也是 `a3c.py` 的一部分。我们为 `AC` 类定义了构造函数，包含一个输入占位符，以及两个全连接的隐藏层，分别有
+    `256` 和 `128` 个神经元，并使用 `elu` 激活函数。接着是策略网络，使用 `softmax` 激活函数，因为我们在 CartPole 中的动作是离散的。此外，我们还有一个没有激活函数的值网络。请注意，我们对策略和价值网络共享相同的隐藏层，这与过去的示例不同：
+- en: '[PRE7]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'For `worker` threads, we need to define the `loss` functions. Thus, when the
+    TensorFlow scope is not `global`, we define an actions placeholder, as well as
+    its one-hot representation; we also define placeholders for the `target` value
+    and `advantage` functions. We then compute the product of the policy distribution
+    and the one-hot actions, sum them, and store them in the `policy_times_a` object.
+    Then, we combine these terms to construct the `loss` functions, as we mentioned
+    previously. We compute the sum over the batch of the L2 loss for value; the Shannon
+    entropy as the policy distribution multiplied with its logarithm, with a minus
+    sign; the policy loss as the product of the logarithm of the policy distribution;
+    and the `advantage` function, summed over the batch of samples. Finally, we use
+    the appropriate weights to combine these losses to compute the total loss, which
+    is stored in `self.loss`:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`worker`线程，我们需要定义`loss`函数。因此，当TensorFlow作用域不是`global`时，我们定义一个动作占位符，以及其独热表示；我们还为`target`值和`advantage`函数定义占位符。然后，我们计算策略分布和独热动作的乘积，将它们相加，并将它们存储在`policy_times_a`对象中。然后，我们组合这些项来构建`loss`函数，正如我们之前提到的。我们计算值的L2损失的批次总和；策略分布乘以其对数的香农熵，带有一个负号；作为策略分布对数的乘积的`loss`函数；以及批次样本上`advantage`函数的总和。最后，我们使用适当的权重结合这些损失来计算总损失，存储在`self.loss`中：
+- en: '[PRE8]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'As you saw in the previous chapter, we use `tf.gradients()` to compute the
+    policy gradients; specifically, we compute the gradients of the `loss` function
+    with respect to the local network variables, with the latter obtained from `tf.get_collection()`.
+    To mitigate the problem of exploding gradients, we clip the gradients to a magnitude
+    of `40.0` using TensorFlow''s `tf.clip_by_global_norm()` function. We can then
+    collect the network parameters of the global network using `tf.get_collection()`
+    with a scope of `global` and apply the gradients in the Adam optimizer by using
+    `apply_gradients()`. This will compute the policy gradients:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您在上一章中看到的，我们使用`tf.gradients()`来计算策略梯度；具体来说，我们计算`loss`函数相对于本地网络变量的梯度，后者从`tf.get_collection()`中获得。为了减少梯度爆炸问题，我们使用TensorFlow的`tf.clip_by_global_norm()`函数将梯度裁剪为`40.0`的大小。然后，我们可以使用`tf.get_collection()`来收集全局网络的网络参数，作用于Adam优化器中的梯度，使用`apply_gradients()`。这将计算策略梯度：
+- en: '[PRE9]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The Worker() class
+  id: totrans-62
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Worker()类
+- en: 'We will now describe the `Worker()` class, which each worker thread will use.
+    First, we define the `__init__()` constructor for the class. Inside of it, we
+    define the worker name, the number, the model path, the Adam optimizer, the count
+    of global episodes, and the operator to increment it:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将描述`Worker()`类，每个工作线程都会使用。首先，我们为该类定义`__init__()`构造函数。在其中，我们定义工作人员的名称、编号、模型路径、Adam优化器、全局剧集计数以及增加它的操作符：
+- en: '[PRE10]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We also create the local instance of the `AC` class, with the appropriate arguments
+    passed in. We then create a TensorFlow operation to copy the model parameters
+    from global to local. We also create a NumPy identity matrix with ones on the
+    diagonal, as well as an environment object:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还创建了`AC`类的本地实例，并传入适当的参数。然后，我们创建一个TensorFlow操作，将全局模型参数复制到本地。我们还创建了一个在对角线上具有一的NumPy单位矩阵，以及一个环境对象：
+- en: '[PRE11]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Next, we create the `train()` function, which is the most important part of
+    the `Worker` class. The states, actions, rewards, next states, or observations
+    and values are obtained from the experience list that''s received as an argument
+    by the function. We computed the discounted sum over the rewards by using a utility
+    function called `discount()`, which we will define soon. Similarly, the `advantage`
+    function is also discounted:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建了`train()`函数，这是`Worker`类中最重要的部分。状态、动作、奖励、下一个状态或观察值和价值是从作为参数传递给函数的经验列表中获取的。我们使用一个名为`discount()`的实用函数计算了奖励的折现总和，很快我们将定义它。类似地，`advantage`函数也被折现了：
+- en: '[PRE12]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'We then update the global network parameters by calling the TensorFlow operations
+    that we defined earlier, along with the required input to the placeholders that
+    are passed using TensorFlow''s `feed_dict` function. Note that since we have multiple
+    worker threads performing this update on the master parameters, we need to avoid
+    conflict. In other words, only one thread can update the master network parameters
+    at a given time instant; two or more threads doing this update at the same time
+    will not update the global parameters one after the other, and it can cause problems
+    if one thread updates the global parameters while the other thread is in the process
+    of updating the same. This means that the former''s update will be overwritten
+    by the latter, which we do not desire. This is accomplished using Python''s threading
+    library''s `Lock()` function. We create an instance of `Lock()` called `lock`.
+    `lock.acquire()` will grant access to the current thread only, which will perform
+    the update, after which it will release the lock using `lock.release()`. Finally,
+    we return the losses from the function:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们通过调用之前定义的 TensorFlow 操作来更新全局网络参数，并传入通过 TensorFlow 的 `feed_dict` 函数传递给占位符的所需输入。请注意，由于我们有多个工作线程在执行这个更新操作，因此需要避免冲突。换句话说，在任意时间点，只有一个线程可以更新主网络参数；两个或更多线程同时执行更新操作时，更新不会按顺序进行，这可能会导致问题。如果一个线程在另一个线程更新全局参数时也在进行更新，那么前一个线程的更新会被后一个线程覆盖，这是我们不希望发生的情况。这是通过
+    Python 的 threading 库中的 `Lock()` 函数实现的。我们创建一个 `Lock()` 实例，命名为 `lock`。`lock.acquire()`
+    只会授予当前线程访问权限，当前线程会执行更新操作，完成后通过 `lock.release()` 释放锁。最后，我们从函数中返回损失值：
+- en: '[PRE13]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Now, we need to define the workers' `work()` function. We first obtain the global
+    episode count and set `total_steps` to zero. Then, inside a TensorFlow session,
+    while the threads are still coordinated, we copy the global parameters to the
+    local network using `self.update_local_ops`. We then start an episode. Since the
+    episode hasn't been terminated, we obtain the policy distribution and store it
+    in `a_dist`. We sample an action from this distribution using NumPy's `random.choice()` function.
+    This action, `a`, is fed into the environment's `step()` function to obtain the
+    new state, the reward, and the Terminal Boolean. We can shape the reward by dividing
+    it by `100.0`.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要定义工作线程的 `work()` 函数。首先，我们获取全局的 episode 计数，并将 `total_steps` 设置为零。然后，在
+    TensorFlow 会话中，当线程仍然协调时，我们使用 `self.update_local_ops` 将全局参数复制到本地网络。接下来，我们启动一个 episode。由于
+    episode 尚未结束，我们获取策略分布并将其存储在 `a_dist` 中。我们从这个分布中使用 NumPy 的 `random.choice()` 函数采样一个动作。这个动作
+    `a` 被输入到环境的 `step()` 函数中，以获取新的状态、奖励和终止布尔值。我们可以通过将奖励除以 `100.0` 来调整奖励值。
+- en: 'The experience is stored in the local buffer, called `episode_buffer`. We also
+    add the reward to `episode_reward`, and we increment the `total_steps` count,
+    as well as `episode_step_count`:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经验存储在本地缓冲区中，称为 `episode_buffer`。我们还将奖励添加到 `episode_reward` 中，并增加 `total_steps`
+    计数以及 `episode_step_count`：
+- en: '[PRE14]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'If we have `25` entries in the buffer, it''s time for an update. First, the
+    value is computed and stored in `v1`, which is then passed to the `train()` function,
+    which will output the three loss values: value, policy, and entropy. After this,
+    the `episode_buffer` is reset. If the episode has terminated, we break from the
+    loop. Finally, we print the episode count and reward on the screen. Note that
+    we have used `25` entries as the time to do the update. Feel free to vary this
+    and see how the training is affected by this hyperparameter:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果缓冲区中有 `25` 个条目，说明是时候进行更新了。首先，计算并将值存储在 `v1` 中，然后将其传递给 `train()` 函数，该函数将输出三个损失值：价值、策略和熵。之后，重置
+    `episode_buffer`。如果 episode 已结束，我们就跳出循环。最后，我们在屏幕上打印出 episode 计数和奖励。请注意，我们使用了 `25`
+    个条目作为进行更新的时机。可以随意调整这个值，看看该超参数如何影响训练过程：
+- en: '[PRE15]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'After exiting the episode loop, we use the remaining samples in the buffer
+    to train the network. `worker _0` contains the global or master network, which
+    we can save by using `saver.save`. We can also call the `self.increment` operation
+    to increment the global episode count by one:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在退出 episode 循环后，我们使用缓冲区中的剩余样本来训练网络。`worker_0` 包含全局或主网络，我们可以通过 `saver.save` 保存它。我们还可以调用
+    `self.increment` 操作，将全局 episode 计数加一：
+- en: '[PRE16]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: That's it for `a3c.py`.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是 `a3c.py` 的内容。
+- en: Coding utils.py
+  id: totrans-79
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写 utils.py
+- en: 'Last but not least, we will code the `utility` functions in `utils.py`. We
+    will import the necessary packages, and we''ll also define the `update_target_graph()`
+    function that we used earlier. It takes the scope of the source and destination
+    parameters as arguments, and it copies the parameters from the source to the destination:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们将编写`utils.py`中的`utility`函数。我们将导入所需的包，并且还将定义之前使用的`update_target_graph()`函数。它以源和目标参数的作用域作为参数，并将源中的参数复制到目标中：
+- en: '[PRE17]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The other utility function that we need is the `discount()` function. It runs
+    the input list, `x` backwards, and sums them with a weight of `gamma`, which is
+    the discount factor. The discounted value is then returned from the function:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个我们需要的工具函数是`discount()`函数。它会将输入列表`x`倒序运行，并按折扣因子`gamma`的权重进行求和。然后返回折扣后的值：
+- en: '[PRE18]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Training on CartPole
+  id: totrans-84
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在CartPole上训练
+- en: 'The code for `cartpole.py` can be run using the following command:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`cartpole.py`的代码可以使用以下命令运行：'
+- en: '[PRE19]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The code stores the episode rewards in the `performance.txt` file. A plot of
+    the episode rewards during training is shown in the following screenshot:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码将回合奖励存储在`performance.txt`文件中。以下截图展示了训练过程中回合奖励的图表：
+- en: '![](img/0d3de487-a0c6-42e0-8e2e-f899dc923ec4.png)'
+  id: totrans-88
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0d3de487-a0c6-42e0-8e2e-f899dc923ec4.png)'
+- en: 'Figure 1: Episode rewards for CartPole, which was trained using A3C'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图1：在A3C训练下的CartPole回合奖励
+- en: Note that since we have shaped the reward, the episode reward that you can see
+    in the preceding screenshot is different from the values that are typically reported
+    by other researchers in papers and/or blogs.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，由于我们已经塑形了奖励，您在上图中看到的回合奖励与其他研究人员在论文和/或博客中报告的值不同。
+- en: The A3C algorithm applied to LunarLander
+  id: totrans-91
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: A3C算法应用于LunarLander
+- en: 'We will extend the same code to train an agent on the LunarLander problem,
+    which is harder than CartPole. Most of the code is the same as before, so we will
+    only describe the changes that need to be made to the preceding code. First, the
+    reward shaping is different for the LunarLander problem. So, we will include a
+    function called `reward_shaping()` in the `a3c.py` file. It will check if the
+    lander has crashed on the lunar surface; if so, the episode will be terminated
+    and there will be a `-1.0` penalty. If the lander is not moving, the episode will
+    be terminated and a `-0.5` penalty will be paid:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将扩展相同的代码来训练一个智能体解决LunarLander问题，该问题比CartPole更具挑战性。大部分代码与之前相同，因此我们只会描述需要对前面的代码进行的更改。首先，LunarLander问题的奖励塑形不同。因此，我们将在`a3c.py`文件中包含一个名为`reward_shaping()`的函数。它将检查着陆器是否已撞击月球表面；如果是，回合将被终止，并会受到`-1.0`的惩罚。如果着陆器未移动，回合将被终止，并支付`-0.5`的惩罚：
+- en: '[PRE20]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'We will call this function after `env.step()`:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在`env.step()`之后调用此函数：
+- en: '[PRE21]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Coding lunar.py
+  id: totrans-96
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编写lunar.py
+- en: 'The `cartpole.py` file from the previous exercise has been renamed to `lunar.py`.
+    The changes that have been made are as follows. First, we set the maximum number
+    of time steps per episode to `1000` for LunarLander, the discount factor to `gamma
+    = 0.999`, and the state and action dimensions to `8` and `4`, respectively:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前练习中的`cartpole.py`文件已重命名为`lunar.py`。所做的更改如下。首先，我们将每个回合的最大时间步数设置为`1000`，折扣因子设置为`gamma
+    = 0.999`，状态和动作维度分别设置为`8`和`4`：
+- en: '[PRE22]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'The environment is set to `LunarLander-v2`:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 环境设置为`LunarLander-v2`：
+- en: '[PRE23]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: That's it for the code changes for training A3C on LunarLander.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是在LunarLander上训练A3C的代码更改。
+- en: Training on LunarLander
+  id: totrans-102
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在LunarLander上训练
+- en: 'You can start the training by using the following command:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过以下命令开始训练：
+- en: '[PRE24]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'This will train the agent and store the episode rewards in the `performance.txt`
+    file, which we can plot as follows:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将训练智能体并将回合奖励存储在`performance.txt`文件中，我们可以如下绘制图表：
+- en: '![](img/d9abb1ac-a778-47d5-86bd-c02003be013a.png)'
+  id: totrans-106
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d9abb1ac-a778-47d5-86bd-c02003be013a.png)'
+- en: 'Figure 2: Episode rewards for LunarLander using A3C'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2：使用A3C的LunarLander回合奖励
+- en: As you can see, the agent has learned to land the spacecraft on the lunar surface.
+    Happy landings! Again, note that the episode reward is different from the values
+    that have been reported in papers and blogs by other RL practitioners, since we
+    have scaled the rewards.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，智能体已经学会了将航天器安全着陆到月球表面。祝你着陆愉快！再强调一次，回合奖励与其他强化学习从业者在论文和博客中报告的值不同，因为我们对奖励进行了缩放。
+- en: The A2C algorithm
+  id: totrans-109
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: A2C算法
+- en: The difference between A2C and A3C is that A2C performs synchronous updates.
+    Here, all the workers will wait until they have completed the collection of experiences
+    and computed the gradients. Only after this are the global (or master) network's
+    parameters updated. This is different from A3C, where the update is performed
+    asynchronously, that is, where the worker threads do not wait for the others to
+    finish. A2C is easier to code than A3C, but that is not undertaken here. If you
+    are interested in this, you are encouraged to take the preceding A3C code and
+    convert it to A2C, after which the performance of both algorithms can be compared.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: A2C和A3C的区别在于A2C执行同步更新。在这里，所有工作线程会等待直到它们完成经验收集并计算出梯度。只有在这个过程中，全球（或主）网络的参数才会被更新。这与A3C不同，后者的更新是异步进行的，也就是说工作线程不会等待其他线程完成。A2C比A3C更容易编码，但这里没有进行这部分的处理。如果你对此感兴趣，可以将前面提到的A3C代码转换为A2C，之后可以对比两种算法的性能。
+- en: Summary
+  id: totrans-111
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we introduced the A3C algorithm, which is an on-policy algorithm
+    that's applicable to both discrete and continuous action problems. You saw how
+    three different loss terms are combined into one and optimized. Python's threading
+    library is useful for running multiple threads, with a copy of the policy network
+    in each thread. These different workers compute the policy gradients and pass
+    them on to the master to update the neural network parameters. We applied A3C
+    to train agents for the CartPole and the LunarLander problems, and the agents
+    learned them very well. A3C is a very robust algorithm and does not require a
+    replay buffer, although it does require a local buffer for collecting a small
+    number of experiences, after which it is used to update the networks. Lastly,
+    a synchronous version of the algorithm, called A2C, was also introduced.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了A3C算法，它是一种适用于离散和连续动作问题的在线策略算法。你已经看到三种不同的损失项是如何结合成一个并优化的。Python的线程库非常有用，可以运行多个线程，每个线程中都有一个策略网络的副本。这些不同的工作线程计算策略梯度，并将其传递给主线程以更新神经网络的参数。我们将A3C应用于训练CartPole和LunarLander问题的智能体，且智能体学习得非常好。A3C是一种非常强健的算法，不需要重放缓冲区，尽管它确实需要一个本地缓冲区来收集少量经验，之后这些经验将用于更新网络。最后，我们还介绍了该算法的同步版本——A2C。
+- en: This chapter should have really improved your understanding of yet another deep
+    RL algorithm. In the next chapter, we will study the last two RL algorithms in
+    this book, TRPO and PPO.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章应该已经极大地提升了你对另一种深度强化学习算法的理解。在下一章，我们将学习本书中的最后两个强化学习算法：TRPO和PPO。
+- en: Questions
+  id: totrans-114
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Is A3C an on-policy or off-policy algorithm?
+  id: totrans-115
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: A3C是在线策略算法还是离线策略算法？
+- en: Why is the Shannon entropy term used?
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么使用香农熵项？
+- en: What are the problems with using a large number of worker threads?
+  id: totrans-117
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用大量工作线程有什么问题？
+- en: Why is softmax used in the policy neural network?
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么在策略神经网络中使用softmax？
+- en: Why do we need an `advantage` function?
+  id: totrans-119
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么我们需要一个`advantage`函数？
+- en: 'This is left as an exercise: For the LunarLander problem, repeat the training
+    without reward shaping and see if the agent learns faster/slower than what we
+    saw in this chapter.'
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这是一个练习：对于LunarLander问题，重复训练过程，不进行奖励塑形，看看智能体学习的速度是比本章看到的更快还是更慢。
+- en: Further reading
+  id: totrans-121
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '*Asynchronous Methods for Deep Reinforcement Learning*, by *Volodymyr Mnih*,
+    *Adrià Puigdomènech Badia*, *Mehdi Mirza*, *Alex Graves*, *Timothy P. Lillicrap*,
+    *Tim Harley*, *David Silver*, and *Koray Kavukcuoglu*, A3C paper from *DeepMind*
+    arXiv:1602.01783: [https://arxiv.org/abs/1602.01783](https://arxiv.org/abs/1602.01783)'
+  id: totrans-122
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*深度强化学习中的异步方法*，作者：*Volodymyr Mnih*，*Adrià Puigdomènech Badia*，*Mehdi Mirza*，*Alex
+    Graves*，*Timothy P. Lillicrap*，*Tim Harley*，*David Silver*，和*Koray Kavukcuoglu*，A3C论文来自*DeepMind*，arXiv:1602.01783：[https://arxiv.org/abs/1602.01783](https://arxiv.org/abs/1602.01783)'
+- en: '*Deep Reinforcement Learning Hands-On*, by *Maxim Lapan*, *Packt Publishing*:
+    [https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands](https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands)'
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*深度强化学习实战*，作者：*Maxim Lapan*，*Packt Publishing*：[https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands](https://www.packtpub.com/big-data-and-business-intelligence/deep-reinforcement-learning-hands)'

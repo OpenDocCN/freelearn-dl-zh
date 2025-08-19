@@ -1,0 +1,1419 @@
+- en: Semantic Segmentation and Custom Dataset Builder
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 语义分割与自定义数据集构建器
+- en: In this chapter, we'll analyze semantic segmentation and the challenges that
+    come with it. Semantic segmentation is the challenging problem of classifying
+    every single pixel of an image with the correct semantic label. The first part
+    of this chapter presents the problem itself, why it is important, and what are
+    the possible applications. At the end of the first part, we will discuss the well-known
+    U-Net architecture for semantic segmentation, and we will implement it as a Keras
+    model in pure TensorFlow 2.0 style. The model implementation is preceded by the
+    introduction of the deconvolution operation required to implement semantic segmentation
+    networks successfully.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中，我们将分析语义分割及其面临的挑战。语义分割是一个具有挑战性的问题，目标是为图像中的每个像素分配正确的语义标签。本章的第一部分介绍了这个问题本身，它为什么重要以及可能的应用。第一部分结束时，我们将讨论著名的
+    U-Net 语义分割架构，并将其作为一个 Keras 模型在纯 TensorFlow 2.0 风格中实现。模型实现之前，我们将介绍为成功实现语义分割网络所需的反卷积操作。
+- en: The second part of this chapter starts with dataset creation—since, at the time
+    of writing, there is no `tfds` builder for semantic segmentation, we take advantage
+    of this to introduce the TensorFlow Datasets architecture and show how to implement
+    a custom DatasetBuilder. After getting the data, we'll perform the training process
+    of U-Net step by step, showing how straightforward it is to train this model using
+    Keras and Keras callbacks. This chapter ends with the usual exercise section,
+    perhaps the most crucial part of this whole chapter. The only way to understand
+    a concept is to get your hands dirty.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的第二部分从数据集创建开始——由于在撰写时没有`tfds`构建器支持语义分割，我们利用这一点来介绍 TensorFlow 数据集架构，并展示如何实现一个自定义的
+    DatasetBuilder。在获取数据后，我们将一步步执行 U-Net 的训练过程，展示使用 Keras 和 Keras 回调函数训练此模型是多么简便。本章以通常的练习部分结束，或许是整章中最关键的部分。理解一个概念的唯一途径就是亲自动手实践。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主题：
+- en: Semantic segmentation
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 语义分割
+- en: Create a TensorFlow DatasetBuilder
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建一个 TensorFlow DatasetBuilder
+- en: Model training and evaluation
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 模型训练与评估
+- en: Semantic segmentation
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 语义分割
+- en: 'Different from object detection, where the goal is to detect objects in rectangular
+    regions, and image classification, which has the purpose of classifying the whole
+    image with a single label, semantic segmentation is a challenging computer vision
+    task, the goal of which is to assign the correct label to every pixel of the input
+    image:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与目标检测不同，目标检测的目标是检测矩形区域中的物体，图像分类的目的是为整张图像分配一个标签，而语义分割是一个具有挑战性的计算机视觉任务，目标是为输入图像的每个像素分配正确的标签：
+- en: '![](img/8f1d9dcf-dd97-40ee-af55-939fb21f97ad.png)'
+  id: totrans-9
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/8f1d9dcf-dd97-40ee-af55-939fb21f97ad.png)'
+- en: Examples of semantically annotated images from the CityScapes dataset. Every
+    single pixel of the input image has a corresponding pixel-label. (Source: [https://www.cityscapes-dataset.com/examples/](https://www.cityscapes-dataset.com/examples/))
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自 CityScapes 数据集的语义标注图像示例。每个输入图像的像素都有相应的像素标签。（来源：[https://www.cityscapes-dataset.com/examples/](https://www.cityscapes-dataset.com/examples/))
+- en: The applications of semantic segmentation are countless, but perhaps the most
+    important ones are in the autonomous driving and medical imaging domains.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语义分割的应用有无数个，但也许最重要的应用领域是自动驾驶和医学影像。
+- en: Automated guided vehicles and self-driving cars can take advantage of semantic
+    segmentation results, getting a complete understanding of the whole scene captured
+    by the cameras mounted on the vehicle. For example, having the pixel-level information
+    of the road can help the driving software have better control of the position
+    of the car. Localizing the road using a bounding box is far less accurate than
+    having a pixel-level classification that localizes the road pixels independently
+    from the perspective.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自动引导车和自动驾驶汽车可以利用语义分割的结果，全面理解由安装在车辆上的摄像头捕捉到的整个场景。例如，拥有道路的像素级信息可以帮助驾驶软件更好地控制汽车的位置。通过边界框来定位道路的精度远不如拥有像素级分类，从而能够独立于视角定位道路像素。
+- en: In the medical imaging domain, the bounding boxes predicted by an object detector
+    are sometimes useful and other times not. In fact, if the task is the detection
+    of a specific type of cell, a bounding box can give the user enough information.
+    But if, instead, the task is to localize blood vessels, then using a bounding
+    box is not enough. As it is easy to imagine, a fine-grained classification is
+    not an easy task, and there are several challenges to face from both the theoretical
+    and practical points of view.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在医学影像领域，由目标检测器预测的边界框有时是有用的，有时则没有。事实上，如果任务是检测特定类型的细胞，边界框可以提供足够的信息。但是如果任务是定位血管，单纯使用边界框是不够的。正如可以想象的那样，精细分类并不是一项容易的任务，理论和实践上都面临着许多挑战。
+- en: Challenges
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 挑战
+- en: One of the tough challenges is to get the correct data. There are several enormous
+    datasets of labeled images since the process of classifying an image by its main
+    content is relatively fast. A team of professional annotators can easily label
+    thousands of images a day since the task only consists of looking at the picture
+    and selecting a label.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个棘手的挑战是获取正确的数据。由于通过图像的主要内容对图像进行分类的过程相对较快，因此有几个庞大的标注图像数据集。一个专业的标注团队每天可以轻松标注数千张图片，因为这项任务仅仅是查看图片并选择一个标签。
+- en: There are also a lot of object detection datasets, where multiple objects have
+    been localized and classified. The process requires more annotation time with
+    respect to the classification alone, but as it is something that does not require
+    extreme accuracy, it is a relatively fast process.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也有很多物体检测数据集，其中多个物体已经被定位和分类。与单纯的分类相比，这个过程需要更多的标注时间，但由于它不要求极高的精度，因此是一个相对较快的过程。
+- en: The semantic segmentation dataset, instead, requires specialized software and
+    very patient annotators that are extremely accurate in their work. In fact, the
+    process of labeling with pixel-level accuracy is perhaps the most time-consuming
+    process of all of the annotation types. For this reason, the number of semantic
+    segmentation datasets is low, and their number of images is limited. As we will
+    see in the next section, dedicated to dataset creation, PASCAL VOC 2007, which
+    contains 24,640 annotated objects for the image classification and localization
+    task, only contains approximately 600 labeled images.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语义分割数据集则需要专门的软件和非常耐心的标注员，他们在工作中非常精确。事实上，像素级精度标注的过程可能是所有标注类型中最耗时的。因此，语义分割数据集的数量较少，图像的数量也有限。正如我们将在下一部分中看到的，专门用于数据集创建的PASCAL
+    VOC 2007数据集，包含24,640个用于图像分类和定位任务的标注物体，但只有大约600张标注图像。
+- en: 'Another challenge that semantic segmentation brings is technical. Classifying
+    every single pixel of an image requires designing convolutional architectures
+    in a different way with respect to the ones seen so far. All of the architectures
+    described so far followed the same structure:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语义分割带来的另一个挑战是技术性的。对图像的每一个像素进行分类需要以不同于目前所见的卷积架构方式来设计卷积架构。到目前为止，所有描述的架构都遵循了相同的结构：
+- en: One input layer, which defines the input resolution expected by the network
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个输入层，用于定义网络期望的输入分辨率。
+- en: The feature extractor part, which is a stack of several convolution operations
+    with different strides or with pooling operations in between, which, layer-by-layer,
+    reduce the spatial extent of the feature maps until it is reduced to a vector
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 特征提取部分是由多个卷积操作堆叠而成，这些卷积操作具有不同的步幅，或者中间夹杂池化操作，逐层减少特征图的空间范围，直到它被压缩成一个向量。
+- en: The classification part which, given the feature vector produced by the feature
+    extractor, is trained to classify this low-dimensional representation to a fixed
+    number of classes
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分类部分，给定由特征提取器生成的特征向量，训练该部分将此低维表示分类为固定数量的类别。
+- en: Optionally, a regression head, which uses the same features to produce a set
+    of four coordinates
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可选地，回归头部，使用相同的特征生成一组四个坐标。
+- en: The task of semantic segmentation, however, cannot follow this structure since,
+    if the feature extractor only reduces the input resolution layer-by-layer, how
+    can the network produce a classification for every pixel in the input image?
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，语义分割任务不能遵循这种结构，因为如果特征提取器仅仅是逐层减少输入的分辨率，网络又如何为输入图像的每个像素生成分类呢？
+- en: One of the proposed solutions is the deconvolution operation.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提出的一个解决方案是反卷积操作。
+- en: Deconvolution – transposed convolution
+  id: totrans-25
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 反卷积 – 转置卷积
+- en: Let's start this section by saying that the term deconvolution is misleading.
+    In fact, in mathematics and engineering, the deconvolution operation exists but
+    has very little in common with what deep learning practitioners intend with this
+    term.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从这一节开始时，先说明“反卷积”这一术语具有误导性。实际上，在数学和工程学中，确实存在反卷积操作，但与深度学习从业者所指的反卷积并没有太多相似之处。
+- en: In this domain, a deconvolution operation is a transposed convolution operation,
+    or even an image resize, followed by a standard convolution operation. Yes, two
+    different implementations are named in the same way.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个领域中，反卷积操作是转置卷积操作，或甚至是图像调整大小，之后再执行标准卷积操作。是的，两个不同的实现使用了相同的名称。
+- en: The deconvolution operation in deep learning just guarantees that, if a feature
+    map is a result of a convolution between an input map and a kernel with a certain
+    size and stride, the deconvolution operation will produce a feature map with the
+    same spatial extent of the input, if applied with the same kernel size and stride.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深度学习中的反卷积操作只保证，如果特征图是输入图和具有特定大小与步幅的卷积核之间卷积的结果，则反卷积操作将生成具有与输入相同空间扩展的特征图，前提是应用相同的卷积核大小和步幅。
+- en: 'To do that, a standard convolution is performed with a pre-processed input
+    where a zero padding is added not only at the borders but also within the feature
+    map cells. The following diagram should help to clarify the process:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这一点，首先对预处理过的输入进行标准卷积操作，在边界处不仅添加零填充，还在特征图单元内进行填充。以下图示有助于澄清这一过程：
+- en: '![](img/b009c6eb-460e-4357-97de-2b631cbba889.png)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b009c6eb-460e-4357-97de-2b631cbba889.png)'
+- en: 'Image and caption source: A guide to convolution arithmetic for deep learning—Vincent
+    Dumoulin and Francesco Visin'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像及说明来源：《深度学习卷积算术指南》——Vincent Dumoulin 和 Francesco Visin
+- en: TensorFlow, through the `tf.keras.layers` package, offers a ready-to-use deconvolution
+    operation: `tf.keras.layers.Conv2DTranspose`.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow通过`tf.keras.layers`包，提供了一个现成可用的反卷积操作：`tf.keras.layers.Conv2DTranspose`。
+- en: Another possible way of performing the deconvolution is to resize the input
+    to the desired resolution and make this operation learnable by adding a standard
+    2D convolution with same padding on top of the resized image.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行反卷积的另一种可能方式是将输入调整为所需的分辨率，并通过在调整后的图像上添加标准的2D卷积（保持相同的填充）来使该操作可学习。
+- en: In short, what really matters in the deep learning context is creating a learnable
+    layer that reconstructs the original spatial resolution and performs a convolution.
+    This is not the mathematical inverse of the convolution operation, but the practice
+    has shown that it is enough to achieve good results.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简而言之，在深度学习的背景下，真正重要的是创建一个可学习的层，能够重建原始空间分辨率并执行卷积操作。这并不是卷积操作的数学逆过程，但实践表明，这样做足以取得良好的结果。
+- en: One of the semantic segmentation architectures that used the deconvolution operation
+    extensively and achieved impressive results in the task of the segmentation of
+    medical images is the U-Net architecture.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用反卷积操作并在医学图像分割任务中取得显著成果的语义分割架构之一是U-Net架构。
+- en: The U-Net architecture
+  id: totrans-36
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: U-Net架构
+- en: U-Net is a convolutional architecture for semantic segmentation introduced by
+    Olaf Ronnerberg et al. in *Convolutional Networks for Biomedical Image Segmentation*
+    with the explicit goal of segmenting biomedical images.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: U-Net是一种用于语义分割的卷积架构，由Olaf Ronnerberg等人在《用于生物医学图像分割的卷积网络》一文中提出，明确目标是分割生物医学图像。
+- en: The architecture revealed itself to be general enough to be applied in every
+    semantic segmentation task since it has been designed without any constraints
+    about the datatypes.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该架构被证明足够通用，可以应用于所有语义分割任务，因为它在设计时并未对数据类型施加任何限制。
+- en: 'The U-Net architecture follows the typical encoder-decoder architectural pattern
+    with skip connections. This way of designing the architecture has proven to be
+    very effective when the goal is to produce an output with the same spatial resolution
+    of the input since it allows the gradients to propagate between the output and
+    the input layer in a better way:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: U-Net架构遵循典型的编码器-解码器架构模式，并具有跳跃连接。采用这种设计架构的方式，在目标是生成与输入具有相同空间分辨率的输出时，已经证明非常有效，因为它允许梯度在输出层和输入层之间更好地传播：
+- en: '![](img/6befbb85-9184-4b00-9814-eece8624ae3b.png)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6befbb85-9184-4b00-9814-eece8624ae3b.png)'
+- en: 'The U-Net architecture. The blue boxes are the feature maps produced by the
+    blocks, denoted with their shapes. The white boxes are copied and cropped feature
+    maps. Different arrows indicate different operations. Source: Convolutional Networks
+    for Biomedical Image Segmentation—Olaf Ronnerberg et al.'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: U-Net 架构。蓝色框表示由模块产生的特征图，并标明了它们的形状。白色框表示复制并裁剪后的特征图。不同的箭头表示不同的操作。来源：Convolutional
+    Networks for Biomedical Image Segmentation—Olaf Ronnerberg 等。
+- en: The left side of the U-Net architecture is an encoder that, layer-by-layer,
+    reduces the input size from 572 x 572 to 32 x 32 in the lowest resolution. The
+    right side contains the encoder part of the architecture, which mixes information
+    extracted from the encoding part to the information learned by the up-convolution
+    (deconvolution) operations.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: U-Net 架构的左侧是一个编码器，它逐层将输入大小从 572 x 572 缩小到最低分辨率下的 32 x 32。右侧包含架构的解码部分，它将从编码部分提取的信息与通过上卷积（反卷积）操作学到的信息进行混合。
+- en: The original U-Net architecture does not produce an output with the same resolution
+    of the input, but it has been designed to produce a slightly lower resolution
+    output. A final 1 x 1 convolution is used as the final layer to map each feature
+    vector (with a depth of 64) to the desired number of classes. For a complete assessment
+    of the original architecture, carefully read the original U-Net paper by Olaf
+    Ronnerberg et al. in *Convolutional Networks for Biomedical Image Segmentation*.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原始的 U-Net 架构并不输出与输入相同分辨率的结果，但它设计为输出稍微低一些分辨率的结果。最终的 1 x 1 卷积被用作最后一层，将每个特征向量（深度为
+    64）映射到所需的类别数量。要全面评估原始架构，请仔细阅读 Olaf Ronnerberg 等人撰写的 *Convolutional Networks for
+    Biomedical Image Segmentation* 中的原始 U-Net 论文。
+- en: Instead of implementing the original U-net architecture, we are going to show
+    how to implement a slightly modified U-Net that produces an output with the same
+    resolution of the input and that follows the same original block organization.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将展示如何实现一个略微修改过的 U-Net，它输出的分辨率与输入相同，并且遵循相同的原始模块组织方式，而不是实现原始的 U-Net 架构。
+- en: 'As can be seen from the screenshot of the architecture, there are two main
+    blocks:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从架构的截图中可以看到，主要有两个模块：
+- en: '**Encoding blocks**: There are three convolutions followed by a downsampling
+    operation.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**编码模块**：有三个卷积操作，接着是一个下采样操作。'
+- en: '**Decoding blocks**: This is a deconvolution operation, followed by the concatenation
+    of its output with the corresponding input feature, and two convolution operations.'
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**解码模块**：这是一种反卷积操作，接着将其输出与对应的输入特征进行连接，并进行两次卷积操作。'
+- en: It is possible and really easy to use the Keras functional API to define this
+    model and connect these logical blocks. The architecture we are going to implement
+    differs a little from the original one, since this is a custom U-Net variation,
+    and it shows how Keras allows the use of models as layers (or building blocks).
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 Keras 函数式 API 定义这个模型并连接这些逻辑模块是可能的，而且非常简单。我们将要实现的架构与原始架构略有不同，因为这是一个自定义的 U-Net
+    变体，它展示了 Keras 如何允许将模型作为层（或构建模块）来使用。
+- en: 'The `upsample` and `downsample` functions are implemented as a `Sequential`
+    model, which is nothing but a convolution or deconvolution operation, with a stride
+    of `2`, followed by an activation function:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`upsample` 和 `downsample` 函数作为 `Sequential` 模型实现，该模型实际上是一个卷积或反卷积操作，步幅为 `2`，并随后使用一个激活函数：'
+- en: '`(tf2)`'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE0]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The model definition function supposes a minimum input resolution of 256 x
+    256, and it implements the encoding, decoding, and concatenate (skip connection)
+    blocks of the architecture:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型定义函数假设最小输入分辨率为 256 x 256，并实现了架构中的编码、解码和连接（跳跃连接）模块：
+- en: '`(tf2)`'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE1]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Using Keras, it is possible to visualize not only the tabular summary of the
+    model (by using the `summary()` method of a Keras model), but also to get a graphical
+    representation of the created model, which is often a blessing when designing
+    complex architectures:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 Keras，不仅可以可视化模型的表格摘要（通过 Keras 模型的 `summary()` 方法），还可以获得所创建模型的图形表示，这在设计复杂架构时常常是一个福音：
+- en: '`(tf2)`'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE2]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'These three lines of code, generate this great graphical representation:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这三行代码生成了这个出色的图形表示：
+- en: '![](img/0aa2463f-1c2b-4ae3-9734-7b552846b844.png)'
+  id: totrans-59
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0aa2463f-1c2b-4ae3-9734-7b552846b844.png)'
+- en: Graphical representation of the U-Net-like structure defined. Keras allows this
+    kind of visualization to help the architecture design process.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义的 U-Net 类似结构的图形表示。Keras 允许进行这种可视化，以帮助架构设计过程。
+- en: The generated image looks like the horizontally flipped version of the U-net
+    architecture, and this is the architecture we are going to use to tackle the semantic
+    segmentation problem in this chapter.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成的图像看起来像是 U-net 架构的水平翻转版本，这也是我们将在本章中用来解决语义分割问题的架构。
+- en: Now that we have understood the problem and defined a deep architecture, we
+    can move forward and gather the required data.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经理解了问题，并定义了深度架构，可以继续前进并收集所需的数据。
+- en: Create a TensorFlow DatasetBuilder
+  id: totrans-63
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建一个 TensorFlow DatasetBuilder
+- en: In the same way as any other machine learning problem, the first step is getting
+    the data. Since semantic segmentation is a supervised learning task, we need a
+    classification dataset of images and corresponding labels. The peculiarity is
+    that the label in itself is an image.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与任何其他机器学习问题一样，第一步是获取数据。由于语义分割是一个监督学习任务，我们需要一个图像及其相应标签的分类数据集。特殊之处在于，标签本身也是一张图像。
+- en: At the time of writing, there is no semantic dataset ready to use in TensorFlow
+    Datasets. For this reason, we use this section not only to create `tf.data.Dataset`
+    with the data that we need, but also to have a look at the process required to
+    develop a `tfds` DatasetBuilder.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在撰写本文时，TensorFlow Datasets 中没有现成可用的语义数据集。因此，我们不仅在本节中创建需要的 `tf.data.Dataset`，还要了解开发
+    `tfds` DatasetBuilder 所需的过程。
+- en: 'Since, in the previous section dedicated to the object detection, we used the
+    PASCAL VOC 2007 dataset, we are going to reuse the downloaded files to create
+    the semantic segmentation version of the PASCAL VOC 2007 dataset. The following
+    screenshot shows how the dataset is provided. Each picture has a corresponding
+    label, where the pixel color identifies a different class:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于在上一节的目标检测部分中，我们使用了 PASCAL VOC 2007 数据集，因此我们将重新使用下载的文件来创建 PASCAL VOC 2007 数据集的语义分割版本。以下截图展示了数据集的提供方式。每张图片都有一个对应的标签，其中像素颜色代表不同的类别：
+- en: '![](img/ee25a449-6ddc-4c91-a7b9-5461e524bcb5.png)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ee25a449-6ddc-4c91-a7b9-5461e524bcb5.png)'
+- en: A pair (image, label) sampled from the dataset. The top image is the original
+    image, while the bottom image contains the semantic segmentation class of the
+    known objects. Every not know class is marked as background (color black), while
+    the objects are delimited using the color white.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从数据集中采样的一对（图像，标签）。上方的图像是原始图像，而下方的图像包含了已知物体的语义分割类别。每个未知类别都标记为背景（黑色），而物体则使用白色标出。
+- en: The dataset previously downloaded comes not only with the annotated bounding
+    boxes but also with the semantic segmentation annotation for many images. TensorFlow
+    Datasets downloaded the raw data in the default directory (`~/tensorflow_datasets/downloads/`)
+    and placed the extracted archive in the `extracted` subfolder. We can, therefore,
+    re-use the downloaded data to create a new dataset for semantic segmentation.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前下载的数据集不仅包含了标注的边界框，还包括了许多图像的语义分割注释。TensorFlow Datasets 将原始数据下载到默认目录（`~/tensorflow_datasets/downloads/`），并将提取的归档文件放在
+    `extracted` 子文件夹中。因此，我们可以重新使用下载的数据来创建一个新的语义分割数据集。
+- en: Before doing it, it is worth looking at the TensorFlow dataset organization
+    to understand what we need to do to achieve our goal.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在进行之前，值得先了解 TensorFlow 数据集的组织结构，以便明白我们需要做什么才能实现目标。
+- en: Hierarchical organization
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 层次化组织
+- en: 'The whole TensorFlow Datasets API has been designed to be as extensible as
+    possible. To do that, the architecture of TensorFlow Datasets is organized in
+    several abstraction layers that transform the raw dataset data to the `tf.data.Dataset`
+    object. The following diagram, from the TensorFlow Dataset GitHub page ([https://github.com/tensorflow/datasets/](https://github.com/tensorflow/datasets/)),
+    shows the logical organization of the project:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 整个 TensorFlow Datasets API 设计时考虑了尽可能的扩展性。为了实现这一点，TensorFlow Datasets 的架构被组织成多个抽象层，将原始数据集数据转化为
+    `tf.data.Dataset` 对象。以下图表来自 TensorFlow Dataset 的 GitHub 页面（[https://github.com/tensorflow/datasets/](https://github.com/tensorflow/datasets/)），展示了该项目的逻辑组织结构：
+- en: '![](img/21ca6bd5-559f-4e4a-b421-e134598022f6.png)'
+  id: totrans-73
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/21ca6bd5-559f-4e4a-b421-e134598022f6.png)'
+- en: The logical organization of the TensorFlow Datasets project. The raw data flows
+    from several abstraction layers that apply transformation and standardizations,
+    in order to define the TFRecord structure and obtain a tf.data.Dataset object
+    at the end.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow Datasets 项目的逻辑组织结构。原始数据经过多个抽象层的处理，这些层应用了转换和标准化操作，目的是定义 TFRecord 结构，并最终获取一个
+    `tf.data.Dataset` 对象。
+- en: Usually, the `FeatureConnector` and `FileFormatAdapter` classes are ready to
+    use, while the `DatasetBuilder` class must be correctly implemented since it is
+    the data-specific part of the pipeline.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，`FeatureConnector`和`FileFormatAdapter`类是现成的，而`DatasetBuilder`类必须正确实现，因为它是数据管道中与数据特定相关的部分。
+- en: 'Each dataset creation pipeline starts from a subclass of a `DatasetBuilder`
+    object that must implement the following methods:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个数据集创建管道都从一个`DatasetBuilder`对象的子类开始，该子类必须实现以下方法：
+- en: '`_info` is used to build the `DatasetInfo` object that describes the dataset
+    (and produces the human-readable representation that is extremely useful to have
+    a complete understanding of the data).'
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_info`用于构建描述数据集的`DatasetInfo`对象（并生成对人类友好的表示，这对全面理解数据非常有用）。'
+- en: '`_download_and_prepare` is used to download the data from a remote location
+    (if any) and do some basic preprocessing (such as extracting the compressed archives).
+    Moreover, it creates the serialized (TFRecord) representation.'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_download_and_prepare`用于从远程位置下载数据（如果有的话）并进行一些基本预处理（如提取压缩档案）。此外，它还会创建序列化的（TFRecord）表示。'
+- en: '`_as_dataset`: This is the final step, to produce a `tf.data.Dataset` object
+    from the serialized data.'
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_as_dataset`：这是最后一步，用于从序列化数据生成一个`tf.data.Dataset`对象。'
+- en: 'Subclassing directly, the `DatasetBuilder` class is often not needed since `GeneratorBasedBuilder`
+    is a ready-to-use subclass of `DatasetBuilder` that simplifies the dataset definition.
+    The methods to implement by subclassing it are as follows:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直接子类化时，通常不需要`DatasetBuilder`类，因为`GeneratorBasedBuilder`是一个现成的`DatasetBuilder`子类，简化了数据集定义。通过子类化它需要实现的方法如下：
+- en: '`_info` is the same method of `DatasetBuilder` (see the `_info` method description
+    of the previous bullet list).'
+  id: totrans-81
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_info`是`DatasetBuilder`的相同方法（参见上一条列表中的`_info`方法描述）。'
+- en: '`_split_generators` is used to download the raw data and do some basic preprocessing
+    but without the need to worry about TFRecord creation.'
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_split_generators`用于下载原始数据并进行一些基本预处理，但无需担心TFRecord的创建。'
+- en: '`_generate_examples` is used to create a Python iterator. This method yields
+    examples in the dataset from the raw data, where every example will be automatically
+    serialized as a row in a TFRecord.'
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_generate_examples`用于创建一个Python迭代器。该方法从原始数据中生成数据集中的示例，每个示例都会被自动序列化为TFRecord中的一行。'
+- en: Therefore, by subclassing `GeneratorBasedBuilder`, there are only three simple
+    methods to implement, and we can hence start implementing them.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，通过子类化`GeneratorBasedBuilder`，只需要实现三个简单的方法，我们就可以开始实现它们了。
+- en: The dataset class and DatasetInfo
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据集类和DatasetInfo
+- en: 'Subclassing a model and implementing the required methods is straightforward.
+    The first step is to define the skeleton of our class and then start by implementing
+    the methods in the order of complexity. Moreover, since our goal is to create
+    a dataset for semantic segmentation that uses the same downloaded files of the
+    PASCAL VOC 2007 dataset, we can override the methods of the `tfds.image.Voc2007`
+    DatasetBuilder to reuse all of the information already present in the parent class:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 子类化一个模型并实现所需的方法是直接的。第一步是定义我们类的框架，然后按复杂度顺序开始实现方法。此外，既然我们的目标是创建一个用于语义分割的数据集，且使用的是相同的PASCAL
+    VOC 2007数据集的下载文件，我们可以重写`tfds.image.Voc2007`的`DatasetBuilder`方法，以重用父类中已存在的所有信息：
+- en: '`(tf2)`'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE3]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: The most straightforward, but perhaps the most important method, to implement
+    is `_info`, which contains all of the dataset information and the definition of
+    the structure of a single example.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最直接，但可能也是最重要的方法是实现`_info`，它包含了所有的数据集信息以及单个示例结构的定义。
+- en: Since we are extending the `tfds.image.Voc2007` dataset, it is possible to reuse
+    certain common information. The only thing to note is that the semantic segmentation
+    requires a label, which is a single-channel image (and not a color image as we
+    are used to seeing).
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们正在扩展`tfds.image.Voc2007`数据集，因此可以重用某些公共信息。唯一需要注意的是，语义分割需要一个标签，这是一个单通道图像（而不是我们习惯看到的彩色图像）。
+- en: 'Implementing the `_info` method is hence straightforward:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现`_info`方法因此是直接的：
+- en: '`(tf2)`'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE4]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: It is worth noting that TensorFlow Datasets already comes with a predefined
+    set of feature connectors that have been used to define `FeatureDict`. For example,
+    the correct way of defining an image feature with a fixed depth (4 or 1) and an
+    unknown height and width is to use `tfds.features.Image(shape=(None, None, depth))`.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得注意的是，TensorFlow Datasets 已经自带了一个预定义的特征连接器集合，这些连接器用于定义 `FeatureDict`。例如，定义具有固定深度（4
+    或 1）且高度和宽度未知的图像特征的正确方法是使用 `tfds.features.Image(shape=(None, None, depth))`。
+- en: The `description`, `urls`, and `citation` fields have been kept from the parent,
+    although this is not fully correct since the description and citation fields of
+    the parent are about the object detection and classification challenges.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`description`、`urls` 和 `citation` 字段已从父类继承，尽管这并不完全正确，因为父类的描述和引用字段涉及的是物体检测和分类挑战。'
+- en: The second method to implement is `_split_generators`.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个需要实现的方法是 `_split_generators`。
+- en: Creating the dataset splits
+  id: totrans-97
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建数据集拆分
+- en: The `_split_generators` method is used to download the raw data and do some
+    basic preprocessing without needing to worry about TFRecord creation.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`_split_generators` 方法用于下载原始数据并进行一些基本的预处理，而无需担心 TFRecord 的创建。'
+- en: 'Since we are inheriting from `tfds.image.Voc2007`, there is no need to reimplement
+    it, but it is, instead, required to have a look at the parent source code:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们是从 `tfds.image.Voc2007` 继承的，因此无需重新实现它，但需要查看父类的源代码：
+- en: '`(tf2)`'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE5]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The source code is from [https://github.com/tensorflow/datasets/blob/master/tensorflow_datasets/image/voc.py](https://github.com/tensorflow/datasets/blob/master/tensorflow_datasets/image/voc.py),
+    released under the Apache License, 2.0.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源代码来自 [https://github.com/tensorflow/datasets/blob/master/tensorflow_datasets/image/voc.py](https://github.com/tensorflow/datasets/blob/master/tensorflow_datasets/image/voc.py)，并遵循
+    Apache License 2.0 授权协议。
+- en: As it can be easily seen, the method uses a `dl_manager` object to download
+    (and cache) and extract the archive from some remote location. The dataset split
+    definition in `"train"`, `"test"`, and `"val"` is performed in the return line.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如可以很容易看出，方法使用一个 `dl_manager` 对象来下载（并缓存）并从某个远程位置解压归档文件。数据集的拆分定义在 `"train"`、`"test"`
+    和 `"val"` 中的返回行执行。
+- en: The most important part of every `tfds.core.SplitGeneratro` call is the `gen_kwargs`
+    parameter. In fact, at this line, we are instructing how the `_generate_exaples`
+    function is going to be called.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次调用 `tfds.core.SplitGeneratro` 最重要的部分是 `gen_kwargs` 参数。事实上，在这一行，我们正在指示如何调用
+    `_generate_exaples` 函数。
+- en: In short, this function creates three splits, by calling the `_generate_examples` function,
+    passing the `data_path` parameters set to the current dataset path (`test_path`
+    or `trainval_path`), and setting `set_name` to the correct dataset name.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简而言之，这个函数通过调用 `_generate_examples` 函数，传入 `data_path` 参数设置为当前数据集路径（`test_path`
+    或 `trainval_path`），并将 `set_name` 设置为正确的数据集名称，从而创建三个拆分。
+- en: The `set_name` parameter value comes from the PASCAL VOC 2007 directory and
+    file organization. As we will see in the next section, where the `_generate_example`
+    method is implemented, knowing the dataset structure and content is needed to
+    create the splits correctly.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`set_name` 参数的值来自 PASCAL VOC 2007 目录和文件组织。正如我们将在下一节看到的那样，在 `_generate_example`
+    方法的实现中，了解数据集的结构和内容对于正确创建拆分是必要的。'
+- en: Generating the example
+  id: totrans-107
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 生成示例
+- en: The `_generate_example` method can be defined with any signature. This method
+    is called only by the `_split_generators` method, and therefore, it is up to this
+    method to correctly invoke `_generate_example` with the correct parameters.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`_generate_example` 方法可以定义为任何签名。该方法仅由 `_split_generators` 方法调用，因此，由这个方法来正确地用正确的参数调用
+    `_generate_example`。'
+- en: Since we haven't overwritten the parent `_split_generators` method, we have
+    to use the same signature required by the parent. Hence, we have the `data_path`
+    and `set_name` parameters to use, in addition to all of the other information
+    that is available in the PASCAL VOC 2007 documentation.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们没有重写父类的 `_split_generators` 方法，因此我们必须使用父类要求的相同签名。因此，我们需要使用 `data_path` 和
+    `set_name` 参数，除此之外，还可以使用 PASCAL VOC 2007 文档中提供的其他所有信息。
+- en: To goal of `_generate_examples` is to yield an example every time it is invoked
+    (behaving like a standard Python iterator).
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`_generate_examples` 的目标是每次调用时返回一个示例（表现得像一个标准的 Python 迭代器）。'
+- en: From the dataset structure, we know that, inside `VOCdevkit/VOC2007/ImageSets/Segmentation/`,
+    there are three text files—one for each split: `"train"`, `"test"`, and `"val"`.
+    Every file contains the name of the labeled image for every split.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从数据集结构中，我们知道，在 `VOCdevkit/VOC2007/ImageSets/Segmentation/` 目录下，有三个文本文件——每个拆分一个：`"train"`，`"test"`
+    和 `"val"`。每个文件都包含每个拆分中标记图像的名称。
+- en: Therefore, it is straightforward to use the information contained in these files
+    to create the three splits. We only have to open the file and read it line-by-line
+    to know which are the images to read.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，使用这些文件中包含的信息来创建三份数据集是直接的。我们只需逐行打开文件并读取，就可以知道要读取哪些图像。
+- en: TensorFlow Datasets constrains us from using the Python file operations, but
+    it explicitly requires the usage of the `tf.io.gfile` package. This constraint
+    is necessary, since there are datasets that are too huge to be processed on a
+    single machine, and `tf.io.gfile` can be easily used by TensorFlow Datasets to
+    read and process remote and distributed datasets.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow Datasets 限制我们使用 Python 文件操作，但明确要求使用 `tf.io.gfile` 包。这个限制是必要的，因为有些数据集太大，无法在单台机器上处理，而
+    `tf.io.gfile` 可以方便地被 TensorFlow Datasets 用来读取和处理远程以及分布式的数据集。
+- en: 'From the PASCAL VOC 2007 documentation, we can also extract a **Look-Up Table**
+    (**LUT**) to create a mapping between the RGB values and the scalar labels:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 PASCAL VOC 2007 文档中，我们还可以提取一个 **查找表** (**LUT**)，用来创建 RGB 值与标量标签之间的映射：
+- en: '`(tf2)`'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE6]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: After creating this look-up table, we can use only TensorFlow operations to
+    read the images, check for their existence (because there is no guarantee that
+    the raw data is perfect and we have to prevent failures during the dataset creation),
+    and create the single-channel image that contains the numerical value associated
+    with the RGB color.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建这个查找表后，我们可以仅使用 TensorFlow 操作来读取图像，检查其是否存在（因为无法保证原始数据是完美的，我们必须防止在数据集创建过程中出现故障），并创建包含与
+    RGB 颜色相关的数值的单通道图像。
+- en: 'Read the source code carefully since it may be hard to understand the first
+    read. In particular, the loop over the look-up table where we look for correspondences
+    between the RGB colors and the colors available may be not easy to understand
+    at first glance. The following code not only creates the single-channel image
+    with the numerical values associated with the RGB colors, using `tf.Variable`,
+    but also checks whether the RGB values are correct:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仔细阅读源代码，因为第一次阅读时可能很难理解。特别是，查找 RGB 颜色与可用颜色之间对应关系的查找表循环，初看可能不容易理解。以下代码不仅使用 `tf.Variable`
+    创建与 RGB 颜色相关的数值的单通道图像，还检查 RGB 值是否正确：
+- en: '`(tf2)`'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE7]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: The `_generate_examples` method not only yields single examples, but it must
+    yield a pair, `(id, example)`, where `id`—in this case, `image_id`—should uniquely
+    identify the record; this field is used to shuffle the dataset globally and to
+    avoid having repeated elements in the generated dataset.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`_generate_examples` 方法不仅返回单个示例，它还必须返回一个元组，`(id, example)`，其中 `id` —— 在本例中是
+    `image_id` —— 应该唯一标识该记录；此字段用于全局打乱数据集，并避免生成的数据集中出现重复元素。'
+- en: Having implemented this last method, everything is correctly set up, and we
+    can use the brand-new Voc2007Semantic loader.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现了这个方法之后，一切都已经正确设置，我们可以使用全新的 Voc2007Semantic 加载器。
+- en: Use the builder
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用构建器
+- en: 'TensorFlow Datasets can automatically detect whether a class visible in the
+    current scope is a `DatasetBuilder` object. Therefore, having implemented the
+    class by subclassing an existing `DatasetBuilder`, the `"voc2007_semantic"` builder
+    is already ready to use:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow Datasets 可以自动检测当前作用域中是否存在 `DatasetBuilder` 对象。因此，通过继承现有的 `DatasetBuilder`
+    类实现的 `"voc2007_semantic"` 构建器已经可以直接使用：
+- en: '[PRE8]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: At the first execution, the splits are created and the `_generate_examples`
+    method is classed three times to create the TFRecord representation of the examples.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第一次执行时，会创建拆分，并且 `_generate_examples` 方法会被调用三次以创建示例的 TFRecord 表示。
+- en: 'By inspecting the `info` variable, we can see some dataset statistics:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过检查 `info` 变量，我们可以看到一些数据集统计信息：
+- en: '[PRE9]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The features are described by implementing the `_info` method, and the dataset
+    size is relatively small, containing only 207 images each for train and test split
+    and 211 for the validation split.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特征通过实现 `_info` 方法来描述，数据集的规模相对较小，每个训练集和测试集包含 207 张图像，验证集包含 211 张图像。
+- en: Implementing `DatasetBuilder` is a relatively straightforward operation that
+    you are invited to do every time you start working with a new dataset—in this
+    way, a high-efficiency pipeline can be used during the training and evaluation
+    processes.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现`DatasetBuilder`是一个相对直接的操作，每当你开始处理一个新的数据集时，都应该进行这项操作——这样，在训练和评估过程中可以使用高效的管道。
+- en: Model training and evaluation
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 模型训练与评估
+- en: Although the network architecture is not that of an image classifier and the
+    labels are not scalars, semantic segmentation can be seen as a traditional classification
+    problem and therefore the training and evaluation processes can be the same.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管网络架构并非图像分类器，并且标签不是标量，但语义分割仍然可以视为一个传统的分类问题，因此训练和评估过程是相同的。
+- en: For this reason, instead of writing a custom training loop, we can use the `compile`
+    and `fit` Keras models to build the training loop and execute it respectively.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 出于这个原因，我们可以使用`compile`和`fit` Keras模型来构建训练循环，并分别执行它，而不是编写自定义的训练循环。
+- en: Data preparation
+  id: totrans-134
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据准备
+- en: To use the Keras `fit` model, the `tf.data.Dataset` object should generate tuples
+    in the `(feature, label)` format, where `feature` is the input image and `label`
+    is the image label.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用Keras的`fit`模型，`tf.data.Dataset`对象应生成 `(feature, label)` 格式的元组，其中`feature`是输入图像，`label`是图像标签。
+- en: 'Therefore, it is worth defining some functions that can be applied to the elements
+    produced by `tf.data.Dataset`, which transforms the data from a dictionary to
+    a tuple, and, at the same time, we can apply some useful preprocessing for the
+    training process:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，值得定义一些可以应用于`tf.data.Dataset`生成的元素的函数，这些函数可以将数据从字典转换为元组，并且在此过程中，我们还可以为训练过程应用一些有用的预处理：
+- en: '`(tf2)`'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE10]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'It is now easy to get the validation and training sets from the `dataset` object
+    obtained from the `tfds.load` call and apply to them the required transformations:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在很容易从通过`tfds.load`调用获得的`dataset`对象中获取验证集和训练集，并对其应用所需的转换：
+- en: '`(tf2)`'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE11]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The datasets are ready to be used in the `fit` method, and since we are developing
+    a pure Keras solution, we can configure the hidden training loop using the Keras
+    callbacks.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集已准备好用于`fit`方法，并且由于我们正在开发一个纯Keras解决方案，因此可以使用Keras回调函数配置隐藏的训练循环。
+- en: Training loop and Keras callbacks
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练循环与Keras回调函数
+- en: The `compile` method is used to configure the training loop. We can specify
+    the optimizer, the loss, the metrics to measure, and some useful callbacks.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`compile`方法用于配置训练循环。我们可以指定优化器、损失函数、评估指标以及一些有用的回调函数。'
+- en: Callbacks are functions that are executed at the end of every training epoch.
+    Keras comes with a long list of predefined callbacks that are ready to use. In
+    the next code snippet, two of the most common are going to be used, the `ModelCheckpoint`
+    and `TensorBoard` callbacks. As it can be easily guessed, the former saves a checkpoint
+    at the end of the epoch, while the latter logs the metrics using `tf.summary`.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回调函数是在每个训练周期结束时执行的函数。Keras提供了一个预定义回调函数的长列表，用户可以直接使用。在下一个代码片段中，将使用两个最常见的回调函数，`ModelCheckpoint`和`TensorBoard`回调函数。如其名称所示，前者在每个周期结束时保存检查点，而后者使用`tf.summary`记录指标。
+- en: 'Since semantic segmentation can be treated as a classification problem, the
+    loss used is `SparseCategoricalCrossentropy`, configured to apply the sigmoid
+    to the output layer of the network when computing the loss value (in the depth
+    dimension), as stated by the `from_logits=True` parameter. This configuration
+    is required since we haven''t added an activation function to the last layer of
+    the custom U-Net:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于语义分割可以视为一个分类问题，使用的损失函数是`SparseCategoricalCrossentropy`，并配置为在计算损失值时对网络的输出层应用sigmoid（在深度维度上），如`from_logits=True`参数所示。这个配置是必须的，因为我们没有在自定义U-Net的最后一层添加激活函数：
+- en: '`(tf2)`'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE12]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'The datasets and the callbacks are passed to the `fit` method, which performs
+    the effective training loop for the desired number of epochs:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集和回调函数被传递到`fit`方法，该方法执行所需轮数的有效训练循环：
+- en: '`(tf2)`'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE13]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: The training loop will train the model for 50 epochs, measuring the loss and
+    the accuracy during the training and, at the end of every epoch, the accuracy
+    and loss value on the validation set. Moreover, having passed two callbacks, we
+    have a checkpoint with the model parameters logged in the `ckpt` directory, and
+    we have the logging of the metrics not only on the standard output (that is, the
+    Keras default) but also on TensorBoard.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练循环将训练模型50个周期，在训练过程中测量损失和准确度，并在每个周期结束时，测量验证集上的准确度和损失值。此外，经过两个回调后，我们在`ckpt`目录中有一个包含模型参数的检查点，并且不仅在标准输出（即Keras默认设置）上记录了度量，还在TensorBoard上进行了记录。
+- en: Evaluation and inference
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 评估与推理
+- en: 'During the training, we can open TensorBoard and look at the plots of the losses
+    and metrics. At the end of the 50^(th) epoch, we get the plots shown in the following
+    screenshot:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，我们可以打开TensorBoard并查看损失和度量的图表。在第50个周期结束时，我们会得到如下截图所示的图表：
+- en: '![](img/2b8b8a58-807d-45af-8d93-4ea5b8ee0513.png)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/2b8b8a58-807d-45af-8d93-4ea5b8ee0513.png)'
+- en: The accuracy and loss values on the training set (orange) and validation set
+    (blue). The summary usage and configuration is hidden to the user by Keras.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练集（橙色）和验证集（蓝色）上的准确度和损失值。Keras将摘要的使用和配置隐藏给用户。
+- en: Moreover, since we have all of the parameters of the model in our `model` variable,
+    we can try to feed it an image downloaded from the internet and see whether the
+    segmentation works as expected.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，由于我们已经在`model`变量中拥有了模型的所有参数，我们可以尝试向模型输入一张从互联网上下载的图像，看看分割是否按预期工作。
+- en: 'Let''s suppose that we downloaded the following image from the internet and
+    saved it as `"author.jpg"`:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们从互联网上下载了以下图像，并将其保存为`"author.jpg"`：
+- en: '![](img/9d236e4a-e3eb-4f1c-8a88-fa0c03d1e59f.png)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/9d236e4a-e3eb-4f1c-8a88-fa0c03d1e59f.png)'
+- en: Greetings!
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 问候！
+- en: We expect the model to produce a segmentation of the only known class contained
+    in this image, that is, `"person"`, while producing the `"background"` label everywhere
+    else.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们期望模型生成这张图像中唯一已知类别的分割，即`"person"`，同时在其他地方生成`"background"`标签。
+- en: 'Once we''ve downloaded the image, we convert it into the same format expected
+    by the model (a float with values between *[0,1]*) and resize it to *512*. Since
+    the model works on a batch of images, a unary dimension to the `sample` variable
+    has to be added. Now, running the inference is as easy as `model(sample)`. After
+    that, we use the `tf.argmax` function on the last channel to extract the predicted
+    labels for every pixel position:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们下载了图像，就将其转换为模型预期的相同格式（一个在*【0,1】*范围内的浮动值），并将其大小调整为*512*。由于模型处理的是一批图像，因此需要为`sample`变量添加一个单一的维度。现在，运行推理就像`model(sample)`一样简单。之后，我们在最后一个通道上使用`tf.argmax`函数提取每个像素位置的预测标签：
+- en: '`(tf2)`'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE14]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: In the `pred_image` tensor, we have the dense predictions that are pretty much
+    useless for visualization. In fact, this tensor has values in the *[0, 21]* range,
+    and these values are indistinguishable once visualized (they all look black).
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`pred_image`张量中，我们有稠密的预测，这些预测对于可视化几乎没有用处。实际上，这个张量的值在*【0, 21】*范围内，并且这些值一旦可视化后几乎无法区分（它们看起来都很黑）。
+- en: 'Hence, we can use the LUT created for the dataset to apply the inverse mapping
+    from label to color. In the end, we can use the TensorFlow `io` package to convert
+    the image and JPEG format and store it on the disk for easy visualization:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们可以使用为数据集创建的LUT应用从标签到颜色的逆映射。最后，我们可以使用TensorFlow的`io`包将图像转换为JPEG格式并将其存储在磁盘上，方便可视化：
+- en: '`(tf2)`'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE15]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Here''s the result of the segmentation after training a simple model for only
+    50 epochs on a small dataset:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是在小数据集上仅训练50个周期后，简单模型的分割结果：
+- en: '![](img/1e4d9cd8-400b-4084-a0cf-62a107ab4d83.png)'
+  id: totrans-170
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/1e4d9cd8-400b-4084-a0cf-62a107ab4d83.png)'
+- en: The result of the segmentation after mapping the predicted labels to the corresponding
+    colors.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 映射预测标签到相应颜色后的分割结果。
+- en: Although coarse, because the architecture hasn't been optimized, model selection
+    hasn't been performed, and the dataset size is small, the segmentation results
+    already look promising!
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管结果较为粗糙，因为架构尚未优化，模型选择未进行，数据集规模较小，但分割结果已经看起来很有前景！
+- en: 'It is possible to inspect the predicted labels by counting the number of matches
+    per label. In the `pixels_per_label` list, we saved the pair (`label`, `match_count`) and
+    by printing it, we can verify if the predicted class is `"person"` (id 15) as
+    expected:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过计算每个标签的匹配次数，可以检查预测的标签。在`pixels_per_label`列表中，我们保存了对（`label`，`match_count`）的配对，打印出来后，我们可以验证预测的类别是否为预期的`"person"`（id
+    15）：
+- en: '`(tf2)`'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE16]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'That produces the following:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将产生以下结果：
+- en: '[PRE17]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: This is as expected. Of course, there is still room for improvement, and this
+    is left to the reader as an exercise.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这正是预期的。当然，仍然有改进的空间，这留给读者作为练习。
+- en: Summary
+  id: totrans-179
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we introduced the problem of semantic segmentation and implemented
+    U-Net: a deep encoder-decoder architecture used to tackle this problem. A short
+    introduction about the possible use cases and the challenges this problem poses
+    has been presented, followed by an intuitive introduction of the deconvolution
+    (transposed convolution) operation, used to build the decoder part of the architecture.
+    Since, at the time of writing, there is not a dataset for semantic segmentation
+    that''s ready to use in TensorFlow Datasets, we took the advantage of this to
+    show the architecture of TensorFlow Datasets and show how to implement a custom
+    `DatasetBuilder`. Implementing it is straightforward, and it is something that''s
+    recommended to every TensorFlow user since it is a handy way of creating a high-efficiency
+    data input pipeline (`tf.data.Dataset`). Moreover, by implementing the `_generate_examples`
+    method, the user is forced to "have a look" at the data, and this is something
+    that''s highly recommended when doing machine learning and data science.'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了语义分割问题并实现了 U-Net：一种用于解决此问题的深度编码器-解码器架构。简要介绍了该问题的可能应用场景和挑战，接着直观地介绍了用于构建架构解码器部分的反卷积（转置卷积）操作。由于在编写时，TensorFlow
+    Datasets 中还没有准备好的语义分割数据集，我们利用这一点展示了 TensorFlow Datasets 的架构，并展示了如何实现自定义的 `DatasetBuilder`。实现它是直接的，推荐每个
+    TensorFlow 用户这样做，因为它是创建高效数据输入管道（`tf.data.Dataset`）的便捷方式。此外，通过实现 ` _generate_examples`
+    方法，用户被迫“查看”数据，这是进行机器学习和数据科学时强烈推荐的做法。
+- en: After that, we learned the implementation of the training loop for the semantic
+    segmentation network by treating this problem as a classification problem. This
+    chapter showed how to use the Keras `compile` and `fit` methods and presented
+    how to customize the training loop using Keras callbacks. This chapter ended with
+    a quick example of how to use the trained model for inference and how to save
+    the resulting image using only the TensorFlow methods.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，我们通过将此问题视为分类问题，学习了语义分割网络训练循环的实现。本章展示了如何使用 Keras 的 `compile` 和 `fit` 方法，并介绍了如何通过
+    Keras 回调函数自定义训练循环。本章以一个快速示例结束，演示了如何使用训练好的模型进行推理，并如何仅使用 TensorFlow 方法保存生成的图像。
+- en: In the next chapter, `Chapter 9`, *Generative Adversarial Networks*, an introduction
+    to **Generative Adversarial Networks** (**GANs**) and the adversarial training
+    process is shown, and, obviously, we explain how to implement them using TensorFlow
+    2.0.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，`第9章`，*生成对抗网络*，介绍了**生成对抗网络**（**GANs**）及其对抗性训练过程，显然，我们也解释了如何使用 TensorFlow
+    2.0 实现它们。
+- en: Exercises
+  id: totrans-183
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 练习
+- en: 'The following exercises are of fundamental importance and you are invited to
+    answer to every theoretical question and solve all of the code challenges presented:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下练习具有基础性的重要性，邀请您回答每个理论问题并解决所有给定的代码挑战：
+- en: What is the semantic segmentation?
+  id: totrans-185
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是语义分割？
+- en: Why is semantic segmentation a difficult problem?
+  id: totrans-186
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么语义分割是一个困难的问题？
+- en: What is deconvolution? Is the deconvolution operation in deep learning a real
+    deconvolution operation?
+  id: totrans-187
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是反卷积？深度学习中的反卷积操作是一个真正的反卷积操作吗？
+- en: It is possible to use Keras models as layers?
+  id: totrans-188
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 是否可以将 Keras 模型作为层使用？
+- en: Is it possible to use a single Keras `Sequential` model to implement a model
+    architecture with skip connections?
+  id: totrans-189
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 是否可以使用单个 Keras `Sequential` 模型来实现具有跳跃连接的模型架构？
+- en: 'Describe the original U-Net architecture: what are the differences between
+    the custom implementation presented in this chapter and the original one?'
+  id: totrans-190
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 描述原始 U-Net 架构：本章中展示的自定义实现与原始实现有什么不同？
+- en: Implement, using Keras, the original U-Net architecture.
+  id: totrans-191
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用 Keras 实现原始的 U-Net 架构。
+- en: What is a DatasetBuilder?
+  id: totrans-192
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是 DatasetBuilder？
+- en: Describe the hierarchical organization of TensorFlow Datasets.
+  id: totrans-193
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 描述 TensorFlow 数据集的层次结构。
+- en: The `_info` method contains the description of every single example of the dataset.
+    How is this description related to the `FeatureConnector` object?
+  id: totrans-194
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '` _info` 方法包含数据集中每个示例的描述。这个描述与 `FeatureConnector` 对象有什么关系？'
+- en: Describe the `_generate_splits` and `_generate_examples` methods. Explain how
+    these methods are connected and the role of the `gen_kwargs` parameter of `tfds.core.SplitGenerator`.
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 描述 `_generate_splits` 和 `_generate_examples` 方法。解释这两个方法是如何连接的，以及 `tfds.core.SplitGenerator`
+    的 `gen_kwargs` 参数的作用。
+- en: What is a LUT? Why is it a useful data structure when creating a dataset for
+    semantic segmentation?
+  id: totrans-196
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是 LUT？为什么它是创建语义分割数据集时有用的数据结构？
+- en: Why it is required to use `tf.io.gfile` when developing a custom DatasetBuilder?
+  id: totrans-197
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么在开发自定义 DatasetBuilder 时需要使用 `tf.io.gfile`？
+- en: '(Bonus): Add a missing dataset for semantic segmentation to the TensorFlow
+    Datasets project! Submit a Pull Request to [https://github.com/tensorflow/datasets](https://github.com/tensorflow/datasets),
+    and in the message, feel free to share this exercise section and this book.'
+  id: totrans-198
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: （加分项）：为 TensorFlow Datasets 项目添加一个缺失的语义分割数据集！提交一个 Pull Request 到 [https://github.com/tensorflow/datasets](https://github.com/tensorflow/datasets)，并在消息中分享此练习部分和本书内容。
+- en: Train the modified U-Net architecture as shown in this chapter.
+  id: totrans-199
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练本章中展示的修改版 U-Net 架构。
+- en: Change the loss function and add a term of reconstruction loss, where the goal
+    of the minimization process is to both minimize the cross-entropy and make the
+    predicted label similar to the ground truth label.
+  id: totrans-200
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更改损失函数并添加重建损失项，最小化过程的目标是同时最小化交叉熵，并使预测标签尽可能接近真实标签。
+- en: Measure the mean intersection over union using the Keras callback. The Mean
+    IOU is already implemented in the `tf.metrics` package.
+  id: totrans-201
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用 Keras 回调函数测量平均交并比（Mean IOU）。Mean IOU 已在 `tf.metrics` 包中实现。
+- en: Try to improve the model's performance, on the validation set, by adding dropout
+    layers in the encoder.
+  id: totrans-202
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 尝试通过在编码器中添加 dropout 层来提高模型在验证集上的表现。
+- en: During the training, start by dropping neurons with a probability of 0.5 and,
+    at every epoch, increase this value of 0.1\. Stop the training when the validations
+    mean IOU stops increasing.
+  id: totrans-203
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在训练过程中，开始时以 0.5 的概率丢弃神经元，并在每个 epoch 后将此值增加 0.1。当验证集的平均 IOU 停止增加时，停止训练。
+- en: Use the trained model to run inference on a random image downloaded from the
+    internet. Postprocess the result segmentation in order to detect a bounding box
+    around different elements of different classes. Draw the bounding boxes, using
+    TensorFlow, on the input image.
+  id: totrans-204
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用训练好的模型对从互联网上下载的随机图像进行推断。对结果的分割进行后处理，以便检测出不同类别的不同元素的边界框。使用 TensorFlow 在输入图像上绘制边界框。

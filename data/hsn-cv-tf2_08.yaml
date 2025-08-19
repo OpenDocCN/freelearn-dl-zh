@@ -1,0 +1,1789 @@
+- en: Enhancing and Segmenting Images
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 图像增强与分割
+- en: We have just learned how to create neural networks that output predictions that
+    are more complex than just a single class. In this chapter, we will push this
+    concept further and introduce **encoders-decoders**, which are models used to
+    edit or generate full images. We will present how encoder-decoder networks can
+    be applied to a wide range of applications, from image denoising to object and
+    instance segmentation. This chapter comes with several concrete examples, such
+    as the application of encoders-decoders to semantic segmentation for self-driving
+    cars.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们刚刚学习了如何创建神经网络，输出比单一类别更复杂的预测。在本章中，我们将进一步拓展这一概念，介绍**编码器-解码器**，这些模型用于编辑或生成完整图像。我们将展示编码器-解码器网络如何应用于从图像去噪到物体和实例分割的广泛应用。本章将提供几个具体示例，例如编码器-解码器在自动驾驶汽车语义分割中的应用。
+- en: 'The following topics will be covered in this chapter:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: What encoders-decoders are, and how they are trained for pixel-level prediction
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 编码器-解码器是什么，以及如何训练它们进行像素级预测
+- en: Which novel layers they use to output high-dimensional data (unpooling, transposed,
+    and atrous convolutions)
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们使用了哪些新颖的层来输出高维数据（反池化、转置卷积和空洞卷积）
+- en: How the FCN and U-Net architectures are tackling semantic segmentation
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: FCN和U-Net架构如何解决语义分割问题
+- en: How the models we have covered so far can be extended to deal with instance
+    segmentation
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们迄今为止所讲解的模型如何扩展以处理实例分割
+- en: Technical requirements
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'Jupyter notebooks illustrating the concepts presented in this chapter can be
+    found in the following Git folder: [github.com/PacktPublishing/Hands-On-Computer-Vision-with-TensorFlow-2/tree/master/Chapter06](https://github.com/PacktPublishing/Hands-On-Computer-Vision-with-TensorFlow-2/tree/master/Chapter06)[.](https://github.com/PacktPublishing/Hands-On-Computer-Vision-with-Tensorflow/tree/master/ch3)'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 展示本章概念的Jupyter笔记本可以在以下Git文件夹中找到：[github.com/PacktPublishing/Hands-On-Computer-Vision-with-TensorFlow-2/tree/master/Chapter06](https://github.com/PacktPublishing/Hands-On-Computer-Vision-with-TensorFlow-2/tree/master/Chapter06)[.](https://github.com/PacktPublishing/Hands-On-Computer-Vision-with-Tensorflow/tree/master/ch3)
+- en: Later in this chapter, we introduce the `pydensecrf` library to improve segmentation
+    results. As detailed on its GitHub page (refer to the documentation at [https://github.com/lucasb-eyer/pydensecrf#installation](https://github.com/lucasb-eyer/pydensecrf#installation)),
+    this Python module can be installed through `pip` (`pip install git+https://github.com/lucasb-eyer/pydensecrf.git`)
+    and requires a recent version of Cython (`pip install -U cython`).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章稍后我们将介绍`pydensecrf`库，以提高分割结果。根据其GitHub页面的详细说明（请参阅文档：[https://github.com/lucasb-eyer/pydensecrf#installation](https://github.com/lucasb-eyer/pydensecrf#installation)），此Python模块可以通过`pip`安装（`pip
+    install git+https://github.com/lucasb-eyer/pydensecrf.git`），并需要安装最新版本的Cython（`pip
+    install -U cython`）。
+- en: Transforming images with encoders-decoders
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用编码器-解码器转换图像
+- en: As presented in [Chapter 1](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml), *Computer
+    Vision and Neural Networks*, multiple typical tasks in computer vision require
+    pixel-level results. For example, semantic segmentation methods classify each
+    pixel of an image, and smart editing tools return images with some pixels altered
+    (for example, to remove unwanted elements). In this section, we will present encoders-decoders,
+    and how **convolutional neural networks** (**CNNs**) following this paradigm can
+    be applied to such applications.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如[第1章](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml)《计算机视觉与神经网络》中所述，*计算机视觉与神经网络*，多个典型的计算机视觉任务要求像素级结果。例如，语义分割方法对图像的每个像素进行分类，智能编辑工具返回的图像会对某些像素进行修改（例如，删除不需要的元素）。在本节中，我们将介绍编码器-解码器，以及如何将遵循这一范式的**卷积神经网络**（**CNN**）应用于此类任务。
+- en: Introduction to encoders-decoders
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编码器-解码器简介
+- en: Before tackling complex applications, let's first introduce what encoders-decoders
+    are and what purpose they fulfill.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在处理复杂应用之前，让我们首先介绍什么是编码器-解码器及其所实现的功能。
+- en: Encoding and decoding
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 编码与解码
+- en: The encoder-decoder architecture is a very generic framework, with applications
+    in communications, cryptography, electronics, and beyond. According to this framework,
+    the **encoder** is a function that maps input samples into a **latent space**,
+    that is, a hidden structured set of values defined by the encoder. The **decoder**
+    is the complementary function that maps elements from this latent space into a
+    predefined target domain. For example, an encoder can be built to parse media
+    files (with their content represented as elements in its latent space), and it
+    can be paired with a decoder defined, for instance, to output the media contents
+    in a different file format. Well-known examples are the image and audio compression
+    formats we commonly use nowadays. JPEG tools encode our media, compressing them
+    into lighter binary files; they then decode them to recover the pixel values at
+    display time.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编码器-解码器架构是一个非常通用的框架，广泛应用于通信、密码学、电子学等领域。根据该框架，**编码器**是一个将输入样本映射到**潜在空间**的函数，也就是由编码器定义的一组隐藏的结构化值。**解码器**是与之互补的函数，它将潜在空间中的元素映射到预定义的目标域。例如，可以构建一个编码器来解析媒体文件（其内容在潜在空间中表示为元素），并可以与一个解码器配对，后者将媒体内容输出为不同的文件格式。我们现在常用的图像和音频压缩格式就是这种类型的例子。JPEG工具对我们的媒体进行编码，将其压缩为更小的二进制文件；然后它们解码这些文件以在显示时恢复像素值。
+- en: In machine learning, encoder-decoder networks have been used for a long time
+    now (for instance, for text translation). An encoder network would take sentences
+    from the source language as input (for instance, French sentences) and learn to
+    project them into a latent space where the meaning of the sentence would be encoded
+    as a feature vector. A decoder network would be trained alongside the encoder
+    to convert the encoded vectors into sentences in the target language (for instance,
+    English).
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在机器学习中，编码器-解码器网络已经被使用了很长时间（例如，用于文本翻译）。一个编码器网络会将源语言的句子作为输入（例如，法语句子），并学习将它们投影到潜在空间中，在这个空间中，句子的意义会作为特征向量进行编码。解码器网络会与编码器一起训练，将编码后的向量转换为目标语言的句子（例如，英语）。
+- en: Vectors from the latent space in encoder-decoder models are commonly called
+    **codes**.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编码器-解码器模型中的潜在空间向量通常称为**代码**。
+- en: 'Note that a common property of encoders-decoders is for their latent space
+    to be smaller than the input and target latent spaces, as shown in *Figure 6-1*:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，编码器-解码器的一个常见特性是其潜在空间比输入和目标潜在空间要小，如*图 6-1*所示：
+- en: '![](img/2500985a-3cd3-4bc5-8ef6-0a0fd5799262.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/2500985a-3cd3-4bc5-8ef6-0a0fd5799262.png)'
+- en: 'Figure 6-1: Example of an auto-encoder trained on the MNIST dataset (copyright
+    owned by Yann LeCun and Corinna Cortes)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6-1：在 MNIST 数据集上训练的自编码器示例（版权归 Yann LeCun 和 Corinna Cortes 所有）
+- en: In *Figure 6-1*, the encoder is trained to convert the *28* × *28* images into
+    vectors (codes) of *32* values here, and the decoder is trained to recover the
+    images. These codes can be plotted with their class labels to highlight similarities/structures
+    in the dataset (the *32*-dimensional vectors are projected on a 2D plane using
+    **t-SNE**, a method developed by Laurens van der Maatens and Geoffrey Hinton and
+    detailed in the notebooks).
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*图 6-1*中，编码器被训练将*28* × *28*的图像转换为*32*个值的向量（代码），而解码器被训练来恢复这些图像。这些代码可以与它们的类别标签一起绘制，以突出数据集中的相似性/结构（*32*维的向量通过**t-SNE**方法投影到二维平面上，该方法由Laurens
+    van der Maatens和Geoffrey Hinton开发，并在笔记本中详细介绍）。
+- en: Encoders are designed or trained to extract/compress the semantic information
+    contained in the samples (for example, the meaning of a French sentence, without
+    the grammatical particularities of this language). Then, decoders apply their
+    knowledge of the target domain to decompress/complete the information accordingly
+    (for instance, converting the encoded information into a proper English sentence).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编码器被设计或训练来提取/压缩样本中包含的语义信息（例如，法语句子的意思，而不考虑该语言的语法特点）。然后，解码器根据其对目标领域的知识，解压/补充信息（例如，将编码后的信息转换为正确的英语句子）。
+- en: Auto-encoding
+  id: totrans-23
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 自编码
+- en: '**Auto-encoders** (**AEs**) are a special type of encoders-decoders. As shown
+    in *Figure 6-1*, their input and target domains are the same, so their goal is
+    to properly encode and then decode images without impacting their quality, despite
+    their *bottleneck* (their latent space of lower dimensionality). The inputs are
+    reduced to a compressed representation (as feature vectors). If an original input
+    is requested later on, it can be reconstructed from its compressed representation
+    by the decoder.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**自编码器**（**AEs**）是一种特殊类型的编码器-解码器。如*图6-1*所示，它们的输入和目标领域是相同的，因此它们的目标是正确编码并解码图像，而不影响图像质量，尽管它们有一个*瓶颈*（即其较低维度的潜在空间）。输入被压缩为一种压缩表示（作为特征向量）。如果后来需要原始输入，它可以通过解码器从压缩表示中重构出来。'
+- en: JPEG tools can thus be called AEs, as their goal is to encode images and then
+    decode them back without losing too much of their quality. The distance between
+    the input and output data is the typical loss to minimize for auto-encoding algorithms.
+    For images, this distance can simply be computed as the cross-entropy loss, or
+    as the L1/L2 loss (Manhattan and Euclidean distances, respectively) between the
+    input images and resulting images (as illustrated in [Chapter 3](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml),
+    *Modern Neural Networks*).
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，JPEG 工具可以被称为自编码器（AEs），因为它们的目标是编码图像，然后将其解码回去而不失去太多质量。输入和输出数据之间的距离是自编码算法需要最小化的典型损失。对于图像，这个距离可以简单地通过交叉熵损失来计算，或者通过输入图像与结果图像之间的
+    L1/L2 损失（分别是曼哈顿距离和欧几里得距离）（如在[第3章](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml)，*现代神经网络*中所示）。
+- en: In machine learning, auto-encoding networks are really convenient to train,
+    not only because their loss is straightforward to express, as we just described,
+    but also because their training does not require any labels. The input images
+    are the targets used to compute the loss.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在机器学习中，自编码网络非常容易训练，不仅因为其损失函数表达直接，如我们刚才所描述的那样，还因为其训练不需要任何标签。输入图像是用来计算损失的目标。
+- en: There is a schism among machine learning experts regarding AEs. Some claim that
+    these models are **unsupervised** since they do not require any additional labels
+    for their training. Others affirm that, unlike purely unsupervised methods (which
+    typically use complex loss functions to discover patterns in unlabeled datasets),
+    AEs have clearly defined targets (that is, their input images). Therefore, it
+    is also common for these models to be called **self-supervised** (that is, their
+    targets can be directly derived from their inputs).
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在机器学习专家中，对于自编码器存在分歧。有些人认为这些模型是**无监督**的，因为它们的训练不需要任何额外的标签。另一些人则认为，与纯粹的无监督方法（通常使用复杂的损失函数来发现无标签数据集中的模式）不同，自编码器有明确的目标（即，它们的输入图像）。因此，这些模型也常被称为**自监督**（即，它们的目标可以直接从输入中推导出来）。
+- en: Given the smaller latent space of AEs, their encoding sub-network must learn
+    to properly compress the data, whereas the decoder must learn a proper mapping
+    to decompress it back.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于自编码器的潜在空间较小，它们的编码子网络必须学习如何正确地压缩数据，而解码器必须学习如何正确地映射并解压数据。
+- en: Without the bottleneck condition, this identity mapping would be straightforward
+    for networks with shortcut paths, such as ResNet (refer to [Chapter 4](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml),
+    *Influential Classification Tools*)*.* They could simply forward the complete
+    input information from encoder to decoder. With a lower-dimensional latent space
+    (bottleneck), they are forced to learn a properly compressed representation.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有瓶颈条件，对于具有快捷路径的网络（例如 ResNet），这种恒等映射将是直接的（参考[第4章](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml)，*影响力分类工具*）。它们可以简单地将完整的输入信息从编码器传递到解码器。由于存在较低维度的潜在空间（瓶颈），它们被迫学习一种正确的压缩表示。
+- en: Purpose
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 目的
+- en: Regarding the more generic encoders-decoders, their applications are numerous.
+    They are used to convert images, to map them from one domain or modality to another.
+    For example, such models are often applied to **depth regression**, that is, the
+    estimation of the distance between the camera and the image content (the depth)
+    for each pixel. This is an important operation for augmented-reality applications,
+    for example, since it allows them to build a 3D representation of the surroundings,
+    and thus to better interact with the environment.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于更通用的编码器-解码器，它们的应用非常广泛。它们用于转换图像，将它们从一个域或模态映射到另一个域。例如，这些模型经常被应用于**深度回归**，即估计相机与图像内容（深度）之间的距离，对于每个像素。例如，这对增强现实应用非常重要，因为它们可以建立环境的3D表示，从而更好地与环境进行交互。
+- en: 'Similarly, encoders-decoders are commonly used for **semantic segmentation**
+    (refer to [Chapter 1](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml), *Computer Vision
+    and Neural Networks*, for its definition). In this case, the networks are trained
+    not to return the depth, but the estimated class for each pixel (refer to *Figure
+    6-2-c*). This important application will be detailed in the second part of this
+    chapter. Finally, encoders-decoders are also famous for their more *artistic use
+    cases*, such as transforming doodle art into pseudo-realistic images or estimating
+    the daytime equivalent of pictures taken at night:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，编码器-解码器常用于**语义分割**（参见[第1章](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml)，*计算机视觉和神经网络*，以获取其定义）。在这种情况下，网络被训练不是返回深度，而是为每个像素估计的类别（参见*图6-2-c*）。这个重要的应用将在本章的第二部分详细讨论。最后，编码器-解码器也因其更具*艺术性的用例*而闻名，例如将涂鸦艺术转换为伪现实图像或估算在夜间拍摄的照片的白天等效图像：
+- en: '![](img/dad5686d-2a67-4c74-97fd-dc41265ac87e.png)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/dad5686d-2a67-4c74-97fd-dc41265ac87e.png)'
+- en: 'Figure 6-2: Examples of applications for encoders-decoders. These three applications
+    are covered in the Jupyter notebooks for this chapter, with additional explanations
+    and implementation details'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-2：编码器-解码器的应用示例。这三个应用在本章的Jupyter笔记本中有详细说明和实现细节。
+- en: The urban scene images and their labels for semantic segmentation in *Figure
+    6-2*, *Figure 6-10*, and *Figure 6-11* come from the *Cityscapes* dataset ([https://www.cityscapes-dataset.com](https://www.cityscapes-dataset.com)).
+    *Cityscapes* is an awesome dataset and a benchmark for recognition algorithms
+    applied to autonomous driving. Marius Cordts et al., the researchers behind this
+    dataset, kindly gave us the authorization to use some of their images to illustrate
+    this book and to demonstrate some algorithms presented later in this chapter (refer
+    to Jupyter notebooks).
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 城市场景图像及其语义分割标签在*图6-2*、*图6-10*和*图6-11*中来自*Cityscapes*数据集（[https://www.cityscapes-dataset.com](https://www.cityscapes-dataset.com)）。*Cityscapes*是一个很棒的数据集，也是应用于自动驾驶识别算法的基准。该数据集的研究者Marius
+    Cordts等很慷慨地授权我们使用其中的一些图像来说明本书内容，并在本章后面的Jupyter笔记本中演示一些算法。
+- en: Let's now consider AEs. Why should a network be trained to return its input
+    images? The answer lies once again in the bottleneck property of AEs. While the
+    encoding and decoding components are trained as a whole, they are applied separately
+    depending on the use cases.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们考虑自动编码器（AE）。为什么一个网络应该被训练来返回其输入图像呢？答案再次在于AE的瓶颈特性。尽管编码和解码组件作为一个整体进行训练，但根据使用情况它们是分开应用的。
+- en: Because of the bottleneck, the encoder has to compress the data while preserving
+    as much information as possible. Therefore, in case the training dataset has recurring
+    patterns, the network will try to uncover these correlations to improve the encoding.
+    The encoder part of an AE can thus be used to obtain low-dimensional representations
+    of images from the domain it was trained for. The low-dimensional representations
+    they provide are often good at preserving the content similarity between images,
+    for instance. Therefore, they are sometimes used for dataset visualization, to
+    highlight clusters and patterns (refer to *Figure 6-1*).
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于瓶颈的存在，编码器必须在尽可能保留信息的同时压缩数据。因此，如果训练数据集具有重复的模式，网络将尝试揭示这些相关性以改善编码。因此，AE的编码器部分可以用来从其训练的域中获取图像的低维表示。它们提供的低维表示通常能够有效地保持图像之间的内容相似性，例如。因此，它们有时用于数据集可视化，以突出集群和模式（参见*图6-1*）。
+- en: AEs are not as good as algorithms, such as JPEG for generic image compression.
+    Indeed, AEs are *data-specific*; that is, they can only efficiently compress images
+    from the domain they know (for example, an AE trained on images of natural landscapes
+    would work poorly on portraits since the visual features would be too different).
+    However, unlike traditional compression methods, AEs have a better understanding
+    of the images they were trained for, their recurring features, semantic information,
+    and more).
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自动编码器（AEs）并不像 JPEG 等算法那样适合通用的图像压缩。事实上，AEs是*数据特定的*；也就是说，它们只能有效地压缩它们所知道的领域中的图像（例如，训练在自然风景图像上的
+    AE 在处理肖像时效果较差，因为视觉特征差异太大）。然而，与传统压缩方法不同，AEs 对它们所训练的图像有更好的理解，了解其重复出现的特征、语义信息等等。
+- en: In some cases, AEs are trained for their decoders, which can be used for **generative
+    tasks**. Indeed, if the latent space has been appropriately structured during
+    training, then any vector randomly picked from this space can be turned into a
+    picture by the decoder! As we will briefly explain later in this chapter and in
+    [Chapter 7](337ec077-c215-4782-b56c-beae4d94d718.xhtml), *Training on Complex
+    and Scarce Datasets*, training a decoder for the generation of new images is actually
+    not that easy, and requires some careful engineering for the resulting images
+    to be realistic (this is especially true for the training of **generative adversarial
+    networks** (**GANs**), as explained in the next chapter).
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，自动编码器（AEs）会针对其解码器进行训练，解码器可以用于**生成任务**。实际上，如果潜在空间在训练过程中得到了恰当的结构化，那么从这个空间中随机挑选的任何向量都可以通过解码器转化为一张图像！正如我们将在本章后面简要解释的，以及在[第七章](337ec077-c215-4782-b56c-beae4d94d718.xhtml)《复杂和稀缺数据集的训练》中提到的，*在复杂和稀缺数据集上的训练*，训练一个用于生成新图像的解码器实际上并不像想象的那么简单，这需要一些精心的工程设计，才能使生成的图像看起来真实（这对于**生成对抗网络**（**GANs**）的训练尤其如此，我们将在下一章中详细说明）。
+- en: However, **denoising AEs** are the most common AE instances found in practice.
+    These models have the particularity that their input images undergo a lossy transformation
+    before being passed to the networks. Since these models are still trained to return
+    the original images (before transformation), they will learn to cancel the lossy
+    operation and recover some of the missing information (refer to *Figure 6-2-a*).
+    Typical models are trained to cancel white or Gaussian noise, or to recover missing
+    content (such as occluded/removed image patches). Such AEs are also used for **smart
+    image upscaling**, also called **image super-resolution**. Indeed, these networks
+    can learn to partially remove the artifacts (that is, noise) caused by traditional
+    upscaling algorithms such as bilinear interpolation (refer to *Figure 6-2-b*).
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，**去噪自动编码器**（denoising AEs）是实践中最常见的 AE 实例。这些模型有一个特点，即它们的输入图像在传递给网络之前会经历一个有损的转换。由于这些模型仍然是被训练来恢复原始图像（即转换前的图像），它们将学会取消这个有损操作并恢复一些缺失的信息（参见*图
+    6-2-a*）。典型的模型会被训练来去除白噪声或高斯噪声，或者恢复丢失的内容（例如，遮挡或删除的图像区域）。此类 AEs 也被用于**智能图像放大**，也称为**图像超分辨率**。事实上，这些网络可以学习部分去除传统放大算法（如双线性插值）产生的伪影（即噪声）（参见*图
+    6-2-b*）。
+- en: Basic example – image denoising
+  id: totrans-41
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基本示例 – 图像去噪
+- en: We will illustrate the usefulness of AEs on a simple example—the denoising of
+    corrupted MNIST images.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将通过一个简单的示例来说明 AEs 的有用性——去噪损坏的 MNIST 图像。
+- en: Simplistic fully connected AE
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 简单的全连接 AE
+- en: 'To demonstrate how simple, yet efficient, these models can be, we will opt
+    for a shallow, fully connected architecture, which we will implement with Keras:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示这些模型是如何简单又高效，我们将选择一个浅层的、全连接的架构，并使用 Keras 实现：
+- en: '[PRE0]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: We have highlighted here the usual symmetrical architecture of encoders-decoders,
+    with their lower-dimensional bottleneck. To train our AE, we use the images (`x_train`)
+    both as inputs and as targets. Once trained, this simple model can be used to
+    embed datasets, as shown in *Figure 6-1*.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在此强调了常见的对称编码器-解码器架构，及其低维瓶颈。为了训练我们的 AE，我们使用图像（`x_train`）作为输入和目标。训练完成后，这个简单的模型可以用来嵌入数据集，如*图
+    6-1*所示。
+- en: We opted for *sigmoid* as the last activation function, in order to get output
+    values between 0 and 1, like the input values.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们选择了*sigmoid*作为最后的激活函数，以便将输出值限制在 0 和 1 之间，像输入值一样。
+- en: Application to image denoising
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 应用于图像去噪
+- en: 'Training our previous model for image denoising is as simple as creating a
+    noisy copy of the training images and passing it as input to our network instead:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练我们之前的图像去噪模型其实非常简单，只需创建一份带噪声的训练图像副本，并将其作为输入传递给我们的网络即可：
+- en: '[PRE1]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The first two notebooks dedicated to this chapter detail the training process,
+    providing illustrations and additional tips (for instance, to visualize the images
+    predicted during training).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的前两本笔记本详细介绍了训练过程，提供了插图和额外的提示（例如，用于可视化训练过程中预测的图像）。
+- en: Convolutional encoders-decoders
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 卷积编码器-解码器
+- en: Like other **neural network** (**NN**)-based systems, encoders-decoders benefited
+    a lot from the introduction of convolutional and pooling layers. **Deep auto-encoders**
+    (**DAEs**) and other architectures soon became widely used for increasingly complex
+    tasks.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其他基于**神经网络**（**NN**）的系统一样，编码器-解码器从卷积层和池化层的引入中受益匪浅。**深度自编码器**（**DAEs**）和其他架构很快就被广泛应用于越来越复杂的任务。
+- en: In this section, we will first introduce new layers developed for convolutional
+    encoders-decoders. We will then present some significant architectures based on
+    these operations.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将首先介绍为卷积编码器-解码器开发的新层。然后，我们将展示基于这些操作的一些重要架构。
+- en: Unpooling, transposing, and dilating
+  id: totrans-55
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 反池化、转置和膨胀
+- en: As we saw in previous chapters, such as [Chapter 3](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml),
+    *Modern Neural Networks*, and [Chapter 4](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml),
+    *Influential Classification Tools*, CNNs are great *feature extractors*. Their
+    convolutional layers convert their input tensors into more and more high-level
+    feature maps, while their pooling layers gradually down-sample the data, leading
+    to compact and semantically rich features. Therefore, CNNs make for performant
+    encoders.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在前几章中所看到的，例如在[第3章](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml)，《现代神经网络》和[第4章](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml)，《影响力分类工具》中，CNNs是出色的*特征提取器*。它们的卷积层将输入张量转换为越来越高层次的特征图，而池化层则逐渐对数据进行下采样，从而生成紧凑且语义丰富的特征。因此，CNNs非常适合作为高效的编码器。
+- en: However, how could this process be reversed to decode these low-dimensional
+    features into full images? As we will present in the following paragraphs, the
+    same way convolutions and pooling operations replaced dense layers for the encoding
+    of images, reverse operations—such as **transposed convolution** (also known as **deconvolutions**),
+    **dilated convolutions**, and **unpooling**—were developed to better decode features.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如何逆转这一过程，将这些低维特征解码为完整的图像呢？正如我们在接下来的段落中将要展示的那样，就像卷积和池化操作替代了密集层用于图像的编码一样，逆操作——如**转置卷积**（也称为**反卷积**）、**膨胀卷积**和**反池化**——也被开发出来，以更好地解码特征。
+- en: Transposed convolution (deconvolution)
+  id: totrans-58
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 转置卷积（反卷积）
+- en: 'Back in [Chapter 3](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml), *Modern Neural
+    Networks*, we introduced convolutional layers, the operations they perform, and
+    how their hyperparameters (kernel size *k*, input depth *D*, number of kernels
+    *N*, padding *p*, and stride *s*) affect the dimensions of their output (*Figure
+    6-3* serves as a reminder). For an input tensor of shape (*H*, *W*, *D*), we presented
+    the following equations to evaluate the output shape (*H[o]*, *W[o]*, *N*):'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第3章](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml)，《现代神经网络》中，我们介绍了卷积层、它们执行的操作，以及它们的超参数（卷积核大小*k*、输入深度*D*、卷积核数量*N*、填充*p*和步幅*s*）如何影响输出的维度（*图6-3*可作为提醒）。对于形状为(*H*,
+    *W*, *D*)的输入张量，我们提出了以下方程来评估输出形状(*H[o]*, *W[o]*, *N*)：
+- en: '![](img/f8aa2ec8-6584-443a-b480-9c97145b58f0.png)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f8aa2ec8-6584-443a-b480-9c97145b58f0.png)'
+- en: 'Now, let''s assume that we want to develop a layer to reverse the spatial transformation
+    of convolutions. In other words, given a feature map of shape (*H[o]*, *W[o]*,
+    *N*) and the same hyperparameters, *k*, *D*, *N*, *p*, and *s*, we would like
+    a *convolution-like* operation to recover a tensor of shape (*H*, *W*, *D*). Isolating *H*
+    and *W* in the previous equations, we thus want an operation upholding the following
+    properties:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，假设我们想要开发一个层来逆转卷积的空间变换。换句话说，给定形状为(*H[o]*, *W[o]*, *N*)的特征图和相同的超参数，*k*、*D*、*N*、*p*和*s*，我们希望一个*类似卷积*的操作能恢复一个形状为(*H*,
+    *W*, *D*)的张量。在前面的方程式中隔离*H*和*W*，因此我们希望这个操作满足以下特性：
+- en: '![](img/1d436c0a-3be4-40bf-ad90-52ef801a8561.png)'
+  id: totrans-62
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/1d436c0a-3be4-40bf-ad90-52ef801a8561.png)'
+- en: This is how **transposed convolutions** were defined. As we briefly mentioned
+    in [Chapter 4](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml), *Influential Classification
+    Tools*, this new type of layer was proposed by Zeiler and Fergus, the researchers
+    behind ZFNet, the winning methods at ILSVRC 2013 (*Visualizing and understanding
+    convolutional networks*, *Springer, 2014*).
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是**反卷积**的定义。如我们在[第 4 章](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml)，*影响力分类工具*中简要提到的那样，这种新类型的层是由
+    Zeiler 和 Fergus 提出的，他们是 ZFNet 背后的研究人员，ZFNet 是 2013 年 ILSVRC 竞赛的获胜方法（*可视化与理解卷积网络*，*Springer，2014*）。
+- en: With a *k* × *k* × *D* × *N* stack of kernels, these layers convolve an *H[o]*
+    × *W[o]* × *N* tensor into an *H* × *W* × *D* map. To achieve this, the input
+    tensor first undergoes **dilation**. The dilation operation, defined by a rate, *d*,
+    consists of inserting *d* – 1 zeroed rows and columns between each couple of rows
+    and columns (respectively) of the input tensor, as shown in *Figure 6-4*. In a
+    transposed convolution, the dilation rate is set to *s* (the stride used for the
+    standard convolution it is reversing). After this resampling, the tensor is then
+    padded by *p*' = *k* – *p* – 1\. Both the dilation and padding parameters are
+    defined in this way in order to recover the original shape, (*H*, *W*, *D*). The
+    tensor is then finally convolved with the layer's filters using a stride of *s*'
+    = 1, finally resulting in an *H* × *W* × *D* map. Normal and transposed convolutions
+    are compared in *Figures 6-3* and *6-4*.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 *k* × *k* × *D* × *N* 的卷积核堆栈，这些层将 *H[o]* × *W[o]* × *N* 的张量卷积成 *H* × *W*
+    × *D* 的映射。为了实现这一点，输入张量首先会经过**膨胀**操作。膨胀操作由一个速率 *d* 定义，包括在输入张量的每对行和列之间插入 *d* – 1
+    行和列的零值，如*图 6-4*所示。在反卷积中，膨胀率设置为 *s*（即它所反转的标准卷积所用的步幅）。经过这种重采样后，张量将使用 *p*' = *k*
+    – *p* – 1 进行填充。膨胀和填充参数这样定义是为了恢复原始形状（*H*，*W*，*D*）。然后，张量最终使用步幅 *s*' = 1 与层的滤波器进行卷积，最终得到
+    *H* × *W* × *D* 的映射。标准卷积和反卷积的比较见*图 6-3*和*图 6-4*。
+- en: 'The following is a normal convolution:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是标准卷积操作：
+- en: '![](img/c33cac43-87ea-4a18-8a78-d962bc44b7c3.png)'
+  id: totrans-66
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c33cac43-87ea-4a18-8a78-d962bc44b7c3.png)'
+- en: 'Figure 6-3: Reminder of the operations performed by a convolutional layer (defined
+    here by a 3 × 3 kernel w, padding p = 1, and stride s = 2)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6-3：卷积层执行的操作提醒（这里定义为一个 3 × 3 的卷积核 w，填充 p = 1，步幅 s = 2）
+- en: Note that in *Figure 6-3*, the mathematical operation between the patches and
+    the kernel is actually a cross-correlation (refer to [Chapter 3](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml),
+    *Modern Neural Networks*).
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在*图 6-3*中，补丁与卷积核之间的数学操作实际上是互相关（请参见[第 3 章](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml)，*现代神经网络*）。
+- en: 'The following is a transposed convolution:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是反卷积操作：
+- en: '![](img/849cef3b-5538-4a9e-befe-17b6f6e7b6ed.png)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/849cef3b-5538-4a9e-befe-17b6f6e7b6ed.png)'
+- en: 'Figure 6-4: Operations performed by a transposed convolution layer to reverse
+    the spatial transformation of a standard convolution (defined here by a 3 × 3
+    kernel *w*, padding *p* = 1, and dilation *d* = 2, as in Figure 6-3)'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6-4：反卷积层执行的操作，用于逆转标准卷积的空间变换（这里定义为 3 × 3 卷积核 *w*，填充 *p* = 1，膨胀 *d* = 2，如图 6-3
+    所示）
+- en: Note that this time, in *Figure 6-4*, the operation between the patches and
+    the kernel is mathematical convolution.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这次在*图 6-4*中，补丁与卷积核之间的操作是数学卷积。
+- en: If this process seems a bit abstract, it is enough to remember that transposed
+    convolutional layers are commonly used to mirror standard convolutions in order
+    to increase the spatial dimensionality of feature maps while convolving their
+    content with trainable filters. This makes these layers quite suitable for decoder
+    architectures. They can be instantiated using `tf.layers.conv2d_transpose()` (refer
+    to the documentation at [https://www.tensorflow.org/api_docs/python/tf/layers/conv2d_transpose](https://www.tensorflow.org/api_docs/python/tf/layers/conv2d_transpose))
+    and `tf.keras.layers.Conv2DTranspose()` (refer to the documentation at [https://www.tensorflow.org/api_docs/python/tf/keras/layers/Conv2DTranspose](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Conv2DTranspose)),
+    which have the same signatures as the standard `conv2d` ones.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果这个过程看起来有些抽象，那么只需要记住，转置卷积层通常用于镜像标准卷积，以增加特征图的空间维度，同时与可训练的过滤器对其内容进行卷积。这使得这些层非常适合用于解码器架构。它们可以通过
+    `tf.layers.conv2d_transpose()`（参见[https://www.tensorflow.org/api_docs/python/tf/layers/conv2d_transpose](https://www.tensorflow.org/api_docs/python/tf/layers/conv2d_transpose)）和
+    `tf.keras.layers.Conv2DTranspose()`（参见[https://www.tensorflow.org/api_docs/python/tf/keras/layers/Conv2DTranspose](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Conv2DTranspose)）进行实例化，这些方法的签名与标准的
+    `conv2d` 相同。
+- en: There is another subtle difference between standard convolutions and transposed
+    ones, which does not have any real impact in practice, but which is still good
+    to know. Going back to [Chapter 3](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml),
+    *Modern Neural Networks*, we mentioned that convolutional layers in CNNs actually
+    perform cross-correlation. As shown in *Figure 6-4*, transposed convolutional
+    layers actually use mathematical convolution, flipping the indices of the kernels.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标准卷积和转置卷积之间还有一个微妙的区别，虽然在实际应用中没有什么重大影响，但知道这一点仍然是有益的。回到[第3章](dd1d3406-d506-4690-bf13-e5e0584ea9d1.xhtml)，《现代神经网络》，我们提到
+    CNN 中的卷积层实际上执行的是交叉相关（cross-correlation）。如*图6-4*所示，转置卷积层实际上使用的是数学卷积，翻转了卷积核的索引。
+- en: Transposed convolutions are also popularly, yet wrongly, called **deconvolutions**.
+    While there is a mathematical operation named *deconvolution*, it performs differently
+    than transposed convolution. Deconvolutions actually fully revert convolutions,
+    returning the original tensors. Transposed convolutions only approximate this
+    process and return tensors with the original shapes. As we can see in *Figures
+    6-3* and *6-4*, the shapes of the original and final tensors match, but not their
+    values.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转置卷积也常被错误地称为**反卷积**。虽然确实存在一种名为*反卷积*的数学操作，但其执行方式与转置卷积不同。反卷积实际上完全恢复卷积，返回原始张量。而转置卷积仅仅是近似这个过程，返回形状相同的张量。如*图6-3*和*6-4*所示，原始张量和最终张量的形状匹配，但它们的值并不相同。
+- en: Transposed convolutions are also sometimes called **fractionally strided convolutions**.
+    Indeed, the dilation of the input tensors can somehow be seen as the equivalent
+    of using a *fractional* stride for the convolution.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转置卷积（Transposed convolutions）有时也被称为**分数步幅卷积**。实际上，输入张量的扩张（dilation）可以在某种程度上看作是使用*分数*步幅进行卷积的等效操作。
+- en: Unpooling
+  id: totrans-77
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 反池化（Unpooling）
+- en: Although strided convolutions are often used in CNN architectures, average-pooling
+    and max-pooling are the most common operations when it comes to reducing the spatial
+    dimensions of images. Therefore, Zeiler and Fergus also proposed a **max-unpooling**
+    operation (often simply referred to as **unpooling**) to pseudo-reverse max-pooling.
+    They used this operation within a network they called a **deconvnet**, to decode
+    and visualize the features of their *convnet* (that is, a CNN). In the paper describing
+    their solution after winning ILSVRC 2013 (in *Visualizing and understanding convolutional
+    networks*, *Springer, 2014*), they explain that, even though max-pooling is not
+    invertible (that is, we cannot mathematically recover all the non-maximum values
+    the operation discards), it is possible to define an operation approximating its
+    inversion, at least in terms of spatial sampling.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管步幅卷积（strided convolutions）常用于 CNN 架构中，但在减少图像空间维度时，平均池化（average-pooling）和最大池化（max-pooling）是最常见的操作。因此，Zeiler
+    和 Fergus 还提出了一种**最大反池化**操作（通常简称为**反池化**），用于伪逆最大池化。他们在一个名为**deconvnet**的网络中使用了这一操作，用于解码和可视化其*卷积网络*（即
+    CNN）的特征。在描述他们的解决方案的论文中（在赢得 ILSVRC 2013 后发表，见《可视化和理解卷积网络》，*Springer, 2014*），他们解释道，尽管最大池化不是可逆的（也就是说，我们无法通过数学方式恢复池化操作丢弃的所有非最大值），但至少在空间采样方面，定义一个近似其反转的操作是可能的。
+- en: 'To implement this pseudo-inverse operation, they first modified each max-pooling
+    layer so that it outputs the pooling mask along with the resulting tensor. In
+    other words, this mask indicates the original positions of the selected maxima.
+    The max-unpooling operation takes for inputs the pooled tensor (which may have
+    undergone other shape-preserving operations in-between the operation) and the
+    pooling mask. It uses the latter to scatter the input values into a tensor upscaled
+    to its pre-pooling shape. A picture is worth a thousand words, so *Figure 6-5*
+    may help you to understand the operation:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这个伪逆操作，他们首先修改了每个最大池化层，使其除了输出结果张量外，还输出池化掩码。换句话说，这个掩码表示所选最大值的原始位置。最大反池化操作的输入为池化后的张量（它可能在操作之间经过了其他保持形状的操作）和池化掩码。它利用池化掩码将输入值散布到一个上采样到池化前形状的张量中。图片胜过千言万语，*图6-5*可能会帮助你理解该操作：
+- en: '![](img/7dbfd6f3-6a7f-4ccc-aa49-df760cfec394.png)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7dbfd6f3-6a7f-4ccc-aa49-df760cfec394.png)'
+- en: 'Figure 6-5: Example of a max-unpooling operation, following a max-pooling layer
+    edited to also output its pooling mask'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-5：最大反池化操作示例，跟随一个最大池化层，并且该池化层也输出其池化掩码
+- en: Note that, like pooling layers, unpooling operations are fixed/untrainable operations.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，像池化层一样，反池化操作是固定/不可训练的操作。
+- en: Upsampling and resizing
+  id: totrans-83
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 上采样与调整大小
+- en: 'Similarly, an **average-unpooling** operation was developed to mirror average-pooling.
+    The latter operation takes a pooling region of *k* × *k* elements and averages
+    them into a single value. Therefore, an average-unpooling layer takes each value
+    of a tensor and duplicates it into a *k* × *k* region, as illustrated in *Figure
+    6-6*:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，开发了**平均反池化**操作以模拟平均池化。后者操作将一个*k* × *k* 元素的池化区域进行平均，得到一个单一的值。因此，平均反池化层会将张量中的每个值复制到一个*k*
+    × *k* 的区域，如*图6-6*所示：
+- en: '![](img/fffece53-111c-4993-b031-1220992eb61e.png)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/fffece53-111c-4993-b031-1220992eb61e.png)'
+- en: 'Figure 6-6: Example of an average-unpooling operation (also known as upsampling)'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-6：平均反池化操作示例（也称为上采样）
+- en: This operation is nowadays used more often than max-unpooling, and is more commonly
+    known as **upsampling**. For instance, this operation can be instantiated through
+    `tf.keras.layers.UpSampling2D()` (refer to the documentation at [https://www.tensorflow.org/api_docs/python/tf/keras/layers/UpSampling2D](https://www.tensorflow.org/api_docs/python/tf/keras/layers/UpSampling2D)).
+    This method is itself nothing more than a wrapper for `tf.image.resize()` (refer
+    to the documentation at [https://www.tensorflow.org/api_docs/python/tf/image/resize](https://www.tensorflow.org/api_docs/python/tf/image/resize))
+    when called with the `method=tf.image.ResizeMethod.NEAREST_NEIGHBOR` argument,
+    used to resize images using nearest-neighbor interpolation (as its name implies).
+    Finally, note that bilinear interpolation is also sometimes used to upscale feature
+    maps without adding any parameters to train, for example, by instantiating `tf.keras.layers.UpSampling2D()`
+    with the `interpolation="bilinear"` argument (instead of the default `"nearest"` value),
+    which is equivalent to calling `tf.image.resize()` with the default `method=tf.image.ResizeMethod.BILINEAR` attribute.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前，这种操作比最大反池化操作使用得更为频繁，更常被称为**上采样**。例如，这个操作可以通过`tf.keras.layers.UpSampling2D()`来实例化（请参考[https://www.tensorflow.org/api_docs/python/tf/keras/layers/UpSampling2D](https://www.tensorflow.org/api_docs/python/tf/keras/layers/UpSampling2D)中的文档）。该方法本质上只是`tf.image.resize()`的包装器（请参考[https://www.tensorflow.org/api_docs/python/tf/image/resize](https://www.tensorflow.org/api_docs/python/tf/image/resize)中的文档），当使用`method=tf.image.ResizeMethod.NEAREST_NEIGHBOR`参数调用时，用于通过最近邻插值来调整图像大小（正如其名称所示）。最后，注意双线性插值有时也用于放大特征图而无需添加任何训练参数，例如通过使用`interpolation="bilinear"`参数来实例化`tf.keras.layers.UpSampling2D()`（而不是默认的`"nearest"`值），这等同于使用默认的`method=tf.image.ResizeMethod.BILINEAR`属性来调用`tf.image.resize()`。
+- en: In decoder architecture, each nearest-neighbor or bilinear upscaling is commonly
+    followed by a convolution with stride *s* = 1 and padding `"SAME"` (to preserve
+    the new shape). These combinations of predefined upscaling and convolutional operations
+    mirror the convolutional and pooling layers composing encoders, and allow the
+    decoder to learn its own features to better recover the target signals.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在解码器架构中，每次最近邻或双线性上采样通常后跟一个步长*s*=1和填充`"SAME"`的卷积（以保持新的形状）。这些预定义的上采样和卷积操作的组合与组成编码器的卷积和池化层相对应，并允许解码器学习自己的特征，以更好地恢复目标信号。
+- en: Some researchers, such as Augustus Odena, favor these operations over transposed
+    convolutions, especially for tasks such as image super-resolution. Indeed, transposed
+    convolutions tend to cause some checkerboard artifacts (due to feature overlapping
+    when the kernel size is not a multiple of the stride), impacting the output quality
+    (*Deconvolution and Checkerboard artifacts, Distill, 2016*).
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些研究人员，如Augustus Odena，更喜欢这些操作而不是转置卷积，特别是在像图像超分辨率这样的任务中。事实上，当内核大小不是步长的倍数时，转置卷积往往会导致一些棋盘状伪影（由于特征重叠），从而影响输出质量（*反卷积和棋盘伪影，Distill，2016*）。
+- en: Dilated/atrous convolution
+  id: totrans-90
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 扩张/孔卷积
+- en: The last operation we will introduce in this chapter is a bit different from
+    the previous ones, as it is not meant to upsample a feature map provided. Instead,
+    it was proposed to artificially increase the receptive field of convolutions without
+    further sacrificing the spatial dimensionality of the data. To achieve this, **dilation**
+    is applied here too (refer to the *Transposed convolutions (deconvolution)* section),
+    though quite differently.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在本章介绍的最后一个操作与前面的操作略有不同，因为它并非旨在对提供的特征图进行上采样。相反，它被提出是为了在不进一步牺牲数据的空间维度的情况下人为地增加卷积的感受野。为了实现这一点，在这里也应用了**扩张**（请参阅*转置卷积（反卷积）*部分），尽管方法有所不同。
+- en: 'Indeed, **dilated convolutions** are similar to standard convolutions, with
+    an additional hyperparameter, *d*, defining the dilation applied to their kernels.
+    *Figure 6-7* illustrates how this process does artificially increase the layer''s
+    receptive field:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确实，**扩张卷积**类似于标准卷积，但具有额外的超参数*d*，定义其内核所应用的扩张。*图6-7*说明了这个过程如何人为地增加了层的感受野：
+- en: '![](img/6d123b71-98b4-41cd-83c9-a11928744340.png)'
+  id: totrans-93
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6d123b71-98b4-41cd-83c9-a11928744340.png)'
+- en: 'Figure 6-7: Operations performed by a dilated-convolutional layer (defined
+    here by a 2 × 2 kernel w, padding p = 1, stride s = 1, and dilation d = 2)'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-7：由扩张卷积层执行的操作（此处由2 × 2内核w定义，填充p = 1，步长s = 1，扩张d = 2）
+- en: These layers are also called **atrous convolutions**, from the French expression
+    *à trous* (*with holes*). Indeed, while the kernel dilation increases the receptive
+    field, it does so by carving holes in it.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些层也被称为**孔卷积**，来自法语表达*à trous*（*带孔*）。确实，虽然内核扩张增加了感受野，但却是通过在其中切割孔来实现的。
+- en: With such properties, this operation is frequently used in modern encoders-decoders,
+    to map images from one domain to another. In TensorFlow and Keras, instantiating
+    dilated convolutions is just a matter of providing a value above the default 1
+    for the `dilation_rate` parameter of `tf.layers.conv2d()` and `tf.keras.layers.Conv2D()`.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 凭借这些特性，这种操作经常用于现代编码器-解码器中，将图像从一个域映射到另一个域。在TensorFlow和Keras中，实例化扩张卷积只需为`tf.layers.conv2d()`和`tf.keras.layers.Conv2D()`的`dilation_rate`参数提供高于默认值1的值。
+- en: These various operations developed to preserve or increase the spatiality of
+    feature maps led to multiple CNN architectures for pixel-wise dense prediction and
+    data generation.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 开发这些各种操作旨在保留或增加特征图的空间性质，从而导致了多种CNN架构用于像素级密集预测和数据生成。
+- en: Example architectures – FCN and U-Net
+  id: totrans-98
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 示例架构 – FCN和U-Net
+- en: Most convolutional encoders-decoders follow the same template as their fully
+    connected counterparts, but leverage the spatial properties of their locally connected
+    layers for higher-quality results. A typical convolutional AE is presented in
+    one of the Jupyter notebooks. In this subsection, we will cover two more advanced
+    architectures derived from this basic template. Both released in 2015, the FCN
+    and U-Net models are still popular, and are commonly used as components for more
+    complex systems (in semantic segmentation, domain adaptation, and others).
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数卷积编码器-解码器遵循与其全连接对应物相同的模板，但利用其局部连接层的空间性质以获得更高质量的结果。一个典型的卷积AE在Jupyter笔记本中展示。在本小节中，我们将介绍从这个基本模板衍生出的两个更先进的架构。发布于2015年的FCN和U-Net模型仍然很受欢迎，并且通常用作更复杂系统（如语义分割，域自适应等）的组成部分。
+- en: Fully convolutional networks
+  id: totrans-100
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 完全卷积网络
+- en: 'As briefly presented in [Chapter 4](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml),
+    *Influential Classification Tools*, **fully convolutional networks** (**FCNs**)
+    are based on the VGG-16 architecture, with the final dense layers replaced by
+    *1 *× *1* convolutions. What we did not mention was that these networks are commonly
+    extended with upsampling blocks and used as encoders-decoders. Proposed by Jonathan
+    Long, Evan Shelhamer, and Trevor Darrell from the University of California, Berkeley,
+    the FCN architecture perfectly illustrates the notions developed in the previous
+    subsection:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如在 [第 4 章](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml)，*影响力分类工具* 中简要介绍的那样，**全卷积网络**（**FCNs**）基于
+    VGG-16 架构，最终的全连接层被 *1 × 1* 的卷积层替代。我们没有提到的是，这些网络通常会扩展为带有上采样模块的结构，并作为编码器-解码器使用。由加利福尼亚大学伯克利分校的
+    Jonathan Long、Evan Shelhamer 和 Trevor Darrell 提出的 FCN 架构完美地展示了前一小节中发展出的概念：
+- en: How CNNs for feature extraction can be used as efficient encoders
+  id: totrans-102
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何将用于特征提取的 CNNs 用作高效的编码器
+- en: How their feature maps can then be effectively upsampled and decoded by the
+    operations we just introduced
+  id: totrans-103
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 然后，他们的特征图如何通过我们刚才介绍的操作有效地进行上采样和解码
+- en: Indeed, Jonathan Long et al. suggested reusing a pretrained VGG-16 as a feature
+    extractor (refer to [Chapter 4](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml), *Influential
+    Classification Tools*). With its five convolutional blocks, VGG-16 efficiently
+    transforms images into feature maps, albeit dividing their spatial dimensions
+    by two after each block. To decode the feature maps from the last block (for instance,
+    into semantic masks), the fully connected layers used for classification are replaced
+    by convolutional ones. The final layer is then applied – a transposed convolution
+    to upsample the data back to the input shape (that is, with a stride of *s* =
+    32, since the spatial dimensions are divided by 32 through VGG).
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事实上，Jonathan Long 等人建议重用预训练的 VGG-16 作为特征提取器（参见 [第 4 章](061eb54a-4e3f-44e8-afb1-bacf796511f4.xhtml)，*影响力分类工具*）。VGG-16
+    通过其五个卷积块有效地将图像转换为特征图，尽管在每个块后空间维度都会减半。为了从最后一个块解码特征图（例如，转换为语义掩码），用于分类的全连接层被卷积层替代。然后应用最终层——一个转置卷积，将数据上采样回输入形状（即，步幅为
+    *s* = 32，因为空间维度在 VGG 中被除以 32）。
+- en: However, Long et al. quickly noticed that this architecture, named **FCN-32s**,
+    was yielding overly *coarse* results. As explained in their paper (*Fully convolutional
+    networks for semantic segmentation*, *Proceedings of the IEEE CVPR conference*,
+    *2015*), the large stride at the final layer indeed limits the scale of detail.
+    Though the features from the last VGG block contain rich contextual information,
+    too much of their spatial definition is already lost. Therefore, the authors had
+    the idea to fuse the feature maps from the last block with those larger ones from
+    previous blocks.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，Long 等人很快注意到，这种名为 **FCN-32s** 的架构产生了过于 *粗糙* 的结果。正如他们在论文中解释的那样（《用于语义分割的全卷积网络》，《IEEE
+    CVPR 会议论文集》，2015），最后一层的大步幅确实限制了细节的尺度。尽管来自最后一个 VGG 块的特征包含丰富的上下文信息，但它们的空间定义已经丢失了太多。因此，作者们想到将最后一个块的特征图与来自前面块的更大特征图进行融合。
+- en: 'In FCN-16s, the last layer of FCN-32s is thus replaced by a transposed layer
+    with a stride of *s* = 2 only, so the resulting tensor has the same dimensions
+    as the feature map from the fourth block. Using a skip connection, features from
+    both tensors are merged together (element-wise addition). The result is finally
+    scaled back to the input shape with another transposed convolution with *s* =
+    16\. In FCN-8s, the same procedure is repeated instead with features from the
+    third block, before the final transposed convolution with *s* = 8\. For clarity,
+    the complete architecture is presented in *Figure 6-8*, and a Keras implementation
+    is provided in the next example:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 FCN-16s 中，FCN-32s 的最后一层被一个步幅为 *s* = 2 的转置层替代，这样得到的张量与第四个块的特征图具有相同的维度。通过跳跃连接，将两个张量的特征进行合并（逐元素加法）。最终结果通过另一个转置卷积（步幅
+    *s* = 16）缩放回输入形状。在 FCN-8s 中，重复相同的过程，但使用来自第三个块的特征，最终再进行一个步幅 *s* = 8 的转置卷积。为了清晰起见，完整的架构在
+    *图 6-8* 中展示，下一示例中提供了一个 Keras 实现：
+- en: '![](img/6bf5d945-e3fe-4a50-831b-85475c77e8f6.png)'
+  id: totrans-107
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6bf5d945-e3fe-4a50-831b-85475c77e8f6.png)'
+- en: 'Figure 6-8: FCN-8s architecture. The data dimensions are shown after each block,
+    supposing an *H* × *W* input. *D*[o] represents the desired number of output channels'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6-8：FCN-8s 架构。每个模块后的数据维度显示在图中，假设输入为 *H* × *W*。*D*[o] 表示所需的输出通道数。
+- en: '*Figure 6-8* illustrates how VGG-16 serves as a feature extractor/encoder,
+    and how the transposed convolutions are used for decoding. The figure also highlights
+    that FCN-32s and FCN-16s are simpler, lighter architectures, with only one skip
+    connection, or none at all.'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*图6-8*展示了VGG-16如何作为特征提取器/编码器，以及如何使用转置卷积进行解码。该图还强调了FCN-32s和FCN-16s是更简单、更轻量的架构，仅有一个或完全没有跳跃连接。'
+- en: With its use of transfer learning and its fusion of multi-scale feature maps,
+    FCN-8s can output images with fine details. Furthermore, because of its fully
+    convolutional nature, it can be applied to encode/decode images of different sizes.
+    Performant and versatile, FCN-8s is still commonly used in many applications,
+    while inspiring multiple other architectures.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于其使用迁移学习并融合了多尺度特征图，FCN-8s能够输出具有细节的图像。此外，由于其完全卷积的特性，它可以应用于编码/解码不同大小的图像。FCN-8s表现出色且具有多功能性，仍然广泛应用于许多领域，并且启发了其他多种架构。
+- en: U-Net
+  id: totrans-111
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: U-Net
+- en: 'Among the solutions inspired by FCNs, the U-Net architecture is not only one
+    of the first; it is probably the most popular (proposed by Olaf Ronneberger, Philipp
+    Fischer, and Thomas Brox in a paper entitled *U-Net: Convolutional networks for
+    biomedical image segmentation*, published by Springer).'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在受FCN启发的解决方案中，U-Net架构不仅是最早的之一，而且可能是最受欢迎的（由Olaf Ronneberger、Philipp Fischer和Thomas
+    Brox在一篇名为*U-Net: Convolutional networks for biomedical image segmentation*的论文中提出，该论文由Springer出版）。'
+- en: Also developed for semantic segmentation (applied to medical imaging), it shares
+    multiple properties with FCNs. It is also composed of a multi-block contractive
+    encoder that increases the features' depth while reducing their spatial dimensions,
+    and of an expansive decoder that recovers the image resolution. Moreover, like
+    in FCNs, skip connections are used to connect encoding blocks to their decoding
+    counterparts. The decoding blocks are thus provided with both the contextual information
+    from the preceding block and the location information from the encoding path.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该模型也用于语义分割（应用于医学影像），它与FCN有许多相似之处。它由一个多块的收缩型编码器组成，通过增加特征的深度而减少其空间维度，以及一个扩展型解码器，恢复图像的分辨率。此外，像FCN一样，跳跃连接用于将编码块与其解码对接块连接。因此，解码块既能接收来自前一块的上下文信息，也能接收来自编码路径的位置数据。
+- en: 'U-Net also differs from FCN in two main ways. Unlike FCN-8s, U-Net is **symmetrical**,
+    going back to the traditional U-shaped encoder-decoder structure (hence the name).
+    Furthermore, the merging with the feature maps from the skip connection is done
+    through **concatenation** (along the channel axis) instead of addition. The U-Net
+    architecture is depicted in *Figure 6-9*. As for the FCN, a Jupyter Notebook is
+    dedicated to its implementation from scratch:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: U-Net与FCN在两个主要方面有所不同。与FCN-8s不同，U-Net是**对称**的，采用传统的U形编码器-解码器结构（因此得名）。此外，通过**连接**（沿通道轴）而非加法来合并来自跳跃连接的特征图。U-Net架构如*图6-9*所示。至于FCN，一个Jupyter
+    Notebook专门用于从头实现FCN：
+- en: '![](img/ca653a8b-5c09-41be-972e-3245084e067d.png)'
+  id: totrans-115
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ca653a8b-5c09-41be-972e-3245084e067d.png)'
+- en: 'Figure 6-9: U-Net architecture'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-9：U-Net架构
+- en: Note also that while the original decoding blocks have transposed convolutions
+    with *s = 2* for upsampling, it is common to find implementations using nearest-neighbor
+    scaling instead (refer to the discussion in the previous subsection). Given its
+    popularity, U-Net has known many variations and still inspires numerous architectures
+    (for example, replacing its blocks with residual ones, and densifying the intra-block
+    and extra-block connectivity).
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还需要注意的是，虽然原始解码块具有*升采样时s = 2*的转置卷积，但常见的实现使用最近邻插值缩放（请参阅前一小节的讨论）。由于其流行性，U-Net已经有了许多变体，并且仍然启发了多种架构（例如，用残差块替代其原有块，并且增强块内和块外的连接性）。
+- en: Intermediary example – image super-resolution
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 中介示例——图像超分辨率
+- en: Let's briefly apply one of these models to a new problem – image super-resolution
+    (complete implementation and additional tips are found in the related notebook).
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们简要地将这些模型应用到一个新问题——图像超分辨率（完整的实现和附加提示可以在相关的Notebook中找到）。
+- en: FCN implementation
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: FCN实现
+- en: 'Remembering the architecture we just presented, a simplified version of FCN-8s
+    can be implemented as follows (note that the real model has additional convolutions
+    before each transposed one):'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住我们刚刚介绍的架构，可以按照以下方式实现简化版的FCN-8s（请注意，实际模型在每个转置卷积之前还有额外的卷积层）：
+- en: '[PRE2]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Reusing the Keras implementation of VGG and the Functional API, an FCN-8s model
+    can be created with minimal effort.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过重用VGG的Keras实现和功能性API，可以轻松创建一个FCN-8s模型。
+- en: Application to upscaling images
+  id: totrans-124
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 应用于图像放大
+- en: 'A simple trick to train a network for super-resolution is to use a traditional
+    upscaling method (such as bilinear interpolation) to scale the images to the target
+    dimensions, before feeding them to the model. This way, the network can be trained
+    as a denoising AE, whose task is to clear the upsampling artifacts and to recover
+    lost details:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练超分辨率网络的一个简单技巧是使用传统的放大方法（如双线性插值）将图像放大到目标尺寸，然后再输入模型。通过这种方式，网络可以作为去噪自编码器进行训练，任务是清除上采样伪影并恢复丢失的细节：
+- en: '[PRE3]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Proper code and complete demonstration on images can be found in the notebooks.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 适当的代码和完整的图像演示可以在笔记本中找到。
+- en: As mentioned earlier, the architectures we just covered are commonly applied
+    to a wide range of tasks, such as depth estimation from color images, next-frame
+    prediction (that is, predicting what the content of the next image could be, taking
+    for input a series of video frames), and image segmentation. In the second part
+    of this chapter, we will develop the latter task, which is essential in many real-life
+    applications.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，我们刚刚介绍的架构通常应用于多种任务，如从彩色图像中估计深度、下一帧预测（即预测下一帧图像的内容，输入为一系列视频帧）和图像分割。在本章的第二部分，我们将深入探讨后一项任务，这在许多现实应用中至关重要。
+- en: Understanding semantic segmentation
+  id: totrans-129
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解语义分割
+- en: '**Semantic segmentation** is a more generic term for the task of segmenting
+    images into meaningful parts. It covers both object segmentation and instance
+    segmentation, which were introduced in [Chapter 1](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml),
+    *Computer Vision and Neural Networks*. Unlike image classification and object
+    detection, covered in the previous chapters, segmentation tasks require the methods
+    to return pixel-level dense predictions, that is, to assign a label to each pixel
+    in the input images.'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**语义分割**是将图像划分为有意义部分的任务的更广泛术语。它包括对象分割和实例分割，这两者在[第1章](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml)《计算机视觉与神经网络》中介绍。与前几章中涉及的图像分类和目标检测不同，分割任务要求方法返回像素级的密集预测，即为输入图像中的每个像素分配一个标签。'
+- en: After explaining in more detail why encoders-decoders are thus great at object
+    segmentation, and how their results can be further refined, we will present some
+    solutions for the more complicated task of instance segmentation.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在更详细地解释为什么编码器-解码器如此擅长对象分割，以及如何进一步优化其结果之后，我们将介绍一些针对更复杂任务——实例分割的解决方案。
+- en: Object segmentation with encoders-decoders
+  id: totrans-132
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用编码器-解码器进行对象分割
+- en: As we saw in the first part of this chapter, encoding-decoding networks are
+    trained to map data samples from one domain to another (for example, from noisy
+    to noiseless, or from color to depth). Object segmentation can be seen as one
+    such operation – the mapping of images from the color domain to the class domain.
+    Given its value and context, we want to assign one of the target classes to each
+    pixel of a picture, returning a **label map** with the same height and width.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在本章第一部分所看到的，编码-解码网络被训练来将数据样本从一个领域映射到另一个领域（例如，从噪声到无噪声，或从彩色到深度）。对象分割可以看作是其中的一种操作——将图像从颜色域映射到类别域。根据其价值和上下文，我们希望为图片中的每个像素分配一个目标类别，从而返回具有相同高度和宽度的**标签图**。
+- en: Teaching encoders-decoders to take an image and return a label map still requires
+    some consideration, which we will now discuss.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 教授编码器-解码器将图像转换为标签图仍然需要一些考虑，我们现在将讨论这一点。
+- en: Overview
+  id: totrans-135
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 概述
+- en: In the following paragraphs, we will present how networks such as U-Net are
+    used for object segmentation, and how their outputs can be further processed into
+    refined label maps.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的段落中，我们将展示如何使用U-Net等网络进行对象分割，以及如何进一步处理其输出以生成精细的标签图。
+- en: Decoding as label maps
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 解码为标签图
+- en: Building encoders-decoders to directly output label maps—where each pixel value
+    represents a class (for instance, `1` for *dog*, and `2` for *cat*)—would yield
+    poor results. As with classifiers, we need a better way to output categorical
+    values.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构建直接输出标签图的编码器-解码器——其中每个像素值表示一个类别（例如，`1`表示*狗*，`2`表示*猫*）——会产生较差的结果。与分类器一样，我们需要一种更好的方法来输出类别值。
+- en: 'To classify images among *N* categories, we learned to build networks with
+    the final layers outputting *N* logits, representing the predicted per-class scores.
+    We also learned how to convert these scores into probabilities using the **softmax**operation,
+    and how to return the most probable class(es) by picking the highest values (for
+    instance, using **argmax**). The same mechanism can be applied to semantic segmentation,
+    at the pixel level instead of the image level. Instead of outputting a column
+    vector of *N* logits containing the per-class scores for each full image, our
+    network is built to return an *H* × *W* × *N* tensor with scores for each pixel
+    (refer to *Figure 6-10*):'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了将图像分类为 *N* 类别，我们学习了如何构建网络，使最终层输出 *N* 个 logits，表示每个类别的预测得分。我们还学习了如何使用 **softmax**
+    操作将这些得分转换为概率，并通过选择最大值（例如，使用 **argmax**）返回最有可能的类别。相同的机制可以应用于语义分割，在像素级别而不是图像级别。我们的网络被构建为返回一个
+    *H* × *W* × *N* 的张量，其中包含每个像素的得分（参见 *图 6-10*）：
+- en: '![](img/041ed823-c5b3-47b2-850f-645a0916f564.png)'
+  id: totrans-140
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/041ed823-c5b3-47b2-850f-645a0916f564.png)'
+- en: 'Figure 6-10: Given an input image of dimensions *H* × *W*, the network returns
+    an *H* × *W* × *N* probability map, with *N* being the number of classes. Using
+    argmax, the predicted label map can then be obtained'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6-10：给定一个尺寸为 *H* × *W* 的输入图像，网络返回一个 *H* × *W* × *N* 的概率图，其中 *N* 是类别数。使用 argmax
+    可以获得预测的标签图。
+- en: 'For the architectures we presented in this chapter, obtaining such an output
+    tensor is simply a matter of setting *D**[o]* = *N*, that is, setting the number
+    of output channels equal to the number of classes when building the models (refer
+    to *Figures 6-8* and *6-9*). They can then be trained as classifiers. The **cross-entropy
+    loss** is used to compare the softmax values with the one-hot-encoded ground truth
+    label maps (the fact that the compared tensors have more dimensions for classification
+    that do not impact the calculations). Also, the *H* × *W* × *N* predictions can
+    be similarly transformed into per-pixel labels by selecting the indices of the
+    highest values along the channel axis (that is, `argmax` over the channel axis).
+    For instance, the FCN-8s code presented earlier can be adapted to train a model
+    for object segmentation, as follows:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于本章中展示的架构，获得这样的输出张量只是设置 *D**[o]* = *N* 的问题，也就是在构建模型时将输出通道数设置为类别数（参见 *图 6-8*
+    和 *图 6-9*）。然后可以将它们作为分类器进行训练。**交叉熵损失**用于将 softmax 值与 one-hot 编码的真实标签图进行比较（尽管被比较的张量在分类时具有更多的维度，但这不会影响计算）。此外，*H*
+    × *W* × *N* 的预测结果也可以通过选择沿通道轴的最大值索引（即，沿通道轴的 `argmax`）类似地转换为每个像素的标签。例如，前面展示的 FCN-8s
+    代码可以调整为训练一个用于物体分割的模型，如下所示：
+- en: '[PRE4]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The Git repository contains a complete example of an FCN-8s model built and
+    trained for semantic segmentation, as well as a U-Net model.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Git 仓库包含一个完整的 FCN-8s 模型示例，该模型已构建并训练用于语义分割，同时还包含一个 U-Net 模型。
+- en: Training with segmentation losses and metrics
+  id: totrans-145
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用分割损失和指标进行训练
+- en: The use of state-of-the-art architectures, such as FCN-8s and U-Net, is key
+    to building performant systems for semantic segmentation. However, the most advanced
+    models still need a proper loss to converge optimally. While cross-entropy is
+    the default loss to train models both for coarse and dense classification, precautions
+    should be taken for the latter cases.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用先进的架构，如 FCN-8s 和 U-Net，是构建高性能语义分割系统的关键。然而，最先进的模型仍然需要一个合适的损失函数才能最优化收敛。虽然交叉熵是训练模型进行粗分类和密集分类的默认损失，但在后者的情况下应采取适当的预防措施。
+- en: For image-level and pixel-level classification tasks, **class imbalance** is
+    a common problem. Imagine training models over a dataset of 990 catpictures and
+    10 dogpictures. A model that would learn to always output cat would achieve 99%
+    training accuracy, but would not be really useful in practice. For image classification,
+    this can be avoided by adding or removing pictures so that all classes appear
+    in the same proportions. The problem is trickier for pixel-level classification.
+    Some classes may appear in every image but span only a handful of pixels, while
+    other classes may cover most of the images (such as *traffic sign* versus *road *classes
+    for our self-driving car application). The dataset cannot be edited to compensate
+    for such an imbalance.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于图像级和像素级分类任务，**类别不平衡**是一个常见问题。假设我们训练一个模型，数据集包含990张猫的图片和10张狗的图片。如果模型学会总是输出猫，那么它将在训练集上达到99%的准确率，但在实际应用中并没有什么用处。对于图像分类，可以通过添加或删除图片来避免此问题，从而使所有类别以相同的比例出现。对于像素级分类问题，这个问题更为棘手。一些类别可能出现在每张图像中，但仅占很少的像素，而其他类别可能覆盖大部分图像（例如，对于自动驾驶汽车应用中的*交通标志*与*道路*类别）。数据集无法通过编辑来弥补这种不平衡。
+- en: 'To prevent the segmentation models from developing a bias toward larger classes,
+    their loss functions should instead be adapted. For instance, it is common practice
+    to weigh the contribution of each class to the cross-entropy loss. As presented
+    in our notebook on semantic segmentation for self-driving cars and in *Figure
+    6-11*, the less a class appears in training images, the more it should weigh on
+    the loss. This way, the network would be heavily penalized if it starts ignoring
+    smaller classes:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了防止分割模型对大类别产生偏倚，它们的损失函数应该进行调整。例如，通常的做法是加权每个类别对交叉熵损失的贡献。如我们在自动驾驶汽车语义分割笔记本中展示的以及*图6-11*所示，类别在训练图像中出现得越少，它在损失中的权重就应越大。这样，如果网络开始忽略较小的类别，就会受到严重惩罚：
+- en: '![](img/578eba97-9363-4de3-b9d0-5a32c60dd13d.png)'
+  id: totrans-149
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/578eba97-9363-4de3-b9d0-5a32c60dd13d.png)'
+- en: 'Figure 6-11: Examples of pixel weighing strategies for semantic segmentation
+    (the lighter the pixels, the greater their weight on the loss)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-11：语义分割中像素加权策略示例（像素越亮，其在损失中的权重越大）
+- en: The weight maps are usually computed from the ground truth label maps. It should
+    be noted that, as shown in *Figure 6-11*, the weight applied to each pixel can
+    be set not only according to the class, but also according to the pixel's position
+    relative to other elements, and more.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 权重图通常是根据地面真值标签图计算得出的。需要注意的是，如*图6-11*所示，应用于每个像素的权重不仅可以根据类别设置，还可以根据像素相对于其他元素的位置进行设置，等等。
+- en: Another solution is to replace the cross-entropy with another cost function
+    that's not affected by the class proportions. After all, cross-entropy is a surrogate
+    accuracy function, adopted because it is nicely differentiable. However, this
+    function does not really express the actual objective of our models—to properly
+    segment the different classes, whatever their areas. Therefore, several loss functions
+    and metrics that are specific to semantic segmentation have been proposed by researchers
+    to more explicitly capture this objective.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种解决方案是用另一种不受类别比例影响的代价函数来替代交叉熵。毕竟，交叉熵是一个代理准确性函数，由于其良好的可微性而被采用。然而，这个函数并未真正表达我们模型的实际目标——正确分割不同的类别，无论它们的面积如何。因此，研究人员提出了几种针对语义分割的损失函数和度量指标，以更明确地捕捉这一目标。
+- en: '**Intersection-over-Union** (**IoU**), presented in [Chapter 5](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml),
+    *Object Detection Models*, is one of these common metrics. The **Sørensen–Dice
+    coefficient** (often simply named the **Dice coefficient**) is another. Like IoU,
+    it measures how well two sets overlap:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**交集并集比**（**IoU**），在[第5章](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml)中介绍，*目标检测模型*，是常见的评估指标之一。**Sørensen–Dice系数**（通常简称为**Dice系数**）是另一个。像IoU一样，它衡量两个集合的重叠程度：'
+- en: '![](img/b7d499fd-2d60-4663-9f4e-a6af1a01abd8.png)'
+  id: totrans-154
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b7d499fd-2d60-4663-9f4e-a6af1a01abd8.png)'
+- en: 'Here, *|**A|* and *|B|* represent the cardinality of each set (refer to the explanations
+    in the previous chapter), and ![](img/72c18afa-cb39-4f19-b2ee-9b7f0743feca.png)
+    represents the number of elements they have in common (cardinality of their intersection). IoU
+    and Dice share several properties, and one can actually help calculate the other:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，*|**A|*和*|B|*表示每个集合的基数（参考上一章中的解释），而![](img/72c18afa-cb39-4f19-b2ee-9b7f0743feca.png)表示它们的交集中的元素数量（交集的基数）。IoU和Dice有几个共同特性，实际上其中一个可以帮助计算另一个：
+- en: '![](img/6c5e9c55-7c4d-4de2-980e-e15be36d1799.png)'
+  id: totrans-156
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6c5e9c55-7c4d-4de2-980e-e15be36d1799.png)'
+- en: In semantic segmentation, *Dice* is, therefore, used to measure how well the
+    predicted mask for each class overlaps the ground truth mask. For one class, the
+    numerator then represents the number of correctly classified pixels, and the denominator
+    represents the total number of pixels belonging to this class in both the predicted
+    and ground truth masks. As a metric, the *Dice* coefficient thus does not depend
+    on the relative number of pixels one class takes in images. For multi-class tasks,
+    scientists usually compute the *Dice* coefficient for each class (comparing each
+    pair of predicted and ground truth masks), and then average the results.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在语义分割中，*Dice* 因此用来衡量每个类的预测掩码与实际掩码的重叠程度。对于一个类，分子表示正确分类的像素数，分母表示该类在预测和实际掩码中所有像素的总数。作为一种度量，*Dice*
+    系数因此不依赖于一个类在图像中所占的像素相对数量。在多类任务中，科学家通常计算每个类的 *Dice* 系数（比较每一对预测和实际掩码），然后取其平均值。
+- en: 'From the equation, we can see the *Dice* coefficient is defined between 0 and
+    1—its value reaches 0 if *A* and *B* do not overlap at all, and it reaches 1 if
+    they do perfectly. Therefore, to use it as a loss function that a network should
+    minimize, we need to reverse this scoring. All in all, for semantic segmentation
+    applied to *N* classes, the *Dice* loss is commonly defined as follows:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从公式中可以看到，*Dice* 系数的定义范围在 0 和 1 之间——如果 *A* 和 *B* 完全不重叠，则其值为 0；如果它们完全重叠，则值为 1。因此，为了将其作为一个网络应当最小化的损失函数，我们需要反转这个评分。总的来说，对于应用于
+    *N* 类的语义分割，*Dice* 损失通常定义如下：
+- en: '![](img/3920f224-4661-4428-9ce8-ec9610b4bbe3.png)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3920f224-4661-4428-9ce8-ec9610b4bbe3.png)'
+- en: Let's clarify this equation a bit. If *a* and *b* are two one-hot tensors, then
+    the *Dice* numerator (that is, their intersection) can be approximated by applying
+    the element-wise multiplication between them (refer to [Chapter 1](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml),
+    *Computer Vision and Neural Networks*), then by summing together all the values
+    in the resulting tensor. The denominator is obtained by summing all the elements, *a*
+    and *b*. Finally, a small value, ![](img/11068ff7-140a-42e3-a3f0-c49ed876d062.png)
+    (for instance, below *1e-6*), is usually added to the denominator to avoid dividing
+    by zero if the tensors contain nothing, and added to the numerator to smooth the
+    result.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们再澄清一下这个公式。如果 *a* 和 *b* 是两个一热编码张量，那么 *Dice* 分子（即它们的交集）可以通过对它们进行元素级的相乘来近似（参见
+    [第1章](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml)，*计算机视觉与神经网络*），然后将得到的张量中的所有值相加。分母是通过将
+    *a* 和 *b* 中的所有元素相加得到的。最后，如果张量为空，通常会在分母中添加一个小值，![](img/11068ff7-140a-42e3-a3f0-c49ed876d062.png)（例如，低于
+    *1e-6*），并在分子中也添加该小值，以避免除零错误，并平滑结果。
+- en: Note that, in practice, unlike the ground truth one-hot tensors, the predictions
+    do not contain binary values. They are composed of the softmax probabilities ranging
+    continuously from 0 to 1\. This loss is therefore often named **soft Dice**.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在实际应用中，与实际的 ground truth 一热编码张量不同，预测值并不包含二进制值。它们由连续从 0 到 1 的 softmax 概率组成。因此，这种损失函数通常被称为
+    **soft Dice**。
+- en: 'In TensorFlow, this loss can be implemented as follows:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 中，损失函数可以如下实现：
+- en: '[PRE5]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Both *Dice* and *IoU* are important tools for segmentation tasks, and their
+    usefulness is further demonstrated in the related Jupyter notebook.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*Dice* 和 *IoU* 是分割任务中重要的工具，它们的实用性在相关的 Jupyter notebook 中得到了进一步的展示。'
+- en: Post-processing with conditional random fields
+  id: totrans-165
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用条件随机场进行后处理
+- en: Labeling every pixel properly is a complex task, and it is common to obtain
+    predicted label maps with poor contours and small incorrect areas. Thankfully,
+    there are some methods that post-process the results, correcting some obvious
+    defects. Among these methods, the **conditional random fields** (**CRFs**) methods
+    are the most popular because of their overall efficiency.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正确标记每个像素是一个复杂的任务，通常会得到预测的标签图，其中轮廓较差并且存在小的错误区域。幸运的是，有一些方法可以对结果进行后处理，修正一些明显的缺陷。在这些方法中，**条件随机场**（**CRFs**）方法因其整体效率而最为流行。
+- en: The theory behind this is beyond the scope of this book, but CRFs are able to
+    improve pixel-level predictions by taking into account the context of each pixel
+    back in the original image. If the color gradient between two neighboring pixels
+    is small (that is, no abrupt change of color), chances are that they belong to
+    the same class. Taking into account this spatial and color-based model, as well
+    as the probability maps provided by the predictors (in our case, the softmax tensors
+    from CNNs), CRF methods return refined label maps, which are better with respect
+    to visual contours.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这背后的理论超出了本书的范围，但CRFs能够通过考虑每个像素在原始图像中的上下文来提高像素级的预测。如果两个相邻像素之间的颜色梯度较小（即颜色没有急剧变化），那么它们很可能属于同一类别。考虑到这个基于空间和颜色的模型，以及预测器提供的概率图（在我们的案例中，是CNN的softmax张量），CRF方法返回的是经过精细化的标签图，它们在视觉轮廓方面更为准确。
+- en: Several ready-to-use implementations are available, such as `pydensecrf` by
+    Lucas Beyer ([https://github.com/lucasb-eyer/pydensecrf](https://github.com/lucasb-eyer/pydensecrf)),
+    a Python wrapper for dense CRFs with Gaussian edge potentials proposed by Philipp
+    Krähenbühl and Vladlen Koltun (refer to *Efficient inference in fully connected
+    CRFs with gaussian edge potentials*, *Advances in neural information processing
+    systems*, *2011*). In the last notebook for this chapter, we explain how to use
+    this framework.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有多个现成的实现可用，例如由Lucas Beyer开发的`pydensecrf`（[https://github.com/lucasb-eyer/pydensecrf](https://github.com/lucasb-eyer/pydensecrf)），这是一个Python包装器，用于实现Philipp
+    Krähenbühl和Vladlen Koltun提出的带高斯边缘潜力的稠密CRF（参见*Efficient inference in fully connected
+    CRFs with gaussian edge potentials*，*Advances in neural information processing
+    systems*，*2011*）。在本章的最后一个笔记本中，我们将解释如何使用这个框架。
+- en: Advanced example – image segmentation for self-driving cars
+  id: totrans-169
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 高级示例 – 自驾车的图像分割
+- en: As suggested at the beginning of this chapter, we will apply this new knowledge
+    to a complex real-life use case—the segmentation of traffic images for self-driving
+    cars.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如本章开头所建议的，我们将把这些新知识应用于一个复杂的实际用例——自驾车的交通图像分割。
+- en: Task presentation
+  id: totrans-171
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 任务展示
+- en: Like human drivers, self-driving cars need to understand their environment and
+    be aware of the elements around them. Applying semantic segmentation to the video
+    images from a front camera would allow the system to know whether other cars are
+    around, to know whether pedestrians or bikes are crossing the road, to follow
+    traffic lines and signs, and more.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像人类驾驶员一样，自驾车需要理解其环境，并意识到周围的元素。将语义分割应用于前置摄像头的视频图像可以让系统知道是否有其他汽车在周围，知道是否有行人或自行车正在穿越道路，是否在跟随交通线和标志等。
+- en: This is, therefore, a critical process, and researchers are putting in lots
+    of effort into refining the models. For that reason, multiple related datasets
+    and benchmarks are available. The *Cityscapes* dataset ([https://www.cityscapes-dataset.com](https://www.cityscapes-dataset.com))
+    we chose for our demonstration is one of the most famous. Shared by Marius Cordts
+    et al. (refer to *The Cityscapes Dataset for Semantic Urban Scene Understanding*,
+    *Proceedings of the IEEE CVPR Conference*), it contains video sequences from multiple
+    cities, with semantic labels for more than 19 classes *(*road, car, plant, and
+    so on). A notebook is specifically dedicated to getting started with this benchmark.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，这是一个关键过程，研究人员正在投入大量精力来优化模型。因此，有多个相关数据集和基准可供使用。我们为演示选择的*Cityscapes*数据集（[https://www.cityscapes-dataset.com](https://www.cityscapes-dataset.com)）是最著名的之一。由Marius
+    Cordts等人分享（参见*The Cityscapes Dataset for Semantic Urban Scene Understanding*，*IEEE
+    CVPR Conference Proceedings*），它包含来自多个城市的视频序列，并为超过19个类别（如*道路、汽车、植物*等）提供语义标签。专门有一个笔记本用于帮助入门该基准。
+- en: Exemplary solution
+  id: totrans-174
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 示例解决方案
+- en: In the two final Jupyter notebooks for this chapter, FCN and U-Net models are
+    trained to tackle this task, using several of the tricks presented in this section.
+    We demonstrate how to properly weigh each class when computing the loss, we present
+    how to post-process the label maps, and more besides.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的两个最终Jupyter笔记本中，使用FCN和U-Net模型训练来处理这个任务，运用了本节中介绍的多个技巧。我们展示了如何在计算损失时正确地对每个类别加权，如何对标签图进行后处理，等等。
+- en: As the whole solution is quite long and notebooks are better suited to the present
+    code, we invite you to pursue the reading there, if you're interested in this
+    use case. This way, we can dedicate the rest of this chapter to another fascinating
+    problem—instance segmentation.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于整个解决方案比较长，且笔记本更适合展示当前代码，我们邀请你如果对这个用例感兴趣，可以继续阅读笔记本。这样，我们可以将本章的其余部分专注于另一个引人入胜的问题——实例分割。
+- en: The more difficult case of instance segmentation
+  id: totrans-177
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实例分割的更难情况
+- en: With models trained for object segmentation, the *softmax* output represents
+    for each pixel the probability that it belongs to one of *N* classes. However,
+    it does not express whether two pixels or blobs of pixels belong to the same instance
+    of a class. For example, given the predicted label map shown in *Figure 6-10*,
+    we have no way of counting the number of *tree* or *building* instances.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用为对象分割训练的模型时，*softmax* 输出表示每个像素属于 *N* 个类别之一的概率。然而，它并不表示两个像素或像素块是否属于同一类别的实例。例如，给定如
+    *图6-10* 所示的预测标签图，我们无法统计出 *树* 或 *建筑物* 实例的数量。
+- en: In the following subsection, we will present two different ways of achieving
+    instance segmentation by extending solutions for two related tasks that we've
+    tackled already—object segmentation and object detection.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的子章节中，我们将介绍通过扩展已解决的两个相关任务——对象分割和对象检测——的解决方案来实现实例分割的两种不同方法。
+- en: From object segmentation to instance segmentation
+  id: totrans-180
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从对象分割到实例分割
+- en: First, we will present some tools that we can use to obtain instance masks from
+    the segmentation models we just covered. The U-Net authors popularized the idea
+    of tuning encoders-decoders so that their output can be used for instance segmentation.
+    This idea was pushed further by Alexander Buslaev, Victor Durnov, and Selim Seferbekov,
+    who famously won Kaggle's 2018 Data Science Bowl ([https://www.kaggle.com/c/data-science-bowl-2018](https://www.kaggle.com/c/data-science-bowl-2018)),
+    a sponsored competition to advance instance segmentation for medical applications.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将介绍一些工具，帮助我们从刚才提到的分割模型中获得实例掩模。U-Net 的作者普及了调整编码器-解码器的概念，使其输出可用于实例分割。这个想法被
+    Alexander Buslaev、Victor Durnov 和 Selim Seferbekov 推得更远，他们因在 2018 年 Kaggle 数据科学大赛（[https://www.kaggle.com/c/data-science-bowl-2018](https://www.kaggle.com/c/data-science-bowl-2018)）中获胜而广为人知，这场赞助比赛旨在推进医学应用中的实例分割技术。
+- en: Respecting boundaries
+  id: totrans-182
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 尊重边界
+- en: If elements captured by a semantic mask are well-separated/non-overlapping,
+    splitting the masks to distinguish each instance is not too complicated a task.
+    Plenty of algorithms are available to estimate the contours of distinct blobs
+    in binary matrices and/or to provide a separate mask for each blob. For multi-class
+    instance segmentation, this process can just be repeated for each class mask returned
+    by object segmentation methods, splitting them further into instances.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果语义掩模捕获的元素是良好分隔/不重叠的，那么将掩模拆分以区分每个实例并不是一项复杂的任务。现在有很多算法可以用来估计二值矩阵中不同块的轮廓，和/或为每个块提供一个单独的掩模。对于多类别实例分割，这个过程可以针对对象分割方法返回的每个类别掩模重复进行，进一步将它们拆分成实例。
+- en: But precise semantic masks should first be obtained, or elements too close to
+    each other may be returned as a single blob. So, how can we ensure that segmentation
+    models put enough attention into generating masks with precise contours, at least
+    for non-overlapping elements? We know the answer already—the only way to teach
+    networks to do something specific is to adapt their training loss accordingly.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，首先应该获得精确的语义掩模，否则相互过于接近的元素可能会被当作一个整体返回。那么，我们如何确保分割模型在生成具有精确轮廓的掩模时能够给予足够的关注，至少对于不重叠的元素？我们已经知道答案——教网络做某件具体的事情的唯一方法是相应地调整它们的训练损失。
+- en: U-Net was developed for biomedical applications, to segment neuronal structures
+    in microscope images. To teach their network to separate nearby cells properly,
+    the authors decided to weight their loss function to more heavily penalize misclassified
+    pixels at the boundaries of several instances. Also illustrated in *Figure 6-11*,
+    this strategy is quite similar to the per-class loss weighting we presented in
+    the previous subsection, although here, the weighting is specifically computed
+    for each pixel. The U-Net authors present a formula to compute these weight maps
+    based on the ground truth class mask. For each pixel and for each class, this
+    formula takes into account the pixel's distance to the two nearest class instances.
+    The smaller the two distances, the higher the weight. The weight maps can be precomputed
+    and stored along the ground truth masks to be used together during training.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: U-Net是为生物医学应用而开发的，用于分割显微镜图像中的神经结构。为了教会网络正确分离相邻细胞，作者决定对损失函数进行加权，以更重地惩罚位于多个实例边界的错误分类像素。正如在*图6-11*中所示，这种策略与我们在前一小节中介绍的逐类损失加权非常相似，尽管这里的加权是针对每个像素具体计算的。U-Net的作者提出了一个公式来基于地面真实类掩膜计算这些权重图。对于每个像素和每个类，该公式考虑了像素到最近两个类实例的距离。两个距离越小，权重越大。权重图可以预先计算并与地面真实掩膜一起存储，以便在训练时共同使用。
+- en: Note that this per-pixel weighting can be combined with the per-class weighting in
+    multi-class scenarios. The idea to penalize the networks more heavily for certain
+    regions of the images can also be adapted to other applications (for example,
+    to better segment critical parts of manufactured objects).
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这种逐像素的加权可以与多类场景中的逐类加权相结合。对图像中某些区域给予更高惩罚的思想也可以适应于其他应用（例如，更好地分割制造物体的关键部件）。
+- en: 'We mentioned the winners of Kaggle''s 2018 Data Science Bowl, who put a noteworthy
+    spin on this idea. For each class, their custom U-Net was outputting two masks:
+    the usual mask predicting the per-pixel class probability, and a second mask capturing
+    the class boundaries. The ground truth boundary masks were precomputed based on
+    the class masks. After proper training, the information from the two predicted
+    masks can be used to obtain well-separated elements for each class.'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们提到了2018年Kaggle数据科学挑战赛的获胜者，他们对这个思想做出了值得注意的改进。对于每个类，他们的定制U-Net输出了两个掩膜：一个是预测逐像素类别概率的常规掩膜，另一个是捕捉类别边界的掩膜。地面真实的边界掩膜是根据类别掩膜预先计算的。在适当训练后，来自两个预测掩膜的信息可以用于获得每个类的良好分离元素。
+- en: Post-processing into instance masks
+  id: totrans-188
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 后处理成实例掩膜
+- en: As discussed earlier in the previous section, once precise masks are obtained,
+    non-overlapping instances can be identified from them by applying proper algorithms.
+    This post-processing is usually done using **morphological functions**, such as
+    **mask** **erosion** and **dilation**.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如前一小节所讨论的，一旦获得精确的掩膜，就可以通过应用适当的算法从中识别出不重叠的实例。这个后处理通常使用**形态学函数**，如**掩膜****腐蚀**和**膨胀**来完成。
+- en: '**Watershed transforms** are another common family of algorithms that further
+    segment the class masks into instances. These algorithms take a one-channel tensor
+    and consider it as a topographic surface, where each value represents an elevation.
+    Using various methods that we won''t go into, they then extract the ridges'' tops,
+    representing the instance boundaries. Several implementations of these transforms
+    are available, some of which are CNN-based, such as the *Deep watershed transform
+    for instance segmentation* (*Proceedings of the IEEE CVPR conference*, *2017*),
+    by Min Bai and Raquel Urtasun from the University of Toronto. Inspired by the
+    FCN architecture, their network takes for input both the predicted semantic mask
+    and the original RGB image, and returns an energy map that can be used to identify
+    the ridges. Thanks to the RGB information, this solution can even separate overlapping
+    instances with good accuracy.'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**分水岭变换**是另一类常见的算法，可以将类别掩膜进一步分割成实例。这些算法将单通道张量视为一个地形表面，其中每个值代表一个高程。通过我们不会详细讨论的各种方法，它们提取出代表实例边界的山脊顶部。这些变换的多种实现可用，其中一些是基于CNN的，例如Min
+    Bai和Raquel Urtasun（来自多伦多大学）所提出的*Deep watershed transform for instance segmentation*（*IEEE
+    CVPR会议论文集*，*2017*）。受到FCN架构的启发，他们的网络将预测的语义掩膜和原始RGB图像作为输入，输出一个能量图，能够用于识别山脊。得益于RGB信息，这种解决方案甚至能够准确地分离重叠的实例。'
+- en: From object detection to instance segmentation – Mask R-CNN
+  id: totrans-191
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从目标检测到实例分割 – Mask R-CNN
+- en: A second way of addressing instance segmentation is from the angle of object
+    detection. In [Chapter 5](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml), *Object
+    Detection Models*, we presented solutions to return the bounding boxes for object
+    instances appearing in images. In the following paragraphs, we will demonstrate
+    how these results can be turned into more refined instance masks. More precisely,
+    we will present **Mask R-CNN**, a network extending **Faster R-CNN**.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理实例分割的第二种方法是从物体检测的角度出发。在[第5章](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml)，*物体检测模型*中，我们介绍了如何返回图像中出现的物体实例的边界框。在接下来的段落中，我们将展示如何将这些结果转化为更精细的实例掩码。更准确地说，我们将介绍**Mask
+    R-CNN**，它是一个扩展**Faster R-CNN**的网络。
+- en: Applying semantic segmentation to bounding boxes
+  id: totrans-193
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将语义分割应用于边界框
+- en: 'When we introduced object detection in [Chapter 1](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml),
+    *Computer Vision and Neural Networks*, we explained that this process is often
+    used as a preliminary step, providing image patches containing a single instance
+    for further analysis. With this in mind, instance segmentation becomes a matter
+    of two steps:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们在[第1章](3d1c879b-b6fa-4eee-b578-60b57a77ff33.xhtml)中介绍物体检测时，*计算机视觉与神经网络*部分，我们解释了这个过程通常作为一个初步步骤，提供包含单个实例的图像块以供进一步分析。考虑到这一点，实例分割就变成了两步操作：
+- en: Using an object detection model to return bounding boxes for each instance of
+    target classes
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用物体检测模型返回每个目标类别实例的边界框
+- en: Feeding each patch to a semantic segmentation model to obtain the instance mask
+  id: totrans-196
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将每个图像块输入到语义分割模型中以获得实例掩码
+- en: If the predicted bounding boxes are accurate (each capturing a whole, single
+    element), then the task of the segmentation network is straightforward—to classify
+    which pixels in the corresponding patch belong to the captured class, and which
+    pixels are part of the background/belong to another class.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果预测的边界框准确（每个边界框捕捉到一个完整的、单一的元素），那么分割网络的任务就很简单——就是分类哪些像素属于捕捉到的类别，哪些像素属于背景/属于其他类别。
+- en: This way of solving instance segmentation is advantageous, as we already have
+    all the necessary tools to implement it (object detection and semantic segmentation
+    models)!
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种解决实例分割的方法是有优势的，因为我们已经拥有了实现它所需的所有工具（物体检测和语义分割模型）！
+- en: Building an instance segmentation model with Faster-RCNN
+  id: totrans-199
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Faster-RCNN构建实例分割模型
+- en: While we could simply use a pretrained detection network followed by a pretrained
+    segmentation network, the whole pipeline would certainly work better if the two
+    networks were stitched together and trained in an end-to-end manner. Backpropagating
+    the segmentation loss through the common layers would better ensure that the features
+    extracted are meaningful both for the detection and the segmentation tasks. This
+    is pretty much the original idea behind *Mask R-CNN* by Kaiming He et al. from
+    **Facebook AI Research** (**FAIR**) in 2017 (*Mask R-CNN*, *Proceedings of the
+    IEEE CVPR conference*).
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然我们可以简单地使用预训练的检测网络，再接上预训练的分割网络，但如果这两个网络被串联在一起并以端到端的方式训练，整个管道的效果肯定会更好。通过公共层反向传播分割损失将更好地确保提取的特征对于检测和分割任务都具有意义。这几乎就是**Facebook
+    AI Research**（**FAIR**）的Kaiming He等人在2017年提出的*Mask R-CNN*的原始思想（*Mask R-CNN*，*IEEE
+    CVPR会议论文*）。
+- en: If the name rings a bell, Kaiming He was also among the main authors of ResNet
+    and Faster R-CNN.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果这个名字让你有些印象，Kaiming He也是ResNet和Faster R-CNN的主要作者之一。
+- en: 'Mask R-CNN is mostly based on Faster R-CNN. Like Faster R-CNN, Mask R-CNN is
+    composed of a region-proposal network, followed by two branches predicting the
+    class and the box offset for each proposed region (refer to [Chapter 5](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml),
+    *Object Detection Models*). However, the authors extended this model with a *third
+    parallel branch*, outputting a binary mask for the element in each region (as
+    shown in *Figure 6-12*). Note that this additional branch is only composed of
+    a couple of standard and transposed convolutions. As the authors highlighted in
+    their paper, this parallel processing follows the spirit of Faster R-CNN, and
+    contrasts with other instance segmentation methods, which are usually sequential:'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Mask R-CNN主要基于Faster R-CNN。与Faster R-CNN一样，Mask R-CNN由一个区域提议网络组成，后面跟着两个分支，分别预测每个提议区域的类别和框偏移量（参见[第5章](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml)，*目标检测模型*）。然而，作者在此基础上扩展了该模型，增加了一个*第三并行分支*，为每个区域中的元素输出二进制掩码（如*图6-12*所示）。需要注意的是，这个附加分支仅由几个标准卷积和转置卷积组成。正如作者在论文中强调的那样，这种并行处理遵循Faster
+    R-CNN的精神，与其他实例分割方法形成对比，后者通常是顺序进行的：
+- en: '![](img/f5c8d229-30e0-4f17-8de2-bb52d744aefc.png)'
+  id: totrans-203
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f5c8d229-30e0-4f17-8de2-bb52d744aefc.png)'
+- en: 'Figure 6-12: Mask R-CNN architecture, based on Faster R-CNN'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6-12：基于Faster R-CNN的Mask R-CNN架构
+- en: Thanks to this parallelism, He et al. could decouple the classification and
+    segmentation. While the segmentation branch is defined to output *N* binary masks
+    (one for each class, like any usual semantic segmentation model), only the mask
+    corresponding to the class predicted by the other branch will be considered for
+    the final prediction and for the training loss. In other words, only the mask
+    of the instance class contributes to the cross-entropy loss applied to the segmentation
+    branch. As explained by the authors, this lets the segmentation branch predict
+    label maps without competition among the classes, thereby simplifying its task.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 得益于这种并行处理，He等人能够解耦分类和分割。虽然分割分支被定义为输出*N*个二进制掩码（每个类别一个，就像任何常见的语义分割模型一样），但只有与另一分支预测的类别对应的掩码会被考虑用于最终预测和训练损失。换句话说，只有实例类别的掩码才会对应用于分割分支的交叉熵损失产生贡献。正如作者所解释的那样，这使得分割分支能够在没有类别之间竞争的情况下预测标签图，从而简化了其任务。
+- en: Another famous contribution of the Mask R-CNN authors is the **RoI** **a****lign**
+    **layer**, replacing the **RoI pooling** of Faster R-CNN. The difference between
+    the two is actually quite subtle, but provides a non-negligible accuracy boost.
+    RoI pooling causes quantization, for instance, by discretizing the coordinates
+    of the subwindow cells (refer to [Chapter 5](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml),
+    *Object Detection Models,* and *Figure 5-13*). While this does not really impact
+    the predictions of the classification branch (it's robust to such small misalignments),
+    this would affect the quality of the pixel-level prediction of the segmentation
+    branch. To avoid this, He et al. simply *removed the discretization* and *used
+    bilinear interpolation* instead to obtain the cells' content.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Mask R-CNN作者的另一个著名贡献是**RoI** **align** 层，取代了Faster R-CNN中的**RoI池化**。二者之间的差异实际上相当微妙，但提供了显著的准确度提升。RoI池化会引入量化误差，例如通过离散化子窗口单元的坐标（参见[第5章](593ada62-2ff4-4085-a15e-44f8f5e3d071.xhtml)，*目标检测模型*，以及*图5-13*）。虽然这对分类分支的预测影响不大（它对这些微小的错位具有鲁棒性），但会影响分割分支的像素级预测质量。为了避免这种情况，He等人简单地*去除了离散化*，而是*使用了双线性插值*来获取单元格的内容。
+- en: Mask R-CNN distinguished itself at the COCO 2017 challenges, and is widely used
+    nowadays. Multiple implementations can be found online, for instance, in the folder
+    of the `tensorflow/models` repository dedicated to object detection and instance
+    segmentation ([https://github.com/tensorflow/models/tree/master/research/object_detection](https://github.com/tensorflow/models/tree/master/research/object_detection)).
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Mask R-CNN在COCO 2017挑战中脱颖而出，现如今被广泛使用。多个实现可以在线找到，例如，在专门用于目标检测和实例分割的`tensorflow/models`库的文件夹中（[https://github.com/tensorflow/models/tree/master/research/object_detection](https://github.com/tensorflow/models/tree/master/research/object_detection)）。
+- en: Summary
+  id: totrans-208
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we covered several paradigms for pixel-precise applications.
+    We introduced encoders-decoders and some specific architectures and applied them
+    to multiple tasks from image denoising to semantic segmentation. We also demonstrated
+    how different solutions can be combined to tackle more advanced problems, such
+    as instance segmentation.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中，我们介绍了几种用于像素精确应用的范式。我们介绍了编码器-解码器及一些特定架构，并将其应用于从图像去噪到语义分割的多个任务。我们还展示了如何结合不同的解决方案来应对更复杂的问题，例如实例分割。
+- en: As we tackle more and more complex tasks, new challenges arise. For example,
+    in semantic segmentation, precisely annotating images to train models is a time-consuming
+    task. Available datasets are thus usually scarce, and specific measures should
+    be taken to avoid overfitting. Furthermore, because the training images and their
+    ground truths are heavier, well-engineered data pipelines are needed for efficient
+    training.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着我们处理越来越复杂的任务，新的挑战也随之而来。例如，在语义分割中，精确标注图像以训练模型是一项耗时的工作。因此，现有的数据集通常稀缺，应该采取具体措施避免过拟合。此外，由于训练图像及其真实标注较大，需构建良好的数据管道以实现高效训练。
+- en: In the following chapter, we will, therefore, provide in-depth details of how
+    TensorFlow can be used to effectively augment and serve training batches.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将深入介绍如何有效地使用 TensorFlow 来增强和服务训练批次。
+- en: Questions
+  id: totrans-212
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 问题
+- en: What is the particularity of AEs?
+  id: totrans-213
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: AEs 有什么特殊性？
+- en: Which classification architecture are FCNs based on?
+  id: totrans-214
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: FCNs 基于哪种分类架构？
+- en: How can a semantic segmentation model be trained so that it does not ignore
+    small classes?
+  id: totrans-215
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如何训练语义分割模型，使其不忽视小类别？
+- en: Further reading
+  id: totrans-216
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '*Mask R-CNN* ([http://openaccess.thecvf.com/content_iccv_2017/html/He_Mask_R-CNN_ICCV_2017_paper.html](http://openaccess.thecvf.com/content_iccv_2017/html/He_Mask_R-CNN_ICCV_2017_paper.html))
+    by Kaiming He, Georgia Gkioxari, Piotr Dollar, and Ross Girshick: This nicely
+    written conference paper mentioned in the chapter presents Mask R-CNN, providing
+    additional illustrations and details that may help you to understand this model.'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*Mask R-CNN* ([http://openaccess.thecvf.com/content_iccv_2017/html/He_Mask_R-CNN_ICCV_2017_paper.html](http://openaccess.thecvf.com/content_iccv_2017/html/He_Mask_R-CNN_ICCV_2017_paper.html))
+    由 Kaiming He、Georgia Gkioxari、Piotr Dollar 和 Ross Girshick 提出：本章中提到的这篇精心撰写的会议论文介绍了
+    Mask R-CNN，提供了更多的插图和细节，可能有助于您理解该模型。'

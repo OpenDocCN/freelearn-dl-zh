@@ -1,0 +1,1152 @@
+- en: Creating Machine Learning Inference Pipelines
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建机器学习推理管道
+- en: The data transformation logic that is used to process data for model training
+    is the same as the logic that's used to prepare data for obtaining inferences.
+    It is redundant to repeat the same logic twice.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于处理数据以进行模型训练的数据转换逻辑与用于准备数据进行推理的数据转换逻辑是相同的。重复相同的逻辑是冗余的。
+- en: The goal of this chapter is to walk you through how SageMaker and other AWS
+    services can be employed to create **machine learning** (**ML**) pipelines that
+    can process big data, train algorithms, deploy trained models, and run inferences,
+    all while using the same data processing logic for model training and inference.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的目标是带领您了解如何使用 SageMaker 和其他 AWS 服务创建 **机器学习**（**ML**）管道，这些管道能够处理大数据、训练算法、部署训练好的模型并进行推理，同时在模型训练和推理过程中使用相同的数据处理逻辑。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将覆盖以下主题：
+- en: Understanding the architecture of the inference pipeline in SageMaker
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解 SageMaker 中推理管道的架构
+- en: Creating features using Amazon Glue and SparkML
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 Amazon Glue 和 SparkML 创建特征
+- en: Identifying topics by training NTM in SageMaker
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过在 SageMaker 中训练 NTM 来识别主题
+- en: Running online as opposed to batch inference in SageMaker
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 SageMaker 中进行在线推理，而不是批量推理
+- en: Let's look at the technical requirements for this chapter.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看看本章的技术要求。
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'To illustrate the concepts that we will cover in this chapter, we will use
+    the [ABC Millions Headlines](https://www.kaggle.com/therohk/million-headlines)
+    dataset. This dataset contains approximately a million news headlines. In the
+    [github](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/tree/master/Ch10_InferencePipeline_SageMaker/million-headlines-data)
+    repository associated with this chapter, you should find the following files:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明本章将要涵盖的概念，我们将使用 [ABC Millions Headlines](https://www.kaggle.com/therohk/million-headlines)
+    数据集。该数据集包含大约一百万条新闻标题。在与本章相关的 [github](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/tree/master/Ch10_InferencePipeline_SageMaker/million-headlines-data)
+    仓库中，您应该能找到以下文件：
+- en: '[abcnews-date-text.zip](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/blob/master/Ch10_InferencePipeline_SageMaker/million-headlines-data/abcnews-date-text.zip):
+    The input dataset'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[abcnews-date-text.zip](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/blob/master/Ch10_InferencePipeline_SageMaker/million-headlines-data/abcnews-date-text.zip):
+    输入数据集'
+- en: '[libraries-mleap](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/tree/master/Ch10_InferencePipeline_SageMaker/million-headlines-data/libraries-mleap):
+    MLeap libraries (includes a `.jar` file and a Python wrapper for the `.jar`)'
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[libraries-mleap](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/tree/master/Ch10_InferencePipeline_SageMaker/million-headlines-data/libraries-mleap):
+    MLeap 库（包括 `.jar` 文件和 `.jar` 的 Python 包装器）'
+- en: Let's begin by looking at the architecture of an inference pipeline.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从查看推理管道的架构开始。
+- en: Understanding the architecture of the inference pipeline in SageMaker
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解 SageMaker 中推理管道的架构
+- en: 'There are three major components of the inference pipeline we are building:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们正在构建的推理管道有三个主要组件：
+- en: Data preprocessing
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据预处理
+- en: Model training
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 模型训练
+- en: Data preprocessing (from *Step 1*) and inference
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据预处理（来自 *步骤 1*）和推理
+- en: 'The following is the architectural diagram—the steps we are going to walk through
+    are applicable to big data:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是架构图——我们将要演示的步骤适用于大数据：
+- en: '![](img/6b5a0f5c-f99a-4686-a9bb-f038157b4512.png)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6b5a0f5c-f99a-4686-a9bb-f038157b4512.png)'
+- en: In the first step of the pipeline, we execute data processing logic on Apache
+    Spark via AWS Glue. The Glue service is called from a SageMaker Notebook instance.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在管道的第一步，我们通过 AWS Glue 在 Apache Spark 上执行数据处理逻辑。Glue 服务通过 SageMaker Notebook
+    实例进行调用。
+- en: Amazon Glue is a fully managed, serverless **Extract, Transform, and Load**
+    (**ETL**) service that's used to wrangle big data. ETL jobs are run on an Apache
+    Spark environment where Glue provisions, the configuration and scale the resources
+    that are required to run the jobs.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Amazon Glue 是一个完全托管的无服务器 **提取、转换和加载**（**ETL**）服务，用于处理大数据。ETL 作业运行在 Apache Spark
+    环境中，Glue 负责配置并按需扩展执行作业所需的资源。
+- en: The data processing logic, in our case, includes creating tokens/words from
+    each of the news headlines, removing stop words, and counting the frequency of
+    each of the words in a given headline. The ETL logic is serialized into an MLeap
+    bundle, which can be used at the time of inference for data processing. Both the
+    serialized SparkML model and processed input data are stored in an S3 bucket.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据处理逻辑，在我们的案例中，包括从每个新闻头条中创建标记/单词，去除停用词，并计算给定头条中每个单词的频率。ETL逻辑被序列化为MLeap包，可以在推理时用于数据处理。序列化后的SparkML模型和处理过的输入数据都存储在S3桶中。
+- en: MLeap is an open source Spark package that's designed to serialize Spark-trained
+    transformers. Serialized models are used to transform data into the desired format.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MLeap是一个开源Spark包，旨在序列化Spark训练的转换器。序列化模型用于将数据转换为所需格式。
+- en: In the second step, the **neural topic model** (**NTM**) algorithm is trained
+    on the processed data to discover topics.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第二步中，**神经主题模型**（**NTM**）算法将在处理过的数据上进行训练，以发现主题。
+- en: In *Step 3*, both the SparkML and trained NTM models are used to create a pipeline
+    model, which is used to execute the models in the specified sequence. SparkML
+    serves a docker container, and the NTM docker container is provisioned as an endpoint
+    for real-time model predictions. The same pipeline model can be used to run inferences
+    in batch mode, that is, score multiple news headlines in one go, discovering topics
+    for each of them.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*第3步*中，SparkML和训练后的NTM模型一起用于创建管道模型，该模型用于按指定顺序执行模型。SparkML提供一个docker容器，而NTM
+    docker容器则作为实时模型预测的端点。相同的管道模型也可以用于批处理模式下运行推理，即一次处理多个新闻头条，为每个头条发现主题。
+- en: It is now time to delve globally into *Step 1—*how to invoke Amazon Glue from
+    a SageMaker Notebook instance for big data processing.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在是时候全面深入了解*第1步*——如何从SageMaker笔记本实例调用Amazon Glue进行大数据处理。
+- en: Creating features using Amazon Glue and SparkML
+  id: totrans-28
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Amazon Glue和SparkML创建特征
+- en: To create features in a big data environment, we will use PySpark to write data
+    preprocessing logic. This logic will be part of the Python `abcheadlines_processing.py`
+    file. Before we review the logic, we need to walk through some prerequisites.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在大数据环境中创建特征，我们将使用PySpark编写数据预处理逻辑。该逻辑将作为Python文件`abcheadlines_processing.py`的一部分。在回顾逻辑之前，我们需要先走一遍一些前置条件。
+- en: Walking through the prerequisites
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 走一遍前置条件
+- en: 'Provide SageMaker Execution Role access to the Amazon Glue service, as follows:'
+  id: totrans-31
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为Amazon Glue服务提供SageMaker执行角色访问权限，具体如下：
+- en: '![](img/b28c721a-2aed-4dfe-9639-7147a6e1b999.png)'
+  id: totrans-32
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b28c721a-2aed-4dfe-9639-7147a6e1b999.png)'
+- en: Obtaining a SageMaker Execution Role by running the get_execution_role() method
+    of the SageMaker session object
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过运行SageMaker会话对象的get_execution_role()方法来获取SageMaker执行角色
+- en: 'On the IAM Dashboard, click on Roles on the left navigation pane and search
+    for this role. Click on the Target Role to navigate to its Summary page. Click
+    on the Trust Relationships tab to add `AWS Glue` as an additional trusted entity.
+    Click on Edit trust relationship to add the following entry to `"Service" key:
+    "glue.amazonaws.com"`.'
+  id: totrans-34
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在IAM仪表板上，点击左侧导航栏的“角色”并搜索该角色。点击目标角色，进入其摘要页面。点击信任关系标签，添加`AWS Glue`作为附加信任实体。点击“编辑信任关系”并将以下条目添加到`"Service"`键下：“glue.amazonaws.com”。
+- en: 'Upload MLeap binaries to the appropriate location on the S3 bucket, as follows.
+    The binaries can be found in the source code for this chapter:'
+  id: totrans-35
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将MLeap二进制文件上传到S3桶的适当位置，具体如下。这些二进制文件可以在本章的源代码中找到：
+- en: '[PRE0]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: We will use the `upload_data()` method of the SageMaker Session object to upload
+    MLeap binaries to the appropriate location on the S3 bucket. We will need the
+    `MLeap` Java package and the Python wrapper, MLeap, to serialize SparkML models.
+    Similarly, we will upload the input data, that is, [abcnews-date-text.zip](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/blob/master/Ch10_InferencePipeline_SageMaker/million-headlines-data/abcnews-date-text.zip),
+    to the relevant location on the S3 bucket.
+  id: totrans-37
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将使用SageMaker会话对象的`upload_data()`方法将MLeap二进制文件上传到S3桶的适当位置。我们将需要`MLeap` Java包和Python包装器MLeap来序列化SparkML模型。同样，我们将把输入数据，即[abcnews-date-text.zip](https://github.com/PacktPublishing/Hands-On-Artificial-Intelligence-on-Amazon-Web-Services/blob/master/Ch10_InferencePipeline_SageMaker/million-headlines-data/abcnews-date-text.zip)，上传到S3桶中的相关位置。
+- en: Now we'll review the data preprocessing logic in `abcheadlines_processing.py`.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将回顾`abcheadlines_processing.py`中的数据预处理逻辑。
+- en: Preprocessing data using PySpark
+  id: totrans-39
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用PySpark进行数据预处理
+- en: 'The following data preprocessing logic is executed on a Spark cluster. Let''s
+    go through the steps:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的数据预处理逻辑在一个 Spark 集群上执行。让我们逐步进行：
+- en: 'We will begin by gathering arguments sent by the SageMaker Notebook instance,
+    as follows:'
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将首先收集由 SageMaker Notebook 实例发送的参数，如下所示：
+- en: '[PRE1]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: We will use the `getResolvedOptions()` utility function from the AWS Glue library
+    to read all the arguments that were sent by the SageMaker notebook instance.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用 AWS Glue 库中的 `getResolvedOptions()` 实用函数来读取由 SageMaker Notebook 实例发送的所有参数。
+- en: 'Next, we will read the news headlines, as follows:'
+  id: totrans-44
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将读取新闻标题，如下所示：
+- en: '[PRE2]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: We use `spark`, which is the active SparkSession, to read the `.csv` file that
+    contains the relevant news headlines.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用 `spark`，即活动的 SparkSession，来读取包含相关新闻标题的 `.csv` 文件。
+- en: 'Next, we retrieve 10% of the headlines and define the data transformations.
+    We can process all 1,000,000 headlines using distributed computing from Apache
+    Spark. We will, however, illustrate the concepts behind using AWS Glue from a
+    SageMaker notebook instance by using a sample of the dataset:'
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们检索 10% 的标题，并定义数据转换。我们可以使用 Apache Spark 进行分布式计算处理所有 1,000,000 条新闻标题。然而，我们将通过使用数据集的样本从
+    SageMaker Notebook 实例中演示使用 AWS Glue 的背后概念：
+- en: '[PRE3]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '`hdl_fil_cnt` is 10% of the total number of headlines. `abcnewsdf` contains
+    around 100,000 headlines. We use `Tokenizer`, `StopWordsRemover`, `CountVectorizer`,
+    and the **inverse document frequency** (**IDF**) transformer and estimator objects
+    from `pyspark.ml.feature` to transform the headline text, as follows:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`hdl_fil_cnt` 是总新闻标题数的 10%。`abcnewsdf` 包含约 100,000 条新闻标题。我们使用 `pyspark.ml.feature`
+    中的 `Tokenizer`、`StopWordsRemover`、`CountVectorizer`，以及 **逆文档频率** (**IDF**) 转换器和估计器对象来转换标题文本，如下所示：'
+- en: First, `Tokenizer` transforms the headline text into a list of words.
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，`Tokenizer` 将标题文本转换为单词列表。
+- en: Second, `StopWordsTokenizer` removes stop words from the list of words produced
+    by `Tokenizer`.
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第二，`StopWordsTokenizer` 从 `Tokenizer` 生成的单词列表中移除停用词。
+- en: Third, `CountVectorizer` takes the output from the previous step to calculate
+    word frequency.
+  id: totrans-52
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第三，`CountVectorizer` 使用前一步骤的输出来计算词频。
+- en: Lastly, IDF, an estimator, computes the inverse document frequency factor for
+    each of the words (IDF is given by ![](img/f6c66ff6-087f-4596-b312-1ebda4c02ce7.png),
+    where ![](img/cf4cbbb2-b784-479f-83eb-0dfe0164b3eb.png) is the term frequency
+    of term i in headline j, N is the total number of headlines, and
+  id: totrans-53
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，IDF，一个估计器，计算每个单词的逆文档频率因子（IDF 由 ![](img/f6c66ff6-087f-4596-b312-1ebda4c02ce7.png)
+    给出，其中 ![](img/cf4cbbb2-b784-479f-83eb-0dfe0164b3eb.png) 是标题 j 中术语 i 的词频，N 是总标题数，以及
+- en: '![](img/f6f4c888-b901-412d-9772-29ec0561f6cf.png) is the number of headlines
+    containing term i). Words that are unique to a headline are much more important
+    than those that appear frequently in other headlines.'
+  id: totrans-54
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![](img/f6f4c888-b901-412d-9772-29ec0561f6cf.png) 是包含术语 i 的标题数）。标题中独特的单词比那些在其他标题中频繁出现的单词更重要。'
+- en: For more information on `Estimator` and `Transformer` objects in Spark ML, please
+    refer to Spark's documentation at [https://spark.apache.org/docs/latest/ml-pipeline.html](https://spark.apache.org/docs/latest/ml-pipeline.html).
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于在 Spark ML 中的 `Estimator` 和 `Transformer` 对象的更多信息，请参阅 Spark 的文档 [https://spark.apache.org/docs/latest/ml-pipeline.html](https://spark.apache.org/docs/latest/ml-pipeline.html)。
+- en: 'Next, we will stitch all the transformer and estimator stages together into
+    a pipeline and transform the headlines into feature vectors. The width of a feature
+    vector is 200, as defined by `CountVectorizer`:'
+  id: totrans-56
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将所有转换器和估计器阶段连接成一个流水线，并将标题转换为特征向量。特征向量的宽度为 200，由 `CountVectorizer` 定义：
+- en: '[PRE4]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: In the preceding code, we use the `Pipeline` object from `pyspark.ml` to tie
+    data transformations together. We also call the `fit()` method on the `Pipeline`
+    object, `news_pl`, to create `PipelineModel`. `news_pl_fit` will have learned
+    the IDF factor for each of the words in the news headlines. When the `transform()`
+    method is invoked on `news_pl_fit`, the input headlines are transformed into feature
+    vectors. Each headline will be represented by a vector that's 200 in length. `CountVectorizer`
+    picks the top 200 words ordered by word frequency across all the headlines. Note
+    that the processed headlines will be stored in the `features` column, as indicated
+    by the `outputCol` parameter of the IDF Estimator stage.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用 `pyspark.ml` 中的 `Pipeline` 对象将数据转换过程连接起来。我们还在 `Pipeline` 对象 `news_pl`
+    上调用了 `fit()` 方法，以创建 `PipelineModel`。`news_pl_fit` 将学习每个新闻标题中单词的 IDF 因子。当在 `news_pl_fit`
+    上调用 `transform()` 方法时，输入的标题将被转换为特征向量。每个标题将由一个长度为 200 的向量表示。`CountVectorizer` 按照所有标题中单词的频率排序，选择频率最高的前
+    200 个单词。请注意，处理后的标题将存储在 `features` 列中，这是 IDF 估算器阶段 `outputCol` 参数所指示的。
+- en: 'Now we save the resulting feature vectors in `.csv` format, as follows:'
+  id: totrans-59
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将保存结果特征向量为 `.csv` 格式，如下所示：
+- en: '[PRE5]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'To save the processed headlines in `.csv` format, the `features` column needs
+    to be in a simple string format. The CSV file format does not support storing
+    arrays or lists in a column. We will define a user-defined function, `get_str`,
+    to convert a feature vector into a string of comma-separated tf-idf numbers. Please
+    look at the source code associated with this chapter for additional details. The
+    resulting `news_save` DataFrame will be saved to a designated location on the
+    S3 bucket as a `.csv` file. The following screenshot shows the format of the `.csv`
+    file:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了将处理后的标题保存为 `.csv` 格式，`features` 列需要以简单的字符串格式存储。CSV 文件格式不支持在列中存储数组或列表。我们将定义一个用户自定义函数
+    `get_str`，将特征向量转换为逗号分隔的 tf-idf 数字字符串。请参阅本章附带的源代码以获取更多细节。最终的 `news_save` DataFrame
+    将作为 `.csv` 文件保存到 S3 存储桶的指定位置。以下截图显示了 `.csv` 文件的格式：
+- en: '![](img/c3a22483-4c2e-4efc-b3f4-a1c75d0c4a6c.png)'
+  id: totrans-62
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c3a22483-4c2e-4efc-b3f4-a1c75d0c4a6c.png)'
+- en: Similarly, we will also save the vocabulary into a separate text file.
+  id: totrans-63
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 同样，我们还将把词汇表保存到一个单独的文本文件中。
+- en: 'Now it''s time to serialize `news_pl_fit` and push it to an S3 bucket, as follows:'
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在是时候序列化 `news_pl_fit` 并将其推送到 S3 存储桶，如下所示：
+- en: '[PRE6]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: In the preceding code block, we use the `serializetoBundle()` method of the
+    `SimpleSparkSerializer` object from the MLeap `pyspark` library to serialize `news_pl_fit`.
+    We will convert the format of the serialized model from a `.zip` into a `tar.gz`
+    before uploading it to the S3 bucket.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码块中，我们使用 MLeap `pyspark` 库中的 `SimpleSparkSerializer` 对象的 `serializetoBundle()`
+    方法来序列化 `news_pl_fit`。我们将在上传到 S3 存储桶之前，将序列化后的模型格式从 `.zip` 转换为 `tar.gz` 格式。
+- en: Now let's walk through the process of running `abcheadlines_processing.py` through
+    an AWS Glue job.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们通过 AWS Glue 作业来执行 `abcheadlines_processing.py` 脚本。
+- en: Creating an AWS Glue job
+  id: totrans-68
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建 AWS Glue 作业
+- en: Now we will create a Glue job using `Boto3`, which is the AWS SDK for Python.
+    This SDK allows Python developers to create, configure, and manage AWS services.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将使用 `Boto3` 创建一个 Glue 作业，`Boto3` 是 AWS 的 Python SDK。该 SDK 允许 Python 开发人员创建、配置和管理
+    AWS 服务。
+- en: 'Let''s create a Glue job by providing the following specifications:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们创建一个 Glue 作业，并提供以下规格：
+- en: '[PRE7]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: In the preceding code block, we call the `create_job()` method of the AWS Glue
+    client by passing in the job name, description, and role. We also specify how
+    many concurrent we want to execute.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码块中，我们通过传入作业名称、描述和角色，调用 AWS Glue 客户端的 `create_job()` 方法。我们还指定了要执行的并发数。
+- en: 'Now let''s look at the command that''s sent by Glue to the Spark cluster:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看一下 Glue 发送到 Spark 集群的命令：
+- en: '[PRE8]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: In the preceding code, we define the command name and location of the Python
+    script containing the data preprocessing logic, that is, `abcheadlines_processing.py`.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们定义了命令名称和包含数据预处理逻辑的 Python 脚本的位置，即 `abcheadlines_processing.py`。
+- en: 'Now let''s look at which binaries need to be configured in order to serialize
+    SparkML models:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们来看看需要配置哪些二进制文件，以便序列化 SparkML 模型：
+- en: '[PRE9]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: In the preceding code, we define a default language so that we can preprocess
+    big data, the locations of the MLeap `.jar` file, and the Python wrapper of MLeap.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们定义了默认语言，以便我们可以预处理大数据，指定了 MLeap `.jar` 文件的存放位置以及 MLeap 的 Python 包装器。
+- en: 'Now that we have created the Glue job, let''s run it:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 既然我们已经创建了 Glue 作业，让我们来执行它：
+- en: '[PRE10]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: We invoke the `start_job_run()` method of the AWS Glue client by passing the
+    name of the Glue job we created earlier, along with the arguments that define
+    the input and location locations.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过传递之前创建的Glue作业的名称，以及定义输入和位置的参数，调用AWS Glue客户端的`start_job_run()`方法。
+- en: 'We can get the status of the Glue job as follows:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过以下方式获取Glue作业的状态：
+- en: '[PRE11]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'We will receive the following output:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将收到以下输出：
+- en: '![](img/e3183a01-8ff2-4ff4-af3b-6179cebff7d9.png)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e3183a01-8ff2-4ff4-af3b-6179cebff7d9.png)'
+- en: We invoke the `get_job_run()` method of the AWS Glue client and pass in the
+    name of the Glue job whose status we want to check.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们调用AWS Glue客户端的`get_job_run()`方法，并传入我们想检查其状态的Glue作业的名称。
+- en: 'To check the status of the AWS Glue job, you can also navigate to the AWS Glue
+    service from the Services menu. Under the ETL section in the left-hand navigation
+    menu, click on Jobs. Select a job name to look at the details of that Glue job:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查AWS Glue作业的状态，您还可以通过“服务”菜单导航到AWS Glue服务。在左侧导航菜单中的ETL部分，点击作业。选择一个作业名称以查看该Glue作业的详细信息：
+- en: '![](img/95836dc1-f89a-4488-a734-4475aeef0e0e.png)'
+  id: totrans-88
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/95836dc1-f89a-4488-a734-4475aeef0e0e.png)'
+- en: Now we will uncover topics that are in the ABC News Headlines dataset by fitting
+    NTM to it.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将通过拟合NTM到ABC新闻头条数据集来揭示其中的主题。
+- en: Identifying topics by training NTM in SageMaker
+  id: totrans-90
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过在SageMaker中训练NTM来识别主题
+- en: 'Perform the following steps to train the NTM model:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行以下步骤来训练NTM模型：
+- en: 'Read the processed ABC News Headlines dataset from the output folder on the
+    designated S3 bucket, as follows:'
+  id: totrans-92
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从指定的S3桶的输出文件夹中读取处理后的ABC新闻头条数据集，如下所示：
+- en: '[PRE12]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: We use the `read_csv()` function from the pandas library to read the processed
+    news headlines into a DataFrame. The DataFrame contains 110,365 headlines and
+    200 words.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用来自pandas库的`read_csv()`函数将处理后的新闻头条读取到DataFrame中。DataFrame包含110,365条头条和200个单词。
+- en: 'Then, we split the dataset into three parts—train, validation, and test—as
+    follows:'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们将数据集分成三部分——训练集、验证集和测试集，如下所示：
+- en: '[PRE13]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: In the preceding code block, we take 80% of the data for training, 10% for validation,
+    and the remaining 10% for testing.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码块中，我们将80%的数据用于训练，10%用于验证，剩余10%用于测试。
+- en: Upload the train, validation, and test datasets to the appropriate location
+    on the S3 bucket. We also need to upload the vocabulary text file that was created
+    by the AWS Glue job to the auxiliary path. SageMaker's built-in algorithm uses
+    the auxiliary path to provide additional information while training. In this case,
+    our vocabulary contains 200 words. However, the feature vector from the previous
+    section does not know the word name; it does, however, know the word index. Therefore,
+    after the NTM is trained, so that SageMaker can output significant words that
+    correspond to a topic, it needs a vocabulary text file.
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将训练集、验证集和测试集数据集上传到S3桶上的适当位置。我们还需要将AWS Glue作业创建的词汇文本文件上传到辅助路径。SageMaker的内置算法使用辅助路径提供训练时的额外信息。在本例中，我们的词汇包含200个单词。然而，前一部分的特征向量不知道单词的名称；它确实知道单词的索引。因此，在NTM训练完成后，为了使SageMaker能够输出与主题对应的重要单词，它需要一个词汇文本文件。
+- en: The next step is to define the NTM Estimator object from SageMaker by passing
+    the number and type of compute instances and the Docker NTM image to a SageMaker
+    session. Estimators are learning models that are suitable for the data.
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 下一步是通过将计算实例的数量和类型以及Docker NTM镜像传递给SageMaker会话，定义SageMaker中的NTM Estimator对象。Estimators是适合数据的学习模型。
+- en: 'Now we are ready to train the NTM algorithm, as follows:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们准备好训练NTM算法，如下所示：
+- en: '[PRE14]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: To train the NTM algorithm, we use the `fit()` method of the `ntm` Estimator
+    object by passing the location of the train, test, and auxiliary datasets. Since
+    we have a whole new chapter, [Chapter 9](0537c904-c763-496c-bfd2-f18042dcd0a2.xhtml),
+    *Discovering Topics in Text Collection*, dedicated to understanding how the NTM
+    algorithm works, we will save the model training details for later.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了训练NTM算法，我们使用`ntm` Estimator对象的`fit()`方法，并传入训练集、测试集和辅助数据集的位置。由于我们有一整章内容，[第9章](0537c904-c763-496c-bfd2-f18042dcd0a2.xhtml)，*发现文本集合中的主题*，专门讲解如何理解NTM算法的工作原理，因此我们将保存模型训练的详细信息，稍后再处理。
+- en: 'The following is the model''s output—we''ve configured the model so that it
+    retrieves five topics:'
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以下是模型的输出——我们已经配置了模型，使其能够检索五个主题：
+- en: '[PRE15]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: There are two numbers at the beginning of each topic—kld and recons. We will
+    go into each of these losses in the next chapter. But for now, understand that
+    the first fraction reflects the loss in creating embedded news headlines, while
+    the second fraction reflects the reconstruction loss (that is, creating headlines
+    from embeddings). The smaller the losses, the better the topic clusters.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个主题的开头有两个数字——kld和recons。我们将在下一章详细讨论这两个损失。但是目前，理解第一个比例反映了创建嵌入式新闻标题的损失，而第二个比例反映了重建损失（即从嵌入中创建标题）。损失越小，主题聚类的效果越好。
+- en: For each of the topics we've discovered, we manually label the topics based
+    on the word groupings.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们发现的每个主题，我们根据词语分组手动标注这些主题。
+- en: Now we are ready to look at inference patterns. Inferences can be obtained both
+    in real-time and batch mode.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备好查看推理模式。推理可以在实时模式和批量模式下获得。
+- en: Running online versus batch inferences in SageMaker
+  id: totrans-108
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在SageMaker中运行在线推理与批量推理
+- en: 'In real-world production scenarios, we typically come across two situations:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在现实世界的生产场景中，我们通常会遇到两种情况：
+- en: Running inferences in real-time or in online mode
+  id: totrans-110
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在实时或在线模式下运行推理
+- en: Running inferences in batch or in offline mode
+  id: totrans-111
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 批量或离线模式下运行推理
+- en: To illustrate this, in the case of using a recommender system as part of a web/mobile
+    app, real-time inferences can be used when you want to personalize item suggestions
+    based on in-app activity. The in-app activity, such as items you browsed, items
+    left in your shopping cart and not checked out, and so on, can be sent as input
+    to an online recommender system.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明这一点，假设使用推荐系统作为Web或移动应用的一部分，当你想根据应用内活动来个性化商品推荐时，可以使用实时推理。应用内活动，如浏览过的商品、购物车中但未结账的商品等，可以作为输入发送到在线推荐系统。
+- en: On the other hand, if you want to present item suggestions to your customers
+    even before they engage with your web/mobile app, then you can send data related
+    to their historical consumption behavior to an offline recommender system so that
+    you can obtain item suggestions for your entire customer base in one shot.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，如果你希望在客户与Web或移动应用进行交互之前就向他们展示商品推荐，那么你可以将与其历史消费行为相关的数据发送到离线推荐系统，从而一次性为整个客户群体获得商品推荐。
+- en: Let's look at how real-time predictions are run.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何运行实时预测。
+- en: Creating real-time predictions through an inference pipeline
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过推理管道创建实时预测
+- en: In this section, we will build a pipeline where we reuse the serialized SparkML
+    model for data preprocessing and employ a trained NTM model to derive topics from
+    preprocessed headlines. SageMaker's Python SDK provides classes such as `Model`,
+    `SparkMLModel`, and `PipelineModel` to create an inference pipeline that can be
+    used to conduct feature processing and then score processed data using the trained
+    algorithm.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将构建一个管道，重用序列化的SparkML模型进行数据预处理，并使用训练好的NTM模型从预处理的标题中提取主题。SageMaker的Python
+    SDK提供了`Model`、`SparkMLModel`和`PipelineModel`等类，用于创建推理管道，进行特征处理，并使用训练好的算法对处理后的数据进行评分。
+- en: 'Let''s walk through the steps for creating an endpoint that can be used for
+    real-time predictions:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们逐步讲解如何创建一个可以用于实时预测的端点：
+- en: 'Create a `Model` from the NTM training job (the one we created in the previous
+    section), as follows:'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从NTM训练作业（我们在上一节中创建的那个）创建`Model`，如下所示：
+- en: '[PRE16]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Here, we create the `Model` object that's present in the `sagemaker.model` module.
+    We pass in the location of the trained NTM model and the Docker registry path
+    of the NTM inference image.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们创建了`Model`对象，该对象位于`sagemaker.model`模块中。我们传入训练好的NTM模型的位置以及NTM推理镜像的Docker注册路径。
+- en: 'Create a SparkML `Model` representing the learned data preprocessing logic,
+    as follows:'
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个表示学习到的数据预处理逻辑的SparkML `Model`，如下所示：
+- en: '[PRE17]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: We define `sparkml_data` as the location of the serialized `PipelineModel` from
+    the `pyspark.ml` package. Remember that `PipelineModel` contains three transformers
+    (`Tokenizer`, `StopWordsRemover`, and `CountVectorizer`) and one estimator (IDF)
+    from the data preprocessing we did in the previous section. Then, we create a
+    `SparkMLModel` object, `sparkml_model`, by passing the location of the trained
+    Spark `PipelineModel` and schema of input data for inference.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将`sparkml_data`定义为来自`pyspark.ml`包的序列化`PipelineModel`的位置。请记住，`PipelineModel`包含三个变换器（`Tokenizer`、`StopWordsRemover`和`CountVectorizer`）和一个估算器（IDF），这些都是我们在上一节中进行的数据预处理中用到的。然后，我们通过传入训练好的Spark
+    `PipelineModel`的位置和推理输入数据的模式，创建一个`SparkMLModel`对象`sparkml_model`。
+- en: 'Create a `PipelineModel`, encompassing and sequencing the `sparkml_model` (data
+    preprocessing) and `ntm_model` as follows:'
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个`PipelineModel`，将`SparkMLModel`（数据预处理）和`ntm_model`按顺序组合如下：
+- en: '[PRE18]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: We create a `PipelineModel` object from the `sagemaker.pipeline` module by passing
+    in the model name, the `sagemaker` execution role, and the sequence of models
+    we want to execute.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过传递模型名称、`sagemaker`执行角色和我们要执行的模型序列，来从`sagemaker.pipeline`模块创建一个`PipelineModel`对象。
+- en: 'Now it''s time to deploy the `PipelineModel`, as follows:'
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在是时候部署`PipelineModel`了，如下所示：
+- en: '[PRE19]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: We will invoke the `deploy()` method on `sm_model` to deploy the model as an
+    endpoint. We pass the number and type of instances we need to host the endpoint,
+    along with the endpoint's name, to the deployed model.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将调用`sm_model`上的`deploy()`方法，将模型部署为一个端点。我们需要将托管端点所需的实例数量和类型，以及端点名称，传递给部署的模型。
+- en: 'Now it''s time to pass a sample headline from the test dataset to the newly
+    created endpoint. Let''s walk through the steps:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在是时候将测试数据集中的一个样本头条新闻传递给新创建的端点了。让我们一步一步地了解这些步骤：
+- en: 'First, we create a `RealTimePredictor` object from the `sagemaker.predictor`
+    module, as follows:'
+  id: totrans-131
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们从`sagemaker.predictor`模块创建一个`RealTimePredictor`对象，如下所示：
+- en: '[PRE20]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: We define the `RealTimePredictor` object by passing the name of the endpoint
+    created previously, the current SageMaker session, the serializer (this defines
+    how the input data is encoded when transmitting it to an endpoint), and the request
+    and response content types.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过传递先前创建的端点名称、当前的SageMaker会话、序列化器（定义如何在将数据传输到端点时对输入数据进行编码）以及请求和响应的内容类型，来定义`RealTimePredictor`对象。
+- en: 'Then we invoke the `predict()` method of the `RealTimePredictor` object, `predictor`,
+    as follows:'
+  id: totrans-134
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们调用`RealTimePredictor`对象`predictor`的`predict()`方法，如下所示：
+- en: '[PRE21]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We call the `predict()` method of `predictor`, initialized as the `RealTimePredictor`
+    object, by passing a sample headline from the test dataset as part of the `json`
+    payload, as follows:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们调用`predictor`的`predict()`方法，该方法已初始化为`RealTimePredictor`对象，通过将测试数据集中的一个样本头条新闻作为`json`负载的一部分传递，如下所示：
+- en: '[PRE22]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'The payload variable contains two keys, `schema` and `data`. The `schema` key
+    contains the input and output structure of `SparkMLModel`, while the `data` key
+    contains a sample headline whose topics we want to discover. If we choose to override
+    the SageMaker `sparkml` schema we specified while initializing `SparkMLModel`,
+    we can pass the new schema. The following is the output from scoring a news headline:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`payload`变量包含两个键：`schema`和`data`。`schema`键包含`SparkMLModel`的输入和输出结构，而`data`键包含我们希望发现其主题的一个样本头条新闻。如果我们选择覆盖在初始化`SparkMLModel`时指定的SageMaker
+    `sparkml`架构，我们可以传递新的架构。以下是评分新闻头条后的输出：'
+- en: '[PRE23]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'We can see that the headline has three prominent topics: International Politics
+    and Conflict, followed by Funding/Expenses related challenges and Law Enforcement.'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到，头条新闻有三个显著的主题：国际政治与冲突，其次是与资金/支出相关的挑战，最后是执法。
+- en: 'A little bit of context—Lisa Scaffidi was the Lord Mayor of Perth, Western
+    Australia. She was charged with inappropriate use of her position—failure to declare
+    gifts and travel worth tens of thousands of dollars. Therefore, this headline
+    aptly has a mixture of topics: International Politics and Conflict (51%), followed
+    by Funding/Expenses-related challenges (22%) and then by Law Enforcement (17%).'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一点背景——Lisa Scaffidi曾是西澳大利亚珀斯市市长。她因不当使用职权而被控—未能申报价值数万美元的礼品和旅行。因此，这条头条新闻恰如其分地涵盖了多个主题：国际政治与冲突（51%），随后是与资金/支出相关的挑战（22%），然后是执法（17%）。
+- en: Now let's look at inferring topics for a batch of headlines.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看一下如何为一批头条新闻推断主题。
+- en: Creating batch predictions through an inference pipeline
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过推理管道创建批量预测
+- en: In this section, we will turn our attention from real-time predictions to batch
+    predictions. To address the need to deploy trained models in offline mode, SageMaker
+    offers Batch Transform. Batch Transform is a newly released high-performance and
+    throughput feature where inferences can be obtained for the entire dataset. Both
+    the input and output data is stored in an S3 bucket. The *Batch Transform* service
+    manages the necessary compute resources to score the input data, given the trained
+    model.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将焦点从实时预测转向批量预测。为了满足将训练好的模型部署到离线模式的需求，SageMaker提供了Batch Transform。Batch
+    Transform是一个新发布的高性能和高吞吐量特性，能够对整个数据集进行推理。输入和输出数据都存储在S3桶中。*Batch Transform*服务负责管理必要的计算资源，以便使用训练好的模型对输入数据进行评分。
+- en: 'This following diagram shows how the *Batch Transform* service works:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下图示显示了 *批量转换* 服务是如何工作的：
+- en: '![](img/a8f0276a-427e-4ad3-b79b-f3baa6febd93.png)'
+  id: totrans-146
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a8f0276a-427e-4ad3-b79b-f3baa6febd93.png)'
+- en: 'In the preceding diagram, we can see the following steps:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的图示中，我们可以看到以下步骤：
+- en: The Batch Transform service ingests large volumes of input data (from the S3
+    bucket) through an agent.
+  id: totrans-148
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 批量转换服务通过代理摄取大量输入数据（来自 S3 存储桶）。
+- en: The role of the Batch Transform agent is to orchestrate communication between
+    the trained model and the S3 bucket, where input and output data is stored.
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 批量转换代理的角色是协调训练模型与 S3 存储桶之间的通信，在那里存储输入和输出数据。
+- en: Once the request data is available to the agent, it sends it to the trained
+    model, which transforms news headlines and generates topics.
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦请求数据对代理可用，它就会将其发送到训练好的模型，模型会转换新闻标题并生成主题。
+- en: The inferences or topics that are produced are deposited back in the designated
+    S3 bucket by the intermediate agent.
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 由中介代理产生的推理或主题将被返回存储到指定的 S3 存储桶中。
+- en: 'Let''s go through the steps for running a Batch Transform job:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们逐步了解如何运行一个批量转换任务：
+- en: Define the path to the S3 bucket where the input and output data is stored,
+    along with the name of the `PipelineModel` we created in the previous section.
+    The name of the `PipelineModel` can be obtained either programmatically or through
+    the AWS console (navigate to the SageMaker service on the left navigation pane;
+    then, under Inference, click on Models).
+  id: totrans-153
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义存储输入和输出数据的 S3 存储桶路径，以及我们在上一节中创建的 `PipelineModel` 的名称。`PipelineModel` 的名称可以通过编程方式或通过
+    AWS 控制台获取（导航到左侧导航面板中的 SageMaker 服务；然后，在推理部分，点击模型）。
+- en: 'Create a `Transformer` object from the `sagemaker.transformer` module, as follows:'
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从 `sagemaker.transformer` 模块创建一个 `Transformer` 对象，如下所示：
+- en: '[PRE24]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Here, we define the compute resources that are required to run the pipeline
+    model, for example, the EC2 instance type and number. Then, we define and assemble
+    a strategy, that is, how to batch records (single or multiple records) and how
+    to assemble the output. The Current SageMaker session and output content type
+    defined by `accept` are also provided.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们定义运行管道模型所需的计算资源，例如 EC2 实例类型和数量。然后，我们定义并组装策略，即如何批量处理记录（单条或多条记录）以及如何组装输出。还提供了当前
+    SageMaker 会话和由 `accept` 定义的输出内容类型。
+- en: 'Invoke the `transform()` method of the transformer object we created in the
+    previous step, as follows:'
+  id: totrans-157
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 调用我们在前一步创建的转换器对象的 `transform()` 方法，如下所示：
+- en: '[PRE25]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'We define the path to the input data, the name of the Batch Transform job,
+    the input content type, and how the input records are separated (news headlines
+    are separated by line, in this case). Next, we wait for the batch inference to
+    be run on all the input data. The following is an excerpt from the output that
+    was produced:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们定义输入数据的路径、批量转换任务的名称、输入内容类型，以及如何分隔输入记录（在这种情况下，新闻标题按行分隔）。接下来，我们等待对所有输入数据进行批量推理。以下是产生的输出的摘录：
+- en: '![](img/4d2d5be4-9609-4e0d-9862-b21a87aff883.png)'
+  id: totrans-160
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4d2d5be4-9609-4e0d-9862-b21a87aff883.png)'
+- en: 'Remember that we have uncovered five topics: International Politics and Conflict,
+    Sports and Crime, Natural Disasters and Funding, Protest and Law Enforcement,
+    and Crime. For each news headline, the NTM algorithm predicts the probability
+    that the headline contains topics 1 through 5\. Thus, each headline will be represented
+    by a mixture of five topics.'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，我们已经涉及了五个主题：国际政治与冲突、体育与犯罪、自然灾害与资金、抗议与执法、以及犯罪。对于每个新闻标题，NTM 算法会预测该标题包含主题 1
+    至 5 的概率。因此，每个标题将由五个主题的混合组成。
+- en: For example, in the *Indonesian police say gunfire killed azahari* headline,
+    crime-related topics are predominant. The topics are very relevant since the headline
+    has to do with the murder of Azahari, the mastermind behind the 2002 Bali bombing.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，在 *印尼警方称枪击事件导致阿扎哈里死亡* 的标题中，犯罪相关的主题占主导地位。这些主题非常相关，因为该标题涉及的是 2002 年巴厘岛爆炸事件的幕后策划者阿扎哈里的谋杀。
+- en: By completing this section, we have successfully looked at two different patterns
+    for running inferences in SageMaker.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过完成本节，我们已经成功查看了两种在 SageMaker 中运行推理的不同模式。
+- en: Summary
+  id: totrans-164
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we have learned how to reuse data preprocessing logic for training
+    and inference and how to run online as opposed to offline inferences. We started
+    by understanding the architecture of the machine learning inference pipeline.
+    Then, we used the ABC News Headlines dataset to illustrate big data processing
+    through AWS Glue and SparkML. Then, we discovered topics from the news headlines
+    by fitting the NTM algorithm to processed headlines. Finally, we walked through
+    real-time as opposed to batch inferences by utilizing the same data preprocessing
+    logic for inference. Through the inference pipeline, data scientists and machine
+    learning engineers can increase speed with which ML solutions are marketed.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们学习了如何重用数据预处理逻辑进行训练和推理，以及如何执行在线推理与离线推理的区别。我们首先了解了机器学习推理流水线的架构。然后，我们使用ABC新闻头条数据集，通过AWS
+    Glue和SparkML演示大数据处理。接着，我们通过将NTM算法应用于处理后的新闻头条，发现了新闻的主题。最后，我们通过利用相同的数据预处理逻辑进行推理，讲解了实时推理与批处理推理的区别。通过推理流水线，数据科学家和机器学习工程师可以提高机器学习解决方案的上市速度。
+- en: In the next chapter, we'll do a deep dive into **Neural Topic Models** (**NTMs**).
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，我们将深入探讨**神经主题模型**（**NTMs**）。
+- en: Further reading
+  id: totrans-167
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 深入阅读
+- en: 'The following reading material is intended to enhance your understanding of
+    what was covered in this chapter:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下阅读材料旨在增强你对本章所涵盖内容的理解：
+- en: '**Pipeline models in Spark**:[https://blog.insightdatascience.com/spark-pipelines-elegant-yet-powerful-7be93afcdd42](https://blog.insightdatascience.com/spark-pipelines-elegant-yet-powerful-7be93afcdd42)'
+  id: totrans-169
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Spark中的流水线模型**：[https://blog.insightdatascience.com/spark-pipelines-elegant-yet-powerful-7be93afcdd42](https://blog.insightdatascience.com/spark-pipelines-elegant-yet-powerful-7be93afcdd42)'
+- en: '**Batch Transform**:[https://docs.aws.amazon.com/sagemaker/latest/dg/how-it-works-batch.html](https://docs.aws.amazon.com/sagemaker/latest/dg/how-it-works-batch.html)'
+  id: totrans-170
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**批量变换**：[https://docs.aws.amazon.com/sagemaker/latest/dg/how-it-works-batch.html](https://docs.aws.amazon.com/sagemaker/latest/dg/how-it-works-batch.html)'
+- en: '**Topic modeling**:[https://medium.com/ml2vec/topic-modeling-is-an-unsupervised-learning-approach-to-clustering-documents-to-discover-topics-fdfbf30e27df](https://medium.com/ml2vec/topic-modeling-is-an-unsupervised-learning-approach-to-clustering-documents-to-discover-topics-fdfbf30e27df)'
+  id: totrans-171
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**主题建模**：[https://medium.com/ml2vec/topic-modeling-is-an-unsupervised-learning-approach-to-clustering-documents-to-discover-topics-fdfbf30e27df](https://medium.com/ml2vec/topic-modeling-is-an-unsupervised-learning-approach-to-clustering-documents-to-discover-topics-fdfbf30e27df)'
+- en: '**Transformers in Spark**:[https://spark.apache.org/docs/1.6.0/ml-guide.html#transformers](https://spark.apache.org/docs/1.6.0/ml-guide.html#transformers)'
+  id: totrans-172
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Spark中的变换器**：[https://spark.apache.org/docs/1.6.0/ml-guide.html#transformers](https://spark.apache.org/docs/1.6.0/ml-guide.html#transformers)'

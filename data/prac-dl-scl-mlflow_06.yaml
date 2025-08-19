@@ -1,0 +1,1897 @@
+- en: '*Chapter 4*: Tracking Code and Data Versioning'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第 4 章*：跟踪代码和数据版本'
+- en: DL models are not just models – they are intimately tied to the code that trains
+    and tests the model and the data that's used for training and testing. If we don't
+    track the code and data that's used for the model, it is impossible to reproduce
+    the model or improve it. Furthermore, there have been recent industry-wide awakenings
+    and paradigm shifts toward a **data-centric AI** ([https://www.forbes.com/sites/gilpress/2021/06/16/andrew-ng-launches-a-campaign-for-data-centric-ai/?sh=5cbacdc574f5](https://www.forbes.com/sites/gilpress/2021/06/16/andrew-ng-launches-a-campaign-for-data-centric-ai/?sh=5cbacdc574f5)),
+    where the importance of data is being lifted to a first-class artifact in building
+    ML and, especially, DL models. Due to this, in this chapter, we will learn how
+    to track code and data versioning using MLflow. We will learn about the different
+    ways we can track code and pipeline versioning and how to use Delta Lake for data
+    versioning. By the end of this chapter, you will be able to understand and implement
+    tracking techniques for both code and data with MLflow.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深度学习（DL）模型不仅仅是模型——它们与训练和测试模型的代码，以及用于训练和测试的数据密切相关。如果我们不跟踪用于模型的代码和数据，就无法重现模型或改进它。此外，近期在整个行业范围内对**数据中心
+    AI**的觉醒和范式转变（[https://www.forbes.com/sites/gilpress/2021/06/16/andrew-ng-launches-a-campaign-for-data-centric-ai/?sh=5cbacdc574f5](https://www.forbes.com/sites/gilpress/2021/06/16/andrew-ng-launches-a-campaign-for-data-centric-ai/?sh=5cbacdc574f5)）使得数据在构建机器学习（ML）和特别是深度学习（DL）模型中的重要性被提升为首要要素。因此，在本章节中，我们将学习如何使用
+    MLflow 跟踪代码和数据版本。我们将学习如何跟踪代码和管道版本，并了解如何使用 Delta Lake 进行数据版本管理。在本章节结束时，您将能够理解并实现使用
+    MLflow 跟踪代码和数据的技巧。
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主要主题：
+- en: Tracking notebook and pipeline versioning
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 跟踪笔记本和管道版本
+- en: Tracking locally, privately built Python libraries
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 跟踪本地私有构建的 Python 库
+- en: Tracking data versioning in Delta Lake
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 Delta Lake 中跟踪数据版本
+- en: Technical requirements
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'The following are the technical requirements for this chapter:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章节的技术要求如下：
+- en: 'VS Code with the Jupyter Notebook extension: [https://github.com/microsoft/vscode-jupyter/wiki/Setting-Up-Run-by-Line-and-Debugging-for-Notebooks](https://github.com/microsoft/vscode-jupyter/wiki/Setting-Up-Run-by-Line-and-Debugging-for-Notebooks).'
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 Jupyter Notebook 扩展的 VS Code：[https://github.com/microsoft/vscode-jupyter/wiki/Setting-Up-Run-by-Line-and-Debugging-for-Notebooks](https://github.com/microsoft/vscode-jupyter/wiki/Setting-Up-Run-by-Line-and-Debugging-for-Notebooks)。
+- en: 'The code for this chapter, which can be found in this book''s GitHub repository:
+    [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04).'
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 本章节的代码可以在本书的 GitHub 仓库中找到：[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04)。
+- en: Access to a Databricks instance so that you can learn how to use Delta Lake
+    to enable versioned data access.
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问 Databricks 实例，以便学习如何使用 Delta Lake 来实现版本化的数据访问。
+- en: Tracking notebook and pipeline versioning
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 跟踪笔记本和管道版本
+- en: 'Data scientists usually start by experimenting with Python notebooks offline,
+    where interactive execution is a key benefit. Python notebooks have come a long
+    way since the days of `.ipynb`. You may not be able to see the exact Git hash
+    in the MLflow tracking server for each run using a Jupyter notebook either. There
+    are a lot of interesting debates on whether or when a Jupyter notebook should
+    be used, especially in a production environment (see a discussion here: [https://medium.com/mlops-community/jupyter-notebooks-in-production-4e0d38803251](https://medium.com/mlops-community/jupyter-notebooks-in-production-4e0d38803251)).
+    There are multiple reasons why we shouldn''t use Jupyter notebooks in a production
+    environment, especially when we need reproducibility in an end-to-end pipeline
+    fashion, where unit testing, proper code versioning, and dependency management
+    could be difficult with a lot of notebooks. There are some early innovations around
+    scheduling, parameterizing, and executing Jupyter notebooks in a workflow fashion
+    using the open source tool **papermill** by Netflix ([https://papermill.readthedocs.io/en/latest/index.html](https://papermill.readthedocs.io/en/latest/index.html)).
+    However, a recent innovation by Databricks and VS Code makes notebooks much easier
+    to be version controlled and integrated with MLflow. Let''s look at the notebook
+    characteristics that were introduced by these two tools:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据科学家通常从离线实验 Python 笔记本开始，交互式执行是其主要优势之一。自 `.ipynb` 时代以来，Python 笔记本已经取得了长足的进展。你可能也无法在
+    MLflow 跟踪服务器中看到每次使用 Jupyter 笔记本运行的确切 Git 哈希值。关于是否以及何时应该在生产环境中使用 Jupyter 笔记本，存在许多有趣的争论（可以在这里查看讨论：[https://medium.com/mlops-community/jupyter-notebooks-in-production-4e0d38803251](https://medium.com/mlops-community/jupyter-notebooks-in-production-4e0d38803251)）。我们不应在生产环境中使用
+    Jupyter 笔记本的原因有很多，尤其是在我们需要端到端管道中的可复现性时，单元测试、代码版本控制和依赖管理在大量笔记本的情况下可能会变得困难。Netflix
+    的开源工具 **papermill**（[https://papermill.readthedocs.io/en/latest/index.html](https://papermill.readthedocs.io/en/latest/index.html)）在调度、参数化和按工作流方式执行
+    Jupyter 笔记本方面做出了一些早期创新。然而，Databricks 和 VS Code 的最近创新使得笔记本更容易进行版本控制并与 MLflow 集成。让我们来看一下这两个工具引入的笔记本特性：
+- en: '**Interactive execution**: Both Databricks''s notebooks and VS Code''s notebooks
+    can run the same way as traditional Jupyter notebooks, in a cell-by-cell execution
+    mode. By doing this, you can immediately see the output of the results.'
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**交互式执行**：Databricks 的笔记本和 VS Code 的笔记本可以像传统的 Jupyter 笔记本一样运行，采用逐单元格执行模式。通过这种方式，你可以立即看到结果的输出。'
+- en: '`.py` file extension. This allows all the regular Python code linting (code
+    format and style checking) to be applied to a notebook.'
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`.py` 文件扩展名。这允许对笔记本应用常规的 Python 代码检查（代码格式和风格检查）。'
+- en: '**Special symbols for rendering code cells and Mark down cells**: Both Databricks
+    and VS Code leverage some special symbols to render Python files as interactive
+    notebooks. In Databricks, the special symbols to delineate code into different
+    executable cells are as follows:'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**渲染代码单元格和 Markdown 单元格的特殊符号**：Databricks 和 VS Code 都利用一些特殊符号将 Python 文件渲染为交互式笔记本。在
+    Databricks 中，用于将代码分隔成不同可执行单元格的特殊符号如下：'
+- en: '[PRE0]'
+  id: totrans-16
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The code below the special `COMMAND` line will be rendered as an executable
+    cell in the Databricks web UI portal, as follows:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特殊的 `COMMAND` 行下方的代码将在 Databricks Web UI 门户中作为可执行单元格进行渲染，如下所示：
+- en: '![Figure 4.1 – Databricks executable cell'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.1 – Databricks 可执行单元格'
+- en: '](img/B18120_Figure_4.1.jpg)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.1.jpg)'
+- en: Figure 4.1 – Databricks executable cell
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.1 – Databricks 可执行单元格
+- en: To execute the code in this cell, you can just click **Run Cell** via the top-right
+    drop-down menu.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行此单元格中的代码，你只需通过右上方的下拉菜单点击 **运行单元格**。
+- en: 'To add a large chunk of text to describe and comment on the code in Databricks
+    (also known as Markdown cells), you can use the `# MAGIC` symbol at the beginning
+    of the line, as follows:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要向 Databricks 中添加大量文本以描述和评论代码（也称为 Markdown 单元格），你可以在行的开头使用 `# MAGIC` 符号，如下所示：
+- en: '[PRE1]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'This is then rendered in the Databricks notebook as a Markdown comment cell,
+    as follows:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，这将在 Databricks 笔记本中渲染为一个 Markdown 注释单元格，如下所示：
+- en: '![Figure 4.2 – Databricks Markdown text cell'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.2 – Databricks Markdown 文本单元格'
+- en: '](img/B18120_Figure_4.2.jpg)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.2.jpg)'
+- en: Figure 4.2 – Databricks Markdown text cell
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.2 – Databricks Markdown 文本单元格
+- en: 'In VS Code, a slightly different set of symbols is used for these two types
+    of cells. For a code cell, the `# %%` symbols are used at the beginning of the
+    cell block:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 VS Code 中，这两种类型的单元格使用略有不同的符号集。对于代码单元格，`# %%` 符号用于单元格块的开头：
+- en: '[PRE2]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'This is then rendered in VS Code''s editor, as follows:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，这将在 VS Code 的编辑器中呈现，如下所示：
+- en: '![Figure 4.3 – VSCode code cell'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.3 – VSCode 代码单元格'
+- en: '](img/B18120_Figure_4.3.jpg)'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.3.jpg)'
+- en: Figure 4.3 – VS Code code cell
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.3 – VS Code 代码单元格
+- en: 'As you can see, there is a **Run Cell** button before the block of code that
+    you can click to run the code block interactively. If you click the **Run Cell**
+    button, the code block will start executing in the side panel of the editor window,
+    as shown here:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，在代码块前面有一个**运行单元格**按钮，您可以点击该按钮以交互式地运行代码块。如果点击**运行单元格**按钮，代码块将在编辑器窗口的侧边面板中开始执行，如下所示：
+- en: '![ Figure 4.4 – Running code interactively in VSCode'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.4 – 在 VSCode 中交互式运行代码'
+- en: '](img/B18120_Figure_4.4.jpg)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.4.jpg)'
+- en: Figure 4.4 – Running code interactively in VS Code
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.4 – 在 VS Code 中交互式运行代码
+- en: 'To add a Markdown cell that contains comments, add the following to the beginning
+    of the line, as well as the necessary symbols:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要添加一个包含注释的 Markdown 单元格，请在行的开头添加以下内容，并使用必要的符号：
+- en: '[PRE3]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This will ensure that the text is not an executable code block in VS Code.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将确保文本在 VS Code 中不是一个可执行的代码块。
+- en: Given the advantages of Databricks and VS Code notebooks, we suggest using either
+    for version tracking. We can use GitHub to track the versioning of either type
+    of notebook since they use a regular Python file format.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 鉴于 Databricks 和 VS Code 笔记本的优点，我们建议使用其中任意一种进行版本控制。我们可以使用 GitHub 来跟踪任何一种类型笔记本的版本，因为它们使用的是常规的
+    Python 文件格式。
+- en: Two Ways to Use Databricks Notebook Version Control
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 Databricks 笔记本版本控制的两种方法
+- en: 'For a managed Databricks instance, a notebook version can be tracked in two
+    ways: by looking at the revision history on the side panel of the notebook on
+    the Databricks web UI, or by linking to a remote GitHub repository. Detailed descriptions
+    are available in the Databricks notebook documentation: [https://docs.databricks.com/notebooks/notebooks-use.html#version-control](https://docs.databricks.com/notebooks/notebooks-use.html#version-control).'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于托管的 Databricks 实例，笔记本版本可以通过两种方式进行跟踪：通过查看 Databricks Web UI 中笔记本侧边面板的修订历史，或者通过链接到远程
+    GitHub 仓库。详细描述可以参考 Databricks 笔记本文档：[https://docs.databricks.com/notebooks/notebooks-use.html#version-control](https://docs.databricks.com/notebooks/notebooks-use.html#version-control)。
+- en: While the Databricks web portal provides excellent support for notebook version
+    control and integration with MLflow experimentation tracking (see this chapter's
+    callout boxes on *Two Ways to Use Databricks Notebook Version Control* and *Two
+    Types of MLflow Experiments in Databricks Notebooks*), there is one major drawback
+    of writing code in the Databricks notebook web UI. This is because the web UI
+    is not a typical **integrated development environment** (**IDE**) compared to
+    VS Code, where code style and formatting tools such as **flake8** ([https://flake8.pycqa.org/en/latest/](https://flake8.pycqa.org/en/latest/))
+    and autopep8 ([https://pypi.org/project/autopep8/](https://pypi.org/project/autopep8/))
+    can easily be enforced. This can have a major impact on code quality and maintainability.
+    Thus, it is highly recommended that you use VS Code to author notebook code (either
+    a Databricks notebook or a VS Code notebook).
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 Databricks Web 门户为笔记本版本控制和与 MLflow 实验追踪的集成提供了出色的支持（参见本章中的*两种使用 Databricks
+    笔记本版本控制的方法*和*Databricks 笔记本中的两种 MLflow 实验类型*的提示框），但是在 Databricks 笔记本 Web UI 中编写代码有一个主要的缺点。这是因为与
+    VS Code 相比，Web UI 不是一个典型的**集成开发环境**（**IDE**），在 VS Code 中，代码样式和格式化工具如 **flake8**（[https://flake8.pycqa.org/en/latest/](https://flake8.pycqa.org/en/latest/)）和
+    autopep8（[https://pypi.org/project/autopep8/](https://pypi.org/project/autopep8/)）可以轻松执行。这对代码质量和可维护性有重大影响。因此，强烈建议使用
+    VS Code 来编写笔记本代码（无论是 Databricks 笔记本还是 VS Code 笔记本）。
+- en: Two Types of MLflow Experiments in Databricks Notebooks
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Databricks 笔记本中的两种 MLflow 实验类型
+- en: 'For a managed Databricks web portal instance, there are two types of MLflow
+    experiments you can perform: workspace and notebook experiments. A workspace experiment
+    is mainly for a shared experiment folder that is not tied to a single notebook.
+    Remote code execution can write to a workspace experiment folder if needed. On
+    the other hand, a notebook scope experiment is tied to a specific notebook and
+    can be found directly on one of the top-right menu items called **Experiment**
+    in the notebook page on the Databricks web portal. For more details, please look
+    at the Databricks documentation website: [https://docs.databricks.com/applications/mlflow/tracking.html#experiments](https://docs.databricks.com/applications/mlflow/tracking.html#experiments).'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于一个托管的 Databricks Web 门户实例，您可以执行两种类型的 MLflow 实验：工作区实验和 notebook 实验。工作区实验主要用于一个共享的实验文件夹，该文件夹不绑定到单个
+    notebook。如果需要，远程代码执行可以写入工作区实验文件夹。另一方面，notebook 范围实验绑定到特定的 notebook，并且可以在 Databricks
+    Web 门户的 notebook 页面上直接通过右上角的 **Experiment** 菜单项找到。有关更多细节，请查看 Databricks 文档网站：[https://docs.databricks.com/applications/mlflow/tracking.html#experiments](https://docs.databricks.com/applications/mlflow/tracking.html#experiments)。
+- en: 'Using this chapter''s VS Code notebook, `fine_tuning.py`, which can be found
+    in this chapter''s GitHub repository ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/notebooks/fine_tuning.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/notebooks/fine_tuning.py)),
+    you will be able to run it interactively in the VS Code editor and log the experiment
+    in the MLflow Docker server that we set up in [*Chapter 3*](B18120_03_ePub.xhtml#_idTextAnchor040)*,
+    Tracking Models, Parameters, and Metrics*. As a reminder, note that to run this
+    notebook in VS Code successfully, you will need to set up your virtual environment,
+    called `dl_model`, as described in the `README.md` file in this chapter''s GitHub
+    repository. It consists of the following three steps:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用本章的 VS Code notebook `fine_tuning.py`，该文件可以在本章的 GitHub 仓库中找到（[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/notebooks/fine_tuning.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/notebooks/fine_tuning.py)），您将能够在
+    VS Code 编辑器中交互式运行它，并在我们在 [*第 3 章*](B18120_03_ePub.xhtml#_idTextAnchor040) 中设置的
+    MLflow Docker 服务器中记录实验，章节名称为 *追踪模型、参数和指标*。提醒一下，成功在 VS Code 中运行这个 notebook，您需要按照本章
+    GitHub 仓库中的 `README.md` 文件描述的步骤设置虚拟环境 `dl_model`。它包括以下三个步骤：
+- en: '[PRE4]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '[PRE6]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'If you run this notebook cell-by-cell from beginning to end, your experiment
+    page will look as follows:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您从头到尾逐个运行此 notebook 单元格，您的实验页面将如下所示：
+- en: '![Figure 4.5 – Logged experiment page after running a VSCode notebook interactively'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.5 – 在 VS Code notebook 中交互式运行后记录的实验页面'
+- en: '](img/B18120_Figure_4.5.jpg)'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.5.jpg)'
+- en: Figure 4.5 – Logged experiment page after running a VS Code notebook interactively
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.5 – 在 VS Code 中交互式运行 notebook 后记录的实验页面
+- en: You may immediately notice a problem in the preceding screenshot – `fine_tuning.py`
+    file. This is because VS Code notebooks are not natively integrated into the MLflow
+    tracking server for source file tracking; it can only show the **ipykernel** ([https://pypi.org/project/ipykernel/](https://pypi.org/project/ipykernel/))
+    that VS Code uses to execute a VS Code notebook ([https://github.com/microsoft/vscode-jupyter](https://github.com/microsoft/vscode-jupyter)).
+    Unfortunately, this is a limitation that, at the time of writing, cannot be addressed
+    by running VS Code notebooks *interactively* for experiment code tracking. Databricks
+    notebooks running inside a hosted Databricks web UI have no such problem as they
+    have native integration with the MLflow tracking server that's bundled in the
+    Databricks web portal.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能会立即注意到前面的截图中的问题 —— `fine_tuning.py` 文件。这是因为 VS Code notebook 并未与 MLflow 跟踪服务器原生集成以进行源文件跟踪；它只能显示
+    VS Code 用于执行 notebook 的 **ipykernel**（[https://pypi.org/project/ipykernel/](https://pypi.org/project/ipykernel/)）（[https://github.com/microsoft/vscode-jupyter](https://github.com/microsoft/vscode-jupyter)）。不幸的是，这是一个限制，在撰写本文时，无法通过交互式运行
+    VS Code notebook 来解决实验代码跟踪问题。托管在 Databricks Web UI 中运行的 Databricks notebook 则没有此类问题，因为它们与
+    MLflow 跟踪服务器有原生集成，该服务器与 Databricks Web 门户捆绑在一起。
+- en: 'However, since the VS Code notebooks are just Python code, we can run the notebooks
+    in the command line *non-interactively*, as follows:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，由于 VS Code notebook 只是 Python 代码，我们可以在命令行中以 *非交互式* 方式运行 notebook，如下所示：
+- en: '[PRE7]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'This will log the actual source code''s filename and the Git commit hash in
+    the MLflow experiment page without any issues, as shown here:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将在 MLflow 实验页面上无任何问题地记录实际源代码的文件名和 Git 提交哈希，如下所示：
+- en: '![Figure 4.6 – Logged experiment page after running a VSCode notebook in the
+    command line'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.6 – 在命令行运行 VSCode 笔记本后的已记录实验页面'
+- en: '](img/B18120_Figure_4.6.jpg)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.6.jpg)'
+- en: Figure 4.6 – Logged experiment page after running a VS Code notebook in the
+    command line
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.6 – 在命令行运行 VS Code 笔记本后的已记录实验页面
+- en: The preceding screenshot shows the correct source filename (`fine_tuning.py`)
+    and the correct git commit hash (**661ffeda5ae53cff3623f2fcc8227d822e877e2d**).
+    This workaround does not require us to change the notebook's code and could be
+    very useful if our initial interactive notebook debugging is done and we want
+    to get a complete run of the notebook, along with proper code version tracking
+    in the MLflow tracking server. Note that all the other parameters, metrics, and
+    models are tracked properly, regardless of whether we run the notebook interactively.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的截图显示了正确的源文件名（`fine_tuning.py`）和正确的 git 提交哈希（**661ffeda5ae53cff3623f2fcc8227d822e877e2d**）。这个解决方法不需要我们修改笔记本的代码，并且如果我们已经完成了初步的交互式笔记本调试，并且希望获得完整的笔记本运行结果，同时在
+    MLflow 跟踪服务器中进行正确的代码版本跟踪，这个方法会非常有用。请注意，所有其他参数、指标和模型都会被正确跟踪，无论我们是否以交互式方式运行笔记本。
+- en: Pipeline tracking
+  id: totrans-63
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 管道跟踪
+- en: 'Having discussed notebook code tracking (version and filename), let''s turn
+    to the topic of pipeline tracking. Before we discuss pipeline tracking, however,
+    we will discuss the definition of a pipeline in the ML/DL life cycle. Conceptually,
+    a pipeline is a multi-step data processing and task workflow. However, the implementation
+    of such a data/task workflow can be quite different. A pipeline can be defined
+    as a first-class Python API in some ML packages. The two most well-known pipeline
+    APIs are as follows:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论完笔记本代码跟踪（版本和文件名）之后，让我们转到管道跟踪的话题。然而，在讨论管道跟踪之前，我们首先需要了解管道在 ML/DL 生命周期中的定义。从概念上讲，管道是一个多步骤的数据处理和任务工作流。然而，数据/任务工作流的实现可能有很大的不同。管道可以在一些机器学习包中被定义为一流的
+    Python API。最著名的两个管道 API 如下：
+- en: '`sklearn.pipeline.Pipeline` ([https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html](https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html)):
+    This is widely used for building tightly integrated multi-step pipelines for classical
+    machine learning or data **extract, transform, and load** (**ETL**) pipelines
+    using **pandas DataFrames** (https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html).'
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`sklearn.pipeline.Pipeline` ([https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html](https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html)):
+    这是广泛用于构建紧密集成的多步骤管道，用于经典机器学习或数据 **提取、转换和加载**（**ETL**）管道，使用 **pandas DataFrames**（https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html）。'
+- en: '`pyspark.ml.Pipeline` ([https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.Pipeline.html](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.Pipeline.html)):
+    This is a PySpark version for building simple and tightly integrated multi-step
+    pipelines for machine learning or data ETL pipelines using **Spark DataFrames**
+    (https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.DataFrame.html).'
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`pyspark.ml.Pipeline` ([https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.Pipeline.html](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.Pipeline.html)):
+    这是 PySpark 版本的工具，用于构建简单且紧密集成的多步骤管道，适用于机器学习或数据 ETL 管道，使用 **Spark DataFrames**（https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.DataFrame.html）。'
+- en: However, when we're building a DL model pipeline, we need to use multiple different
+    Python packages at different steps of the pipeline, so a one-size-fits-all approach
+    using a single pipeline API doesn't usually work. In addition, neither of the
+    aforementioned pipeline APIs have native support for the current popular DL packages,
+    such as **Huggingface** or **PyTorch-Lightning**, which require additional integration
+    work. Although some open source DL pipeline APIs exist such as **Neuraxle** ([https://github.com/Neuraxio/Neuraxle](https://github.com/Neuraxio/Neuraxle)),
+    which tries to provide a sklearn-like pipeline interface and framework, it is
+    not widely used. Furthermore, using these API-based pipelines means that you'll
+    be locked in when you need to add more steps to the pipeline, which could reduce
+    your flexibility to extend or evolve a DL pipeline when new requirements arise.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，当我们构建一个深度学习（DL）模型管道时，我们需要在管道的不同步骤中使用多个不同的Python包，因此，使用一个通用的单一管道API通常无法满足需求。此外，前面提到的管道API都不原生支持当前流行的深度学习包，如**Huggingface**或**PyTorch-Lightning**，这些需要额外的集成工作。尽管存在一些开源的深度学习管道API，如**Neuraxle**（[https://github.com/Neuraxio/Neuraxle](https://github.com/Neuraxio/Neuraxle)），它尝试提供类似sklearn的管道接口和框架，但并未得到广泛使用。此外，使用这些基于API的管道意味着当你需要向管道中添加更多步骤时，可能会被限制，从而降低了你在新需求出现时扩展或发展深度学习管道的灵活性。
+- en: 'In this book, we will take a different approach to define and build a DL pipeline
+    that''s based on MLflow''s `fine_tuning.py`, into a multiple-step pipeline. This
+    pipeline can be visualized as a three-step flow diagram, as shown here:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，我们将采用不同的方法来定义并构建一个基于MLflow的`fine_tuning.py`的深度学习管道，并将其转变为一个多步骤管道。这个管道可以被可视化为一个三步流程图，如下所示：
+- en: '![Figure 4.7 – A three-step DL pipeline'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图4.7 – 一个三步的深度学习管道](img/B18120_Figure_4.7.jpg)'
+- en: '](img/B18120_Figure_4.7.jpg)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.7.jpg)'
+- en: Figure 4.7 – A three-step DL pipeline
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图4.7 – 一个三步的深度学习管道
+- en: 'This three-step flow is as follows:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个三步流程如下：
+- en: Download the data to a local execution environment
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将数据下载到本地执行环境
+- en: Fine-tune the model
+  id: totrans-74
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 微调模型
+- en: Register the model
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 注册模型
+- en: 'These modular steps may seem to be overkill for our current example, but the
+    power of having a distinctive functional step is evident when more complexities
+    are involved, or when changes are needed at each step. Each step can be modified
+    without them affecting the other steps if we define the parameters that need to
+    be passed between them. Each step is a standalone Python file that can be executed
+    independently with a set of input parameters. There will be a main pipeline Python
+    file that can run the whole pipeline or a sub-section of the pipeline''s steps.
+    In the `MLproject` file, which is a standard YAML file without the file extension,
+    we can define four entry points (`main`, `download_data`, `fine_tuning_model`,
+    and `register_model`), their required input parameters, their types and default
+    values, and the command line to execute each entry point. In our example, these
+    entry points will be provided in a Python command-line execution command. However,
+    you can invoke any kind of execution, such as a batch shell script, if needed
+    for any particular steps. For example, the following lines in the `MLproject`
+    file for this chapter ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/MLproject](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/MLproject))
+    describe the name of the project, the `conda` environment definition filename,
+    and the main entry point:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些模块化步骤可能对我们当前的示例来说有些过于复杂，但当涉及更多复杂性或每个步骤需要更改时，具有独立功能步骤的优势就显现出来。如果我们定义了需要在步骤之间传递的参数，每个步骤都可以独立修改，而不会影响其他步骤。每个步骤都是一个独立的Python文件，可以通过一组输入参数独立执行。将会有一个主管道Python文件，可以运行整个管道或管道的一个子部分。在`MLproject`文件中，这是一个没有文件扩展名的标准YAML文件，我们可以定义四个入口点（`main`、`download_data`、`fine_tuning_model`
+    和 `register_model`），它们所需的输入参数、参数类型和默认值，以及执行每个入口点的命令行。在我们的示例中，这些入口点将通过Python命令行执行命令提供。然而，如果某些步骤需要特定的执行方式，你也可以调用其他执行方式，比如批处理脚本。例如，本章中的`MLproject`文件的以下行（[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/MLproject](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/MLproject)）描述了项目的名称、`conda`环境定义文件的文件名以及主入口点：
+- en: '[PRE8]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '[PRE9]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: '[PRE10]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '[PRE11]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[PRE12]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '[PRE13]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '[PRE15]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Here, the name of the project is `dl_model_chapter04`. `conda_env` refers to
+    a local conda environment's YAML definition file, `conda.yaml`, which is located
+    in the same directory as the `MLproject` file. The `entry_points` section lists
+    the first entry point, called `main`. In the `parameters` section, there is one
+    parameter called `pipeline_steps`, which allows the user to define a comma-separated
+    list of DL pipeline steps to execute. This parameter is of the `str` type and
+    its default value is `all`, which means that all the pipeline steps will run.
+    Lastly, the `command` section lists how to execute this step in the command line.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，项目名称是 `dl_model_chapter04`。`conda_env` 指的是本地 conda 环境的 YAML 定义文件 `conda.yaml`，该文件与
+    `MLproject` 文件位于同一目录。`entry_points` 部分列出了第一个入口点，名为 `main`。在 `parameters` 部分，有一个名为
+    `pipeline_steps` 的参数，允许用户定义一个逗号分隔的 DL 流水线步骤列表以供执行。该参数的类型是 `str`，默认值是 `all`，意味着所有流水线步骤都会执行。最后，`command`
+    部分列出了如何在命令行中执行此步骤。
+- en: 'The rest of the `MLproject` file defines the other three pipeline step entry
+    points by following the same syntactic convention as the main entry point. For
+    example, the following lines in the same `MLproject` file define the entry point
+    of `download_data`:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MLproject` 文件的其余部分通过遵循与主入口点相同的语法规则来定义另外三个流水线步骤入口点。例如，以下几行在同一个 `MLproject`
+    文件中定义了 `download_data` 的入口点：'
+- en: '[PRE18]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '[PRE19]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '[PRE20]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '[PRE21]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '[PRE23]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '[PRE25]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: '[PRE27]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: '[PRE29]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: '[PRE30]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '[PRE31]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: '[PRE34]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: The `download_data` section, similar to the main entry point, also defines the
+    list of parameters, types, and default values, as well as the command line to
+    execute this step. We can define the rest of the steps in the same manner as we
+    did in the `MLproject` file that we just checked out from this book's GitHub repository.
+    For more details, take a look at the full content of that `MLproject` file.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`download_data` 部分，类似于主入口点，也定义了参数列表、类型和默认值，以及执行此步骤的命令行。我们可以像在本书的 GitHub 仓库中查看的
+    `MLproject` 文件一样，按相同的方式定义其余步骤。更多详细信息，请查看该 `MLproject` 文件的完整内容。'
+- en: 'After defining the `MLproject` file, it becomes clear that we have defined
+    a multi-step pipeline in a declarative way. This is like a specification for the
+    pipeline that says each step''s name, what input parameters it expects, and how
+    to execute them. Now, the next step is to implement the Python function to execute
+    each step of the pipeline. So, let''s look at the core implementation of the main
+    entry point''s Python function, which is called `main.py`. The following lines
+    of code (not the entire Python code in `main.py`) illustrate the core component
+    of implementing the entire pipeline with just one step in the pipeline (`download_data`):'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在定义了 `MLproject` 文件后，很明显我们已经以声明的方式定义了一个多步骤的流水线。这就像是一个流水线的规范，说明了每个步骤的名称、期望的输入参数以及如何执行它们。现在，下一步是实现
+    Python 函数来执行流水线的每个步骤。所以，让我们看看主入口点的 Python 函数的核心实现，它叫做 `main.py`。以下代码行（不是 `main.py`
+    中的整个 Python 代码）展示了只用一个流水线步骤（`download_data`）来实现整个流水线的核心组件：
+- en: '[PRE35]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: This main function snippet contains a `run_pipeline` function, which will be
+    run when the `main.py` file is executed in the command line. There is a parameter
+    called `steps`, which will be passed to this function when it's provided. In this
+    example, we are using the `click` Python package ([https://click.palletsprojects.com/en/8.0.x/](https://click.palletsprojects.com/en/8.0.x/))
+    to parse command-line arguments. The `run_pipeline` function starts an MLflow
+    experiment run by calling `mlflow.start_run` and passing two parameters (`run_name`
+    and `nested`). We have used `run_name` before – it's the descriptive phrase for
+    this run. However, the `nested` parameter is new, which means that this is a parent
+    experiment run. This parent experiment run contains some child experiment runs
+    that will be hierarchically tracked in MLflow. Each parent run can contain one
+    or more child runs. In the example code, this contains one step of the pipeline
+    run, called `download_data`, which is invoked by calling `mlflow.run`. This is
+    the key MLflow function to invoke an MLproject's entry point programmatically.
+    Once `download_data` has been invoked and the run has finished, the parent run
+    will also finish, thus concluding the pipeline's run.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此主函数代码片段包含一个`run_pipeline`函数，在命令行中执行`main.py`文件时将运行该函数。有一个称为`steps`的参数，在提供时将传递给该函数。在此示例中，我们使用了`click`
+    Python包 ([https://click.palletsprojects.com/en/8.0.x/](https://click.palletsprojects.com/en/8.0.x/))
+    来解析命令行参数。`run_pipeline`函数通过调用`mlflow.start_run`启动一个MLflow实验运行，并传递两个参数（`run_name`和`nested`）。我们之前使用过`run_name`，它是此运行的描述性短语。然而，`nested`参数是新的，这意味着这是一个父实验运行。这个父实验运行包含一些将在MLflow中层次跟踪的子实验运行。每个父运行可以包含一个或多个子运行。在示例代码中，这包含管道运行的一个步骤，称为`download_data`，通过调用`mlflow.run`来调用。这是调用MLproject入口点的关键MLflow函数。一旦调用了`download_data`并且运行已完成，父运行也将完成，从而结束管道的运行。
+- en: Two Ways to Execute an MLproject's Entry Point
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行MLproject入口点的两种方式
+- en: There are two ways to execute an MLproject's entry point. First, you can use
+    MLflow's Python API, known as `mlflow.run` ([https://www.mlflow.org/docs/latest/python_api/mlflow.projects.html#mlflow.projects.run](https://www.mlflow.org/docs/latest/python_api/mlflow.projects.html#mlflow.projects.run)).
+    Alternatively, you can use the MLflow's command-line interface tool, called `mlflow
+    run`, which can be called in a command-line shell environment to execute any entry
+    point directly ([https://www.mlflow.org/docs/latest/cli.html#mlflow-run](https://www.mlflow.org/docs/latest/cli.html#mlflow-run)).
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行MLproject入口点有两种方式。首先，您可以使用MLflow的Python API，称为`mlflow.run` ([https://www.mlflow.org/docs/latest/python_api/mlflow.projects.html#mlflow.projects.run](https://www.mlflow.org/docs/latest/python_api/mlflow.projects.html#mlflow.projects.run))。另外，您可以使用MLflow的命令行界面工具，称为`mlflow
+    run`，可以在命令行shell环境中直接调用以执行任何入口点 ([https://www.mlflow.org/docs/latest/cli.html#mlflow-run](https://www.mlflow.org/docs/latest/cli.html#mlflow-run))。
+- en: 'Now, let''s learn how to implement each step in the pipeline generically. For
+    each pipeline step, we put the Python files in a `pipeline` folder. In this example,
+    we have three files: `download_data.py`, `fine_tuning_model.py`, and `register_model.py`.
+    Thus, the relevant files for successfully building an MLflow supported pipeline
+    project are as follows:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们学习如何通用地实现管道中的每个步骤。对于每个管道步骤，我们将Python文件放在一个`pipeline`文件夹中。在本例中，我们有三个文件：`download_data.py`、`fine_tuning_model.py`和`register_model.py`。因此，成功构建支持MLflow的管道项目所需的相关文件如下：
+- en: '[PRE42]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '[PRE43]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: '[PRE44]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '[PRE45]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '[PRE46]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'For the implementation of each pipeline step, we can use the following Python
+    function templates. A placeholder section is reserved for implementing the actual
+    pipeline step logic:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于每个管道步骤的实现，我们可以使用以下Python函数模板。一个占位符部分用于实现实际的管道步骤逻辑：
+- en: '[PRE48]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: '[PRE50]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '[PRE51]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '[PRE53]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '[PRE54]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '[PRE55]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: '[PRE56]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '[PRE57]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '[PRE58]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: '[PRE59]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: This template allows us to standardize the way we implement the pipeline step
+    task. The main idea here is that for each pipeline step task, it needs to start
+    with `mlflow.start_run` to launch an MLflow experiment run. Once we've implemented
+    specific execution logic in the function, we need to log some parameters using
+    `mlflow.log_parameter`, or some artifacts in the artifact store using `mlflow.log_artifacts`,
+    that can be passed to and used by the next step of the pipeline. This is called
+    `mlflow.set_tag`.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此模板允许我们标准化实施管道步骤任务的方式。主要思想是，对于每个管道步骤任务，需要从`mlflow.start_run`开始启动一个MLflow实验运行。一旦我们在函数中实现了具体的执行逻辑，我们需要使用`mlflow.log_parameter`记录一些参数，或者在工件存储中使用`mlflow.log_artifacts`记录一些工件，这些参数和工件可以传递并由管道的下一步使用。这就是所谓的`mlflow.set_tag`。
+- en: 'For example, in the `download_data.py` step, the core implementation is as
+    follows:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，在`download_data.py`步骤中，核心实现如下：
+- en: '[PRE60]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '[PRE61]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '[PRE64]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[PRE65]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: '[PRE68]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '[PRE69]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: '[PRE72]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[PRE73]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '[PRE74]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: '[PRE75]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'In this `download_data.py` implementation, the task is to download the data
+    for model building from a remote URL to a local folder (`download_data(download_url,
+    local_folder)`). Once we''ve done this, we will log a few parameters, such as
+    `download_url` and `local_folder`. We can also log the newly downloaded data into
+    the MLflow artifact store using `mlflow.log_artifacts`. For this example, this
+    may not seem necessary since we only want to execute the next step in a local
+    development environment. However, for a more realistic scenario in a distributed
+    execution environment where each step could be run in different execution environments,
+    this is very desirable since we only need to pass the artifact URL path to the
+    next step of the pipeline to use; we don''t need to know how and where the previous
+    step was executed. In this example, when the `mlflow.log_artifacts(local_folder,
+    artifact_path="data")` statement is called, the downloaded data folder is uploaded
+    to the MLflow artifact store. However, we will not use this artifact path for
+    the downstream pipeline step in this chapter. We will explore how we use this
+    kind of artifact store to pass artifacts to the next step in the pipeline later
+    in this book. Here, we will use the log parameters to pass the downloaded data
+    path to the next step of the pipeline (`mlflow.log_param("local_folder", local_folder)`).
+    So, let''s look at how we can do that by extending `main.py` so that it includes
+    the next step, which is the `fine_tuning_model` entry point, as follows:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个`download_data.py`实现中，任务是将模型构建所需的数据从远程URL下载到本地文件夹（`download_data(download_url,
+    local_folder)`）。完成这一步后，我们将记录一些参数，比如`download_url`和`local_folder`。我们还可以使用`mlflow.log_artifacts`将新下载的数据记录到MLflow工件存储中。对于这个例子来说，可能看起来不太必要，因为我们只是在本地开发环境中执行下一步。然而，在一个更现实的分布式执行环境中，每个步骤可能会在不同的执行环境中运行，这种做法是非常有用的，因为我们只需要将工件URL路径传递给管道的下一步使用；我们不需要知道上一步是如何以及在哪里执行的。在这个例子中，当`mlflow.log_artifacts(local_folder,
+    artifact_path="data")`语句被调用时，下载的数据文件夹会被上传到MLflow工件存储。然而，在本章中，我们不会使用这个工件路径来执行下游管道步骤。稍后在本书中，我们将探讨如何使用这种工件存储将工件传递到管道的下一步。在这里，我们将使用日志记录的参数将下载的数据路径传递给管道的下一步（`mlflow.log_param("local_folder",
+    local_folder)`）。所以，让我们看看如何通过扩展`main.py`，使其包含下一步，即`fine_tuning_model`入口点，如下所示：
+- en: '[PRE76]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[PRE77]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '[PRE78]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: '[PRE79]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: '[PRE80]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'We use `mlflow.tracking.MlflowClient().get_run` to get the `download_run` MLflow
+    run object and then use `download_run.data.params` to get `file_path_uri` (in
+    this case, it is just a local folder path). This is then passed to the next `mlflow.run`,
+    which is `fine_tuning_run`, as a key-value parameter (`parameters={"data_path":
+    file_path_uri` ). This way, the `fine_tuning_run` pipeline step can use this parameter
+    to prefix its data source path. This is a very simplified scenario to illustrate
+    how we can pass data from one step to the next. Using the `mlflow.tracking.MlflowClient()`
+    API, which is provided by MLflow ([https://www.mlflow.org/docs/latest/python_api/mlflow.tracking.html](https://www.mlflow.org/docs/latest/python_api/mlflow.tracking.html)),
+    makes accessing a run''s information (parameters, metrics, and artifacts) straightforward.'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '我们使用`mlflow.tracking.MlflowClient().get_run`来获取`download_run`的MLflow运行对象，然后使用`download_run.data.params`来获取`file_path_uri`（在这个例子中，它只是一个本地文件夹路径）。然后将其作为键值参数（`parameters={"data_path":
+    file_path_uri}`）传递给下一个`mlflow.run`，即`fine_tuning_run`。通过这种方式，`fine_tuning_run`管道步骤可以使用这个参数来作为数据源路径的前缀。这是一个非常简化的场景，用来说明我们如何将数据从一个步骤传递到下一个步骤。使用由MLflow提供的`mlflow.tracking.MlflowClient()`API（[https://www.mlflow.org/docs/latest/python_api/mlflow.tracking.html](https://www.mlflow.org/docs/latest/python_api/mlflow.tracking.html)），可以轻松访问运行信息（参数、指标和工件）。'
+- en: 'We can also extend the `main.py` file with the third step of the pipeline by
+    adding the `register_model` step. This time, we need the logged model URI to register
+    a trained model, which depends on `run_id` of the `fine_tuning_model` step. So,
+    in the `fine_tuning_model` step, we need to get the `run_id` property of `fine_tuning_model`
+    run and then pass it through the input parameter for the `register_model` run,
+    as follows:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以通过添加`register_model`步骤，扩展`main.py`文件中的管道第三步。这次，我们需要日志记录的模型URI来注册已训练的模型，这取决于`fine_tuning_model`步骤的`run_id`。因此，在`fine_tuning_model`步骤中，我们需要获取`fine_tuning_model`运行的`run_id`属性，然后将其作为输入参数传递给`register_model`运行，如下所示：
+- en: '[PRE81]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: 'Now, the `register_model` step can use `fine_tuning_run_id` to locate the logged
+    model. The core implementation of the `register_model` step is as follows:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，`register_model` 步骤可以使用 `fine_tuning_run_id` 来定位已注册的模型。`register_model` 步骤的核心实现如下：
+- en: '[PRE83]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '[PRE84]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: This will register a fine-tuned model at the URI defined by the `logged_model`
+    variable to an MLflow model registry.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将在由 `logged_model` 变量定义的 URI 中注册一个微调模型到 MLflow 模型注册表。
+- en: 'If you have followed these steps, then you should have a working pipeline that
+    can be tracked by MLflow from end to end. As a reminder, a prerequisite is to
+    have the local full-fledged MLflow server set up, as shown in [*Chapter 3*](B18120_03_ePub.xhtml#_idTextAnchor040)*,
+    Tracking Models, Parameters, and Metrics*. You should have set up the virtual
+    environment, `dl_model`, in the previous section. To test this pipeline, check
+    out this chapter''s GitHub repository at [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04)
+    and run the following command:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您已经按照这些步骤操作，那么您应该已经有了一个可以由 MLflow 端到端跟踪的工作管道。提醒一下，前提条件是您已经设置好本地完整的 MLflow
+    服务器，如在 [*第 3 章*](B18120_03_ePub.xhtml#_idTextAnchor040)*，跟踪模型、参数和指标* 中所示。您应该已经在上一节中设置了虚拟环境
+    `dl_model`。要测试这个管道，请访问本章的 GitHub 仓库 [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter04)
+    并运行以下命令：
+- en: '[PRE86]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'This will run the entire three-step pipeline and log the pipeline''s `run_id`
+    (which is the parent run) and each step''s run as the child runs in the MLflow
+    tracking server. The last few lines of the console screen''s output will display
+    something as follows when it has finished running (you will see lots of outputs
+    on the screen when you run the pipeline):'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将运行整个三步管道，并将管道的 `run_id`（即父运行）以及每个步骤的运行作为子运行记录在 MLflow 跟踪服务器中。当运行完成时，控制台屏幕的最后几行输出会显示如下内容（运行管道时，您将看到许多屏幕输出）：
+- en: '![Figure 4.8 – Console output of running the pipeline with MLflow run_ids'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.8 – 运行带有 MLflow run_ids 的管道的控制台输出'
+- en: '](img/B18120_Figure_4.8.jpg)'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.8.jpg)'
+- en: Figure 4.8 – Console output of running the pipeline with MLflow run_ids
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.8 – 运行带有 MLflow run_ids 的管道的控制台输出
+- en: 'This shows the pipeline''s `run_id`, which is `f8f21fdf8fff4fd6a400eeb403b776c8`;
+    the last step is the `run_id` property of `fine_tuning_model`, which is `5ba38e059695485396e709b809e9bb8d`.
+    If we go to the MLflow tracking server''s UI web page by clicking on `http://localhost`,
+    we should be able to see the following nested experiment runs in the `dl_model_chapter04`
+    experiment folder, as follows:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这显示了管道的 `run_id`，它是 `f8f21fdf8fff4fd6a400eeb403b776c8`；最后一步是 `fine_tuning_model`
+    的 `run_id` 属性，它是 `5ba38e059695485396e709b809e9bb8d`。如果我们通过点击 `http://localhost`
+    进入 MLflow 跟踪服务器的 UI 页面，我们应该能看到如下在 `dl_model_chapter04` 实验文件夹中的嵌套实验运行：
+- en: '![Figure 4.9 – A pipeline being run with nested three-step child runs in the
+    MLflow tracking server'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.9 – 一个包含三步嵌套子步骤运行的管道在 MLflow 跟踪服务器中运行'
+- en: '](img/B18120_Figure_4.9.jpg)'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.9.jpg)'
+- en: Figure 4.9 – A pipeline being run with nested three-step child runs in the MLflow
+    tracking server
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.9 – 一个包含三步嵌套子步骤运行的管道在 MLflow 跟踪服务器中运行
+- en: 'The preceding screenshot shows the pipeline run, along with the source `main.py`
+    file and the nested run of the three steps of the pipeline. Each step has a corresponding
+    entry point name defined in `MLproject` with a GitHub commit hash code version
+    of `register_model` run page, you will see the following information:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的截图展示了管道运行，以及源 `main.py` 文件和管道三步的嵌套运行。每个步骤都有一个在 `MLproject` 中定义的对应入口点名称，并带有
+    `register_model` 运行页面的 GitHub 提交哈希代码版本，您将看到以下信息：
+- en: '![Figure 4.10 – Entry point register_model''s run page on the MLflow tracking
+    server'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.10 – 在 MLflow 跟踪服务器上，入口点 `register_model` 的运行页面'
+- en: '](img/B18120_Figure_4.10.jpg)'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.10.jpg)'
+- en: Figure 4.10 – Entry point register_model's run page on the MLflow tracking server
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.10 – 在 MLflow 跟踪服务器上，入口点 `register_model` 的运行页面
+- en: The preceding screenshot shows not only some of the familiar information we
+    have seen already, but also some new information such as `file:///`), the GitHub
+    hash code version, the entry point `(-e register_model`), the execution environment,
+    which is a local dev environment (`-b local`), and the expected parameters for
+    the `register_model` function (`-P`). We will learn how to use MLflow's `MLproject`
+    to run commands to execute tasks remotely later in this book. Here, we just need
+    to understand that the source code is referred to through the entry point (`register_model`),
+    not the filename itself, since the reference is declared as an entry point in
+    the `MLproject` file.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的截图不仅展示了我们已经看到的一些熟悉信息，还展示了一些新信息，例如 `file:///`、GitHub 哈希码版本、入口点 `(-e register_model)`、执行环境（本地开发环境
+    `-b local`）以及 `register_model` 函数的预期参数（`-P`）。我们将在本书后面学习如何使用 MLflow 的 `MLproject`
+    运行命令来远程执行任务。这里，我们只需要理解源代码是通过入口点（`register_model`）引用的，而不是通过文件名本身，因为该引用在 `MLproject`
+    文件中已声明为入口点。
+- en: If you saw the output shown in *Figure 4.9* and *Figure 4.10* in your MLflow
+    tracking server, then it's time to celebrate – you have successfully executed
+    a multi-step DL pipeline using MLflow!
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在 MLflow 跟踪服务器中看到了*图 4.9*和*图 4.10*中显示的输出，那么是时候庆祝了——你已经成功地使用 MLflow 执行了一个多步骤的深度学习管道！
+- en: In summary, to track a multi-step DL pipeline in MLflow, we can use `MLproject`
+    to define entry points for each pipeline step and a main pipeline entry point.
+    In the main pipeline function, we implement methods so that data can be passed
+    between pipeline steps. Each pipeline step then uses the data that's been shared,
+    as well as other input parameters, to execute a specific task. Both the main pipeline-level
+    function and each step of the pipeline are tracked using the MLflow tracking server,
+    which produces a parent `run_id` to track the main pipeline run and multiple MLflow
+    nested runs to track each pipeline's step. We introduced a template for each pipeline
+    step to implement this task in a standard way. We also explored the powerful pipeline
+    chaining that's done through MLflow's `run` parameter and artifact store to learn
+    how to pass data between pipeline steps.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，要在 MLflow 中跟踪一个多步骤的深度学习管道，我们可以使用 `MLproject` 来定义每个管道步骤的入口点以及主管道的入口点。在主管道函数中，我们实现方法以便可以在管道步骤之间传递数据。然后，每个管道步骤使用已经共享的数据以及其他输入参数来执行特定任务。主管道级别的函数以及管道的每个步骤都通过
+    MLflow 跟踪服务器进行跟踪，该服务器生成一个父级 `run_id` 来跟踪主管道的运行，并生成多个嵌套的 MLflow 运行来跟踪每个管道步骤。我们为每个管道步骤介绍了一个模板，以标准化地实现此任务。我们还通过
+    MLflow 的 `run` 参数和工件存储探索了强大的管道链式操作，学习了如何在管道步骤之间传递数据。
+- en: Now that you know how to track notebooks and pipelines, let's learn how to track
+    Python libraries.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经知道如何跟踪笔记本和管道，接下来我们来学习如何跟踪 Python 库。
+- en: Tracking locally, privately built Python libraries
+  id: totrans-189
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 跟踪本地私有构建的 Python 库
+- en: 'Now, let''s turn our attention to tracking locally, privately built Python
+    libraries. For publicly released Python libraries, we can explicitly specify their
+    released version, which is published in PyPI, in a requirements file or a `conda.yaml`
+    file. For example, this chapter''s `conda.yaml` file ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/conda.yaml](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/conda.yaml))
+    defines the Python version and provides a reference to a requirements file, as
+    follows:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们将注意力转向跟踪本地私有构建的 Python 库。对于公开发布的 Python 库，我们可以在 `requirements` 文件或 `conda.yaml`
+    文件中明确指定其发布的版本，这些版本通常发布在 PyPI 上。例如，本章的 `conda.yaml` 文件 ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/conda.yaml](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter04/conda.yaml))
+    定义了 Python 版本，并提供了对 `requirements` 文件的引用，如下所示：
+- en: '[PRE87]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: '[PRE88]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: '[PRE89]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: '[PRE90]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: '[PRE91]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: '[PRE92]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: '[PRE93]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: '[PRE94]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: 'The Python version is defined as `3.8.10` and is being enforced. This `conda.yaml`
+    file also refers to a `requirements.txt` file, which contains the following versioned
+    Python packages as a `requirements.txt` file, which is located in the same directory
+    as the `conda.yaml` file:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python 版本被定义为 `3.8.10`，并且被强制执行。该 `conda.yaml` 文件还引用了一个 `requirements.txt` 文件，其中包含以下版本化的
+    Python 包，该文件位于与 `conda.yaml` 文件相同的目录中：
+- en: '[PRE95]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '[PRE96]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '[PRE97]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: '[PRE98]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: '[PRE99]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: '[PRE100]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: '[PRE101]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: '[PRE102]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: 'As we can see, all these packages are being tracked explicitly using their
+    published PyPI ([https://pypi.org/](https://pypi.org/)) version number. When you
+    run the MLflow `MLproject`, MLflow will use the `conda.yaml` file and the referenced
+    `requirements.txt` file to create a conda virtual environment dynamically. This
+    ensures that the execution environment is reproducible and that all the DL model
+    pipelines can be run successfully. You may have noticed that such a virtual environment
+    was created for you the first time you ran the previous section''s MLflow pipeline
+    project. You can do this again by running the following command:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如我们所见，所有这些包都在显式地使用它们发布的 PyPI（[https://pypi.org/](https://pypi.org/)）版本号进行追踪。当你运行
+    MLflow 的`MLproject`时，MLflow 将使用`conda.yaml`文件和引用的`requirements.txt`文件动态创建 conda
+    虚拟环境。这确保了执行环境的可重现性，并且所有的深度学习模型管道都能够成功运行。你可能注意到，第一次运行上一节的 MLflow 管道项目时，已经为你创建了这样的虚拟环境。你可以通过运行以下命令再次执行此操作：
+- en: '[PRE103]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: 'This will produce a list of conda virtual environments in your current machine.
+    You should be able to find a virtual environment starting with a `mlflow-` prefix,
+    followed by a long string of alphanumerical characters, as follows:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将生成当前机器中 conda 虚拟环境的列表。你应该能够找到一个以`mlflow-`为前缀，后跟一串字母和数字的虚拟环境，如下所示：
+- en: '[PRE104]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: 'This is the virtual environment that''s created by MLflow dynamically, which
+    follows the dependencies that are specified in `conda.yaml` and `requirements.txt`.
+    Subsequently, when you log the fine-tuned model, `conda.yaml` and `requirements.txt`
+    will be automatically logged in the MLflow artifact store, as follows:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是由 MLflow 动态创建的虚拟环境，它遵循在`conda.yaml`和`requirements.txt`中指定的依赖项。随后，当你记录经过微调的模型时，`conda.yaml`和`requirements.txt`将自动记录到
+    MLflow 工件存储中，如下所示：
+- en: '![Figure 4.11 – Python packages are being logged and tracked in the MLflow
+    artifact store'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.11 – Python 包正在被记录并追踪到 MLflow 工件存储中'
+- en: '](img/B18120_Figure_4.11.jpg)'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.11.jpg)'
+- en: Figure 4.11 – Python packages are being logged and tracked in the MLflow artifact
+    store
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.11 – Python 包正在被记录并追踪到 MLflow 工件存储中
+- en: As we can see, the `conda.yaml` file was automatically expanded to include the
+    content of `requirements.txt`, as well as other dependencies that conda decides
+    to include.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如我们所见，`conda.yaml`文件已自动扩展，包含了`requirements.txt`的内容，以及 conda 决定要包含的其他依赖项。
+- en: 'For privately built Python packages, which means the Python packages that are
+    not published to PyPI for public consumption and references, the recommended way
+    to include such a Python package is by using `git+ssh`. Let''s assume that you
+    have a privately built project called `cool-dl-utils`, that the organization you
+    work for is called `cool_org`, and that your project''s repository has been set
+    up in GitHub. If you want to include this project''s Python package in the requirements
+    file, you need to make sure that you add your public key to your GitHub settings.
+    If you want to learn how to generate a public key and load it into GitHub, take
+    a look at GitHub''s guide at [https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account).
+    In the `requirements.txt` file, you can add the following line, which will reference
+    a specific GitHub hash (`81218891bbf5a447103884a368a75ffe65b17a44`) and the Python
+    `.egg` package that was built from this private repository (you can also reference
+    a `.whl` package if you wish):'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于私有构建的 Python 包（即未公开发布到 PyPI 供公众使用和引用的 Python 包），推荐的方式是使用`git+ssh`来包含该 Python
+    包。假设你有一个名为`cool-dl-utils`的私有构建项目，你所在的组织叫做`cool_org`，并且你的项目仓库已在 GitHub 上设置。如果你想在
+    requirements 文件中包含该项目的 Python 包，你需要确保将你的公钥添加到 GitHub 设置中。如果你想了解如何生成公钥并将其加载到 GitHub，请参考
+    GitHub 的指南：[https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account)。在`requirements.txt`文件中，你可以添加如下内容，这将引用一个特定的
+    GitHub 哈希（`81218891bbf5a447103884a368a75ffe65b17a44`）和从该私有仓库构建的 Python `.egg`
+    包（如果愿意，也可以引用`.whl`包）：
+- en: '[PRE105]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: 'If you have a numerically released version in your privately built package,
+    you can also directly reference the release number in the `requirements.txt` file,
+    as follows:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在自己构建的包中有一个数字版本，你也可以直接在`requirements.txt`文件中引用该版本号，如下所示：
+- en: '[PRE106]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: Here the release number of `cool-dl-utils` is `2.11.4`. This allows MLflow to
+    pull this privately built package into the virtual environment to execute `MLproject`.
+    In this chapter, we don't need to reference any privately built Python packages,
+    but it is worth noting that MLflow can leverage the `git+ssh` approach to do that.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里`cool-dl-utils`的发布版本是`2.11.4`。这使得MLflow能够将这个私有构建的包拉入虚拟环境中执行`MLproject`。在这一章中，我们不需要引用任何私有构建的Python包，但值得注意的是，MLflow可以利用`git+ssh`方式来实现这一点。
+- en: Now, let's learn how to track data versioning.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们学习如何跟踪数据版本。
+- en: Tracking data versioning in Delta Lake
+  id: totrans-223
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在Delta Lake中跟踪数据版本
+- en: 'In this section, we''ll learn how data is tracked in MLflow. Historically,
+    data management and versioning are usually considered as being different from
+    machine learning and data science. However, the advent of data-centric AI is playing
+    an increasingly important role, particularly in DL. Therefore, it is critical
+    to know what and how data is being used to improve the DL model. In the first
+    data-centric AI competition, which was organized by Andrew Ng in the summer of
+    2021, the requirements to become a winner were not about changing and tuning a
+    model, but rather improving the dataset of a fixed model ([https://https-deeplearning-ai.github.io/data-centric-comp/](https://https-deeplearning-ai.github.io/data-centric-comp/)).
+    Here is a quote from the competition''s web page:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们将学习如何在MLflow中跟踪数据。历史上，数据管理和版本控制通常被视为与机器学习和数据科学不同的领域。然而，数据驱动的AI的兴起在深度学习中扮演着越来越重要的角色。因此，了解数据如何以及用于何种目的来改进深度学习模型是至关重要的。在2021年夏季，由Andrew
+    Ng组织的第一届数据驱动AI竞赛中，获胜的要求并不是改变和调优模型，而是改进一个固定模型的数据集（[https://https-deeplearning-ai.github.io/data-centric-comp/](https://https-deeplearning-ai.github.io/data-centric-comp/)）。这是竞赛网页上的一句话：
+- en: '"The Data-Centric AI Competition inverts the traditional format and asks you
+    to improve a dataset, given a fixed model. We will provide you with a dataset
+    to improve by applying data-centric techniques such as fixing incorrect labels,
+    adding examples that represent edge cases, applying data augmentation, and so
+    on."'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"数据驱动的AI竞赛颠覆了传统格式，要求你在给定固定模型的情况下改进数据集。我们将提供一个数据集，供你通过应用数据驱动的技术来改进，比如修正错误标签、添加代表边缘案例的示例、应用数据增强等。"'
+- en: This paradigm shift highlights the importance of data in deep learning, especially
+    supervised deep learning, where labeled data is important. An implied underlying
+    assumption is that different data will produce different model metrics, even if
+    the same model architecture and parameters are used. This requires us to diligently
+    track the data versioning process so that we know which version of the data is
+    being used to produce the winning model.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一范式的转变突显了数据在深度学习中的重要性，尤其是在监督学习中，标签数据尤为重要。一个潜在的假设是，不同的数据将产生不同的模型指标，即使使用相同的模型架构和参数。这要求我们仔细跟踪数据版本控制过程，以便知道哪个版本的数据正在用来生成获胜的模型。
+- en: There are several emerging frameworks for tracking data versioning in the ML/DL
+    life cycle. One of the early pioneers in this domain is **DVC** ([http://dvc.org](http://dvc.org)).
+    It uses a set of GitHub-like commands to pull/push data as if they are code. It
+    allows the data to be stored remotely in S3, or Google Drive, among many other
+    popular stores. However, the data that's stored in the remote store becomes hashed
+    and isn't human-readable. This becomes a locked-in problem since the only way
+    to access the data is through the DVC tool and configuration. In addition, it
+    is hard to track how the data and its schema have been changed. While it is possible
+    to integrate MLflow with DVC, its usability and flexibility are not as desirable
+    as we want. Thus, we will not deep dive into this approach in this book. If you
+    are interested in this, we suggest that you utilize the *Versioning data and models
+    in ML projects using DVC and AWS* reference at the end of this chapter to find
+    more details about using DVC.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在ML/DL生命周期中，出现了几个用于跟踪数据版本的框架。**DVC**（[http://dvc.org](http://dvc.org)）是这个领域的早期先驱之一。它使用类似GitHub的命令来拉取/推送数据，就像操作代码一样。它允许将数据远程存储在S3或Google
+    Drive等多个流行存储中。然而，存储在远程存储中的数据会被哈希化，并且无法被人类阅读。这会产生“锁定”问题，因为访问数据的唯一方法是通过DVC工具和配置。此外，追踪数据及其架构如何变化也很困难。尽管可以将MLflow与DVC集成，但其可用性和灵活性不如我们所期望的那样好。因此，在本书中我们不会深入探讨这种方法。如果你对此感兴趣，我们建议你参考本章末尾的*使用DVC和AWS进行ML项目中的数据和模型版本管理*，以获得有关DVC的更多细节。
+- en: The recently open sourced and open format-based **Delta Lake** ([https://delta.io/](https://delta.io/))
+    is a practical solution for integrated data management and version control in
+    a DL/ML project, especially since MLflow can directly support such integration.
+    This is also the foundational data management layer, called **Lakehouse** ([https://databricks.com/blog/2020/01/30/what-is-a-data-lakehouse.html](https://databricks.com/blog/2020/01/30/what-is-a-data-lakehouse.html)),
+    which unifies both data warehouse and streaming data into one data foundation
+    layer. It supports both schema change tracking and data versioning, which is ideal
+    for a DL/ML data use scenario. Delta tables are based on the open standard file
+    format called **Parquet** ([https://parquet.apache.org/](https://parquet.apache.org/)),
+    which is widely supported for large-scale data storage.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最近开源且基于开放格式的**Delta Lake**（[https://delta.io/](https://delta.io/)）是一个集成数据管理和版本控制的实际解决方案，特别是因为
+    MLflow 可以直接支持这种集成。这也是基础数据管理层，称为**Lakehouse**（[https://databricks.com/blog/2020/01/30/what-is-a-data-lakehouse.html](https://databricks.com/blog/2020/01/30/what-is-a-data-lakehouse.html)），它将数据仓库和流数据统一到一个数据基础层。它支持模式变更跟踪和数据版本控制，非常适合深度学习/机器学习数据使用场景。Delta
+    表是基于一种名为**Parquet**（[https://parquet.apache.org/](https://parquet.apache.org/)）的开放标准文件格式，它在大规模数据存储中得到了广泛支持。
+- en: Delta Table in Databricks
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Databricks 中的 Delta 表
+- en: 'Note that this section assumes that you have access to a Databricks service,
+    which allows you to experiment with the Delta Lake format in the **Databricks
+    File System** (**DBFS**). You can get a trial account for the community version
+    by going to the Databricks portal: [https://community.cloud.databricks.com/login.html](https://community.cloud.databricks.com/login.html).'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，本节假设你可以访问 Databricks 服务，允许你在**Databricks 文件系统**（**DBFS**）中实验 Delta Lake
+    格式。你可以通过访问 Databricks 门户：[https://community.cloud.databricks.com/login.html](https://community.cloud.databricks.com/login.html)来获取社区版的试用账户。
+- en: 'Note that this section requires you to use **PySpark** to manipulate the data
+    through both reading/writing data from/into storage such as S3\. Delta Lake has
+    a capability called **Time Travel** that can automatically version the data. By
+    passing a parameter such as a timestamp or a version number, you can read any
+    historical data for that particular version or timestamp. This makes reproducing
+    and tracking the experiments much easier as the only temporal metadata about the
+    data is the version number or timestamp of the data. There are two ways to query
+    the Delta table:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，本节需要使用**PySpark**通过读取/写入数据与存储（如 S3）进行数据操作。Delta Lake 具有一个称为**时间旅行（Time Travel）**的功能，可以自动对数据进行版本控制。通过传递像时间戳或版本号这样的参数，你可以读取该特定版本或时间戳的任何历史数据。这使得重现和追踪实验变得更加容易，因为数据的唯一时间元数据就是数据的版本号或时间戳。查询
+    Delta 表有两种方式：
+- en: '`timestampAsOf`: This lets you read the Delta table, as well as read a version
+    that has a specific timestamp. The following code shows how the data can be read
+    using `timestampAsOf`:'
+  id: totrans-232
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`timestampAsOf`：此选项让你能够读取 Delta 表，同时读取具有特定时间戳的版本。以下代码展示了如何使用 `timestampAsOf`
+    来读取数据：'
+- en: '[PRE107]'
+  id: totrans-233
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: '`versionAsOf`: This defines the numerical value of the Delta table''s version.
+    You also have the option to read a version that has a specific version, starting
+    with version 0\. The following PySpark code reads the data with the `versionAsOf`
+    option defined as version `52`:'
+  id: totrans-234
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`versionAsOf`：此选项定义了 Delta 表的版本号。你也可以选择读取具有特定版本的版本，从版本 0 开始。以下 PySpark 代码使用
+    `versionAsOf` 选项读取版本 `52` 的数据：'
+- en: '[PRE108]'
+  id: totrans-235
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: Having this kind of timestamped or versioned access is a key advantage to tracking
+    any file version using a Delta table. So, let's look at a concrete example of
+    this in MLflow so that we can track the IMDb dataset we have been using.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拥有这种带有时间戳或版本的访问权限是使用 Delta 表追踪任何文件版本的关键优势。所以，让我们在 MLflow 中看一个具体的例子，这样我们就可以追踪我们一直在使用的
+    IMDb 数据集。
+- en: An example of tracking data using MLflow
+  id: totrans-237
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 MLflow 追踪数据的示例
+- en: 'For the IMDb datasets we have been using to fine-tune the sentiment classification
+    model, we will upload these CSV files into Databricks'' data store or any S3 bucket
+    that you can access from your Databricks portal. Once you''ve done that, follow
+    these steps to create a Delta table that supports versioned and timestamped data
+    access:'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们一直用来微调情感分类模型的 IMDb 数据集，我们将这些 CSV 文件上传到 Databricks 的数据存储中，或者上传到你可以从 Databricks
+    门户访问的任何 S3 存储桶中。完成后，按照以下步骤创建一个支持版本化和时间戳数据访问的 Delta 表：
+- en: 'Read the following CSV files into a DataFrame (assuming that you uploaded the
+    `train.csv` file into the `FileStore/imdb/` folder in Databricks):'
+  id: totrans-239
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将以下 CSV 文件读取到数据框中（假设你已将 `train.csv` 文件上传到 Databricks 的 `FileStore/imdb/` 文件夹）：
+- en: '[PRE109]'
+  id: totrans-240
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: 'Write the `imdb_train_df` DataFrame in DBFS as a Delta table, as follows:'
+  id: totrans-241
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将 `imdb_train_df` 数据框写入 DBFS 作为 Delta 表，如下所示：
+- en: '[PRE110]'
+  id: totrans-242
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: 'Read the `training.delta` file back into memory using the following command:'
+  id: totrans-243
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用以下命令将 `training.delta` 文件重新读入内存：
+- en: '[PRE111]'
+  id: totrans-244
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: 'Now, look at the history of the Delta table via the Databricks UI. You click
+    on the **History** tab once you''ve read the Delta table from storage into memory:'
+  id: totrans-245
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，通过 Databricks UI 查看 Delta 表的历史记录。在从存储读取 Delta 表到内存后，点击 **History** 标签：
+- en: '![Figure 4.12 – The train_delta table''s history with a version and a timestamp
+    column'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 4.12 – train_delta 表的历史记录，包含版本和时间戳列](img/B18120_Figure_4.12.jpg)'
+- en: '](img/B18120_Figure_4.12.jpg)'
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_Figure_4.12.jpg)'
+- en: Figure 4.12 – The train_delta table's history with a version and a timestamp
+    column
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.12 – train_delta 表的历史记录，包含版本和时间戳列
+- en: The preceding screenshot shows that the version is **0** and that the timestamp
+    is **2021-11-22**. This is the value that we can use to access the versionized
+    data when passing the version number or timestamp to a Spark DataFrame reader.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述截图显示版本为 **0**，时间戳为 **2021-11-22**。这是我们在传递版本号或时间戳给 Spark DataFrame 阅读器时，可以用来访问版本化数据的值。
+- en: 'Read the versioned `imdb/train_delta` file using the following command:'
+  id: totrans-250
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用以下命令读取版本化的`imdb/train_delta`文件：
+- en: '[PRE112]'
+  id: totrans-251
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: This will read version `0` of the `train.delta` file. If we had other versions
+    of this file, we could pass a different version number.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将读取 `train.delta` 文件的版本 `0`。如果我们有其他版本的此文件，可以传递不同的版本号。
+- en: 'Read the timestamped `imdb/train_delta` file using the following command:'
+  id: totrans-253
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用以下命令读取带时间戳的 `imdb/train_delta` 文件：
+- en: '[PRE113]'
+  id: totrans-254
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: This will read the timestamped data. At the time of writing, this is the only
+    timestamp we have, which is fine. If we had more timestamped data, we could pass
+    a different version to it.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将读取带有时间戳的数据。在写作时，这是我们拥有的唯一时间戳，没问题。如果我们有更多带时间戳的数据，可以传递不同的版本。
+- en: 'Now, if we need to log this data version in the MLflow tracking experiment
+    run, we can just log the path of the data, the version number, and/or the timestamp
+    using `mlflow.log_parameter()`. This will log these as part of the experiment''s
+    parameter key-value list:'
+  id: totrans-256
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，如果我们需要在 MLflow 跟踪实验运行中记录这个数据版本，我们只需使用 `mlflow.log_parameter()` 记录数据的路径、版本号和/或时间戳。这将作为实验参数键值对的一部分进行记录：
+- en: '[PRE114]'
+  id: totrans-257
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: The only requirement for using a Delta table is that the data needs to be stored
+    in a form of storage that supports Delta tables, such as Lakehouse, which is supported
+    by Databricks. This is of great value for enterprise ML/DL scenarios since we
+    can track data versioning alongside code and model versioning.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 Delta 表的唯一要求是数据需要存储在支持 Delta 表的存储形式中，例如 Databricks 支持的 Lakehouse。这对企业级 ML/DL
+    场景具有重要价值，因为我们可以与代码和模型版本一起跟踪数据版本。
+- en: In summary, Delta Lake provides a simple yet powerful way to version data. MLflow
+    can easily log these version numbers and timestamps as part of the experiment's
+    parameter lists to track the data, as well as all the other parameters, metrics,
+    artifacts, code, and models consistently.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，Delta Lake 提供了一种简单而强大的方式来进行数据版本管理。MLflow 可以轻松地将这些版本号和时间戳作为实验参数列表的一部分进行记录，以便一致地跟踪数据，以及所有其他参数、指标、工件、代码和模型。
+- en: Summary
+  id: totrans-260
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we took a deep dive into how we can track code and data versions
+    in an MLflow experiment run. We started by reviewing the different types of notebooks:
+    Jupyter notebooks, Databricks notebooks, and VS Code notebooks. We compared them
+    and recommended that VS Code should be used to author a notebook due to its IDE
+    support, as well as its Python styling, autocompletion, and many more rich features.'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们深入探讨了如何在 MLflow 实验运行中跟踪代码和数据版本。我们首先回顾了不同类型的笔记本：Jupyter 笔记本、Databricks
+    笔记本和 VS Code 笔记本。我们对比了它们，并推荐使用 VS Code 来编写笔记本，因为它具有 IDE 支持，以及 Python 风格、自动补全和许多其他丰富功能。
+- en: Then, after reviewing the limitations of existing ML pipeline API frameworks,
+    we discussed how to create a multi-step DL pipeline using MLflow's `run_id`, and
+    then use a child `run_id` for each pipeline step. The flexibility to do pipeline
+    chaining and tracking by passing parameters or artifact store locations to the
+    next step can be done using `mlflow.run()` and `mlflow.tracking.MlflowClient()`.
+    We successfully ran the end-to-end three-step pipeline using the MLflow nested
+    run tracking capability. This will also open doors for us to extend the use of
+    MLproject for running different steps in a distributed way in future chapters.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在回顾现有ML管道API框架的局限性之后，我们讨论了如何使用MLflow的`run_id`创建一个多步骤的DL管道，并为每个管道步骤使用子`run_id`。通过将参数或工件存储位置传递到下一个步骤，可以使用`mlflow.run()`和`mlflow.tracking.MlflowClient()`来进行管道链式操作和跟踪。我们成功地使用MLflow的嵌套运行跟踪功能运行了一个端到端的三步管道。这也为我们未来章节中分布式方式运行不同步骤的MLproject使用扩展提供了可能。
+- en: We also learned how to track privately built Python packages using the `git+ssh`
+    approach. We then used the Delta Lake approach to gain versioned and timestamped
+    access to data. This allows data to be tracked in two ways using a version number
+    or a timestamp. MLflow can then log these version numbers or timestamps as a parameter
+    during the MLflow experiment run. Since we are entering the data-centric AI era,
+    being able to track data versioning is critical for reproducibility and time travel.
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还学习了如何使用`git+ssh`方法跟踪私有构建的Python包。然后，我们使用Delta Lake方法获得了版本化和时间戳的数据访问权限。这使得数据可以通过版本号或时间戳两种方式进行跟踪。然后，MLflow可以在实验运行期间将这些版本号或时间戳作为参数记录。由于我们正进入数据驱动的AI时代，能够跟踪数据版本对于可重复性和时间旅行至关重要。
+- en: With that, we've finished learning how to comprehensively track code, data,
+    and models using MLflow. In the next chapter, we will learn how to scale out our
+    DL experiment in a distributed way.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至此，我们已经完成了使用MLflow全面跟踪代码、数据和模型的学习。在下一章，我们将学习如何以分布式方式扩展我们的DL实验。
+- en: Further reading
+  id: totrans-265
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: 'For more information about the topics that were covered in this chapter, take
+    a look at the following resources:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于本章所涵盖主题的更多信息，请查看以下资源：
+- en: 'MLflow notebook experiment tracking in Databricks: [https://docs.databricks.com/applications/mlflow/tracking.html#create-notebook-experiment](https://docs.databricks.com/applications/mlflow/tracking.html#create-notebook-experiment)'
+  id: totrans-267
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在Databricks中使用MLflow笔记本实验跟踪：[https://docs.databricks.com/applications/mlflow/tracking.html#create-notebook-experiment](https://docs.databricks.com/applications/mlflow/tracking.html#create-notebook-experiment)
+- en: '*Building Multistep Workflows*: [https://www.mlflow.org/docs/latest/projects.html#building-multistep-workflows](https://www.mlflow.org/docs/latest/projects.html#building-multistep-workflows)'
+  id: totrans-268
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*构建多步骤工作流*：[https://www.mlflow.org/docs/latest/projects.html#building-multistep-workflows](https://www.mlflow.org/docs/latest/projects.html#building-multistep-workflows)'
+- en: '*End-to-end ML pipelines with MLflow projects*: [https://dzlab.github.io/ml/2020/08/09/mlflow-pipelines/](https://dzlab.github.io/ml/2020/08/09/mlflow-pipelines/)'
+  id: totrans-269
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*使用MLflow项目的端到端机器学习管道*：[https://dzlab.github.io/ml/2020/08/09/mlflow-pipelines/](https://dzlab.github.io/ml/2020/08/09/mlflow-pipelines/)'
+- en: 'Installing a privately built Python package: [https://medium.com/@ffreitasalves/pip-installing-a-package-from-a-private-repository-b57b19436f3e](mailto:https://medium.com/@ffreitasalves/pip-installing-a-package-from-a-private-repository-b57b19436f3e)'
+  id: totrans-270
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 安装私有构建的Python包：[https://medium.com/@ffreitasalves/pip-installing-a-package-from-a-private-repository-b57b19436f3e](mailto:https://medium.com/@ffreitasalves/pip-installing-a-package-from-a-private-repository-b57b19436f3e)
+- en: '*Versioning data and models in ML projects using DVC and AWS*: [https://medium.com/analytics-vidhya/versioning-data-and-models-in-ml-projects-using-dvc-and-aws-s3-286e664a7209](https://medium.com/analytics-vidhya/versioning-data-and-models-in-ml-projects-using-dvc-and-aws-s3-286e664a7209)'
+  id: totrans-271
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*在ML项目中使用DVC和AWS进行数据和模型版本控制*：[https://medium.com/analytics-vidhya/versioning-data-and-models-in-ml-projects-using-dvc-and-aws-s3-286e664a7209](https://medium.com/analytics-vidhya/versioning-data-and-models-in-ml-projects-using-dvc-and-aws-s3-286e664a7209)'
+- en: '*Introducing Delta Time Travel for Large Scale Data Lakes*: [https://databricks.com/blog/2019/02/04/introducing-delta-time-travel-for-large-scale-data-lakes.html](https://databricks.com/blog/2019/02/04/introducing-delta-time-travel-for-large-scale-data-lakes.html)'
+  id: totrans-272
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*为大规模数据湖引入Delta时间旅行*：[https://databricks.com/blog/2019/02/04/introducing-delta-time-travel-for-large-scale-data-lakes.html](https://databricks.com/blog/2019/02/04/introducing-delta-time-travel-for-large-scale-data-lakes.html)'
+- en: '*How We Won the First Data-Centric AI Competition: Synaptic-AnN*: [https://www.deeplearning.ai/data-centric-ai-competition-synaptic-ann/](https://www.deeplearning.ai/data-centric-ai-competition-synaptic-ann/)'
+  id: totrans-273
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*我们如何赢得首届数据中心人工智能竞赛：Synaptic-AnN*：[https://www.deeplearning.ai/data-centric-ai-competition-synaptic-ann/](https://www.deeplearning.ai/data-centric-ai-competition-synaptic-ann/)'
+- en: '*Reproduce Anything: Machine Learning Meets Data Lakehouse*: [https://databricks.com/blog/2021/04/26/reproduce-anything-machine-learning-meets-data-lakehouse.html](https://databricks.com/blog/2021/04/26/reproduce-anything-machine-learning-meets-data-lakehouse.html)'
+  id: totrans-274
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*重现任何事物：机器学习遇上数据湖屋*：[https://databricks.com/blog/2021/04/26/reproduce-anything-machine-learning-meets-data-lakehouse.html](https://databricks.com/blog/2021/04/26/reproduce-anything-machine-learning-meets-data-lakehouse.html)'
+- en: '*DATABRICKS COMMUNITY EDITION: A BEGINNER''S GUIDE*: [https://www.topcoder.com/thrive/articles/databricks-community-edition-a-beginners-guide](https://www.topcoder.com/thrive/articles/databricks-community-edition-a-beginners-guide)'
+  id: totrans-275
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*DATABRICKS COMMUNITY EDITION：初学者指南*：[https://www.topcoder.com/thrive/articles/databricks-community-edition-a-beginners-guide](https://www.topcoder.com/thrive/articles/databricks-community-edition-a-beginners-guide)'

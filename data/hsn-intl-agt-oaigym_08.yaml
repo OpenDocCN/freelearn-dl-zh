@@ -1,0 +1,1616 @@
+- en: Implementing an Intelligent - Autonomous Car Driving Agent using Deep Actor-Critic
+    Algorithm
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用深度演员-评论家算法实现智能-自动驾驶汽车代理
+- en: 'In [Chapter 6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12), Implementing
+    an Intelligent Agent for Optimal Control using Deep Q-Learning, we implemented
+    agents using deep Q-learning to solve discrete control tasks that involve discrete
+    actions or decisions to be made. We saw how they can be trained to play video
+    games such as Atari, just like we do: by looking at the game screen and pressing
+    the buttons on the game pad/joystick. We can use such agents to pick the best
+    choice given a finite set of choices, make decisions, or perform actions where
+    the number of possible decisions or actions is finite and typically small. There
+    are numerous real-world problems that can be solved with an agent that can learn
+    to take optimal through to discrete actions. We saw some examples in [Chapter
+    6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12), *Implementing an Intelligent
+    Agent for* *Optimal Discrete Control using Deep Q-Learning*.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)，*实现一个用于最优控制的智能代理，使用深度Q学习*，我们实现了使用深度Q学习的代理来解决涉及离散动作或决策的问题。我们看到它们如何被训练来玩视频游戏，比如Atari游戏，就像我们一样：看着游戏屏幕并按下游戏手柄/摇杆上的按钮。我们可以使用这样的代理在给定有限的选择集的情况下，做出最佳选择、做决策或执行动作，其中可能的决策或动作数量是有限的，通常较少。有许多现实世界的问题可以通过能够学习执行最优离散动作的代理来解决。我们在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中看到了些例子，*实现一个用于最优离散控制的智能代理，使用深度Q学习*。
+- en: In the real world, there are other classes of problems and tasks that require
+    lower-level actions to be performed that are continuous values and not discrete.
+    For example, an intelligent temperature control system or a thermostat needs to
+    be capable of making fine adjustments to the internal control circuits to maintain
+    a room at the specified temperature. The control action signal may include a continuous
+    valued real number (such as *1.456*) to control **heating, ventilation, and air
+    conditioning** (**HVAC**) systems. Consider another example in which we want to
+    develop an intelligent agent to drive a car autonomously. Humans drive a car by
+    shifting gears, pressing the accelerator or brake pedal, and steering the car.
+    While the current gear is going to be one of a possible set of five to six values,
+    depending on the transmission system of the car, if an intelligent software agent
+    has to perform all of those actions, it has to be able to produce continuous valued
+    real numbers for the throttle (accelerator), braking (brake), and steering.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在现实世界中，还有其他类别的问题和任务要求执行的动作是低级的，并且是连续值而不是离散的。例如，一个智能温控系统或恒温器需要能够对内部控制电路进行精细调整，以维持房间的指定温度。控制动作信号可能包括一个连续值的实数（例如*1.456*）来控制**供暖、通风和空调**（**HVAC**）系统。再考虑一个例子，我们希望开发一个智能代理来自动驾驶汽车。人类驾驶汽车时，通过换挡、踩油门或刹车踏板以及转向来操控汽车。虽然当前的档位是五到六个值中的一个，取决于汽车的变速系统，但如果一个智能软件代理必须执行所有这些动作，它必须能够为油门（加速器）、刹车（刹车）和转向产生连续值的实数。
+- en: In cases like these examples, where we need the agent to take continuous valued
+    actions, we can use policy gradient-based actor-critic methods to directly learn
+    and update the agent's policy in the policy space, rather than through a state
+    and/or action value function like in the deep Q-learning agent we saw in [Chapter
+    6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12), *Implementing an Intelligent
+    Agent for Optimal Discrete Control using Deep Q-Learning*. In this chapter, we
+    will start from the basics of an actor-critic algorithm and build our agent gradually,
+    while training it to solve various classic control problems using OpenAI Gym environments
+    along the way. We will build our agent all the way up to being able to drive a
+    car in the CARLA driving simulation environment using the custom Gym interface
+    that we implemented in the previous chapter.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在像这些例子中，当我们需要代理执行连续值的动作时，我们可以使用基于策略梯度的演员-评论家方法来直接学习和更新代理的策略，而不是像在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中看到的深度Q学习代理那样通过状态和/或动作值函数来进行学习，*实现一个用于最优离散控制的智能代理，使用深度Q学习*。在本章中，我们将从演员-评论家算法的基础开始，逐步构建我们的代理，同时训练它使用OpenAI
+    Gym环境解决各种经典的控制问题。我们将把代理构建到能够在CARLA驾驶模拟环境中驾驶汽车，使用我们在上一章中实现的自定义Gym接口。
+- en: The deep n-step advantage actor-critic algorithm
+  id: totrans-4
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 深度n步优势演员-评论者算法
+- en: In our deep Q-learner-based intelligent agent implementation, we used a deep
+    neural network as the function approximator to represent the action-value function.
+    The agent then used the action-value function to come up with a policy based on
+    the value function. In particular, we used the ![](img/00158.jpeg)-greedy algorithm
+    in our implementation. So, we understand that ultimately the agent has to know
+    what actions are good to take given an observation/state. Instead of parametrizing
+    or approximating a state/action action function and then deriving a policy based
+    on that function, can we not parametrize the policy directly? Yes we can! That
+    is the exact idea behind policy gradient methods.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们基于深度Q学习的智能代理实现中，我们使用深度神经网络作为函数逼近器来表示动作值函数。然后代理根据值函数提出策略。特别地，我们在实现中使用了 ![](img/00158.jpeg)-贪婪算法。因此，我们理解最终代理必须知道在给定观测/状态时采取什么行动是好的。而不是对状态/行动函数进行参数化或逼近，然后根据该函数导出策略，我们可以直接参数化策略吗？是可以的！这正是策略梯度方法的精确思想。
+- en: In the following subsections, we will briefly look at policy gradient-based
+    learning methods and then transition to actor-critic methods that combine and
+    make use of both value-based and policy-based learning. We will then look at some
+    of the extensions to the actor-critic method that have been shown to improve learning
+    performance.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的小节中，我们将简要介绍基于策略梯度的学习方法，然后转向结合价值和基于策略的学习的演员-评论者方法。然后，我们将看一些扩展到演员-评论者方法，已被证明能提高学习性能的方法。
+- en: Policy gradients
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 策略梯度
+- en: In policy gradientbased methods, the policy is represented, for example, by
+    using a neural network with parameters ![](img/00159.jpeg), and the goal is to
+    find the best set of parameters ![](img/00160.jpeg). This can be intuitively seen
+    as an optimization problem where we are trying to optimize the objective of the
+    policy to find the best-performing policy. What is the objective of the agent's
+    policy ? We know that the agent should achieve maximum rewards in the long term,
+    in order to complete the task or achieve the goal. If we can formulate that objective
+    mathematically, we can use optimization techniques to find the best policy for
+    the agent to follow for the given task.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基于策略梯度的方法中，策略可以通过使用带参数的神经网络表示，例如 ![](img/00159.jpeg)，目标是找到最佳参数集 ![](img/00160.jpeg)。这可以直观地看作是一个优化问题，我们试图优化策略的目标，以找到表现最佳的策略。代理策略的目标是什么？我们知道，代理应该在长期内获得最大的奖励，以完成任务或实现目标。如果我们能数学化地表述这个目标，我们可以使用优化技术找到最佳策略，供代理根据给定任务遵循。
+- en: 'We know that the state value function ![](img/00161.jpeg) tells us the expected
+    return starting from state ![](img/00162.jpeg)  and following policy ![](img/00163.jpeg) until
+    the end of the episode. It tells us how good it is to be in state ![](img/00164.jpeg).
+    So ideally, a good policy will have a higher value for the starting state in the
+    environment as it represents the expected/mean/average value of being in that
+    state and taking actions according to policy ![](img/00165.jpeg) until the end
+    of the episode. The higher the value in the starting state, the higher the total
+    long-term reward an agent following the policy can achieve. Therefore, in an episodic
+    environment—where the environment is an episode; that is, it has a terminal state—we
+    can measure how good a policy is based on the value of the start state. Mathematically,
+    such an objective function can be written as follows:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们知道状态值函数 ![](img/00161.jpeg) 告诉我们从状态 ![](img/00162.jpeg) 开始，按照策略 ![](img/00163.jpeg) 直到本集结束的预期回报。它告诉我们身处状态 ![](img/00164.jpeg) 有多好。因此，一个良好的策略在环境中起始状态的值应较高，因为它代表了在该状态下执行策略 ![](img/00165.jpeg) 直至本集结束时的预期/平均/总体价值。起始状态值越高，遵循策略的代理可以获得的总长期奖励也越高。因此，在一个情节性环境中——环境即一个情节，即具有终端状态——我们可以根据起始状态的值来衡量策略的优劣。数学上，这样的目标函数可以写成如下形式：
+- en: '![](img/00166.jpeg)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00166.jpeg)'
+- en: 'But what if the environment is not episodic? This means it doesn''t have a
+    terminal state and keeps on going. In such as environment, we can use the average
+    value of the states that are visited while following the current policy, ![](img/00167.jpeg).
+    Mathematically, the average value objective function can be written as follows:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但如果环境不是序列性的呢？这意味着它没有终止状态，并且一直持续下去。在这种环境中，我们可以使用遵循当前策略时所访问的状态的平均值 ![](img/00167.jpeg)。从数学角度来看，平均值目标函数可以表示为以下形式：
+- en: '![](img/00168.jpeg)'
+  id: totrans-12
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00168.jpeg)'
+- en: Here, ![](img/00169.jpeg) is the stationary distribution of the Markov chain
+    for ![](img/00170.jpeg), which gives the probability of visiting state ![](img/00171.jpeg) while
+    following policy ![](img/00172.jpeg).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/00169.jpeg) 是 ![](img/00170.jpeg) 对应的马尔可夫链的平稳分布，表示遵循策略 ![](img/00172.jpeg)
+    时访问状态 ![](img/00171.jpeg) 的概率。
+- en: 'We can also use the average reward obtained per time step in such environments,
+    which can be expressed mathematically using the following equation:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以使用在这种环境中每个时间步获得的平均奖励，这可以通过以下方程式在数学上表示：
+- en: '![](img/00173.jpeg)'
+  id: totrans-15
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00173.jpeg)'
+- en: 'This is essentially the expected value of rewards that can be obtained when
+    the agent takes actions based on policy ![](img/00174.jpeg), which can be written
+    in short form like this:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这本质上是当智能体根据策略 ![](img/00174.jpeg) 采取行动时可以获得的奖励的期望值，可以简写为如下形式：
+- en: '![](img/00175.jpeg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00175.jpeg)'
+- en: 'To optimize this policy objective function using gradient descent, we would
+    take the derivative of the equation with respect to ![](img/00176.jpeg), find
+    the gradients, back-propagate, and perform the gradient descent step. From the
+    previous equations, we can write the following:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使用梯度下降法优化此策略目标函数，我们将对方程关于 ![](img/00176.jpeg) 进行求导，找到梯度，进行反向传播，并执行梯度下降步骤。从之前的方程中，我们可以写出如下公式：
+- en: '![](img/00177.jpeg)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00177.jpeg)'
+- en: 'Let''s differentiate the previous equation with respect to  ![](img/00178.jpeg) 
+    by expanding the terms and then simplifying it further. Follow the following equations
+    from left to right to understand the series of steps involved in arriving at the
+    result:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们通过展开项并进一步简化，求解前面方程对 ![](img/00178.jpeg) 的导数。按照以下方程从左到右的顺序，理解得出结果所涉及的一系列步骤：
+- en: '![](img/00179.jpeg)'
+  id: totrans-21
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00179.jpeg)'
+- en: 'To understand these equations and how the policy gradient, ![](img/00180.jpeg),
+    is equal to the likelihood ratio, ![](img/00181.jpeg), let''s take a step back
+    and revisit what our goal is. Our goals is to find the optimal set of parameters ![](img/00182.jpeg) for
+    the policy so that the agent following the policy will reap the maximum rewards
+    in expectation (i.e on an average average). To achieve that goal, we start with
+    a set of parameters and then keep updating the parameters until we reach the optimal
+    set of parameters. To figure out which direction in the parameter space the policy
+    parameters have to be updated, we make use of the direction indicated by the gradient
+    of policy ![](img/00183.jpeg) with respect to parameters ![](img/00184.jpeg).
+    Let''s start with the second term in the previous equation, ![](img/00185.jpeg),
+    (which was a result of the first term, ![](img/00186.jpeg), by definition):'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解这些方程以及如何将策略梯度 ![](img/00180.jpeg) 等同于似然比 ![](img/00181.jpeg)，我们先回顾一下我们的目标是什么。我们的目标是找到策略的最优参数集 ![](img/00182.jpeg)，使得遵循该策略的智能体能够在期望中获得最大奖励（即平均奖励）。为了实现这个目标，我们从一组参数开始，然后不断更新这些参数，直到我们达到最优参数集。为了确定在参数空间中需要更新哪些方向，我们利用策略 ![](img/00183.jpeg)
+    对参数 ![](img/00184.jpeg) 的梯度指示的方向。我们先从前面方程中的第二项 ![](img/00185.jpeg)（这是第一项 ![](img/00186.jpeg)
+    按定义得到的结果）开始：
+- en: '![](img/00187.jpeg) is the gradient of the expected value, under policy ![](img/00188.jpeg),
+    of the step reward that resulted from taking action ![](img/00189.jpeg) in state ![](img/00190.jpeg).
+    This, by the definition of expectation, can be written as the following sum:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/00187.jpeg) 是在策略 ![](img/00188.jpeg) 下，采取动作 ![](img/00189.jpeg) 在状态 ![](img/00190.jpeg)
+    中获得的步长奖励的期望值的梯度。根据期望值的定义，可以将其写成如下的和式：'
+- en: '![](img/00191.jpeg)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00191.jpeg)'
+- en: We'll look at the likelihood ratio trick, which is used in this context to transform
+    this equation into a form that makes the computation feasible.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将研究似然比技巧，在此上下文中用于将该方程转化为一种使计算可行的形式。
+- en: The likelihood ratio trick
+  id: totrans-26
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 似然比技巧
+- en: 'The policy represented by ![](img/00192.jpeg) is assumed to be a differentiable
+    function whenever it is non-zero, but computing the gradient of the policy with
+    respect to theta, ![](img/00193.jpeg), may not be straightforward. We can multiply
+    and divide by policy ![](img/00194.jpeg) on both sides to get the following:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由 ![](img/00192.jpeg) 表示的策略假设在其非零时为可微分函数，但计算策略相对于theta的梯度， ![](img/00193.jpeg)，可能并不直接。我们可以在两边同时乘以和除以策略 ![](img/00194.jpeg)，得到以下公式：
+- en: '![](img/00195.jpeg)'
+  id: totrans-28
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00195.jpeg)'
+- en: 'From calculus, we know that the gradient of the log of a function is the gradient
+    of the function over the function itself, which is mathematically given by the
+    following:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从微积分中，我们知道函数的对数的梯度是该函数相对于其本身的梯度，数学表达式如下：
+- en: '![](img/00196.jpeg)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00196.jpeg)'
+- en: 'Therefore, we can write the gradient of the policy with respect to its parameters
+    in the following form:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们可以将策略相对于其参数的梯度写成以下形式：
+- en: '![](img/00197.jpeg)'
+  id: totrans-32
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00197.jpeg)'
+- en: This is called the likelihood ratio trick, or the log derivative trick, in machine
+    learning.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这在机器学习中被称为似然比技巧，或对数导数技巧。
+- en: The policy gradient theorem
+  id: totrans-34
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 策略梯度定理
+- en: 'Because policy ![](img/00198.jpeg) is a probability distribution function that
+    describes the probability distribution over actions given the state and parameters
+    ![](img/00199.jpeg) by definition, the double summation terms over the states
+    and the actions can be expressed as the expectation of the score function scaled
+    by reward ![](img/00200.jpeg) over distribution ![](img/00201.jpeg). This is mathematically
+    equivalent to the following:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于策略 ![](img/00198.jpeg) 是一个概率分布函数，它描述了给定状态和参数 ![](img/00199.jpeg) 下的动作概率分布，根据定义，跨状态和动作的双重求和项可以表示为通过奖励 ![](img/00200.jpeg) 在分布 ![](img/00201.jpeg) 上的得分函数的期望值。这在数学上等价于以下公式：
+- en: '![](img/00202.jpeg)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00202.jpeg)'
+- en: Note that in the preceding equation, ![](img/00203.jpeg) is the step reward
+    for taking action ![](img/00204.jpeg) from state ![](img/00205.jpeg).
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在前面的方程中， ![](img/00203.jpeg) 是采取行动 ![](img/00204.jpeg) 从状态 ![](img/00205.jpeg) 获得的步奖励。
+- en: 'The policy gradient theorem generalizes this approach by replacing the instantaneous
+    step reward ![](img/00206.jpeg) with the long-term action value ![](img/00207.jpeg) and
+    can be written as follows:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略梯度定理通过用长期行动值 ![](img/00207.jpeg) 替换即时步奖励 ![](img/00206.jpeg)，对这种方法进行了推广，可以写成如下形式：
+- en: '![](img/00208.jpeg)'
+  id: totrans-39
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00208.jpeg)'
+- en: This result is a very useful one and forms the basis of several variations of
+    the policy gradient method.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个结果非常有用，并且形成了多个策略梯度方法变体的基础。
+- en: With this understanding of policy gradients, we will dive into actor-critic
+    algorithms and their variations in the following few sections.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过对策略梯度的理解，我们将在接下来的几节中深入探讨演员-评论员算法及其变体。
+- en: Actor-critic algorithm
+  id: totrans-42
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 演员-评论员算法
+- en: 'Let''s start with a diagrammatic representation of the actor-critic architecture,
+    as shown in the following diagram:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从演员-评论员架构的图示表示开始，如下图所示：
+- en: '![](img/00209.jpeg)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00209.jpeg)'
+- en: 'There are two components in the actor-critic algorithm, as evident from the
+    name and the preceding diagram. The actor is responsible for acting in the environment,
+    which involves taking actions, given observations about the environment and based
+    on the agent''s policy. The actor can be thought of as the policy holder/maker.
+    The critic, on the other hand, takes care of estimating the state-value, or state-action-value,
+    or advantage-value function (depending on the variant of the actor-critic algorithm
+    used). Let''s consider a case where the critic is trying to estimate the action
+    value function ![](img/00210.jpeg). If we use a set of parameters *w* to denote
+    the critic''s parameters, the critic''s estimates can be essentially written as:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如名称和前面的图示所示，演员-评论员算法有两个组成部分。演员负责在环境中执行动作，即根据对环境的观察并根据代理的策略采取行动。演员可以被视为策略的持有者/制定者。另一方面，评论员负责估计状态值、状态-动作值或优势值函数（取决于所使用的演员-评论员算法的变体）。让我们考虑一个例子，其中评论员试图估计动作值函数 ![](img/00210.jpeg)。如果我们使用一组参数
+    *w* 来表示评论员的参数，评论员的估计值可以基本写成：
+- en: '![](img/00211.jpeg)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00211.jpeg)'
+- en: 'Replacing the true action-value function with the critic''s approximation of
+    the action-value function (the last equation in the policy gradient theorem section)
+    in the results of the policy gradient theorem from the previous section leads
+    us to the approximate policy gradient given by the following:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将真实的动作值函数替换为评论家对动作值函数的近似（在策略梯度定理部分的最后一个方程），从上一节的策略梯度定理结果中得到以下近似的策略梯度：
+- en: '![](img/00212.jpeg)'
+  id: totrans-48
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00212.jpeg)'
+- en: In practice, we further approximate the expectation using stochastic gradient
+    ascent (or descent with a -ve sign).
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际操作中，我们进一步通过使用随机梯度上升（或者带负号的下降）来逼近期望值。
+- en: Advantage actor-critic algorithm
+  id: totrans-50
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 优势演员-评论家算法
+- en: 'The action-value actor-critic algorithm still has high variance. We can reduce
+    the variance by subtracting a baseline function, *B(s)*, from the policy gradient.
+    A good baseline is the state value function, ![](img/00213.jpeg). With the state
+    value function as the baseline, we can rewrite the result of the policy gradient
+    theorem as the following:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 动作值演员-评论家算法仍然具有较高的方差。我们可以通过从策略梯度中减去基准函数 *B(s)*来减少方差。一个好的基准是状态值函数， ![](img/00213.jpeg)。使用状态值函数作为基准，我们可以将策略梯度定理的结果重写为以下形式：
+- en: '![](img/00214.jpeg)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00214.jpeg)'
+- en: 'We can define the advantage function ![](img/00215.jpeg) to be the following:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以定义优势函数 ![](img/00215.jpeg)为以下形式：
+- en: '![](img/00216.jpeg)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00216.jpeg)'
+- en: 'When used in the previous policy gradient equation with the baseline, this
+    gives us the advantage of the actor-critic policy gradient:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当与基准一起用于前述的策略梯度方程时，这将给出演员-评论家策略梯度的优势：
+- en: '![](img/00217.jpeg)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00217.jpeg)'
+- en: 'Recall from the previous chapters that the 1-step Temporal Difference (TD)
+    error for value function ![](img/00218.jpeg) is given by the following:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回顾前几章，值函数的1步时序差分（TD）误差 ![](img/00218.jpeg)给出如下：
+- en: '![](img/00219.jpeg)'
+  id: totrans-58
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00219.jpeg)'
+- en: 'If we compute the expected value of this TD error, we will end up with an equation
+    that resembles the definition of the action-value function we saw in [Chapter
+    2](part0033.html#VF2I0-22c7fc7f93b64d07be225c00ead6ce12), *Reinforcement Learning
+    and Deep Reinforcement Learning*. From that result, we can observe that the TD
+    error is in fact an unbiased estimate of the advantage function, as derived in
+    this equation from left to right:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们计算这个TD误差的期望值，我们将得到一个方程，它类似于我们在[第2章](part0033.html#VF2I0-22c7fc7f93b64d07be225c00ead6ce12)中看到的动作值函数的定义，*强化学习与深度强化学习*。从这个结果中，我们可以观察到，TD误差实际上是优势函数的无偏估计，正如从左到右推导出的这个方程所示：
+- en: '![](img/00220.jpeg)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00220.jpeg)'
+- en: With this result and the previous set of equations in this chapter so far, we
+    have enough theoretical background to get started with our implementation of our
+    agent! Before we get into the code, let's understand the flow of the algorithm
+    to get a good picture of it in our minds.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这个结果和本章迄今为止的方程组，我们已经具备了足够的理论基础，可以开始实现我们的代理！在进入代码之前，让我们先理解算法的流程，以便在脑海中对其有一个清晰的图像。
+- en: 'The simplest (general/vanilla) form of the advantage actor-critic algorithm
+    involves the following steps:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最简单的（一般/基础）优势演员-评论家算法包括以下步骤：
+- en: Initialize the (stochastic) policy and the value function estimate.
+  id: totrans-63
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化（随机）策略和价值函数估计。
+- en: For a given observation/state ![](img/00221.jpeg), perform the action, ![](img/00222.jpeg),
+    prescribed by the current policy, ![](img/00223.jpeg).
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于给定的观察/状态 ![](img/00221.jpeg)，执行当前策略 ![](img/00223.jpeg)规定的动作 ![](img/00222.jpeg)。
+- en: Calculate the TD error based on the resulting state, ![](img/00224.jpeg) and the
+    reward  ![](img/00225.jpeg) obtained using the 1-step TD learning equation:![](img/00226.jpeg)
+  id: totrans-65
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 基于得到的状态 ![](img/00224.jpeg)和通过1步TD学习方程获得的奖励 ![](img/00225.jpeg)，计算TD误差：![](img/00226.jpeg)
+- en: 'Update the actor by adjusting the action probabilities for state ![](img/00227.jpeg) based
+    on the TD error:'
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过根据TD误差调整状态的动作概率来更新演员！[](img/00227.jpeg)：
+- en: If ![](img/00228.jpeg) > 0, increase the probability of taking action ![](img/00229.jpeg) because ![](img/00230.jpeg) was
+    a good decision and worked out really well
+  id: totrans-67
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果 ![](img/00228.jpeg) > 0，增加采取动作 ![](img/00229.jpeg)的概率，因为 ![](img/00230.jpeg)是一个好的决策，并且效果很好
+- en: If ![](img/00231.jpeg) < 0 , decrease the probability of taking action ![](img/00232.jpeg) because ![](img/00233.jpeg) resulted
+    in a poor performance by the agent
+  id: totrans-68
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果 ![](img/00231.jpeg) < 0，则减少采取动作 ![](img/00232.jpeg)的概率，因为 ![](img/00233.jpeg)导致了代理的表现不佳
+- en: 'Update the critic by adjusting its estimated value of ![](img/00234.jpeg) using
+    the TD error:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过调整其对![](img/00234.jpeg)的估计值，使用TD误差更新评论员：
+- en: '![](img/00235.jpeg), where ![](img/00236.jpeg) is the critic''s learning rate'
+  id: totrans-70
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '![](img/00235.jpeg)，其中![](img/00236.jpeg)是评论员的学习率'
+- en: Set the next state ![](img/00237.jpeg) to be the current state ![](img/00238.jpeg) and
+    repeat step 2.
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将下一个状态![](img/00237.jpeg)设置为当前状态![](img/00238.jpeg)，并重复步骤2。
+- en: n-step advantage actor-critic algorithm
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: n步优势演员-评论员算法
+- en: In the advantage actor-critic algorithm section, we looked at the steps involved
+    in implementing the algorithm. In step 3, we noticed that we have to calculate
+    the TD error based on the 1-step return (TD target). It is like letting the agent
+    take a step in the environment and then based on the outcome, calculating the
+    error in the critic's estimates and updating the policy of the agent. This sounds
+    straightforward and simple, right? But, is there any better way to learn and update
+    the policy? As you might have guessed from the title of this section, the idea
+    is to use the n-step return, which uses more information to learn and update the
+    policy compared to 1-step return-based TD learning. n-step TD learning can be
+    seen as a generalized version and the 1-step TD learning used in the actor-critic
+    algorithm, as discussed in the previous section, is a special case of the n-step
+    TD learning algorithm with n=1\. Let's look at a quick illustration to understand
+    the n-step return calculation and then implement a Python method to calculate
+    the n-step return, which we will use in our agent implementation.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在优势演员-评论员算法部分，我们查看了实现该算法的步骤。在第3步中，我们注意到需要基于1步回报（TD目标）计算TD误差。这就像让智能体在环境中迈出一步，然后根据结果计算评论员估计值的误差，并更新智能体的策略。这听起来直接且简单，对吧？但是，是否有更好的方法来学习和更新策略呢？正如你从本节标题中可能猜到的那样，思路是使用n步回报，与基于1步回报的TD学习相比，n步回报使用了更多的信息来学习和更新策略。n步TD学习可以看作是一个广义版本，而在前一节中讨论的演员-评论员算法中使用的1步TD学习是n步TD学习算法的特例，n=1。我们来看一个简短的示例，以理解n步回报的计算，然后实现一个Python方法来计算n步回报，我们将在智能体实现中使用它。
+- en: n-step returns
+  id: totrans-74
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: n步回报
+- en: 'n-step returns are a simple but very useful concept known to yield better performance
+    for several reinforcement learning algorithms, not just with the advantage actor-critic-based
+    algorithm. For example, the best performing algorithm to date on the Atari suite
+    of *57* games, which significantly outperforms the second best algorithm, uses
+    n-step returns. We will actually discuss that agent algorithm, called Rainbow,
+    in [Chapter 10](part0173.html#54VHA0-22c7fc7f93b64d07be225c00ead6ce12), *Exploring
+    the learning environment landscape: Roboschool, Gym-Retro, StarCraft-II, DMLab*.'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: n步回报是一个简单但非常有用的概念，已知能够为多种强化学习算法提供更好的性能，不仅仅是优势演员-评论员算法。例如，目前在*57*款游戏的Atari套件上表现最好的算法，显著超越第二名的算法，便使用了n步回报。我们实际上会在[第10章](part0173.html#54VHA0-22c7fc7f93b64d07be225c00ead6ce12)中讨论这个智能体算法，名为Rainbow，*探索学习环境的景观：Roboschool,
+    Gym-Retro, StarCraft-II, DMLab*。
+- en: 'Let''s first get an intuitive understanding of the n-step return process. Let''s
+    use the following diagram to illustrate one step in the environment. Assume that
+    the agent is in state ![](img/00239.jpeg) at time t=1 and decides to take action ![](img/00240.jpeg),
+    which results in the environment being transitioned to state ![](img/00241.jpeg) at
+    time t=t+1= 1+1 = 2 with the agent receiving a reward of ![](img/00242.jpeg):'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要对n步回报过程有一个直观的理解。我们使用以下图示来说明环境中的一步。假设智能体在时间t=1时处于状态![](img/00239.jpeg)，并决定采取动作![](img/00240.jpeg)，这导致环境在时间t=t+1=1+1=2时过渡到状态![](img/00241.jpeg)，同时智能体获得奖励![](img/00242.jpeg)：
+- en: '![](img/00243.jpeg)'
+  id: totrans-77
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00243.jpeg)'
+- en: 'We can calculate the 1-step TD return using the following formula:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用以下公式计算1步TD回报：
+- en: '![](img/00244.jpeg)'
+  id: totrans-79
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00244.jpeg)'
+- en: Here, ![](img/00245.jpeg) is the value estimate of state ![](img/00246.jpeg) according
+    to the value function (critic). In essence, the agent takes a step and uses the
+    received return and the discounted value of the agent's estimate of the value
+    of the next/resulting state to calculate the return.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/00245.jpeg)是根据价值函数（评论员）对状态![](img/00246.jpeg)的价值估计。实质上，智能体采取一步，并利用所接收到的回报以及智能体对下一个/结果状态的价值估计的折扣值来计算回报。
+- en: 'If we let the agent continue interacting with the environment for a few more
+    steps, the trajectory of the agent can be simplistically represented using the
+    following diagram:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们让智能体继续与环境交互更多的步数，智能体的轨迹可以用以下简化的图示表示：
+- en: '![](img/00247.jpeg)'
+  id: totrans-82
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00247.jpeg)'
+- en: 'This diagram shows a 5-step interaction between the agent and the environment.
+    Following a similar approach to the 1-step return calculation in the previous
+    paragraph, we can calculate the 5-step return using the following formula:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该图展示了智能体与环境之间的 5 步交互。采用与前一段中 1 步回报计算类似的方法，我们可以使用以下公式计算 5 步回报：
+- en: '![](img/00248.jpeg)'
+  id: totrans-84
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00248.jpeg)'
+- en: We can then use this as the TD target in step 3 of the advantage actor-critic
+    algorithm to improve the performance of the agent.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们可以在优势演员-评论员算法的步骤 3 中使用此作为 TD 目标，以提高智能体的性能。
+- en: You can see how the performance of the advantage actor-critic agent with the
+    1-step return compares to the performance with the n-step return by running the
+    `ch8/a2c_agent.py` script with the `learning_step_thresh` parameter in the `parameters.json`
+    file set to 1 (for the 1-step return) and 5 or 10 (for the n-step return) in any
+    of the Gym environments.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过在任意 Gym 环境中运行 `ch8/a2c_agent.py` 脚本，设置`parameters.json`文件中的`learning_step_thresh`参数为
+    1（用于 1 步回报）和 5 或 10（用于 n 步回报），来比较具有 1 步回报和 n 步回报的优势演员-评论员智能体的性能。
+- en: For example, you can run
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，你可以运行
+- en: '`(rl_gym_book) praveen@ubuntu:~/HOIAWOG/ch8$python a2c_agent.py --env Pendulum-v0`
+    with `learning_step_thresh=1`, monitor its performance using Tensorboard using
+    the command'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(rl_gym_book) praveen@ubuntu:~/HOIAWOG/ch8$python a2c_agent.py --env Pendulum-v0`
+    使用`learning_step_thresh=1`，通过以下命令使用 Tensorboard 监控其性能'
+- en: '`(rl_gym_book) praveen@ubuntu:~/HOIAWOG/ch8/logs$tensorboard --logdir=.`, and
+    then after a million or so steps you can compare the performance of the agent
+    trained with `learning_step_thresh=10`. Note that the trained agent model will
+    be saved at `~/HOIAWOG/ch8/trained_models/A2_Pendulum-v0.ptm` . You can rename
+    it or move it to a different directory before you start the second run to start
+    the training from scratch!'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(rl_gym_book) praveen@ubuntu:~/HOIAWOG/ch8/logs$tensorboard --logdir=.`, 然后在大约一百万步后，你可以比较使用`learning_step_thresh=10`训练的智能体的性能。请注意，训练后的智能体模型将保存在`~/HOIAWOG/ch8/trained_models/A2_Pendulum-v0.ptm`。你可以在开始第二次运行之前重命名它或将其移动到不同的目录，以便从头开始训练！'
+- en: 'To make the concept more explicit, let''s discuss how we will use this in step
+    3 and in the advantage actor-critic algorithm. We will first use the n-step return
+    as the TD target and calculate the TD error using the following formula (step
+    3 of the algorithm):'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使概念更加明确，让我们讨论如何在步骤 3 中以及在优势演员-评论员算法中使用它。我们将首先使用 n 步回报作为 TD 目标，并使用以下公式计算 TD
+    误差（算法的步骤 3）：
+- en: '![](img/00249.jpeg)'
+  id: totrans-91
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00249.jpeg)'
+- en: 'We will then follow step 4 in the algorithm discussed in the previous subsection
+    and update the critic. Then, in step 5, we will update the critic using the following
+    update rule:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将按照前一小节中讨论的算法步骤 4 更新评论员。接着，在步骤 5 中，我们将使用以下更新规则来更新评论员：
+- en: '![](img/00250.jpeg)'
+  id: totrans-93
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00250.jpeg)'
+- en: We will then move on to step 6 of the algorithm to continue with the next state, ![](img/00251.jpeg),
+    using 5-step transitions from ![](img/00252.jpeg) until ![](img/00253.jpeg) and calculating
+    the 5-step return, then repeat the procedure for updating ![](img/00254.jpeg).
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将继续进行算法的步骤 6，使用来自![](img/00251.jpeg)的 5 步过渡，直到![](img/00253.jpeg)，并计算 5
+    步回报，然后重复更新![](img/00254.jpeg)的过程。
+- en: Implementing the n-step return calculation
+  id: totrans-95
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现 n 步回报计算
+- en: 'If we pause for a moment and analyze what is happening, you might see that
+    we are probably not making full use of the 5-step long trajectory. With access
+    to the information from the agent''s 5-step long trajectory starting from state ![](img/00255.jpeg),
+    we only ended up learning one new piece of information, which is all about ![](img/00256.jpeg)to
+    update the actor and the critic (![](img/00257.jpeg)). We can actually make the
+    learning process more efficient by using the same 5-step trajectory to calculate
+    updates for each of the state values present in the trajectory, with their respective
+    *n* values based on the end of the trajectory. For example, in a simplified trajectory
+    representation, if we considered state ![](img/00258.jpeg), with the forward-view
+    of the trajectory enclosed inside the bubble, as shown in this diagram:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们暂停片刻并分析一下发生了什么，你可能会发现我们可能没有充分利用这条5步长的轨迹。从状态 ![](img/00255.jpeg)开始的代理5步长轨迹提供了信息，但我们最终只学到了一个新信息，这仅仅是关于 ![](img/00256.jpeg)来更新演员和评论员（![](img/00257.jpeg)）。其实，我们可以通过使用相同的5步轨迹来计算轨迹中每个状态值的更新，并根据轨迹结束的 *n* 值使学习过程更加高效。例如，在一个简化的轨迹表示中，如果我们考虑状态 ![](img/00258.jpeg)，并将轨迹的前视部分包含在气泡中，如下图所示：
+- en: '![](img/00259.jpeg)'
+  id: totrans-97
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00259.jpeg)'
+- en: 'We can use the information inside the bubble to extract the TD learning target
+    for state ![](img/00260.jpeg). In this case, since there is only one step of information
+    available from ![](img/00261.jpeg), we will be calculating the 1-step return,
+    as shown in this equation:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用气泡中的信息来提取状态 ![](img/00260.jpeg)的TD学习目标。在这种情况下，由于从 ![](img/00261.jpeg)处只能获得一步信息，我们将计算1步回报，如下方程所示：
+- en: '![](img/00262.jpeg)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00262.jpeg)'
+- en: As we discussed before, we can use this value as the TD target in equation to
+    get another TD error value, and use the second value to update the actor and ![](img/00263.jpeg),
+    in addition to previous updates (![](img/00264.jpeg)). Now, we have got one more
+    piece of information for the agent to learn from!
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如我们之前讨论过的，我们可以使用该值作为方程中的TD目标，以获得另一个TD误差值，并利用第二个值来更新演员和 ![](img/00263.jpeg)，以及之前的更新（![](img/00264.jpeg)）。现在，我们又为代理提供了一个新的学习信息！
+- en: 'If we apply the same intuition and consider state ![](img/00265.jpeg), with
+    the forward-view of the trajectory enclosed in the bubble, as shown in the following
+    diagram:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们应用相同的直觉，考虑状态 ![](img/00265.jpeg)，并将轨迹的前视部分包含在气泡中，如下图所示：
+- en: '![](img/00266.jpeg)'
+  id: totrans-102
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00266.jpeg)'
+- en: 'We can use the information inside the bubble to extract the TD learning target
+    for ![](img/00267.jpeg). In this case, there are two types of information available
+    from ![](img/00268.jpeg); therefore, we will calculate the 2-step return using
+    the following equation:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用气泡中的信息来提取 ![](img/00267.jpeg)的TD学习目标。在这种情况下，从 ![](img/00268.jpeg)获得了两种信息，因此我们将使用以下方程计算2步回报：
+- en: '![](img/00269.jpeg)'
+  id: totrans-104
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00269.jpeg)'
+- en: 'If we look at this equation and the previous equation, we can observe that
+    there is a relationship between ![](img/00270.jpeg) and ![](img/00271.jpeg), which
+    is given by the following equation:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们看一下这个方程和前一个方程，我们可以观察到 ![](img/00270.jpeg) 和 ![](img/00271.jpeg)之间的关系，公式如下所示：
+- en: '![](img/00272.jpeg)'
+  id: totrans-106
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00272.jpeg)'
+- en: 'This gives us another piece of information for the agent to learn from. Likewise,
+    we can extract more information from this one trajectory of the agent. Extending
+    the same concept for ![](img/00273.jpeg) and ![](img/00274.jpeg), we can arrive
+    at the following relationship:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这为代理提供了另一个学习的信息。同样，我们可以从这条轨迹中提取更多的信息。将相同的概念扩展到 ![](img/00273.jpeg) 和 ![](img/00274.jpeg)，我们可以得到以下关系：
+- en: '![](img/00275.jpeg)'
+  id: totrans-108
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00275.jpeg)'
+- en: 'Likewise, in short, we can observe the following:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，简而言之，我们可以观察到以下内容：
+- en: '![](img/00276.jpeg)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00276.jpeg)'
+- en: 'And finally, we can also observe the following:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们还可以观察到以下内容：
+- en: '![](img/00277.jpeg)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00277.jpeg)'
+- en: Simply put, we can start from the last step in the trajectory, calculate the
+    n-step return until the end of the trajectory, and then move back to the previous
+    step to calculate the return using the previously calculated value.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简而言之，我们可以从轨迹中的最后一步开始，计算n步回报直到轨迹结束，然后回到上一部来使用之前计算的值计算回报。
+- en: 'The implementation is straightforward and simple, and it is advisable to try
+    to implement this on your own. It is provided as follows for your reference:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现过程直接且简单，建议自己尝试实现。这些内容提供如下，供参考：
+- en: '[PRE0]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Deep n-step advantage actor-critic algorithm
+  id: totrans-116
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 深度n步优势演员-评论家算法
+- en: We observed that the actor-critic algorithm combines value-based methods and
+    policy-based methods. The critic estimates the value function and the actor follows
+    the policy, and we looked at how we can update the actor and the critic. From
+    our previous experience in [Chapter 6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12), *Implementing
+    an Intelligent Agent for optimal discrete control using Deep Q Learning*, we naturally
+    got the idea of using a neural network to approximate the value function and therefore
+    the critic. We can also use a neural network to represent policy ![](img/00278.jpeg),
+    in which case parameters ![](img/00279.jpeg) are the weights of the neural network.
+    Using deep neural networks to approximate the actor and the critic is exactly
+    the idea behind deep actor-critic algorithms.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们观察到演员-评论家算法结合了基于价值的方法和基于策略的方法。评论家估计价值函数，演员遵循策略，我们研究了如何更新演员和评论家。通过我们在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中，*使用深度Q学习实现最优离散控制的智能代理*的经验，我们自然产生了使用神经网络来逼近价值函数，从而代替评论家的想法。我们还可以使用神经网络来表示策略！[](img/00278.jpeg)，在这种情况下，参数！[](img/00279.jpeg)是神经网络的权重。使用深度神经网络来逼近演员和评论家的方法，正是深度演员-评论家算法的核心思想。
+- en: Implementing a deep n-step advantage actor critic agent
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现深度n步优势演员评论家代理
+- en: We have prepared ourselves with all the background information required to implement
+    the deep n-step advantage actor-critic (A2C) agent. Let's look at an overview
+    of the agent implementation process and then jump right into the hands-on implementation.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经准备好所有实现深度n步优势演员-评论家(A2C)代理所需的背景信息。让我们先看看代理实现过程的概述，然后直接进入实际的实现过程。
+- en: 'The following is the high-level flow of our A2C agent:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是我们A2C代理的高级流程：
+- en: Initialize the actor's and critic's networks.
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化演员和评论家的网络。
+- en: Use the current policy of the actor to gather n-step experiences from the environment
+    and calculate the n-step return.
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用演员的当前策略从环境中收集n步经验并计算n步回报。
+- en: Calculate the actor's and critic's losses.
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算演员和评论家的损失。
+- en: Perform the stochastic gradent descent optimization step to update the actor
+    and critic parameters.
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行随机梯度下降优化步骤以更新演员和评论家的参数。
+- en: Repeat from step 2.
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从第2步开始重复。
+- en: We will implement the agent in a Python class named `DeepActorCriticAgent`.
+    You will find the full implementation in this book's code repository under 8th
+    chapter: `ch8/a2c_agent.py`. We will make this implementation flexible so that
+    we can easily extend it further for the batched version, as well make an asynchronous
+    version of the n-step advantage actor-critic agent.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在一个名为`DeepActorCriticAgent`的Python类中实现该代理。你可以在本书的代码仓库中的第8章找到完整的实现：`ch8/a2c_agent.py`。我们将使该实现具有灵活性，以便我们可以轻松扩展它，进一步实现批处理版本，并且还可以实现异步版本的n步优势演员-评论家代理。
+- en: Initializing the actor and critic networks
+  id: totrans-127
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 初始化演员和评论家的网络
+- en: The `DeepActorCriticAgent` class's initialization is straightforward. We will
+    quickly have a look into it and then see how we actually define and initialize
+    the actor and critic networks.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DeepActorCriticAgent`类的初始化很直接。我们将快速浏览它，然后查看我们如何实际定义和初始化演员和评论家的网络。'
+- en: 'The agent''s initialization function is shown here:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代理的初始化函数如下所示：
+- en: '[PRE1]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: You may wonder why the `agent` class is inheriting from the `multiprocessing.Process`
+    class. Although for our first agent implementation we will be running one agent
+    in one process, we can use this flexible interface to enable running several agents
+    in parallel to speed up the learning process.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会想知道为什么`agent`类继承自`multiprocessing.Process`类。虽然在我们的第一个代理实现中，我们将一个代理运行在一个进程中，但我们可以利用这个灵活的接口，启用并行运行多个代理，从而加速学习过程。
+- en: Let's move on to actor and critic implementations using neural networks defined
+    with PyTorch operations. Following a similar code structure to what we used in
+    our deep Q-learning agent in [Chapter 6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12),
+    *Implementing an Intelligent Agent for optimal discrete control using Deep Q Learning*,
+    in the code base you will see that we are using a module named `function_approximator`
+    to contain our neural network-based function approximator implementations. You
+    can find the full implementations under the `ch8/function_approximator` folder
+    in this book's code repository.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来我们将介绍使用PyTorch操作定义的神经网络实现的演员和评论员。按照与我们在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)的深度Q学习智能体相似的代码结构，*使用深度Q学习实现最优离散控制的智能体*，在代码库中你会看到我们使用一个名为`function_approximator`的模块来包含我们的基于神经网络的函数逼近器实现。你可以在本书代码库中的`ch8/function_approximator`文件夹下找到完整的实现。
+- en: 'Since some environments have small and discrete state spaces, such as the `Pendulum-v0`, `MountainCar-v0`,
+    or `CartPole-v0` environments, we will also implement shallow versions of neural
+    networks along with the deep versions, so that we can dynamically choose a suitable
+    neural network depending on the environment the agent is trained/tested on. When
+    you look through the sample implementation of the neural networks for the actor,
+    you will notice that in both the `shallow` and the `deep` function approximator
+    modules, there is a class called `Actor` and a different class called `DiscreteActor`.
+    This is again for generality purposes so that we can let the agent dynamically
+    pick and use the neural network most suitable for representing the actor, depending
+    on whether the environment''s action space is continuous or discrete. There is
+    one more variation for the completeness and generality of our agent implementation
+    that you need to be aware of: both the `shallow` and the `deep` function approximator
+    modules in our implementations have an `ActorCritic` class, which is a single
+    neural network architecture that represents both the actor and the critic. In
+    this way, the feature extraction layers are shared between the actor and the critic,
+    and different heads (final layers) in the same neural network are used to represent
+    the actor and the critic.'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于一些环境具有较小且离散的状态空间，例如`Pendulum-v0`、`MountainCar-v0`或`CartPole-v0`环境，我们还将实现浅层版本的神经网络，并与深层版本一同使用，以便根据智能体训练/测试所用的环境动态选择合适的神经网络。当你查看演员的神经网络示例实现时，你会注意到在`shallow`和`deep`函数逼近器模块中都有一个名为`Actor`的类和一个不同的类叫做`DiscreteActor`。这是为了通用性，方便我们根据环境的动作空间是连续的还是离散的，让智能体动态选择和使用最适合表示演员的神经网络。为了实现智能体的完整性和通用性，你还需要了解另外一个变体：我们实现中的`shallow`和`deep`函数逼近器模块都有一个`ActorCritic`类，它是一个单一的神经网络架构，既表示演员又表示评论员。这样，特征提取层在演员和评论员之间共享，神经网络中的不同头（最终层）用于表示演员和评论员。
+- en: 'Sometimes, the different parts of the implementation might be confusing. To
+    help avoid confusion, here is a summary of the various options in our neural network-based
+    actor-critic implementations:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，实现的不同部分可能会令人困惑。为了帮助避免困惑，以下是我们基于神经网络的演员-评论员实现中各种选项的总结：
+- en: '| **Module/class** | **Description** | **Purpose/use case** |  |'
+  id: totrans-135
+  prefs: []
+  type: TYPE_TB
+  zh: '| **模块/类** | **描述** | **目的/用例** |  |'
+- en: '| 1\. `function_approximator.shallow` |  Shallow neural network implementations
+    for actor-critic representations. | Environments that have low-dimensional state/observation
+    spaces. |  |'
+  id: totrans-136
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1\. `function_approximator.shallow` | 用于演员-评论员表示的浅层神经网络实现。 | 具有低维状态/观察空间的环境。
+    |  |'
+- en: '|  1.1 `function_approximator.shallow.Actor` |  Feed-forward neural network
+    implementation that produces two continuous values: mu (mean) and sigma for a
+    Gaussian distribution-based policy representation. | Low-dimensional state/observation
+    space and continuous action space. |  |'
+  id: totrans-137
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1.1 `function_approximator.shallow.Actor` | 前馈神经网络实现，输出两个连续值：mu（均值）和sigma（标准差），用于基于高斯分布的策略表示。
+    | 低维状态/观察空间和连续动作空间。 |  |'
+- en: '| 1.2 `function_approximator.shallow.DiscreteActor` | Feed-forward neural network
+    that produces a logit for each action in the action space. | Low-dimensional state/observation
+    space and discrete action space. |  |'
+  id: totrans-138
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1.2 `function_approximator.shallow.DiscreteActor` | 前馈神经网络，为动作空间中的每个动作输出一个logit。
+    | 低维状态/观察空间和离散动作空间。 |  |'
+- en: '| 1.3 `function_approximator.shallow.Critic` | Feed-forward neural network
+    that produces a continuous value. | Used to represent the critic/value function
+    for environments with low-dimensional state/observation space |  |'
+  id: totrans-139
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1.3 `function_approximator.shallow.Critic` | 前馈神经网络，输出一个连续值。 | 用于表示评论员/值函数，适用于低维状态/观测空间的环境。
+    |  |'
+- en: '| 1.4 `function_approximator.shallow.ActorCritic` | Feed-forward neural network
+    that produces mu (mean), sigma for a Gaussian distribution, and a continuous value.
+    | Used to represent the actor and the critic in the same network for environments
+    with low-dimensional state/observation space. It is possible to modify this to
+    a discrete actor-critic network. |  |'
+  id: totrans-140
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1.4 `function_approximator.shallow.ActorCritic` | 前馈神经网络，输出高斯分布的均值（mu）和标准差（sigma），以及一个连续值。
+    | 用于表示同一网络中的演员（actor）和评论员（critic），适用于低维状态/观测空间的环境。也可以将其修改为离散的演员-评论员网络。 |  |'
+- en: '| 2\. `function_approximator.deep` | Deep neural network implementations for
+    actor, critic representation. | Environments that have high-dimensional state/observation
+    spaces. |  |'
+  id: totrans-141
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2\. `function_approximator.deep` | 深度神经网络实现，用于演员（actor）和评论员（critic）表示。 |
+    适用于具有高维状态/观测空间的环境。 |  |'
+- en: '| 2.1 `function_approximator.deep.Actor` | Deep convolutional neural network
+    that produces the mu (mean) and sigma for a Gaussian distribution-based policy
+    representation. | High-dimensional state/observation space and continuous action
+    space. |  |'
+  id: totrans-142
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2.1 `function_approximator.deep.Actor` | 深度卷积神经网络，输出基于高斯分布的策略表示的均值（mu）和标准差（sigma）。
+    | 高维状态/观测空间和连续动作空间。 |  |'
+- en: '| 2.2 `function_approximator.deep.DiscreteActor` | Deep convolutional neural
+    network that produces a logit for each action in the action space. | High-dimensional
+    state/observation space and discrete action-space. |  |'
+  id: totrans-143
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2.2 `function_approximator.deep.DiscreteActor` | 深度卷积神经网络，为动作空间中的每个动作输出一个logit值。
+    | 高维状态/观测空间和离散动作空间。 |  |'
+- en: '| 2.3 `function_approximator.deep.Critic` | Deep convolutional neural network
+    that produces a continuous value. | Used to represent the critic/value-function
+    for environments with high-dimensional state/observation space. |  |'
+  id: totrans-144
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2.3 `function_approximator.deep.Critic` | 深度卷积神经网络，输出一个连续值。 | 用于表示评论员/值函数，适用于高维状态/观测空间的环境。
+    |  |'
+- en: '| 2.4 `function_approximator.deep.ActorCritic` | Deep convolutional neural
+    network that produces mu (mean), sigma for a Gaussian distribution as well as
+    a continuous value. | Used to represent the actor and the critic in a same network
+    for environments with high-dimensional state/observation space. It is possible
+    to modify this to a discrete actor-critic network. |  |'
+  id: totrans-145
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2.4 `function_approximator.deep.ActorCritic` | 深度卷积神经网络，输出高斯分布的均值（mu）和标准差（sigma），以及一个连续值。
+    | 用于表示同一网络中的演员（actor）和评论员（critic），适用于高维状态/观测空间的环境。也可以将其修改为离散的演员-评论员网络。 |  |'
+- en: 'Let''s now look at the first part of the `run()` method, where we initialize
+    the actor and the critic network based on the type of the environment''s state
+    and action spaces, as well as based on whether the state space is low-dimensional
+    or high-dimensional based on the previous table:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看`run()`方法的第一部分，在这里我们根据环境的状态和动作空间的类型，以及根据先前表格中状态空间是低维还是高维的不同，来初始化演员（actor）和评论员（critic）网络：
+- en: '[PRE2]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Gathering n-step experiences using the current policy
+  id: totrans-148
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用当前策略收集n步经验
+- en: 'The next step is to perform what are called *rollouts* using the current policy
+    of the agent to collect `n` number of transitions. This process is basically letting
+    the agent interact with the environment and generating new experiences in terms
+    of state transitions, usually represented as a tuple containing the state, action,
+    reward obtained, and next state, or in short `(![](img/00280.jpeg), ![](img/00281.jpeg), ![](img/00282.jpeg), ![](img/00283.jpeg))`,
+    as illustrated in the following diagram:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一步是执行所谓的*rollouts*，即使用当前策略让代理收集`n`步转移。这个过程本质上是让代理与环境进行交互，并生成新的经验，通常表示为一个包含状态、动作、奖励以及下一个状态的元组，简写为`(![](img/00280.jpeg),
+    ![](img/00281.jpeg), ![](img/00282.jpeg), ![](img/00283.jpeg))`，如下图所示：
+- en: '![](img/00284.jpeg)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00284.jpeg)'
+- en: In the example shown in the preceding diagram, the agent would fill its `self.trajectory`
+    with a list of the five transitions like this: `[T1, T2, T3, T4, T5]`.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示意图中，代理将用如下方式填充它的`self.trajectory`，该列表包含五个转移：`[T1, T2, T3, T4, T5]`。
+- en: 'In our implementation, we will use a slightly modified transition representation
+    to reduce redundant calculations. We will use the following definition to represent
+    a transition:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的实现中，我们将使用稍微修改过的转换表示法，以减少冗余的计算。我们将使用以下定义来表示转换：
+- en: '`Transition = namedtuple("Transition", ["s", "value_s", "a", "log_prob_a"])`'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Transition = namedtuple("Transition", ["s", "value_s", "a", "log_prob_a"])`'
+- en: Here, `s` is the state, `value_s` is the critic's prediction of the value of
+    state `s`, `a` is the action taken, and `log_prob_a` is the logarithm of the probability
+    of taking action `a` according to the actor/agent's current policy.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`s` 是状态，`value_s` 是评论家对状态 `s` 的值的预测，`a` 是采取的行动，`log_prob_a` 是根据演员/代理当前策略采取行动
+    `a` 的概率的对数。
+- en: We will use the `calculate_n_step_return(self, n_step_rewards, final_state,
+    done, gamma)` method we implemented previously to calculate the n-step return
+    based on the `n_step_rewards` list containing the scalar reward values obtained
+    at each step in the trajectory and the `final_state` used to calculate the critic's
+    estimate value of the final/last state in the trajectory, as we discussed earlier
+    in the n-step return calculation section.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用之前实现的 `calculate_n_step_return(self, n_step_rewards, final_state, done,
+    gamma)` 方法，基于包含每个步骤获得的标量奖励值的 `n_step_rewards` 列表和用于计算评论家对轨迹中最后/最终状态的估计值的 `final_state`，来计算n步回报，正如我们在n步回报计算部分中讨论过的那样。
+- en: Calculating the actor's and critic's losses
+  id: totrans-156
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 计算演员和评论家的损失
+- en: From the description of the n-step deep actor-critic algorithm we went over
+    previously, you may remember that the critic, represented using a neural network,
+    is trying to solve a problem that is similar to what we saw in [Chapter 6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12), *Implementing
+    an Intelligent Agent for Optimal Discrete Control using Deep Q-Learning*, which
+    is to represent the value function (similar to the action-value function we used
+    in this chapter, but a bit simpler). We can use the standard **Mean Squared Error**
+    (**MSE**) loss or the smoother L1 loss/Huber loss, calculated based on the critic's
+    predicted values and the n-step returns (TD targets) computed in the previous
+    step.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从我们之前讨论的n步深度演员-评论家算法的描述中，你可能记得评论家是通过神经网络来表示的，它试图解决一个问题，这个问题类似于我们在[第六章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中看到的，*使用深度
+    Q 学习实现最优离散控制的智能体*，即表示值函数（类似于我们在本章中使用的动作值函数，但稍微简单一些）。我们可以使用标准的**均方误差**（**MSE**）损失，或者使用平滑的L1损失/Huber损失，这些损失是基于评论家的预测值和在前一步计算的n步回报（TD目标）计算的。
+- en: For the actor, we will use the results obtained with the policy gradient theorem,
+    and specifically the advantage actor-critic version, where the advantage value
+    function is used to guide the gradient updates of the actor policy. We will use
+    the TD_error, which is an unbiased estimate of the advantage value function.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于演员（actor），我们将使用通过策略梯度定理得到的结果，特别是优势演员-评论家版本，在这种方法中，优势值函数被用来指导演员策略的梯度更新。我们将使用TD_error，它是优势值函数的无偏估计。
+- en: 'In summary, the critic''s and actor''s losses are as follows:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结来说，评论家和演员的损失如下：
+- en: '*critic_loss = MSE(![](img/00285.jpeg), critic_prediction)*'
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*critic_loss = MSE(![](img/00285.jpeg), critic_prediction)*'
+- en: '*actor_loss = log(![](img/00286.jpeg)) * TD_error*'
+  id: totrans-161
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*actor_loss = log(![](img/00286.jpeg)) * TD_error*'
+- en: 'With the main loss calculation equations captured, we can implement them in
+    code using the `calculate_loss(self, trajectory, td_targets)` method, as illustrated
+    by the following code snippet:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在捕获了主要的损失计算方程后，我们可以通过 `calculate_loss(self, trajectory, td_targets)` 方法在代码中实现它们，以下是代码片段的示例：
+- en: '[PRE3]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Updating the actor-critic model
+  id: totrans-164
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 更新演员-评论家模型
+- en: 'After we have calculated the losses for the actor and critic, the next and
+    final step in the learning process is to update the actor and critic parameters
+    based on their losses. Since we use the awesome PyTorch library, which takes care
+    of the partial differentiation, back-propagation of errors, and gradient calculations
+    automatically, the implementation is simple and straightforward using the results
+    from the previous steps, as shown in the following code sample:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们计算了演员和评论家的损失后，学习过程的下一步也是最后一步，是基于损失更新演员和评论家的参数。由于我们使用了强大的 PyTorch 库，它自动处理部分微分、误差反向传播和梯度计算，因此在使用前面步骤的结果时，代码实现简单而直接，如下所示的代码示例所示：
+- en: '[PRE4]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Tools to save/load, log, visualize, and monitor
+  id: totrans-167
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 保存/加载、日志记录、可视化和监控工具
+- en: In the previous sections, we walked through the core part of the agent's learning
+    algorithm implementation. Apart from those core parts, there are a few utility
+    functions that we will use to train and test the agent in different learning environments.
+    We will reuse the components that we already developed in [Chapter 6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12),
+    *Implementing an Intelligent Agent for optimal discrete control using Deep Q Learning*,such
+    as the `utils.params_manager`, and also the `save()` and `load()` methods, which
+    respectively save and load the agent's trained brain or model. We also will make
+    use of the logging utilities to log the agent's progress in a format that is usable
+    with Tensorboard for a nice and quick visualization, as well as for debugging
+    and monitoring to see whether there is something wrong with our agent's training
+    process.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们走访了智能体学习算法实现的核心部分。除了这些核心部分，还有一些实用函数，我们将使用它们在不同的学习环境中训练和测试智能体。我们将重用在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中已经开发的组件，*使用深度Q学习实现最优离散控制的智能体*，例如`utils.params_manager`，以及`save()`和`load()`方法，它们分别用于保存和加载智能体训练好的大脑或模型。我们还将使用日志工具来记录智能体的进展，以便使用Tensorboard进行良好的可视化和快速查看，还可以用于调试和监控，以观察智能体的训练过程中是否存在问题。
+- en: With that, we can complete our implementation of the n-step advantage actor-critic
+    agent! You can find the full implementation in the `ch8/a2c_agent.py` file. Before
+    we see how we can train the agent, in the next section we will quickly look at
+    one of the extensions we can apply to the deep n-step advantage agent to make
+    it perform even better on multi-core machines.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这些，我们就可以完成n步优势演员-评论员智能体的实现！你可以在`ch8/a2c_agent.py`文件中找到完整的实现。在我们看看如何训练智能体之前，在下一节中，我们将快速了解一下可以应用于深度n步优势智能体的一个扩展，以使它在多核机器上表现得更好。
+- en: An extension - asynchronous deep n-step advantage actor-critic
+  id: totrans-170
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 扩展 - 异步深度n步优势演员-评论员
+- en: One easy extension that we can make to our agent implementation is to launch
+    several instances of our agent, each with their own instance of the learning environment,
+    and send back updates from what they have learned in an asychronous manner, that
+    is, whenever they are available, without any need for time syncing. This algorithm is
+    popularly known as the A3C algorithm, which is short for asynchronous advantage
+    actor-critic.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以对智能体实现做的一个简单扩展是，启动多个智能体实例，每个实例都有自己的学习环境实例，并以异步方式返回它们从中学到的更新，也就是说，它们在有可用更新时发送，而无需进行时间同步。这种算法通常被称为A3C算法，A3C是异步优势演员-评论员的缩写。
+- en: One of the motivations behind this extension stems from what we learned in [Chapter
+    6, ](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)*Implementing an Intelligent
+    Agent for optimal discrete control using Deep Q Learning*, with the use of the
+    experience replay memory. Our deep Q-learning agent was able to learn considerably
+    better with the addition of experience replay memory, which in essence helped
+    in decorrelating the dependencies in the sequential decision making problem, and
+    letting the agent extract more juice/information from its past experience. Similarly,
+    the idea behind using multiple actor-learner instances running in parallel is
+    found to be helpful in breaking the correlation between the transitions, and also
+    helps in the exploration of different parts of the state space in the environment,
+    as each actor-learner process has its own set of policy parameters and environment
+    instance to explore. Once the agent instances running in parallel have some updates
+    to send back, they send them over to a shared, global agent instance, which then
+    acts as the new parameter source for the other agent instances to sync from.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个扩展背后的动机之一来源于我们在[第6章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中学到的内容，*使用深度Q学习实现最优离散控制的智能体*，特别是使用经验回放内存。我们的深度Q学习智能体在加入经验回放内存后，学习效果显著提升，本质上它帮助解决了序列决策问题中的依赖性问题，并使智能体能从过去的经验中提取更多的信息。类似地，使用多个并行运行的演员-学习者实例的想法，也被发现有助于打破过渡之间的相关性，并有助于探索环境状态空间的不同部分，因为每个演员-学习者进程都有自己的策略参数和环境实例来进行探索。一旦并行运行的智能体实例有一些更新需要发送回来，它们会将这些更新发送到一个共享的全局智能体实例，这个全局实例作为其他智能体实例同步的新参数来源。
+- en: We can use Python's PyTorch multiprocessing library to implement this extension.
+    Yes! You guessed it right. This was the reason our `DeepActorCritic` agent in
+    our implementation subclassed `torch.multiprocessing.Process` right from the start,
+    so that we can add this extension to it without any significant code refactoring.
+    You can look at the `ch8/README.md` file in the book's code repository for more
+    resources on exploring this architecture if you are interested.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用Python的PyTorch多进程库来实现这个扩展。没错！你猜对了。这正是我们在实现中让`DeepActorCritic`代理一开始就继承了`torch.multiprocessing.Process`的原因，这样我们就可以在不进行重大代码重构的情况下将这个扩展添加到其中。如果你有兴趣，可以查看书籍代码仓库中的`ch8/README.md`文件，获取更多关于探索这一架构的资源。
+- en: We can easily extend our n-step advantage actor-critic agent implementation
+    in `a2c_agent.py` to implement the synchronous deep n-step advantage actor-critic
+    agent. You can find the asynchronous implementation in `ch8/async_a2c_agent.py`.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以轻松扩展`a2c_agent.py`中n步优势演员-评论员代理的实现，来实现同步深度n步优势演员-评论员代理。你可以在`ch8/async_a2c_agent.py`中找到异步实现。
+- en: Training an intelligent and autonomous driving agent
+  id: totrans-175
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练一个智能和自主驾驶的代理
+- en: We now have all the pieces we need to accomplish our goal for this chapter,
+    which is to put together an intelligent, autonomous driving agent, and then train
+    it to drive a car autonomously in the photo-realistic CARLA driving environment
+    that we developed as a learning environment using the Gym interface in the previous
+    chapter. The agent training process can take a while. Depending on the hardware
+    of the machine that you are going to train the agent on, it may take anywhere
+    from a few hours for simpler environments (such as`Pendulum-v0`, `CartPole-v0`,
+    and some of the Atari games) to a few days for complex environments (such as the
+    CARLA driving environment). In order to first get a good understanding of the
+    training process and how to monitor progress while the agent is training, we will
+    start with a few simple examples to walk through the whole process of training
+    and testing the agent. We will then look at how easily we can move it to the CARLA
+    driving environment to train it further.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经具备了实现本章目标所需的所有部分，目标是组建一个智能的自主驾驶代理，并训练它在我们在上一章中开发的、使用Gym接口构建的真实感CARLA驾驶环境中自主驾驶。代理的训练过程可能需要一段时间。根据你用来训练代理的机器硬件，训练可能需要从几个小时（例如`Pendulum-v0`、`CartPole-v0`和一些Atari游戏等简单环境）到几天（例如CARLA驾驶环境等复杂环境）。为了先了解训练过程以及在训练期间如何监控进展，我们将从一些简单的示例开始，逐步走过训练和测试代理的整个过程。然后，我们将展示如何轻松地将其转移到CARLA驾驶环境中，进一步进行训练。
+- en: Training and testing the deep n-step advantage actor-critic agent
+  id: totrans-177
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练和测试深度n步优势演员-评论员代理
+- en: Because our agent's implementation is generic (as discussed using the table
+    in step 1 in the previous section), we can use any learning environment that has
+    Gym-compatible interfaces to train/test the agent. You can experiment and train
+    the agent in a variety of environments that we discussed in the initial chapters
+    of this book, and we will also be discussing some more interesting learning environments
+    in the next chapter. Don't forget about our custom CARLA car driving environment!
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为我们的代理实现是通用的（如上一节第1步中通过表格讨论的那样），我们可以使用任何具有Gym兼容接口的学习环境来训练/测试代理。你可以在本书初期章节中讨论的各种环境中进行实验并训练代理，下一章我们还会讨论一些更有趣的学习环境。别忘了我们的自定义CARLA自动驾驶环境！
+- en: 'We will pick a few environments as examples and walk through how you can launch
+    the training and testing process to get you started experimenting on your own. First,
+    update your fork of the book''s code repository and `cd` to the `ch8` folder,
+    where the code for this chapter resides. As always, make sure to activate the
+    conda environment we created for this book. After this, you can launch the training
+    process for the n-step advantage actor critic agent using the `a2c_agent.py` script,
+    as illustrated here:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将选择一些环境作为示例，逐步展示如何启动训练和测试过程，帮助你开始自己的实验。首先，更新你从书籍代码仓库fork的代码，并`cd`到`ch8`文件夹，这里存放着本章的代码。像往常一样，确保激活为本书创建的conda环境。完成这些后，你可以使用`a2c_agent.py`脚本启动n步优势演员评论员代理的训练过程，示例如下：
+- en: '[PRE5]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: You can replace `Pendulum-v0` with any Gym-compatible learning environment name
+    that is set up on your machine.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以将`Pendulum-v0`替换为任何在你的机器上设置好的兼容Gym的学习环境名称。
+- en: This should launch the agent's training script, which will use the default parameters
+    specified in the `~/HOIAWOG/ch8/parameters.json` file (which you can change to
+    experiment). It will also load the trained agent's brain/model for the specified
+    environment from the `~/HOIAWOG/ch8/trained_models` directory, if available, and
+    continue training. For high-dimensional state space environments, such as the
+    Atari games, or other environments where the state/observation is an image of
+    the scene or the screen pixels, the deep convolutional neural network we discussed
+    in one of the previous sections will be used, which will make use of the GPU on
+    your machine, if available, to speed up computations (you can disable this by
+    setting `use_cuda = False` in the `parameters.json` file if you want). If you
+    have multiple GPUs on your machine and would like to train different agents on
+    different GPUs, you can specify the GPU device ID as a command line argument to
+    the `a2c_agent.py` script using the `--gpu-id` flag to ask the script to use a
+    particular GPU for training/testing.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这应该会启动代理的训练脚本，它将使用`~/HOIAWOG/ch8/parameters.json`文件中指定的默认参数（你可以更改这些参数以进行实验）。如果有可用的已训练代理的大脑/模型，它还会从`~/HOIAWOG/ch8/trained_models`目录加载适用于指定环境的模型，并继续训练。对于高维状态空间环境，例如Atari游戏或其他环境，其中状态/观察是场景的图像或屏幕像素，将使用我们在之前章节中讨论的深度卷积神经网络，这将利用你机器上的GPU（如果有的话）来加速计算（如果你希望禁用此功能，可以在`parameters.json`文件中将`use_cuda
+    = False`）。如果你的机器上有多个GPU，并且希望在不同的GPU上训练不同的代理，可以通过`--gpu-id`标志指定GPU设备ID，要求脚本在训练/测试时使用特定的GPU。
+- en: 'Once the training process starts, you can monitor the agent''s process by launching
+    `tensorboard` using the following command from the `logs` directory:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦训练过程开始，你可以通过从`logs`目录运行以下命令来启动`tensorboard`，监控代理的进程：
+- en: '[PRE6]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'After launching `tensorboard` using the preceding command, you can visit the
+    web page at `http://localhost:6006` to monitor the progress of the agent. Sample
+    screenshots are provided here for your reference; these were from two training
+    runs of the n-step advantage actor-critic agent, with different values for *n*
+    steps, using the `learning_step_threshold` parameter in the `parameters.json`
+    file:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用上述命令启动`tensorboard`后，你可以访问`http://localhost:6006`网页来监控代理的进展。这里提供了示例截图供你参考；这些截图来自两次n步优势演员-评论员代理的训练运行，使用了不同的*n*步值，并使用了`parameters.json`文件中的`learning_step_threshold`参数：
+- en: 'Actor-critic (using separate actor and critic network):'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 演员-评论员（使用单独的演员和评论员网络）：
+- en: '- `Pendulum-v0` ; n-step (learning_step_threshold = 100)'
+  id: totrans-187
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '- `Pendulum-v0` ; n-step (learning_step_threshold = 100)'
+- en: '![](img/00287.jpeg)'
+  id: totrans-188
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00287.jpeg)'
+- en: 2.  - `Pendulum-v0`; n-step (learning_step_threshold = 5)
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2.  - `Pendulum-v0`; n-step (learning_step_threshold = 5)
+- en: '![](img/00288.jpeg)'
+  id: totrans-190
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00288.jpeg)'
+- en: 'Comparing 1 (100-step AC in green) and 2 (5-step AC in grey) on `Pendulum-v0`
+    for 10 million steps:'
+  id: totrans-191
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 比较1（100步AC，绿色）和2（5步AC，灰色）在`Pendulum-v0`上进行1000万步训练：
+- en: '![](img/00289.jpeg)'
+  id: totrans-192
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00289.jpeg)'
+- en: 'The training script will also output a summary of the training process to the
+    console. If you want to visualize the environment to see what the agent is doing
+    or how it is learning, you can add the `--render` flag to the command while launching
+    the training script, as illustrated in the following line:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练脚本还会将训练过程的摘要输出到控制台。如果你想可视化环境，以查看代理正在做什么或它是如何学习的，可以在启动训练脚本时在命令中添加`--render`标志，如下所示：
+- en: '[PRE7]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: As you can see, we have reached a point where you are just one command away
+    from training, logging, and visualizing the agent's performance! We have made
+    very good progress so far.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，我们已经达到一个阶段，你只需一条命令即可开始训练、记录并可视化代理的表现！到目前为止，我们已经取得了非常好的进展。
+- en: You can run several experiments with different sets of parameters for the agent,
+    on the same environment or on different environments. The previous example was
+    chosen to demonstrate its performance in a simpler environment so that you can
+    easily run full-length experiments and reproduce and compare the results, irrespective
+    of the hardware resources you may have. As part of the book's code repository,
+    trained agent brains/models are provided for some environments so that you can
+    quickly start and run the script in test mode to see how a trained agent performs
+    at the tasks. They are available in the `ch8/trianed_models` folder in your fork
+    of the book's repository, or at the upstream origin here: [https://github.com/PacktPublishing/Hands-On-Intelligent-Agents-with-OpenAI-Gym/tree/master/ch8/trained_models](https://github.com/PacktPublishing/Hands-On-Intelligent-Agents-with-OpenAI-Gym/tree/master/ch8/trained_models).
+    You will also find other resources, such as illustrations of learning curves in
+    other environments and video clips of agents performing in a variety of environments,
+    in the book's code repository for your reference.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在相同的环境或不同的环境上使用不同参数集运行多个代理实验。前面的示例被选择来展示其在更简单的环境中的表现，以便您可以轻松地运行全长实验并重现和比较结果，无论您可能拥有的硬件资源如何。作为本书代码库的一部分，针对一些环境提供了训练代理脑/模型，以便您可以快速启动并在测试模式下运行脚本，查看训练代理在任务中的表现。它们可以在您fork的书籍代码库的`ch8/trianed_models`文件夹中找到，或者在此处的上游源：[https://github.com/PacktPublishing/Hands-On-Intelligent-Agents-with-OpenAI-Gym/tree/master/ch8/trained_models](https://github.com/PacktPublishing/Hands-On-Intelligent-Agents-with-OpenAI-Gym/tree/master/ch8/trained_models)。您还会在书籍代码库中找到其他资源，例如其他环境中的学习曲线插图和代理在各种环境中表现的视频剪辑，供您参考。
+- en: 'Once you are ready to test the agent, either using your own trained agent''s
+    brain model or using one of the pre-trained agent brains, you can use the `--test`
+    flag to signify that you would like to disable learning and run the agent in testing
+    mode. For example, to test the agent in the `LunarLander-v2` environment with
+    rendering of the learning environment turned on, you can use the following command:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您准备好测试代理，可以使用您自己训练的代理的脑模型或使用预训练的代理脑，您可以使用`--test`标志来表示您希望禁用学习并在测试模式下运行代理。例如，要在`LunarLander-v2`环境中测试代理，并且打开学习环境的渲染，您可以使用以下命令：
+- en: '[PRE8]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'We can interchangeably use the asynchronous agent that we discussed as an extension
+    to our base agent. Since both the agent implementations follow the same structure
+    and configuration, we can easily switch to the asynchronous agent training script
+    by just using the `async_a2c_agent.py` script in place of `a2c_agent.py`. They
+    even support the same command line arguments to make our work simpler. When using
+    the `asyn_a2c_agent.py` script, you should make sure to set the `num_agents` parameter
+    in the `parameters.json` file, based on the number of processes or parallel instances
+    you would like the agent to use for training. As an example, we can train the
+    asynchronous version of our agent in the `BipedalWalker-v2` environment using
+    the following command:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以互换地使用我们讨论的异步代理作为我们基础代理的扩展。由于两种代理实现都遵循相同的结构和配置，我们可以通过仅使用`async_a2c_agent.py`脚本来轻松切换到异步代理训练脚本。它们甚至支持相同的命令行参数，以简化我们的工作。当使用`async_a2c_agent.py`脚本时，您应确保根据您希望代理使用的进程数或并行实例数在`parameters.json`文件中设置`num_agents`参数。例如，我们可以使用以下命令在`BipedalWalker-v2`环境中训练我们的异步代理版本：
+- en: '[PRE9]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: As you may have realized, our agent implementation is capable of learning to
+    act in a variety of different environments, each with its own set of tasks to
+    be completed, as well as their own state, observation and action spaces. It is
+    this versatility that has made deep reinforcement learning-based agents popular
+    and suitable for solving a variety of problems. Now that we are familiar with
+    the training process, we can finally move on to training the agent to drive a
+    car and follow the lanes in the CARLA driving simulator.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您可能已经意识到的那样，我们的代理实现能够学习在各种不同的环境中行动，每个环境都有其自己的任务集，以及它们自己的状态、观察和行动空间。正是这种多功能性使得基于深度强化学习的代理变得流行，并适合解决各种问题。现在我们已经熟悉了训练过程，我们终于可以开始训练代理驾驶汽车，并跟随CARLA驾驶模拟器中的车道行驶。
+- en: Training the agent to drive a car in the CARLA driving simulator
+  id: totrans-202
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在CARLA驾驶模拟器中训练代理驾驶汽车。
+- en: 'Let''s start training an agent in the CARLA driving environment! First, make
+    sure your GitHub fork is up to date with the upstream master so that you have
+    the latest code from the book''s repository. Since the CARLA environment we created
+    in the previous chapter is compatible with the OpenAI Gym interface, it is actually
+    easy to use the CARLA environment for training, just like any other Gym environment.
+    You can train the n-step advantage actor-critic agent using the following command:'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始在CARLA驾驶环境中训练一个代理！首先，确保你的GitHub分支是最新的，已经与上游主分支同步，这样你就能获得来自书籍仓库的最新代码。由于我们在上一章创建的CARLA环境与OpenAI
+    Gym接口兼容，因此使用CARLA环境进行训练就像使用任何其他Gym环境一样简单。你可以使用以下命令训练n步优势演员-评论家代理：
+- en: '[PRE10]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: This will launch the agent's training process, and like we saw before, a summary
+    of the progress will be printed to the console window, along with the logs written
+    to the `logs` folder, which can be viewed using `tensorboard`.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将启动代理的训练过程，像我们之前看到的那样，进度摘要将被打印到控制台窗口，并且日志会被写入`logs`文件夹，你可以使用`tensorboard`查看它们。
+- en: During the initial stages of the training process, you will notice that the
+    agent is driving the car like crazy!
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程的初期阶段，你会注意到代理驾驶汽车像疯了一样！
+- en: After several hours of training, you will see that the agent learns to control
+    the car and successfully drives down the road while staying in the lane and avoiding
+    crashing into other vehicles. A trained model for the autonomous driver agent
+    is available in the `ch8/trained_models` folder for you to quickly take the agent
+    on a test drive! You will also find more resources and experimental results in
+    the book's code repository to help with your learning and experimentation. Happy
+    experimenting!
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经过几小时的训练，你会看到代理能够控制汽车，成功地沿着道路行驶，同时保持在车道内并避免撞到其他车辆。你可以在`ch8/trained_models`文件夹中找到一个经过训练的自动驾驶代理模型，方便你快速让代理进行测试驾驶！你还可以在书籍的代码仓库中找到更多资源和实验结果，帮助你的学习和实验。祝你实验愉快！
+- en: Summary
+  id: totrans-208
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we got hands-on with an actor-critic architecture-based deep
+    reinforcement learning agent, starting from the basics. We started with the introduction
+    to policy gradient-based methods and walked through the step-by-step process of
+    representing the objective function for the policy gradient optimization, understanding
+    the likelihood ratio trick, and finally deriving the policy gradient theorem.
+    We then looked at how the actor-critic architecture makes use of the policy gradient
+    theorem and uses an actor component to represent the policy of the agent, and
+    a critic component to represent the state/action/advantage value function, depending
+    on the implementation of the architecture. With an intuitive understanding of
+    the actor-critic architecture, we moved on to the A2C algorithm and discussed
+    the six steps involved in it. We then discussed the n-step return calculation
+    using a diagram, and saw how easy it is to implement the n-step return calculation
+    method in Python. We then moved on to the step-by-step implementation of the deep
+    n-step advantage actor-critic agent.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们从基础开始，动手实践了基于演员-评论家架构的深度强化学习代理。我们从策略梯度方法的介绍开始，逐步讲解了表示策略梯度优化的目标函数、理解似然比技巧，最后推导出策略梯度定理。接着，我们了解了演员-评论家架构如何利用策略梯度定理，并使用演员组件表示代理的策略，使用评论家组件表示状态/动作/优势值函数，具体实现取决于架构的实现方式。在对演员-评论家架构有了直观的理解之后，我们进入了A2C算法，并讨论了其中涉及的六个步骤。然后，我们通过图示讨论了n步回报的计算，并展示了如何在Python中轻松实现n步回报计算方法。接着，我们逐步实现了深度n步优势演员-评论家代理。
+- en: We also discussed how we could make the implementation flexible and generic
+    to accommodate a variety of environments, which may have different state, observation
+    and action space dimensions, and also may be continuous or discrete. We then looked
+    at how we can run multiple instances of the agent in parallel on separate processes
+    to improve the learning performance. In the last section, we walked through the
+    steps involved in the process of training the agents, and once they are trained,
+    how we can use the `--test` and `--render` flags to test the agent's performance.
+    We started with simpler environments to get accustomed to the training and monitoring
+    process, and then finally moved on to accomplishing the goal of this chapter,
+    which was to train an intelligent agent to drive a car autonomously in the CARLA
+    driving simulator! I hope you learned a lot going through this relatively long
+    chapter. At this point, you have experience understanding and implementing two
+    broad classes of high-performance learning agent algorithms from this chapter
+    and [Chapter 6](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12), *Implementing
+    an Intelligent Agent for* *Optimal Discrete Control using Deep Q-Learning*. In
+    the next chapter, we will explore the landscape of new and promising learning
+    environments, where you can train your custom agents and start making progress
+    towards the next level.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还讨论了如何使实现变得灵活和通用，以适应各种不同的环境，这些环境可能具有不同的状态、观察和动作空间维度，并且可能是连续的或离散的。接着，我们探讨了如何在不同进程中并行运行多个智能体实例，以提高学习性能。在最后一部分，我们走过了训练智能体过程中涉及的步骤，一旦智能体训练完成，我们可以使用`--test`和`--render`标志来测试智能体的表现。我们从简单的环境开始，以便熟悉训练和监控过程，最终实现了本章的目标——在CARLA驾驶模拟器中训练一个智能体，使其能够自主驾驶一辆车！希望你在阅读这一相对较长的章节时学到了很多东西。到此为止，你已经积累了理解和实现本章以及[第六章](part0094.html#2PKKS0-22c7fc7f93b64d07be225c00ead6ce12)中两大类高性能学习智能体算法的经验，*《使用深度Q学习实现最优离散控制的智能体》*。在下一章，我们将探索新的有前景的学习环境，在这些环境中，你可以训练自定义智能体，并开始朝着下一个层次取得进展。

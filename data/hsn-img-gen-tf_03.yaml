@@ -1,0 +1,1629 @@
+- en: '*Chapter 2*: Variational Autoencoder'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第 2 章*：变分自编码器'
+- en: In the previous chapter, we looked at how a computer sees an image as pixels,
+    and we devised a probabilistic model for pixel distribution for image generation.
+    However, this is not the most efficient way to generate an image. Instead of scanning
+    an image pixel by pixel, we first look at the image and try to understand what
+    is inside. For example, a girl is sitting, wearing a hat, and smiling. Then we
+    use that information to draw a portrait. This is how autoencoders work.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章，我们研究了计算机如何将图像看作像素，并为图像生成设计了像素分布的概率模型。然而，这并不是生成图像的最有效方式。我们不是逐像素扫描图像，而是首先查看图像并尝试理解其中的内容。例如，一个女孩坐着，戴着帽子，微笑着。然后我们利用这些信息来绘制一幅肖像。这就是自编码器的工作方式。
+- en: 'In this chapter, we will first learn how to use an autoencoder to encode pixels
+    into latent variables that we can sample from to generate images. Then we will
+    learn how to tweak it to create a more powerful model known as a **variational
+    autoencoder** (**VAE**). Finally, we will train our VAE to generate faces and
+    perform face editing. The following topics will be covered in this chapter:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将首先学习如何使用自编码器将像素编码为潜在变量，从这些变量中采样来生成图像。接下来，我们将学习如何调整自编码器，创建一个更强大的模型，称为
+    **变分自编码器**（**VAE**）。最后，我们将训练我们的 VAE 来生成面部图像并进行面部编辑。本章将涵盖以下主题：
+- en: Learning latent variables with autoencoders
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用自编码器学习潜在变量
+- en: Variational autoencoders
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 变分自编码器
+- en: Generating faces with VAEs
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用变分自编码器生成面部图像
+- en: Controlling face attributes
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 控制面部特征
+- en: Technical requirements
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: The Jupyter notebooks and codes can be found at [https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter02](https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter02).
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Jupyter 笔记本和代码可以在 [https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter02](https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter02)
+    找到。
+- en: 'The notebooks used in this chapter are as follows:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章使用的笔记本如下：
+- en: '`ch2_autoencoder.ipynb`'
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ch2_autoencoder.ipynb`'
+- en: '`ch2_vae_mnist.ipynb`'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ch2_vae_mnist.ipynb`'
+- en: '`ch2_vae_faces.ipynb`'
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ch2_vae_faces.ipynb`'
+- en: Learning latent variables with autoencoders
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用自编码器学习潜在变量
+- en: Autoencoders were first introduced in the 1980s, and one of the inventors is
+    Geoffrey Hinton, who is one of the godfathers of modern deep learning. The hypothesis
+    is that there are many redundancies in high-dimensional input space that can be
+    compressed into some low-dimensional variables. There are traditional machine
+    learning techniques such as **Principal Component Analysis** (**PCA**) for dimension
+    reduction.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自编码器最早是在 1980 年代提出的，发明者之一是 Geoffrey Hinton，他是现代深度学习的奠基人之一。其假设是高维输入空间中存在大量冗余，可以将其压缩为一些低维变量。传统的机器学习技术，如
+    **主成分分析**（**PCA**），就是用于降维的工具。
+- en: However, in image generation, we will also want to restore the low dimension
+    space into high dimension space. Although the way to do it is quite different,
+    you can think of it like image compression where a raw image is compressed into
+    a file format such as JPEG, which is small and easy to store and transfer. Then
+    the computer can restore the JPEG into pixels that we can see and manipulate.
+    In other words, the raw pixels are compressed into low-dimensional JPEG format
+    and restored to high-dimensional raw pixels for display.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在图像生成中，我们还希望将低维空间恢复到高维空间。虽然实现方式有所不同，但你可以将其理解为图像压缩过程，其中原始图像被压缩为 JPEG 等文件格式，这种格式体积小、易于存储和传输。然后，计算机可以将
+    JPEG 恢复为我们可以看到并操作的像素。换句话说，原始像素被压缩为低维的 JPEG 格式，然后恢复为用于显示的高维原始像素。
+- en: Autoencoders are an *unsupervised machine learning* technique where no labels
+    are needed to train the model. However, some call this *self-supervised* machine
+    learning (*auto* means *self* in Latin) because we do need to use labels, and
+    these labels are not annotated labels but the images themselves.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自编码器是一种 *无监督机器学习* 技术，不需要标签来训练模型。然而，有些人称其为 *自监督* 机器学习（*auto* 在拉丁语中意为 *自我*），因为我们确实需要使用标签，而这些标签并非经过标注的标签，而是图像本身。
+- en: 'The basic building blocks of autoencoders are an **encoder** and a **decoder**.
+    The encoder is responsible for reducing high-dimensional input into some low-dimensional
+    latent (hidden) variables. Although it is not clear from the name, the decoder
+    is the block that converts latent variables back into high dimensional space.
+    The encoder-decoder architecture is also used in other machine learning tasks,
+    such as **semantic segmentation**, where the neural network first learns about
+    the image representation, then produces pixel-level labels. The following diagram
+    shows the general architecture of an autoencoder:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自编码器的基本构建模块是**编码器**和**解码器**。编码器负责将高维输入压缩为一些低维的潜在（隐含）变量。尽管从名称上看不太明显，但解码器是将潜在变量转换回高维空间的模块。编码器-解码器架构也应用于其他机器学习任务，例如**语义分割**，其中神经网络首先学习图像表示，然后生成像素级标签。下图展示了自编码器的一般架构：
+- en: '![Figure 2.1 – General autoencoder architecture'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.1 – 一般自编码器架构](img/B14538_02_01.jpg)'
+- en: '](img/B14538_02_01.jpg)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_01.jpg)'
+- en: Figure 2.1 – General autoencoder architecture
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.1 – 一般自编码器架构
+- en: In the preceding image, the **input** and **output** are images of the same
+    dimension, and **z** is the low dimensional latent vector. The **encoder** compresses
+    input into **z**, and the **decoder** reverses the process to generate the output
+    image.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的图像中，**输入**和**输出**是相同维度的图像，**z**是低维潜在向量。**编码器**将输入压缩成**z**，而**解码器**则逆转这一过程以生成输出图像。
+- en: Having examined the overall architecture, let's look into how the encoder works.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在审视了整体架构之后，让我们进一步了解编码器的工作原理。
+- en: Encoder
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 编码器
+- en: The encoder is made up of multiple neural network layers, and it is best illustrated
+    by using fully connected (dense) layers. We will now jump straight into building
+    an encoder for the `MNIST` dataset, which has a dimension of 28x28x1\. We need
+    to set the dimension of latent variables, which is a 1D vector. We will stick
+    to the convention and name the latent variables as `z`, as seen in the following
+    code.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编码器由多个神经网络层组成，最好的表示方法是使用全连接（密集）层。现在我们将直接构建一个适用于`MNIST`数据集的编码器，该数据集的维度是28x28x1\。我们需要设置潜在变量的维度，这是一个一维向量。我们将遵循惯例，称潜在变量为`z`，如下代码所示。
+- en: 'The code can be found in `ch2_autoencoder.ipynb`:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码可以在`ch2_autoencoder.ipynb`中找到：
+- en: '[PRE0]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The size of the latent variable should be smaller than the input dimension.
+    It is a hyperparameter, and we will first try with 10, which will give us a compression
+    rate of *28*28/10 = 78.4*.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 潜在变量的大小应小于输入维度。它是一个超参数，我们将首先尝试使用10，这将给我们一个压缩率为*28*28/10 = 78.4*。
+- en: 'We will then use three fully connected layers with a decreasing number of neurons
+    (`128`, `64`, `32`, and finally `10`, which is our `z` dimension). We can see
+    in the following model summary that the feature sizes got squeezed from `784`
+    gradually down to `10` in the network''s output:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将使用三个全连接层，神经元数逐渐减少（`128`，`64`，`32`，最后是`10`，这是我们的`z`维度）。我们可以在以下的模型总结中看到，特征大小从`784`逐渐压缩到网络输出的`10`：
+- en: '![Figure 2.2 – Model summary of our encoder'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.2 – 我们编码器的模型总结](img/B14538_02_01.jpg)'
+- en: '](img/B14538_02_02.jpg)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_02.jpg)'
+- en: Figure 2.2 – Model summary of our encoder
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.2 – 我们编码器的模型总结
+- en: This network topology forces the model to learn what is important and discard
+    less important features from layer to layer, to finally come down to the 10 most
+    important features. If you come to think of it, this looks very similar to the
+    **CNN** classification, where the feature map size reduces gradually as it traverses
+    to the top layers. **Feature map** refers to the first two dimensions (height,
+    width) of the tensor.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种网络拓扑结构迫使模型学习哪些是重要的特征，并逐层丢弃不太重要的特征，最终将数据压缩到10个最重要的特征。如果仔细想一想，这与**CNN**分类非常相似，其中特征图的大小随着向上层遍历逐渐减小。**特征图**是指张量的前两个维度（高度和宽度）。
+- en: 'As CNNs are more efficient and better suited for image inputs, we will build
+    the encoder using **convolutional layers**. Old CNNs, such as **VGG**, used max
+    pooling for feature map downsampling, but newer networks tend to achieve that
+    by using stride of 2 in the convolutional layers. The following diagram illustrates
+    the sliding of the convolutional kernel with a stride of 2 to produce a feature
+    map that is half the size of the input feature map:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于CNN在图像输入上更为高效且更适合，我们将使用**卷积层**来构建编码器。旧的CNN（如**VGG**）使用最大池化来进行特征图下采样，但较新的网络通常通过在卷积层中使用步幅为2的卷积核来实现这一点。下图演示了使用步幅为2的卷积核滑动，从而生成一个特征图，其大小是输入特征图的一半：
+- en: '![Figure 2.3 – From left to right, the figure illustrates a convolutional operation
+    working with an input stride of 2 ](img/B14538_02_03.jpg)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 2.3 – 从左到右，图中展示了使用步幅为2的卷积操作](img/B14538_02_03.jpg)'
+- en: Figure 2.3 – From left to right, the figure illustrates a convolutional operation
+    working with an input stride of 2
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.3 – 从左到右，图中展示了使用步幅为2的卷积操作
+- en: '(Source: Vincent Dumoulin, Francesco Visin, “A guide to convolution arithmetic
+    for deep learning” https://www.arxiv-vanity.com/papers/1603.07285/)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （来源：Vincent Dumoulin, Francesco Visin, “深度学习卷积算术指南” https://www.arxiv-vanity.com/papers/1603.07285/）
+- en: 'In this example, we will use four convolutional layers with `8` filters and
+    include an input stride of `2` for downsampling, as follows:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，我们将使用四个卷积层，每个层有`8`个滤波器，并包含一个步幅为`2`的输入进行下采样，如下所示：
+- en: '[PRE1]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: In a typical CNN architectures, the number of filters increases while the feature
+    map size decreases. However, our objective is to reduce the dimension, hence I
+    have kept the filter size as constant. This is sufficient for simple data such
+    as MNIST, and it is fine to change the filter sizes as we move toward the latent
+    variables. Lastly, we flatten the output of the last convolutional layer and feed
+    it to a dense layer to output our latent variables.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在典型的卷积神经网络（CNN）架构中，滤波器的数量会增加，而特征图的大小会减少。然而，我们的目标是减少维度，因此我保持了滤波器大小不变。这对于像MNIST这样的简单数据来说已经足够，随着我们进入潜在变量，滤波器大小的变化也是可以的。最后，我们将最后一个卷积层的输出展平，并将其输入到全连接层，以输出我们的潜在变量。
+- en: Decoder
+  id: totrans-40
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解码器
+- en: If a decoder were a human, they would probably feel ill-treated. This is because
+    the decoder does half of the work but only the encoder gets a place in the name.
+    It should have been called auto-encoder-decoder!
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果解码器是一个人，他们可能会觉得自己被不公平对待。这是因为解码器做了一半的工作，但只有编码器在名称中占有一席之地。它应该被称为自动编码器-解码器！
+- en: 'The job of the decoder is essentially the reverse of the encoder, which is
+    to convert low-dimensional latent variables into high-dimensional output to look
+    like the input image. There is no need for layers in the decoder to look like
+    the encoder in reverse order. You could use completely different layers, for instance,
+    dense layers only in the encoder and convolutional layers only in the decoder.
+    Anyway, we will still use convolutional layers in our decoder to upsample feature
+    maps from 7x7 to 28x28\. The following code snippet shows the construction of
+    the decoder:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解码器的工作本质上是编码器的反向操作，即将低维潜在变量转换为高维输出，以使其看起来像输入图像。解码器中的层不需要按反向顺序看起来像编码器。你可以使用完全不同的层，例如，在编码器中只使用全连接层，在解码器中只使用卷积层。无论如何，我们仍将在解码器中使用卷积层，将特征图从7x7上采样到28x28。以下代码片段展示了解码器的构建：
+- en: '[PRE2]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The first layer is a dense layer that takes in the latent variables and produces
+    a tensor with a size of [7 x 7 x the number of filters] of our first convolutional
+    layer. Unlike the encoder, the objective of the decoder is not to reduce dimensionality,
+    thus we could and should use more filters to give it more generative capacity.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一层是一个全连接层，它接收潜在变量并生成一个大小为[7 x 7 x 卷积层滤波器数量]的张量。与编码器不同，解码器的目标不是减少维度，因此我们可以并且应该使用更多的滤波器，以增加其生成能力。
+- en: '`UpSampling2D` interpolates the pixels to increase the resolution. It is an
+    affine transformation (linear multiplications and additions), therefore it could
+    **backpropagate**, but it uses fixed weights and is therefore is not trainable.
+    Another popular upsampling method is to use the **transpose convolutional layer**,
+    which is trainable, but it can create checkerboard-like artifacts in the generated
+    image. You can read more at [https://distill.pub/2016/deconv-checkerboard/](https://distill.pub/2016/deconv-checkerboard/).'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UpSampling2D`通过插值像素来增加分辨率。它是一个仿射变换（线性乘法和加法），因此它可以**反向传播**，但它使用固定的权重，因此不可训练。另一种流行的上采样方法是使用**转置卷积层**，该层是可训练的，但可能会在生成的图像中产生棋盘状的伪影。你可以在[https://distill.pub/2016/deconv-checkerboard/](https://distill.pub/2016/deconv-checkerboard/)查看更多信息。'
+- en: 'The checkerboard artifacts are more obvious for low-dimension images or when
+    you zoom into an image. The effect can be reduced by using an even-numbered convolutional
+    kernel size, for example, 4 rather than the more popular size of 3\. Therefore,
+    recent image generative models tend to not use transpose convolution. We will
+    be using `UpSampling2D` throughout the rest of the book. The following table shows
+    the model summary of the decoder:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于低维图像或当你放大图像时，棋盘效应更为明显。通过使用偶数大小的卷积核（例如，4而不是更常见的3），可以减少这种效果。因此，近期的图像生成模型通常不使用转置卷积。我们将在本书的其余部分使用`UpSampling2D`。以下表格显示了解码器的模型摘要：
+- en: '![Figure 2.4 – Model summary of the decoder'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图2.4 – 解码器的模型摘要'
+- en: '](img/B14538_02_04.jpg)'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_04.jpg)'
+- en: Figure 2.4 – Model summary of the decoder
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.4 – 解码器的模型摘要
+- en: Tips
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提示
+- en: When designing a CNN, it is important to know how to work out the convolutional
+    layer's output tensor shape. If `padding='same'` is used, the output feature map
+    will have the same size (height and width) as the input feature map. If `padding='valid'`
+    is used instead, then the output size may be slightly smaller depending on the
+    filter kernel dimension. When input `stride = 2` is used together with the same
+    padding, the feature map size is halved. Lastly, the channel number of the output
+    tensor is the same as the convolutional filter number. For example, if the input
+    tensor has a shape of (28,28,1) and goes through `conv2d(filters=32, strides=2,
+    padding='same')`, we know the output will have a shape of (14,14, 32).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设计CNN时，了解如何计算卷积层输出张量的形状非常重要。如果使用`padding='same'`，则输出特征图的大小（高度和宽度）将与输入特征图相同。如果改为使用`padding='valid'`，则输出大小可能会略小，具体取决于滤波器核的维度。当输入`stride
+    = 2`与相同的填充一起使用时，特征图的大小会减半。最后，输出张量的通道数与卷积滤波器的数量相同。例如，如果输入张量的形状是(28,28,1)，并通过`conv2d(filters=32,
+    strides=2, padding='same')`，我们知道输出的形状将是(14,14, 32)。
+- en: Building an autoencoder
+  id: totrans-52
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 构建自编码器
+- en: 'Now we are ready to put the encoder and decoder together to create an autoencoder.
+    First, we instantiate the encoder and decoder separately. We then feed the encoder''s
+    output into the decoder''s input, and we instantiate a `Model` using the encoder''s
+    input and the decoder''s output as follows:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备将编码器和解码器结合起来创建自编码器。首先，我们分别实例化编码器和解码器。然后，我们将编码器的输出传递给解码器的输入，并使用编码器的输入和解码器的输出来实例化一个`Model`，如下所示：
+- en: '[PRE3]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'A deep neural network can look complex and scary to build. However, we could
+    break it down into smaller blocks or modules, then put them together later. The
+    whole task becomes more manageable! For training, we will use L2 loss, this is
+    implemented using **mean squared error** (**MSE**) to compare each of the pixels
+    between the output and expected result. In this example, I have added in some
+    callback functions that will be called after training every epoch as follows:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深度神经网络看起来可能很复杂且难以构建。然而，我们可以将其拆分成更小的模块或块，然后稍后将它们组合起来。这样整个任务就变得更加可管理！在训练过程中，我们将使用L2损失，这通过**均方误差**（**MSE**）来实现，用于比较输出和期望结果之间的每个像素。在这个示例中，我添加了一些回调函数，它们将在每个训练周期后被调用，如下所示：
+- en: '`ModelCheckpoint(monitor=''val_loss'')` to save the model if the validation
+    loss is lower than in earlier epochs.'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`ModelCheckpoint(monitor='val_loss')`在验证损失低于早期周期时保存模型。
+- en: '`EarlyStopping(monitor=''val_loss'', patience = 10)` to stop the training earlier
+    if the validation loss has not improved for 10 epochs.'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`EarlyStopping(monitor='val_loss', patience = 10)`来提前停止训练，如果验证损失在10个周期内没有改善。
+- en: 'The image generated is as follows:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成的图像如下所示：
+- en: '![Figure 2.5 – The first row is the input image and the second row is generated
+    by the autoencoder'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图2.5 – 第一行是输入图像，第二行是由自编码器生成的图像'
+- en: '](img/B14538_02_05.jpg)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_05.jpg)'
+- en: Figure 2.5 – The first row is the input image and the second row is generated
+    by the autoencoder
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.5 – 第一行是输入图像，第二行是由自编码器生成的图像
+- en: As you can see, the first row is the input image and the second row is generated
+    by our autoencoder. We can see that the generated images are a bit blurry; that
+    is probably because we have compressed it too much and some data information is
+    lost during the process.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，第一行是输入图像，第二行是由我们的自编码器生成的图像。我们可以看到生成的图像有些模糊；这可能是因为我们过度压缩了图像，导致在过程中丢失了一些数据。
+- en: 'To confirm our suspicion, we increase the latent variable dimension from 10
+    to 100 and generate the output and the result is as follows:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了验证我们的怀疑，我们将潜在变量的维度从10增加到100，然后生成输出，结果如下：
+- en: '![Figure 2.6 – Image generated by autoencoder with z_dim = 100'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.6 – 自编码器生成的图像，z_dim = 100'
+- en: '](img/B14538_02_06.jpg)'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_06.jpg)'
+- en: Figure 2.6 – Image generated by autoencoder with z_dim = 100
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.6 – 自编码器生成的图像，z_dim = 100
+- en: As you can see, the generated images now look a lot sharper!
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，现在生成的图像看起来更加锐利！
+- en: Generating images from latent variables
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 从潜在变量生成图像
+- en: So, how do we use an autoencoder? It is not very useful to have an AI model
+    to convert an image into a blurrier version of itself. One of the first applications
+    of autoencoders is image denoising, where we add some noise into the input image
+    and train the model to produce a clean image. However, we are more interested
+    in using it to generate images. So, let's see how we can do it.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，我们如何使用自编码器呢？让一个 AI 模型将图像转换为更模糊的版本并不太有用。自编码器的最初应用之一是图像去噪，我们将一些噪声添加到输入图像中，并训练模型生成干净的图像。然而，我们更感兴趣的是使用它来生成图像。那么，让我们看看我们如何做到这一点。
+- en: Now that we have a trained autoencoder, we can ignore the encoder and use only
+    the decoder to sample from the latent variables to generate images (See? The decoder
+    deserves more recognition because it will still need to keep working after completing
+    the training). The first challenge we face is working out how we sample from the
+    latent variables. As we did not use any activation in the last layer before the
+    latent variables, the latent space is unbounded and can be any real floating numbers,
+    and there are hundreds of them!
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经有了训练好的自编码器，我们可以忽略编码器，只使用解码器从潜在变量中采样来生成图像（看到了吗？解码器值得更多的认可，因为它在训练完成后仍然需要继续工作）。我们面临的第一个挑战是如何从潜在变量中采样。由于在潜在变量之前的最后一层没有使用任何激活函数，潜在空间是无界的，可以是任何实数浮动值，而且数量多得不可计数！
+- en: 'To illustrate how this should work, we will train another autoencoder using
+    `z_dim=2` so we can explore the latent space in two dimensions. The following
+    graph shows the plot of the latent space:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明这如何起作用，我们将训练另一个自编码器，使用`z_dim=2`，以便我们可以在二维空间中探索潜在空间。以下图表展示了潜在空间的图：
+- en: '![Figure 2.7 – Plot of latent space. A color version is available in the Jupyter
+    notebook'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.7 – 潜在空间的图。Jupyter Notebook 中有彩色版本'
+- en: '](img/B14538_02_07.jpg)'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_07.jpg)'
+- en: Figure 2.7 – Plot of latent space. A color version is available in the Jupyter
+    notebook
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.7 – 潜在空间的图。Jupyter Notebook 中有彩色版本。
+- en: 'The plot was generated by passing 1,000 samples into the trained encoder and
+    plotting the two latent variables on the scatter plot. The color bar on the right
+    indicates the intensity of the digit labels. We can observe the following from
+    the plots:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该图是通过将 1,000 个样本输入训练好的编码器，并在散点图上绘制两个潜在变量生成的。右侧的色条表示数字标签的强度。我们可以从这些图中观察到以下几点：
+- en: The latent variables sit roughly between **–5** and **+4**. We won't know the
+    exact range unless we create this plot and look at it. This can change when you
+    train the model again, and quite often the samples can scatter more widely beyond
+    +-10.
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 潜在变量大致位于**–5**和**+4**之间。我们无法知道确切的范围，除非我们绘制出这个图并查看它。这个范围在重新训练模型时可能会发生变化，且样本的分布通常会超出+-10，分布得更加广泛。
+- en: The classes are not distributed uniformly. You can see clusters in the top left
+    and on the right that are well separated from other classes (refer to the color
+    version in the Jupyter notebook). However, the classes at the center of the plot
+    tend to be more densely packed and overlap with each other.
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 类别的分布并不均匀。你可以看到左上角和右侧有一些聚类，它们与其他类别分离得很好（请参考 Jupyter Notebook 中的彩色版本）。然而，位于图中心的类别往往较为密集，且彼此重叠。
+- en: 'You might be able to see the non-uniformity better in the following images,
+    which were generated by sweeping the latent variables from **–5** to **+5** with
+    a 1.0 interval:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能能在以下图像中更好地看到不均匀性，这些图像是通过以 1.0 的间隔从**–5**到**+5**扫描潜在变量生成的：
+- en: '![Figure 2.8 - Images generated by sweeping the two latent variables'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.8 - 通过扫描两个潜在变量生成的图像'
+- en: '](img/B14538_02_08.jpg)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_08.jpg)'
+- en: Figure 2.8 - Images generated by sweeping the two latent variables
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.8 - 通过扫描两个潜在变量生成的图像
+- en: We can see that digits 0 and 1 are well represented in the sample distribution
+    and they are nicely drawn too. It is not the case for digits in the center, which
+    are blurry, and some digits are even missing from the samples. The latter shows
+    the shortcoming where there is very little variation in generated images for those
+    classes.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到数字0和1在样本分布中表现得很好，并且它们的绘制效果也很好。对于位于中心的数字情况则不太一样，它们显得模糊，甚至一些数字在样本中完全缺失。这表明，对于这些类别，生成的图像变化非常少，这是一个缺点。
+- en: It's not all bad. If you look closer, you can see how the digit 1 morphs into
+    7, then to 9 and 4, and that is interesting! It looks like the autoencoder has
+    learned some relationship between the latent variables. It might be that the digits
+    with round appearances are mapped into the latent space toward the top-right corner,
+    while digits that look more like a stick sit on the left-hand side. That is good
+    news!
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并不完全是坏事。如果你仔细观察，你会发现数字1逐渐变形为7，接着变成9和4，这很有趣！看起来自动编码器已经学到了一些潜在变量之间的关系。可能是外形圆润的数字被映射到潜在空间的右上角，而看起来更像棍棒的数字则位于左侧。这是个好消息！
+- en: Fun
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 乐趣
+- en: There is a widget in the notebook that allows you to slide the latent variable
+    bars to generate images interactively. Have fun!
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在笔记本中有一个小工具，允许你滑动潜在变量条，进行交互式图像生成。玩得开心！
+- en: In the coming section, we will see how we can use a VAE to solve the distribution
+    issue in the latent space.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将看到如何使用VAE解决潜在空间中的分布问题。
+- en: Variational autoencoders
+  id: totrans-87
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 变分自编码器
+- en: In an autoencoder, the decoder samples directly from latent variables. **Variational
+    autoencoders** (**VAEs**), which were invented in 2014, differ in that the sampling
+    is taken from a distribution parameterized by the latent variables. To be clear,
+    let's say we have an autoencoder with two latent variables, and we draw samples
+    randomly and get two samples of 0.4 and 1.2\. We then send them to the decoder
+    to generate an image.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在自编码器中，解码器是直接从潜在变量中抽取样本的。**变分自编码器**（**VAE**），它在2014年被发明，区别在于样本是从由潜在变量参数化的分布中抽取的。为了清楚说明，假设我们有一个包含两个潜在变量的自编码器，我们随机抽取样本，得到0.4和1.2这两个样本。然后，我们将它们发送到解码器生成图像。
+- en: In a VAE, these samples don't go to the decoder directly. Instead, they are
+    used as a mean and variance of a **Gaussian distribution**, and we draw samples
+    from this distribution to be sent to the decoder for image generation. As this
+    is one of the most important distributions in machine learning, so let's go over
+    some basics of Gaussian distributions before creating a VAE.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在变分自编码器（VAE）中，这些样本并不会直接传递到解码器。相反，它们作为**高斯分布**的均值和方差被使用，我们从这个分布中抽取样本，然后将它们发送到解码器进行图像生成。由于这是机器学习中最重要的分布之一，因此在创建VAE之前，我们先了解一些高斯分布的基本知识。
+- en: Gaussian distribution
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 高斯分布
+- en: 'A Gaussian distribution is characterized by two parameters – **mean** and **variance**.
+    I think we are all familiar with the different bell curves shown in the following
+    graph. The bigger the standard deviation (the square root of the variance), the
+    larger the spread:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高斯分布的特征是由两个参数 – **均值**和**方差**定义的。我想我们都对下图中展示的不同钟形曲线很熟悉。标准差越大（方差的平方根），分布越广：
+- en: '![Figure 2.9 – Gaussian distribution probability density function with different
+    standard deviations'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图2.9 – 不同标准差的高斯分布概率密度函数'
+- en: '](img/B14538_02_09.jpg)'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_09.jpg)'
+- en: Figure 2.9 – Gaussian distribution probability density function with different
+    standard deviations
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.9 – 不同标准差的高斯分布概率密度函数
+- en: We can use the ![](img/Formula_02_001.png) notation to describe a univariate
+    Gaussian distribution, where *µ* is the mean and ![](img/Formula_02_002.png) is
+    the standard deviation.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用 ![](img/Formula_02_001.png) 表示单变量高斯分布，其中 *µ* 是均值，![](img/Formula_02_002.png)
+    是标准差。
+- en: 'The mean tells us where the peak is: it is the value that has the highest probability
+    density, in other words, the most frequent value. If we are to draw samples of
+    pixel location (x,y) of an image, and each x and y have different Gaussian distributions,
+    then we have a *multivariate* Gaussian distribution. In this case, it is a *bivariate*
+    distribution.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 均值告诉我们峰值在哪里：它是概率密度最高的值，换句话说，就是最常见的值。如果我们要从图像的像素位置 (x, y) 中抽取样本，并且每个 x 和 y 都有不同的高斯分布，那么我们就得到一个*多元*高斯分布。在这种情况下，它是一个*二元*分布。
+- en: The mathematical equations of a multivariate Gaussian distribution can look
+    quite intimidating, so I'm not going to put them in here. The only thing we need
+    to know is that we now incorporate standard deviations into the covariance matrix.
+    The diagonal elements in the covariance matrix are simply the standard deviations
+    of individual Gaussian distributions. The other elements measure the covariance
+    between two Gaussian distributions, that is, the correlation between them.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多元高斯分布的数学公式看起来可能相当复杂，因此我不会把它们放在这里。我们只需要知道的是，现在我们将标准差纳入了协方差矩阵。协方差矩阵的对角元素只是各个高斯分布的标准差。其他元素则衡量两个高斯分布之间的协方差，也就是它们之间的相关性。
+- en: 'The following graph shows us the bivariate Gaussian samples without correlation:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下图表展示了没有相关性的二元高斯样本：
+- en: '![Figure 2.10 – Samples from a bivariate Gaussian distribution with no correlation'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.10 – 无相关性的二元高斯分布样本'
+- en: '](img/B14538_02_10.jpg)'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_10.jpg)'
+- en: Figure 2.10 – Samples from a bivariate Gaussian distribution with no correlation
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.10 – 无相关性的二元高斯分布样本
+- en: We can see that when the standard deviation of one dimension increases from
+    1 to 4, the spread increases only in that dimension (the *y* axis) without affecting
+    the others. Here, we say the two Gaussian distributions are **identically and
+    independently distributed** (abbreviated as **iid**).
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到，当某一维度的标准差从1增加到4时，只有该维度（*y*轴）的分布扩展了，而其他维度没有受到影响。在这里，我们说这两个高斯分布是**独立同分布**（简称**iid**）。
+- en: 'Now, in the second example, the plot on the left shows that the covariance
+    is non-zero and positive, which means when the density increases in one dimension,
+    the other dimension will follow suit and they are correlated. The plot on the
+    right shows a negative correlation:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，在第二个例子中，左边的图表显示协方差非零且为正，这意味着当某一维度的密度增加时，另一维度也会跟着增加，它们是相关的。右边的图表显示了负相关：
+- en: '![Figure 2.11 – Samples from a bivariate Gaussian distribution with correlation'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.11 – 带相关性的二元高斯分布样本'
+- en: '](img/B14538_02_11.jpg)'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_11.jpg)'
+- en: Figure 2.11 – Samples from a bivariate Gaussian distribution with correlation
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.11 – 带相关性的二元高斯分布样本
+- en: 'Here is some good news for you: Gaussian distributions in VAEs are assumed
+    to be iid and therefore do not require covariance matrix to describe the correlation
+    between the variables. As a result, we need just *n*-pairs of mean and variance
+    to describe our multivariate Gaussian distribution. What we hope to achieve is
+    to create a nicely distributed latent space where latent variables'' distributions
+    for different data classes are as follows:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有个好消息：在变分自编码器（VAE）中，高斯分布假设是独立同分布（iid），因此不需要协方差矩阵来描述变量之间的相关性。结果，我们只需要*n*对均值和方差来描述我们的多元高斯分布。我们希望实现的目标是创建一个分布良好的潜在空间，其中不同数据类别的潜在变量分布如下：
+- en: Evenly spread so we have a better variation to sample from
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 均匀分布，所以我们可以从中获得更好的变化来进行采样
+- en: Overlap slightly with each other to create a continuous transition
+  id: totrans-109
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 略微重叠以创建连续的过渡
+- en: 'This can be illustrated with the following plot:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可以通过以下图表来说明：
+- en: '![Figure 2.12 – Four samples drawn from a multivariate Gaussian distribution'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.12 – 从多元高斯分布中抽取的四个样本'
+- en: '](img/B14538_02_12.jpg)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_12.jpg)'
+- en: Figure 2.12 – Four samples drawn from a multivariate Gaussian distribution
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.12 – 从多元高斯分布中抽取的四个样本
+- en: Next, we will learn how to incorporate Gaussian distribution sampling into a
+    VAE.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将学习如何将高斯分布采样融入VAE中。
+- en: Sampling latent variables
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 采样潜在变量
+- en: When we train an autoencoder, the encoded latent variables go straight to the
+    decoder. With a VAE, there is an additional sampling step between the encoder
+    and the decoder. The encoder produces the mean and variance of Gaussian distributions
+    as latent variables, and we draw samples from them to send to the decoder. The
+    problem is, sampling is not back-propagatable and therefore is not trainable.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们训练自编码器时，编码后的潜在变量直接传递给解码器。而在VAE中，编码器和解码器之间还有一个额外的采样步骤。编码器生成高斯分布的均值和方差作为潜在变量，我们从中抽取样本并发送到解码器。问题是，采样是不可反向传播的，因此不能进行训练。
+- en: Backpropagation
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 反向传播
+- en: For those who are not familiar with the fundamentals of deep learning, a neural
+    network is trained using **backpropagation**. One of the steps is to calculate
+    the gradients of the loss with respect to the network weights. Therefore, all
+    operations must be differentiable for backpropagation to work.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于那些不熟悉深度学习基础的读者，神经网络是通过**反向传播**来训练的。其步骤之一是计算损失函数对网络权重的梯度。因此，所有操作必须是可微分的，才能使反向传播工作。
+- en: 'To solve this, we can employ a simple *reparameterization trick* where we cast
+    the Gaussian random variable *N* (mean, variance) into *mean + sigma * N(0, 1)*.
+    In other words, we first sample from a standard Gaussian distribution of N(0,1),
+    then multiply it with sigma then add mean to it. As you can see in the following
+    diagram, the sampling becomes an affine transformation (which is composed of only
+    add and multiplication operations) and the error could backpropagate from the
+    output back to the encoder:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，我们可以采用一个简单的*重参数化技巧*，即将高斯随机变量*N*（均值，方差）转换为*mean + sigma * N(0, 1)*。换句话说，我们首先从标准高斯分布N(0,1)中进行采样，然后将其乘以sigma，再加上均值。正如以下图所示，采样变成了一个仿射变换（仅由加法和乘法操作组成），并且误差可以从输出层反向传播到编码器：
+- en: '![Figure 2.13 – Gaussian sampling in a VAE'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.13 – VAE中的高斯采样'
+- en: '](img/B14538_02_13.jpg)'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_13.jpg)'
+- en: Figure 2.13 – Gaussian sampling in a VAE
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.13 – VAE中的高斯采样
+- en: The sampling from a standard Gaussian distribution **N(0,1)** can be seen as
+    input to the VAE, and we do not need to backpropagate back to inputs. However,
+    we will put the **N(0,1)** sampling inside our model. Now that we understand how
+    sampling works, we can now go and build our VAE model.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自标准高斯分布**N(0,1)**的采样可以视为VAE的输入，我们不需要将反向传播回传到输入层。然而，我们将**N(0,1)**的采样放入我们的模型中。既然我们已经理解了采样的原理，接下来我们可以构建我们的VAE模型。
+- en: 'Let''s now implement the sampling as a custom layer, as shown in the following
+    snippet:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们实现将采样作为一个自定义层，如下所示：
+- en: '[PRE4]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Note that we use log variance in the encoder space rather than variance for
+    numerical stability. By definition, variance is a positive number, but unless
+    we use an activation function such as `relu` to constrain it, the variance of
+    latent variables can become negative. Furthermore, the variance can vary greatly,
+    say from 0.01 to 100, which can make it difficult to train. However, the natural
+    log of those values is -4.6 and +4.6, which is a smaller range. Nevertheless,
+    we will need to convert the log variance into the standard deviation when doing
+    sampling, hence the `tf.exp(0.5*logvar)` code.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们在编码器空间中使用对数方差而非方差，以提高数值稳定性。根据定义，方差是一个正数，但除非我们使用如`relu`等激活函数对其进行约束，否则潜在变量的方差可能会变成负数。此外，方差可能变化非常大，例如从0.01到100，这可能使训练变得困难。然而，这些值的自然对数为-4.6和+4.6，这是一个较小的范围。尽管如此，在进行采样时，我们仍然需要将对数方差转换为标准差，因此需要使用`tf.exp(0.5*logvar)`代码。
+- en: Important note
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要提示
+- en: There are a few ways to construct models in TensorFlow. One is to use the `Sequential`
+    class to add layers sequentially. The input of the last layer goes into the next
+    layer; therefore, you don't need to specify the input for the layer. While this
+    is convenient, you can't use this on models that have branches. The next is to
+    use the `tf.random.normal()` will fail in eager execution mode, which is the default
+    mode of TensorFlow 2 for creating a dynamic graph. This is because the function
+    needs to know the batch size to generate the random numbers, but it is unknown
+    as we create the layers. Thus, we would get an error in our Jupyter notebook when
+    trying to draw a sample by passing in a size of `(None, 2)`. As a result, we will
+    switch our model creation to using `call()` is run, we will already know the batch
+    size and hence complete the information of the shape.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow中构建模型有几种方法。其一是使用`Sequential`类按顺序添加层。最后一层的输入会传递到下一层；因此，不需要为该层指定输入。虽然这种方法很方便，但不能在具有分支的模型中使用。接下来，使用`tf.random.normal()`在急切执行模式下会失败，这是TensorFlow
+    2的默认模式，它创建动态计算图时需要知道批次大小来生成随机数，但由于在创建层时批次大小未知，因此会出错。当我们尝试通过传入大小为`(None, 2)`的值来抽样时，会在Jupyter笔记本中遇到错误。因此，我们将模型创建方法切换为使用`call()`，这样在执行时我们已经知道批次大小，进而完成形状信息。
+- en: 'Now we reconstruct our encoder using the `__init__()` or in `__built__()` if
+    we need to use the input shape to construct the layers. Within the subclass, we
+    use the `Sequential` class to create a block of convolutional layers conveniently
+    as we don''t need to read any intermediate tensors:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们使用`__init__()`方法，或者如果需要使用输入形状来构建层，则使用`__built__()`方法来重构我们的编码器。在子类中，我们使用`Sequential`类方便地创建卷积层块，因为我们不需要读取任何中间张量：
+- en: '[PRE5]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'We then use two dense layers to predict the mean and log variance of `z` from
+    the extracted features. Latent variables are sampled and return as output together
+    with the mean and log variance for the loss calculation. The decoder is identical
+    to the autoencoder except that we now re-write it using subclassing:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们使用两个全连接层根据提取的特征预测`z`的均值和对数方差。潜在变量被采样并与均值和对数方差一起返回，用于损失计算。解码器与自动编码器相同，只是我们现在通过子类化重写了它：
+- en: '[PRE6]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Now the encoder block is completed. The decoder block design is unchanged from
+    the autoencoder, so what is left to be done is to define a new loss function.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在编码器模块已经完成。解码器模块的设计与自动编码器相同，因此剩下的工作是定义一个新的损失函数。
+- en: Loss function
+  id: totrans-134
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 损失函数
+- en: We can now sample from a multivariate Gaussian distribution, but there is still
+    no guarantee that the Gaussian blobs won't be far apart from each other and widely
+    spread. The way VAEs do this is by putting in some regularization to encourage
+    the Gaussian distribution to look like N(0,1). In other words, we want them to
+    have a mean close to 0 to keep them close together, and variance close to 1 for
+    a better variation to sample from. This is done by using **Kullback-Leibler divergence
+    (KLD)**.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在可以从多变量高斯分布中采样，但仍然无法保证高斯分布的点不会相互远离或过于分散。变分自编码器（VAE）通过加入正则化项来解决这个问题，以鼓励高斯分布接近N(0,1)。换句话说，我们希望它们的均值接近0，以保持彼此接近，同时方差接近1，以便从中采样更好的变异性。这个过程是通过使用**Kullback-Leibler散度（KLD）**实现的。
+- en: 'KLD is a measurement of how different one probability distribution is to another.
+    For two distributions, *P* and *Q*, the KLD of *P* with respect to *Q* is the
+    cross-entropy of *P* and *Q* minus the entropy of *P*. In information theory,
+    entropy is a measure of information or the uncertainty of a random variable:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: KLD是衡量一个概率分布与另一个概率分布之间差异的指标。对于两个分布，*P*和*Q*，*P*相对于*Q*的KLD是*P*和*Q*的交叉熵减去*P*的熵。在信息论中，熵是信息或随机变量不确定性的度量：
+- en: '![](img/Formula_02_003.jpg)'
+  id: totrans-137
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_02_003.jpg)'
+- en: 'Without going into the mathematical details, KLD is proportional to cross-entropy,
+    hence minimizing cross-entropy will also minimize KLD. When KLD is zero, then
+    the two distributions are identical. It suffices to say that there is a closed-form
+    solution for KLD when the distribution to compare with is a standard Gaussian.
+    This can be calculated directly from the following means and variances:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不深入数学细节，KLD与交叉熵成正比，因此最小化交叉熵也会最小化KLD。当KLD为零时，两个分布是完全相同的。值得一提的是，当要比较的分布是标准高斯分布时，KLD有一个封闭形式的解，可以直接从以下均值和方差计算：
+- en: '![](img/Formula_02_004.jpg)'
+  id: totrans-139
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_02_004.jpg)'
+- en: 'We create custom loss function that takes in labels and network output to calculate
+    the KL loss. I have used `tf.reduce_mean()` instead of `tf.reduce_sum()` to normalize
+    it to the number of latent space dimensions. This doesn''t really matter as the
+    KL loss is multiplied by a hyperparameter, which we will discuss shortly:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们创建了一个自定义的损失函数，它接受标签和网络输出，以计算KL损失。我使用了`tf.reduce_mean()`而不是`tf.reduce_sum()`，这样可以将其标准化为潜在空间维度的数量。这其实并不重要，因为KL损失会乘以一个超参数，我们稍后会讨论这个超参数：
+- en: '[PRE7]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The other loss function is what we have used in the autoencoder to compare
+    the generated images with the label images. This is also called the **reconstruction
+    loss**, which measures the difference in reconstructed images with the target
+    image, hence the name. This can be either **binary cross-entropy** (**BCE**) or
+    **mean squared error** (**MSE**). MSE tends to generate sharper images as it penalizes
+    more severely for pixels that deviate from the label (by squaring the error):'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个损失函数是我们在自动编码器中使用的，用于将生成的图像与标签图像进行比较。这也叫做**重构损失**，它衡量的是重构图像与目标图像之间的差异，因此得名。这个损失可以是**二元交叉熵**（**BCE**）或者**均方误差**（**MSE**）。MSE倾向于生成更锐利的图像，因为它对偏离标签的像素进行更严厉的惩罚（通过平方误差）：
+- en: '[PRE8]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Finally, we add the two losses together:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们将两个损失加在一起：
+- en: '[PRE9]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Now, let's talk about `kl_weight_factor`, which is an important hyperparameter
+    that is often neglected in VAE examples or tutorials. As we can see, the total
+    loss is made up of the KL loss and the reconstruction loss. The background of
+    MNIST digits is black, and therefore the reconstruction loss is relatively low
+    even though the network hasn't learned much and only outputs all zeroes.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们来谈谈 `kl_weight_factor`，它是一个重要的超参数，通常在 VAE 示例或教程中被忽视。正如我们所看到的，总损失由 KL 损失和重建损失组成。MNIST
+    数字的背景是黑色的，因此即使网络没有学到多少内容并且只输出零，重建损失仍然相对较低。
+- en: Comparatively, the distribution of latent variables is all over the place at
+    the beginning, and therefore the gain in reducing the KLD outweighs that of reducing
+    the reconstruction loss. This encourages the network to ignore the reconstruction
+    loss and optimize only for the KLD loss. As a result, the latent variables will
+    have a perfect standard Gaussian distribution of N(0,1) but the generated images
+    will look nothing like the training images, and that is a disaster for a generative
+    model!
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相比之下，潜在变量的分布在开始时非常杂乱，因此减少 KLD 的收益大于减少重建损失的收益。这会促使网络忽视重建损失，仅优化 KLD 损失。因此，潜在变量将具有完美的标准高斯分布
+    N(0,1)，但生成的图像将与训练图像完全不同，这对于生成模型来说是灾难性的！
+- en: Important note
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要提示
+- en: The encoder is discriminative in that it tries to spot differences in the images.
+    We can think of each latent variable as a feature. If we use two latent variables
+    for MNIST digits, they could mean *round* or *straight*. When a decoder sees a
+    digit, it predicts the likelihood of whether they are round or straight by using
+    the means and variances. If a neural network is forced to make the KLD loss 0,
+    the distribution of the latent variables will be identical – the center at 0 with
+    a variance of 1\. In other words, it is equally likely to be round and straight.
+    Hence, the encoder loses its discriminative capacity. When this happens, you will
+    see the decoder produces the same image every time and they look like the average
+    pixel values.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编码器具有判别性，它试图找出图像中的差异。我们可以将每个潜在变量看作一个特征。如果我们使用两个潜在变量来表示 MNIST 数字，它们可能表示*圆形*或*直线*。当解码器看到一个数字时，它通过使用均值和方差来预测该数字是圆形还是直线的可能性。如果强制神经网络使
+    KLD 损失为 0，潜在变量的分布将完全相同——中心为 0，方差为 1。换句话说，圆形和直线的可能性是一样的。因此，编码器失去了其判别能力。当这种情况发生时，你会发现解码器每次生成的图像都相同，看起来就像是像素值的平均值。
+- en: Before we move on to the next part, I suggest you go to `ch2_vae_mnist.ipynb`
+    and try a different `kl_weight_factor` with `VAE(z_dim=2)` to look at the latent
+    variable distribution after training. You can also try to increase `kl_weight_factor`
+    to see how it stops the VAE from learning to generate, and then look at the generated
+    images and distributions again.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们进入下一部分之前，我建议你打开 `ch2_vae_mnist.ipynb`，尝试使用不同的 `kl_weight_factor` 和 `VAE(z_dim=2)`，查看训练后潜在变量的分布。你还可以尝试增加
+    `kl_weight_factor`，看看它如何阻止 VAE 学会生成图像，然后再次查看生成的图像和分布。
+- en: Generating faces with VAEs
+  id: totrans-151
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 VAE 生成人脸
+- en: 'Now that you have learned the theory of VAEs and have built one for MNIST,
+    it is time to grow up, ditch the toy, and generate some serious stuff. We will
+    use VAE to generate some faces. Let''s get started! The code is in `ch2_vae_faces.ipynb`.
+    There are a few face datasets available for training:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 既然你已经了解了 VAE 的理论，并且为 MNIST 构建了一个模型，现在是时候成长起来，丢掉玩具，开始生成一些真实的东西了。我们将使用 VAE 来生成一些人脸。开始吧！代码在
+    `ch2_vae_faces.ipynb` 中。有几个面部数据集可以用于训练：
+- en: Celeb A ([http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html)).
+    This is a popular dataset in academia as it contains annotations of face attributes,
+    but unfortunately it is not available for commercial use.
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Celeb A ([http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html))。这是一个在学术界很受欢迎的数据集，包含面部属性的标注，但不幸的是，不能用于商业用途。
+- en: '**Flickr-Faces-HQ Dataset** (**FFHQ**) ([https://github.com/NVlabs/ffhq-dataset](https://github.com/NVlabs/ffhq-dataset)).
+    This dataset is freely available for commercial use and contains high-resolution
+    images.'
+  id: totrans-154
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Flickr-Faces-HQ 数据集** (**FFHQ**) ([https://github.com/NVlabs/ffhq-dataset](https://github.com/NVlabs/ffhq-dataset))。这个数据集可以自由用于商业用途，并且包含高分辨率的图像。'
+- en: In this exercise, we will only assume the dataset contains RGB images; feel
+    free to use any dataset that suits your needs.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个练习中，我们只假设数据集包含 RGB 图像；你可以随意使用任何适合你需求的数据集。
+- en: Network architecture
+  id: totrans-156
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 网络架构
+- en: 'We reuse the **MNIST VAE** and training pipeline with some modifications given
+    that the dataset is now different from MNIST. Feel free to reduce the layers,
+    parameters, image size, epoch number, and batch size to suit your computing power.
+    The modifications are as follows:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们重新使用了**MNIST VAE**和训练管道，并根据数据集不同于MNIST做了一些修改。根据你的计算能力，随意减少层数、参数、图像大小、训练轮数和批次大小。修改内容如下：
+- en: Increase the latent space dimension to 200\.
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将潜在空间的维度增加到200\。
+- en: The input shape is changed from (28,28,1) to (112,112,3) as we now have 3 color
+    channels instead of grayscale. Why 112? Early CNNs such as VGG use the input size
+    of 224x224 and set the standard for image classification CNNs. We don't want to
+    use too-high resolutions now as we have not mastered the skills needed to generate
+    high-resolution images. Therefore, I picked 224/2 = 112, but you could use any
+    even values.
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 输入形状从(28,28,1)更改为(112,112,3)，因为我们现在有了3个颜色通道，而不是灰度图像。为什么是112？早期的CNN，如VGG，使用224x224的输入大小，并为图像分类CNN设定了标准。由于我们目前还没有掌握生成高分辨率图像的技能，因此我们不想使用过高的分辨率。因此，我选择了224/2
+    = 112，但你可以使用任何偶数值。
+- en: Add image resizing in the pre-processing pipeline. We add more downsampling
+    layers. In MNIST, the encoder downsamples twice, from 28 to 14 to 7\. As we have
+    a higher resolution to start with, we need to downsample four times in total.
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在预处理管道中添加图像调整大小。我们添加了更多的下采样层。在MNIST中，编码器进行了两次下采样，从28到14再到7。由于我们现在的分辨率更高，因此需要总共进行四次下采样。
+- en: 'As the dataset is more complex, we increase the number of filters to increase
+    the network capacity. Therefore, the convolutional layers in encoders are as follows.
+    It is similar for the decoder but in the reverse direction. Instead of downsampling,
+    the convolutional layers upsample the feature maps by striding:'
+  id: totrans-161
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由于数据集更为复杂，我们增加了滤波器的数量，以增强网络的能力。因此，编码器中的卷积层如下所示。解码器类似，但方向相反。解码器的卷积层通过步幅对特征图进行上采样，而不是下采样：
+- en: a) `Conv2D(filters = 32, kernel_size=(3,3), strides = 2)`
+  id: totrans-162
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: a) `Conv2D(filters = 32, kernel_size=(3,3), strides = 2)`
+- en: b) `Conv2D(filters = 32, kernel_size=(3,3), strides = 2)`
+  id: totrans-163
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: b) `Conv2D(filters = 32, kernel_size=(3,3), strides = 2)`
+- en: c) `Conv2D(filters = 64, kernel_size=(3,3), strides = 2)`
+  id: totrans-164
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: c) `Conv2D(filters = 64, kernel_size=(3,3), strides = 2)`
+- en: d) `Conv2D(filters = 64, kernel_size=(3,3), strides = 2)`
+  id: totrans-165
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: d) `Conv2D(filters = 64, kernel_size=(3,3), strides = 2)`
+- en: Tips
+  id: totrans-166
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Although we use the overall loss, that is, the KLD loss and the reconstruction
+    loss in network training, we should only use the reconstruction loss as a metric
+    to monitor when to save the model and early termination of the training. The KLD
+    loss acts as regularization, but we are more interested in the reconstructed image's
+    quality.
+  id: totrans-167
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 尽管我们在网络训练中使用了总损失，即KLD损失和重建损失，但我们应该仅使用重建损失作为指标，来监控何时保存模型以及提前终止训练。KLD损失起到正则化作用，但我们更关心的是重建图像的质量。
+- en: Facial reconstruction
+  id: totrans-168
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 面部重建
+- en: 'Let''s look at the following reconstructed images:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下以下重建的图像：
+- en: '![ Figure 2.14 – Reconstructed images with a VAE'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.14 – 使用VAE重建的图像'
+- en: '](img/B14538_02_14.jpg)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_14.jpg)'
+- en: Figure 2.14 – Reconstructed images with a VAE
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.14 – 使用VAE重建的图像
+- en: They do look good despite not being a perfect reconstruction. The VAE has managed
+    to learn some features from the input image and use that to paint a new face.
+    It looks like the VAE is better at reconstructing female faces. This is not surprising
+    as we have seen the *mean face* in [*Chapter 1*](B14538_01_Final_JM_ePub.xhtml#_idTextAnchor017),
+    *Getting Started with Image Generation Using TensorFlow*, which is of female appearance
+    due to the higher proportion of females in the dataset. That is why mature men
+    were given a younger, more feminine complexion.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管重建并不完美，但它们看起来确实不错。VAE成功地从输入图像中学习了一些特征，并利用这些特征绘制了一张新的面孔。看起来VAE在重建女性面孔方面表现更好。这并不令人惊讶，因为我们在[**第一章**](B14538_01_Final_JM_ePub.xhtml#_idTextAnchor017)《使用TensorFlow进行图像生成入门》中看到的*平均面孔*呈现女性特征，这是因为数据集中女性的比例较高。这也是为什么成熟男性被赋予了更加年轻、女性化的面容。
+- en: The image background is also interesting. As the image backgrounds are so diverse,
+    it was not possible for the encoder to encode every fine detail into low dimensions,
+    so we can see the VAE encodes the background colors and the decoder creates a
+    blurry backdrop based on those colors.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像背景也很有趣。由于图像背景极为多样，编码器无法将每个细节都编码成低维度，因此我们可以看到VAE编码了背景颜色，并且解码器基于这些颜色创建了模糊的背景。
+- en: One fun thing to share with you, when the KL weight factor is too high and the
+    VAE doesn't learn, then the *mean face* will come back to haunt you again. This
+    is as if the VAE's encoder was blinded and told the decoder *“Hey, I can't see
+    anything, just draw me a person”*, and then the decoder draws a portrait of what
+    it thinks an average person looks like.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有件有趣的事情要和大家分享，当 KL 权重因子过高时，VAE 学习失败，那么*平均面孔*将再次出现来困扰你。这就像是 VAE 的编码器被蒙住了眼睛告诉解码器：“嘿，我什么也看不见，就画一个人给我看”，然后解码器画出了它认为的平均人像。
+- en: Generating new faces
+  id: totrans-176
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 生成新面孔
+- en: 'To generate a new image, we create random numbers from the standard Gaussian
+    distribution and feed it to the decoder, as shown in the following code snippet:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要生成新的图像，我们从标准高斯分布中创建随机数，并将其输入到解码器中，如下面的代码片段所示：
+- en: '[PRE10]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: And most of the generated faces look horrible!
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而大多数生成的面孔看起来都很可怕！
+- en: '![ Figure 2.15 – Faces generated with standard normal sampling'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![ 图 2.15 – 使用标准正态抽样生成的面孔'
+- en: '](img/B14538_02_15.jpg)'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_15.jpg)'
+- en: Figure 2.15 – Faces generated with standard normal sampling
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.15 – 使用标准正态抽样生成的面孔
+- en: We can improve the image fidelity by using a **sampling trick**.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过使用**抽样技巧**来提高图像的保真度。
+- en: Sampling trick
+  id: totrans-184
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 抽样技巧
+- en: 'We have just seen that the trained VAE could reconstruct the faces rather well.
+    My suspicion was that there was something not quite right in samples generated
+    by random sampling. To debug this problem, I fed in a few thousand images into
+    the VAE decoder to collect the latent space means and variance. Then I plotted
+    the average mean of each latent space variable, and the following is what I got:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们刚刚看到，训练过的 VAE 能够相当好地重建面孔。我怀疑通过随机抽样生成的样本可能存在一些问题。为了调试这个问题，我将数千张图像输入到 VAE 解码器中，以收集潜在空间的均值和方差。然后我绘制了每个潜在空间变量的平均均值，以下是我的结果：
+- en: '![Figure 2.16 – Average mean of the latent variable'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.16 – 潜变量的平均均值'
+- en: '](img/B14538_02_16.jpg)'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_16.jpg)'
+- en: Figure 2.16 – Average mean of the latent variable
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.16 – 潜变量的平均均值
+- en: In theory, they should center at 0 and have a variance of 1, but they may not
+    due to suboptimal KLD weight and stochasticity in the network training. Because
+    of this, the randomly generated samples do not always match the distribution expected
+    by the decoder. This is the trick I use to generate samples. Using steps similar
+    to the preceding ones, I have collected the average standard deviation of latent
+    variables (one scalar value), which I use for generating normally distributed
+    samples (200 dimensions). Then I added the average mean (200 dimensions) to it.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，它们应该集中在0，并且方差为1，但由于 KLD 权重不佳和网络训练中的随机性，它们可能不会。因此，随机生成的样本并不总是与解码器期望的分布匹配。这就是我用来生成样本的技巧。使用类似前面步骤，我已收集了潜在变量的平均标准差（一个标量值），我用它来生成正态分布样本（200维）。然后我加上了平均均值（200维）。
+- en: Ta-da! Now they look a lot better and sharper!
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 啦！现在它们看起来好多了，更加清晰！
+- en: '![Figure 2.17 – Faces generated with the sampling trick'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.17 – 使用抽样技巧生成的面孔'
+- en: '](img/B14538_02_17.jpg)'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_17.jpg)'
+- en: Figure 2.17 – Faces generated with the sampling trick
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.17 – 使用抽样技巧生成的面孔
+- en: Instead of generating random faces, in the next section we will learn how to
+    perform face editing.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一节中，我们将学习如何进行面部编辑，而不是生成随机面孔。
+- en: Controlling face attributes
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 控制面部特征
+- en: 'Everything we have done in this chapter serves only one purpose: to prepare
+    us for **face editing**! This is the climax of this chapter!'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一章我们所做的一切只有一个目的：为了**面部编辑**做好准备！这是本章的高潮！
+- en: Latent space arithmetic
+  id: totrans-197
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 潜在空间算术
+- en: We have talked about the latent space several times now but haven't given it
+    a proper definition. Essentially, it means every possible value of the latent
+    variables. In our VAE, it is a vector of 200 dimensions, or simply 200 variables.
+    As much as we hope each variable has a distinctive semantic meaning to us, such
+    as *z[0]* is for eyes, *z[1]* dictates the eye color, and so on, things are never
+    that straightforward. We will simply have to assume the information is encoded
+    in all the latent vectors and we can use vector arithmetic to explore the space.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经多次提到潜在空间，但尚未给出其明确定义。基本上，它表示潜在变量的每一个可能值。在我们的 VAE 中，它是一个 200 维的向量，或者简单地说是
+    200 个变量。尽管我们希望每个变量对我们来说都有明确的语义含义，比如 *z[0]* 是眼睛，*z[1]* 控制眼睛的颜色等等，事情往往没有那么简单。我们只能假设信息被编码在所有潜在向量中，并且可以使用向量运算来探索这个空间。
+- en: Before diving into high-dimensional space, let's try to understand it using
+    a two-dimensional example. Imagine you are now at point *(0,0)* on a map and your
+    home is at *(x,y)*. Therefore, the direction toward your home is *(x – 0 ,y -
+    0)* divided by the L2 norm of *(x,y)*, or let's denote the direction as *(x_dot,
+    y_dot)*. Therefore, whenever you move *(x_dot, y_dot)*, you are moving toward
+    your house; and when you move *(-2*x_dot, -2*y_dot)*, you are moving further away
+    from home with twice as many steps.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入高维空间之前，让我们通过一个二维的例子来理解。假设你现在在地图上的点*(0,0)*，而你的家在*(x,y)*。因此，指向你家的方向是*(x – 0
+    ,y - 0)*，然后除以*(x,y)*的L2范数，或者我们将这个方向表示为*(x_dot, y_dot)*。因此，每当你移动*(x_dot, y_dot)*时，你就朝着你家走；而当你移动*(-2*x_dot,
+    -2*y_dot)*时，你就朝着远离家的方向走，步伐是两倍的。
+- en: 'Now, if we know the direction vector of the `smiling` attributes, we could
+    add that to the latent variables to make the face smile:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们知道`smiling`特征的方向向量，我们可以将其添加到潜在变量中，使得面部微笑：
+- en: '[PRE11]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '`smiling_magnitude` is a scalar value that we set, so the next step is to work
+    out the way to obtain `smiling_vector`.'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`smiling_magnitude`是我们设定的标量值，因此下一步是计算获取`smiling_vector`的方法。'
+- en: Finding attribute vectors
+  id: totrans-203
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查找特征向量
+- en: 'Some datasets, such as Celeb A, come with annotations of facial attributes
+    for each image. The labels are binary, meaning they indicate whether a certain
+    attribute exists or not in the image. We will use the labels and the encoded latent
+    variables to find our direction vectors! The idea is simple:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些数据集，例如Celeb A，为每张图片提供了面部属性的注释。这些标签是二进制的，表示某个特征是否存在于图像中。我们将使用这些标签和编码后的潜在变量来找到我们的方向向量！这个想法很简单：
+- en: Use the test dataset or a few thousand samples from the training dataset and
+    use the VAE decoder to generate the latent vectors.
+  id: totrans-205
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用测试数据集或从训练数据集中提取的几千个样本，并使用VAE解码器生成潜在向量。
+- en: 'Separate the latent vectors into two groups: with (positive) or without (negative)
+    the one attribute we are interested in.'
+  id: totrans-206
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将潜在向量分为两组：有（正向）或没有（负向）我们感兴趣的某一特征。
+- en: Calculate the average of the positive vectors and negative vectors separately.
+  id: totrans-207
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 分别计算正向向量和负向向量的平均值。
+- en: Obtain the attribute direction vector by subtracting the average negative vector
+    from the average positive vector.
+  id: totrans-208
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过从平均负向量中减去平均正向量来获取特征方向向量。
+- en: 'The pre-processing function is modified to return the label of the attribute
+    we are interested in. We then use a `lambda` function to map to the data pipeline:'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预处理函数已修改为返回我们感兴趣的属性的标签。然后我们使用`lambda`函数映射到数据管道中：
+- en: '[PRE12]'
+  id: totrans-210
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Not to be confused with the Keras Lambda layer that wraps arbitrary TensorFlow
+    functions into a Keras layer, the `lambda` in the code is a generic Python expression.
+    The `lambda` function is used as a small function but without the overhead code
+    to define the function. The `lambda` function in the preceding code is equivalent
+    to the following function:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要与Keras的Lambda层混淆，后者将任意的TensorFlow函数封装为Keras层。在代码中的`lambda`是一个通用的Python表达式。`lambda`函数作为一个小函数使用，但不需要定义函数的冗余代码。上述代码中的`lambda`函数等同于以下函数：
+- en: '[PRE13]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: When chaining `map` to the dataset, the dataset object will read each image
+    sequentially and call the `lambda` function equivalent to `preprocess(image)`.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在将`map`函数链式调用到数据集时，数据集对象将依次读取每张图片，并调用等同于`preprocess(image)`的`lambda`函数。
+- en: Face editing
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 面部编辑
+- en: 'With the attribute vectors extracted, we can now do the magic:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提取了特征向量后，我们现在可以进行魔法操作：
+- en: First, we take an image from the dataset, which is the leftmost face from the
+    following screenshot.
+  id: totrans-216
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们从数据集中选择一张图片，这张图片是下图中最左侧的面孔。
+- en: We encode the face into latent variables, then decode it to generate a new face,
+    which we place in the middle of the row.
+  id: totrans-217
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将面部图像编码为潜在变量，然后解码生成一张新面孔，将其放置在行的中间。
+- en: Then we add the attribute vector increasingly toward the right.
+  id: totrans-218
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们将特征向量逐步添加到右侧。
+- en: Similarly, we minus the attribute vector while going toward the left of the
+    row.
+  id: totrans-219
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 类似地，我们在向左移动时减去特征向量。
+- en: 'The following screenshot shows the generated images by interpolating the latent
+    vector for male, chubby, moustache, smiling, and glasses:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下截图展示了通过插值潜在向量生成的图像，图像中包含男性、丰满、胡须、微笑和眼镜特征：
+- en: '![Figure 2.18 – Changing facial features by exploring latent space'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 2.18 – 通过探索潜在空间来改变面部特征'
+- en: '](img/B14538_02_18.jpg)'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_18.jpg)'
+- en: Figure 2.18 – Changing facial features by exploring latent space
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 2.18 – 通过探索潜在空间来改变面部特征
+- en: The transitions were rather smooth. You should have noticed that these attributes
+    are not exclusive to each other. For example, as we increase the moustache-ness
+    of a female, the complexion and hair become more manlike, and the VAE even puts
+    a tie on the person. This is totally reasonable, and in fact what we wanted. This
+    shows that some latent variable distributions overlap.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 过渡相当平滑。你应该注意到这些属性并不是彼此排斥的。例如，当我们增加女性的胡须特征时，肤色和头发变得更像男性，VAE甚至给这个人系上了领带。这完全合理，事实上，这正是我们希望的效果。这表明一些潜在变量的分布是有重叠的。
+- en: Similarly, some latent variables do not overlap if we set the male vector to
+    be the most negative. It will push the latent states to a place where traversing
+    the moustache vector will not have an effect on growing a moustache on the face.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，如果我们将男性向量设置为最负，它将把潜在状态推向一个地方，在那里遍历胡须向量将不会对面部生长胡须产生影响。
+- en: 'Next, we can try to change several face attributes together. The mathematics
+    are similar; we now only need to add up all the attribute vectors. In the following
+    screenshot, the image on the left was generated randomly and is used as a baseline.
+    On the right is a new image after some latent space arithmetic, as shown in the
+    bars preceding the images:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们可以尝试同时改变多个面部属性。数学原理类似；我们现在只需要将所有的属性向量加起来。在下面的截图中，左侧的图像是随机生成的，作为基准图像。右侧是经过一些潜在空间运算后的新图像，如图像前面的条形图所示：
+- en: '![Figure 2.19 – Latent space exploration widget'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图2.19 – 潜在空间探索小工具'
+- en: '](img/B14538_02_19.jpg)'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_02_19.jpg)'
+- en: Figure 2.19 – Latent space exploration widget
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2.19 – 潜在空间探索小工具
+- en: The widget is available in the Jupyter notebook. Feel free to use it to explore
+    the latent space and generate new faces!
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个小工具可以在Jupyter Notebook中使用。随时使用它来探索潜在空间并生成新的人脸！
+- en: Summary
+  id: totrans-231
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: We started this chapter by learning how to use an encoder to compress high-dimensional
+    data into low-dimensional latent variables, then use a decoder to reconstruct
+    the data from the latent variables. We learned that the autoencoder's limitation
+    is not being able to guarantee a continuous and uniform latent space, which makes
+    it difficult to sample from. Then we incorporated Gaussian sampling to build a
+    VAE to generate MNIST digits.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过学习如何使用编码器将高维数据压缩为低维潜在变量，然后使用解码器从潜在变量重建数据，开始了本章的内容。我们了解到自编码器的局限性在于无法保证潜在空间是连续且均匀的，这使得从中进行采样变得困难。随后，我们引入了高斯采样，构建了一个变分自编码器（VAE）来生成MNIST数字。
+- en: Finally, we built a bigger VAE to train on the face dataset and had fun creating
+    and manipulating faces. We learned the importance of the sampling distribution
+    in the latent space, latent space arithmetic, and KLD, which lay the foundation
+    for [*Chapter 3*](B14538_03_Final_JM_ePub.xhtml#_idTextAnchor060), *Generative
+    Adversarial Network*.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们构建了一个更大的VAE，并在面部数据集上进行训练，享受创造和操作人脸的乐趣。我们学到了潜在空间中采样分布、潜在空间算术和KLD的重要性，这为[*第3章*](B14538_03_Final_JM_ePub.xhtml#_idTextAnchor060)，*生成对抗网络*打下了基础。
+- en: Although GANs are more powerful than VAEs in generating photorealistic images,
+    the earlier GANs were difficult to train. Therefore, we will learn about the fundamentals
+    of GANs. By the end of the next chapter, you will have learned the fundamentals
+    of all three main families of deep generative algorithms, which will prepare you
+    for more advanced models in part two of the book.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然GANs在生成照片级真实图像方面比VAE更强大，但早期的GANs很难训练。因此，我们将学习GAN的基本原理。在下一章结束时，你将学习到所有三大类深度生成算法的基础知识，为本书第二部分的更高级模型做好准备。
+- en: Before we move on to GANs, I should stress that (variational) autoencoders are
+    still being used widely. The variational encoding aspect has been incorporated
+    into GANs. Therefore, mastering VAEs will help you master the advanced GAN models
+    that we will cover in later chapters. We will cover the use of autoencoders to
+    generate deep fake videos in [*Chapter 9*](B14538_09_Final_JM_ePub.xhtml#_idTextAnchor175)*,
+    Video Synthesis*. That chapter doesn't assume prior knowledge of GANs, therefore
+    feel free to jump ahead to have a peek at how to use autoencoders to perform face
+    swapping.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们进入生成对抗网络（GANs）之前，我要强调的是（变分）自编码器仍然被广泛使用。变分编码方面已经被集成到GANs中。因此，掌握VAE将有助于你掌握后续章节中我们将介绍的高级GAN模型。我们将在[*第9章*](B14538_09_Final_JM_ePub.xhtml#_idTextAnchor175)*，视频合成*中讲解使用自编码器生成深度伪造视频。该章节不假设你已经掌握GANs的相关知识，因此你可以随时跳到该章节，看看如何使用自编码器进行人脸替换。

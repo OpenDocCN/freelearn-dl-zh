@@ -1,0 +1,2687 @@
+- en: TensorFlow 2.0 Architecture
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 架构
+- en: 'In [Chapter 3](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml), *TensorFlow Graph
+    Architecture*, we introduced the TensorFlow graph definition and execution paradigm
+    that, although powerful and has high expressive power, has some disadvantages,
+    such as the following:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第 3 章](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml)，*TensorFlow 图架构*中，我们介绍了
+    TensorFlow 图的定义和执行范式，尽管它功能强大且具有较高的表达能力，但也有一些缺点，如下所示：
+- en: A steep learning curve
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 陡峭的学习曲线
+- en: Hard to debug
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 难以调试
+- en: Counter-intuitive semantics when it comes to certain operations
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 某些操作时的反直觉语义
+- en: Python is only used to build the graph
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 仅用于构建图
+- en: Learning how to work with computational graphs can be tough—defining the computation
+    instead of executing the operations as the Python interpreter encounters them
+    is a different way of thinking compared to what most programs do, especially the
+    ones that only work with imperative languages.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习如何处理计算图可能会很困难——定义计算，而不是像 Python 解释器遇到操作时那样执行操作，是与大多数程序不同的思维方式，尤其是那些只使用命令式语言的程序。
+- en: However, it is still recommended that you have a deep understanding of DataFlow
+    graphs and how TensorFlow 1.x forced its users to think since it will help you
+    understand many parts of the TensorFlow 2.0 architecture.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，仍然建议你深入理解数据流图（DataFlow graphs）以及 TensorFlow 1.x 如何强迫用户思考，因为这将帮助你理解 TensorFlow
+    2.0 架构的许多部分。
+- en: Debugging a DataFlow graph is not easy—TensorBoard helps in visualizing the
+    graph, but it is not a debugging tool. Visualizing the graph only ascertains whether
+    the graph has been built as defined in Python, but the peculiarities such as the
+    parallel execution of the non-dependant operations (remember the exercise at the
+    end of the previous chapter regarding `tf.control_dependencies`?) are hard to
+    find and are not explicitly shown in the graph visualization.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调试数据流图并不容易——TensorBoard 有助于可视化图形，但它不是调试工具。可视化图形只能确认图形是否已经按照 Python 中定义的方式构建，但一些特殊情况，比如无依赖操作的并行执行（还记得上一章末尾关于
+    `tf.control_dependencies` 的练习吗？），很难发现，并且在图形可视化中不会明确显示。
+- en: Python, the de facto data science and machine learning language, is only used
+    to define the graph; the other Python libraries that could help solve the problem
+    can't be used during the graph's definition since it is not possible to mix graph
+    definition and session execution. Mixing graph definition, execution, and the
+    usage of other libraries on graph generated data is difficult and makes the design
+    of the Python application really ugly since it is nearly impossible to not rely
+    on global variables, collections, and objects that are common to many different
+    files. Organizing the code using classes and functions is not natural when using
+    this graph definition and execution paradigm.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python，作为事实上的数据科学和机器学习语言，仅用于定义图形；其他可能有助于解决问题的 Python 库不能在图定义期间使用，因为不能混合图定义和会话执行。混合图定义、执行和使用其他库处理图生成数据是困难的，这使得
+    Python 应用程序的设计变得非常丑陋，因为几乎不可能不依赖于全局变量、集合和多个文件中共有的对象。在使用这种图定义和执行范式时，用类和函数组织代码并不自然。
+- en: 'The release of TensorFlow 2.0 introduced several changes to the framework:
+    from defaulting to eager execution to a complete cleanup of the APIs. The whole
+    TensorFlow package, in fact, was full of duplicated and deprecated APIs that,
+    in TensorFlow 2.0, have been finally removed. Moreover, by deciding to follow
+    the Keras API specification, the TensorFlow developers decided to remove several
+    modules that do not follow it: the most important removal was `tf.layers` (which
+    we used in [Chapter 3](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml), *TensorFlow
+    Graph Architecture*) in favor of `tf.keras.layers`.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 的发布带来了框架的多项变化：从默认启用即时执行到完全清理了 API。事实上，整个 TensorFlow 包中充满了重复和废弃的
+    API，而在 TensorFlow 2.0 中，这些 API 最终被移除。此外，TensorFlow 开发者决定遵循 Keras API 规范，并移除了一些不符合此规范的模块：最重要的移除是
+    `tf.layers`（我们在[第 3 章](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml)，*TensorFlow
+    图架构*中使用过该模块），改用 `tf.keras.layers`。
+- en: Another widely used module, `tf.contrib`, has been completely removed. The `tf.contrib` module
+    contained the community-added layers/software that used TensorFlow. From a software
+    engineering point of view, having a module that contains several completely unrelated
+    and huge projects in one package is a terrible idea. For this reason, they removed
+    it from the main package and decided to move maintained and huge modules into
+    separate repositories, while removing unused and unmaintained modules.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个广泛使用的模块，`tf.contrib`，已经被完全移除。`tf.contrib`模块包含了社区添加的、使用TensorFlow的层/软件。从软件工程的角度来看，拥有一个包含多个完全不相关的大型项目的模块是一个糟糕的想法。由于这个原因，它被从主包中移除，决定将被维护的大型模块移动到独立的代码库，同时移除不再使用和不再维护的模块。
+- en: By defaulting on eager execution and removing (hiding) the graph definition
+    and execution paradigm, TensorFlow 2.0 allows for better software design, thereby
+    lowering the steepness of the learning curve and simplifying the debug phase.
+    Of course, coming from a static graph definition and execution paradigm, you need
+    to have a different way of thinking—this struggle is worth it since the advantages
+    the version 2.0 brings in the long term will highly repay this initial struggle.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认启用急切执行并移除（隐藏）图定义和执行范式，TensorFlow 2.0允许更好的软件设计，从而降低学习曲线的陡峭度，并简化调试阶段。当然，鉴于从静态图定义和执行范式过渡过来，你需要有不同的思维方式——这段过渡期的努力是值得的，因为2.0版本从长远来看带来的优势将大大回报这一初期的努力。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论以下主题：
+- en: Relearning the TensorFlow framework
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 重新学习TensorFlow框架
+- en: The Keras framework and its models
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Keras框架及其模型
+- en: Eager execution and new features
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 急切执行和新特性
+- en: Codebase migration
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 代码库迁移
+- en: Relearning the framework
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 重新学习框架
+- en: As we introduced in [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26), *TensorFlow
+    Graph Architecture*, TensorFlow works by building a computational graph first
+    and then executing it. In TensorFlow 2.0, this graph definition is hidden and
+    simplified; the execution and the definition can be mixed, and the flow of execution
+    is always the one that's found in the source code—there's no need to worry about
+    the order of execution in 2.0.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在 [第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26)中介绍的，*TensorFlow图架构*，TensorFlow的工作原理是首先构建计算图，然后执行它。在TensorFlow
+    2.0中，这个图的定义被隐藏并简化；执行和定义可以混合在一起，执行流程始终与源代码中的顺序一致——在2.0中不再需要担心执行顺序的问题。
+- en: 'Prior to the 2.0 release, developers had to design the graph and the source
+    by following this pattern:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在2.0发布之前，开发者必须遵循以下模式来设计图和源代码：
+- en: How can I define the graph? Is my graph composed of multiple layers that are
+    logically separated? If so, I have to define every logical block inside a different `tf.variable_scope`.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我如何定义图？我的图是否由多个逻辑上分离的层组成？如果是的话，我需要在不同的`tf.variable_scope`中定义每个逻辑模块。
+- en: During the training or inference phase, do I have to use a part of the graph
+    more than once in the same execution step? If so, I have to define this part by
+    wrapping it inside a `tf.variable_scope` and ensuring that the `reuse` parameter
+    is correctly used. We do this the first time to define the block; any other time,
+    we reuse it.
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在训练或推理阶段，我是否需要在同一个执行步骤中多次使用图的某个部分？如果是的话，我需要通过将其包裹在`tf.variable_scope`中来定义该部分，并确保`reuse`参数被正确使用。第一次我们这样做是为了定义这个模块，其他时间我们则是复用它。
+- en: Is the graph definition completed? If so, I have to initialize all the global
+    and local variables, thereby defining the `tf.global_variables_initializer()`
+    operation and executing it as soon as possible.
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 图的定义完成了吗？如果是的话，我需要初始化所有全局和局部变量，从而定义`tf.global_variables_initializer()`操作，并尽早执行它。
+- en: Finally, you have to create the session, load the graph, and run the `sess.run`
+    calls on the node you want to execute.
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最后，你需要创建会话，加载图，并在你想执行的节点上运行`sess.run`调用。
+- en: 'After TensorFlow 2.0 was released, this reasoning completely changed, becoming
+    more intuitive and natural for developers who are not used to working with DataFlow
+    graphs. In fact, in TensorFlow 2.0, the following changes occurred:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0发布后，这种思维方式完全改变了，变得更加直观和自然，尤其对于那些不习惯使用数据流图的开发者。事实上，在TensorFlow
+    2.0中，发生了以下变化：
+- en: There are no more global variables. In 1.x, the graph is global; it doesn't
+    matter if a variable has been defined inside a Python function—it is visible and
+    separate from every other part of the graph.
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再使用全局变量。在 1.x 版本中，图是全局的；即使一个变量是在 Python 函数内部定义的，它也能被看到，并且与图的其他部分是分开的。
+- en: No more `tf.variable_scope`. A context manager can't change the behavior of
+    a function by setting a `boolean` flag (`reuse`). In TensorFlow 2.0, variable
+    sharing is made by **the model itself**. Every model is a Python object, every
+    object has its own set of variables, and to share the variables, you just have
+    to use the **same model** with different input.
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再使用`tf.variable_scope`。上下文管理器无法通过设置`boolean`标志（`reuse`）来改变函数的行为。在 TensorFlow
+    2.0 中，变量共享由**模型本身**来完成。每个模型是一个 Python 对象，每个对象都有自己的变量集，要共享这些变量，你只需使用**相同的模型**并传入不同的输入。
+- en: No more `tf.get_variable`. As we saw in [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26), *TensorFlow
+    Graph Architecture*, `tf.get_variable` allows you to declare variables that can
+    be shared by using `tf.variable_scope`. Since every variable now matches 1:1 with
+    a Python variable, the possibility of declaring global variables has been removed.
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再使用`tf.get_variable`。正如我们在[第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26)中看到的，*TensorFlow
+    图架构*，`tf.get_variable`允许你通过`tf.variable_scope`声明可以共享的变量。由于每个变量现在都与 Python 变量一一对应，因此移除了声明全局变量的可能性。
+- en: No more `tf.layers`. Every layer that's declared inside the `tf.layers` module
+    uses `tf.get_variable` to define its own variables. Use `tf.keras.layers` instead.
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再使用`tf.layers`。在`tf.layers`模块内声明的每个层都会使用`tf.get_variable`来定义自己的变量。请改用`tf.keras.layers`。
+- en: No more global collections. Every variable was added to a collection of global
+    variables that were accessible via `tf.trainable_variables()`—this was contradictory
+    to every good software design principle. Now, the only way to access the variables
+    of an object is by accessing its `trainable_variables` attribute, which returns
+    the list of the trainable variables of that specific object.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再使用全局集合。每个变量都被添加到一个全局变量集合中，可以通过`tf.trainable_variables()`进行访问——这与良好的软件设计原则相悖。现在，访问一个对象的变量的唯一方法是访问其`trainable_variables`属性，该属性返回该特定对象的可训练变量列表。
+- en: There's no need to manually call an operation that initializes all the variables.
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不需要手动调用初始化所有变量的操作。
+- en: API cleanup and the removal of `tf.contrib` is now used in favor of the creation
+    of several small and well-organized projects.
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: API 清理并移除了`tf.contrib`，现在通过创建多个小而组织良好的项目来代替。
+- en: All of these changes have been made to simplify how TensorFlow is used, to organize
+    the codebase better, to increase the expressive power of the framework, and to
+    standardize its structure.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些变化都是为了简化 TensorFlow 的使用，更好地组织代码库，增强框架的表达能力，并标准化其结构。
+- en: Eager execution, together with the adherence of TensorFlow to the Keras API,
+    are the most important changes that came with TensorFlow's 2.0 release.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 立即执行（Eager Execution）以及 TensorFlow 遵循 Keras API 是 TensorFlow 2.0 版本发布时的最重要变化。
+- en: The Keras framework and its models
+  id: totrans-35
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Keras 框架及其模型
+- en: In contrast to what people who already familiar with Keras usually think, Keras
+    is not a high-level wrapper around a machine learning framework (TensorFlow, CNTK,
+    or Theano); instead, it is an API specification that's used for defining and training
+    machine learning models.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与那些已经熟悉Keras的人通常认为的不同，Keras 不是一个机器学习框架（如 TensorFlow、CNTK 或 Theano）的高级封装；它是一个用于定义和训练机器学习模型的
+    API 规范。
+- en: TensorFlow implements the specification in its `tf.keras` module. In particular,
+    TensorFlow 2.0 itself is an implementation of the specification and as such, many
+    first-level submodules are nothing but aliases of the `tf.keras` submodules; for
+    example, `tf.metrics = tf.keras.metrics` and `tf.optimizers = tf.keras.optimizers`.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 在其`tf.keras`模块中实现了这个规范。特别是，TensorFlow 2.0 本身就是该规范的一个实现，因此许多一级子模块实际上只是`tf.keras`子模块的别名；例如，`tf.metrics
+    = tf.keras.metrics`和`tf.optimizers = tf.keras.optimizers`。
+- en: 'TensorFlow 2.0 has, by far, the most complete implementation of the specification,
+    making it the framework of choice for the vast majority of machine learning researchers. Any
+    Keras API implementation allows you to build and train deep learning models. It
+    is used for prototyping quick solutions that follow the natural human way of thinking
+    due to its layer organization, as well as for advanced research due to its modularity
+    and extendibility and for its ease of being deployed to production. The main advantages
+    of the Keras implementation that are available in TensorFlow are as follows:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，TensorFlow 2.0 拥有最完整的规范实现，使其成为绝大多数机器学习研究人员的首选框架。任何 Keras API 实现都允许你构建和训练深度学习模型。它因其层次化组织而用于快速解决方案的原型设计，也因其模块化和可扩展性、以及便于部署到生产环境中而用于高级研究。TensorFlow
+    中的 Keras 实现的主要优势如下：
+- en: '**Ease of use**: The Keras interface is standardized. Every model definition
+    must follow a common interface; every model is composed of layers, and each of
+    them must implement a well-defined interface.'
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**易用性**：Keras 接口是标准化的。每个模型定义必须遵循统一的接口；每个模型由层组成，而每一层必须实现一个明确定义的接口。'
+- en: 'Being standardized in every part—from the model definition to the training
+    loop—makes learning to use a framework that implements the specification easy
+    and extremely useful: any other framework that implements the Keras specification
+    looks similar. This is a great advantage since it allows researchers to read code
+    written in other frameworks without the struggle of learning about the details
+    of the framework that was used.'
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 从模型定义到训练循环的每个部分都标准化，使得学习使用一个实现了该规范的框架变得简单且非常有用：任何其他实现了 Keras 规范的框架看起来都很相似。这是一个巨大的优势，因为它允许研究人员阅读其他框架中编写的代码，而无需学习框架的细节。
+- en: '**Modular and extendible**: The Keras specification describes a set of building
+    blocks that can be used to compose any kind of machine learning model. The TensorFlow
+    implementation allows you to write custom building blocks, such as new layers,
+    loss functions, and optimizers, and compose them to develop new ideas.'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模块化和可扩展性**：Keras 规范描述了一组构建块，可用于组合任何类型的机器学习模型。TensorFlow 实现允许你编写自定义构建块，例如新的层、损失函数和优化器，并将它们组合起来开发新思路。'
+- en: '**Built-in**: Since TensorFlow 2.0''s release, there has been no need to download
+    a separate Python package in order to use Keras. The `tf.keras` module is already
+    built into the `tensorflow` package, and it has some TensorFlow-specific enhancements.'
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**内置**：自从 TensorFlow 2.0 发布以来，使用 Keras 不再需要单独下载 Python 包。`tf.keras` 模块已经内置在
+    `tensorflow` 包中，并且它具有一些 TensorFlow 特定的增强功能。'
+- en: Eager execution is a first-class citizen, just like the high-performance input
+    pipeline module known as `tf.data`. Exporting a model that's been created using
+    Keras is even easier than exporting a model defined in plain TensorFlow. Being
+    exported in a language-agnostic format means that its compatibility with any production
+    environment has already been configured, and so it is guaranteed to work with
+    TensorFlow.
+  id: totrans-43
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 急切执行（Eager execution）是一个一流的功能，就像高性能输入管道模块 `tf.data` 一样。导出一个使用 Keras 创建的模型比导出一个在纯
+    TensorFlow 中定义的模型还要简单。以语言无关的格式导出意味着它与任何生产环境的兼容性已经配置好了，因此可以确保与 TensorFlow 一起工作。
+- en: Keras, together with eager execution, are the perfect tools to prototype new
+    ideas faster and design maintainable and well-organized software. In fact, you
+    no longer need to think about graphs, global collections, and how to define the
+    models in order to share their parameters across different runs; what's really
+    important in TensorFlow 2.0 is to think in terms of Python objects, all of which
+    carry their own variables.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras 与急切执行（eager execution）结合，成为原型化新想法、更快设计可维护和良好组织的软件的完美工具。事实上，你不再需要思考图、全局集合以及如何定义模型以便跨不同的运行共享它们的参数；在
+    TensorFlow 2.0 中，真正重要的是以 Python 对象的方式思考，这些对象都有自己的变量。
+- en: TensorFlow 2.0 lets you design the whole machine learning pipeline while just
+    thinking about objects and classes, and not about graphs and session execution.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 让你在设计整个机器学习管道时，只需关注对象和类，而不需要关注图和会话执行。
+- en: Keras was already present in TensorFlow 1.x, but without eager execution enabled
+    by default, which allowed you to define, train, and evaluate models through *assembling
+    layers.*In the next few sections, we will demonstrate three ways to build a model
+    and train it using a standard training loop
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras 已经在 TensorFlow 1.x 中出现过，但当时默认未启用急切执行，这使得你可以通过*组装层*定义、训练和评估模型。在接下来的几个部分，我们将演示三种使用标准训练循环构建和训练模型的方法。
+- en: In the *Eager execution and new features* section, you will be shown how to
+    create a custom training loop. The rule of thumb is to use Keras to build the
+    models and use a standard training loop if the task to solve is quite standard,
+    and then write a custom training loop when Keras does not provide a simple and
+    ready-to-use training loop.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 *急切执行与新特性*部分，您将学习如何创建一个自定义的训练循环。经验法则是：如果任务比较标准，就使用 Keras 构建模型并使用标准的训练循环；当
+    Keras 无法提供简单且现成可用的训练循环时，再编写自定义的训练循环。
+- en: The Sequential API
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 顺序 API
+- en: The most common type of model is a stack of layers. The `tf.keras.Sequential`
+    model allows you to define a Keras model by stacking `tf.keras.layers`.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最常见的模型类型是层的堆叠。`tf.keras.Sequential` 模型允许你通过堆叠 `tf.keras.layers` 来定义一个 Keras
+    模型。
+- en: 'The CNN that we defined in [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26), *TensorFlow
+    Graph Architecture*, can be recreated using a Keras sequential model in fewer
+    lines and in an elegant way. Since we are training a classifier, we can use the
+    Keras model''s `compile` and `fit` methods to build the training loop and execute
+    it, respectively. At the end of the training loop, we can also evaluate the performance
+    of the model on the test set using the `evaluate` method—Keras will take care
+    of all the boilerplate code:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在 [第 3 章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26)中定义的
+    CNN，*TensorFlow 图形架构*，可以使用 Keras 顺序模型在更少的行数和更优雅的方式中重新创建。由于我们正在训练一个分类器，我们可以使用 Keras
+    模型的 `compile` 和 `fit` 方法分别构建训练循环并执行它。在训练循环结束时，我们还可以使用 `evaluate` 方法评估模型在测试集上的表现——Keras
+    会处理所有的模板代码：
+- en: '`(tf2)`'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE0]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Some things to take note of regarding the preceding code are as follows:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于前面的代码，需要注意的一些事项如下：
+- en: '`tf.keras.Sequential` builds a `tf.keras.Model` object by stacking Keras layers.
+    Every layer expects input and produces an output, except for the first one. The
+    first layer uses the additional `input_shape` parameter, which is required to
+    correctly build the model and print the summary before feeding in a real input.
+    Keras allows you to specify the input shape of the first layer or leave it undefined.
+    In the case of the former, every following layer knows its input shape and forward
+    propagates its output shape to the next layer, making the input and output shape
+    of every layer in the model known once the `tf.keras.Model` object has been created.
+    In the case of the latter, the shapes are undefined and will be computed once
+    the input has been fed to the model, making it impossible to generate the *summary*.'
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.keras.Sequential` 通过堆叠 Keras 层构建 `tf.keras.Model` 对象。每个层都期望输入并生成输出，除了第一个层。第一个层使用额外的 `input_shape` 参数，这是正确构建模型并在输入真实数据前打印总结所必需的。Keras
+    允许你指定第一个层的输入形状，或者保持未定义。在前者的情况下，每个后续的层都知道其输入形状，并将其输出形状向前传播给下一个层，从而使得模型中每个层的输入和输出形状一旦 `tf.keras.Model` 对象被创建就已知。而在后者的情况下，形状是未定义的，并将在输入被馈送到模型后计算，这使得无法生成 *总结*。'
+- en: '`model.summary()` prints a complete description of the model, which is really
+    useful if you want to check whether the model has been correctly defined and thereby
+    check whether there are possible typos in the model definition, which layer weighs
+    the most (in terms of the number of parameters), and how many parameters the whole
+    model has. The CNN summary is presented in the following code. As we can see,
+    the vast majority of parameters are in the fully connected layer:'
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`model.summary()` 打印出模型的完整描述，如果你想检查模型是否已正确定义，从而检查模型定义中是否存在拼写错误，哪个层的权重最大（按参数数量），以及整个模型的参数量是多少，这非常有用。CNN
+    的总结在以下代码中展示。正如我们所看到的，绝大多数参数都在全连接层中：'
+- en: '[PRE1]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The dataset preprocessing step was made without the use of NumPy but, instead,
+    using **eager execution**.
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据集预处理步骤是在没有使用 NumPy 的情况下进行的，而是采用了**急切执行**。
+- en: '`tf.expand_dims(data, -1).numpy()` show how TensorFlow can be used as a replacement
+    for NumPy (having a 1:1 API compatibility). By using `tf.expand_dims` instead
+    of `np.expand_dims`, we obtained the same result (adding one dimension at the
+    end of the input tensor), but created a `tf.Tensor` object instead of a `np.array`
+    object. The `compile` method, however, requiresNumPy arrays as input, and so we
+    need to use the `numpy()` method. Every `tf.Tensor` object has to get the corresponding NumPy
+    value contained in the Tensor object.'
+  id: totrans-58
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`tf.expand_dims(data, -1).numpy()`展示了TensorFlow如何替代NumPy（具有1:1的API兼容性）。通过使用`tf.expand_dims`而非`np.expand_dims`，我们获得了相同的结果（在输入张量的末尾添加一个维度），但是创建了一个`tf.Tensor`对象而不是`np.array`对象。然而，`compile`方法要求输入为NumPy数组，因此我们需要使用`numpy()`方法。每个`tf.Tensor`对象都必须获取Tensor对象中包含的相应NumPy值。'
+- en: 'In the case of a standard classification task, Keras allows you to build the
+    training loop in a single line using the `compile` method. To configure a training
+    loop, the method only requires three arguments: the optimizer, the loss, and the
+    metrics to monitor. In the preceding example, we can see that it is possible to
+    use both strings and Keras objects as parameters to correctly build the training
+    loop.'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在标准分类任务的情况下，Keras允许你用一行代码通过`compile`方法构建训练循环。为了配置训练循环，该方法只需要三个参数：优化器、损失函数和需要监控的度量。在前面的例子中，我们可以看到既可以使用字符串，也可以使用Keras对象作为参数来正确构建训练循环。
+- en: '`model.fit` is the method that you call after the training loop has been built
+    in order to effectively start the training phase on the data that''s passed for
+    the desired number of epochs while measuring the metrics specified in the compile
+    phase. The batch size can be configured by passing the `batch_size` parameter.
+    In this case, we are using the default value of 32.'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`model.fit`是你在训练循环构建完成后调用的方法，用于在传入的数据上开始训练阶段，训练次数由指定的epoch数确定，并在编译阶段指定的度量标准下进行评估。批量大小可以通过传递`batch_size`参数进行配置。在这种情况下，我们使用默认值32。'
+- en: At the end of the training loop, the model's performance can be measured on
+    some unseen data. In this case, it's testing the test set of the fashion-MNIST
+    dataset.
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在训练循环结束时，可以在一些未见过的数据上衡量模型的性能。在这种情况下，它是对fashion-MNIST数据集的测试集进行测试。
+- en: 'Keras takes care of giving the user feedback while the model is being training,
+    logging a progress bar for each epoch and the live value of loss and metrics in
+    the standard output:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras在训练模型时会为用户提供反馈，记录每个epoch的进度条，并在标准输出中实时显示损失和度量的值：
+- en: '[PRE2]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The last line in the preceding code is the result of the `evaluate` call.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面代码中的最后一行是`evaluate`调用的结果。
+- en: The Functional API
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Functional API
+- en: The Sequential API is the simplest and most common way of defining models. However,
+    it cannot be used to define arbitrary models. The Functional API allows you to
+    define complex topologies without the constraints of the sequential layers.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Sequential API是定义模型的最简单和最常见的方法。然而，它不能用来定义任意的模型。Functional API允许你定义复杂的拓扑结构，而不受顺序层的限制。
+- en: The Functional API allows you to define multi-input, multi-output models, easily
+    sharing layers, defines residual connections, and in general define models with
+    arbitrary complex topologies.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Functional API允许你定义多输入、多输出模型，轻松共享层，定义残差连接，并且一般来说能够定义具有任意复杂拓扑结构的模型。
+- en: Once built, a Keras layer is a callable object that accepts an input tensor
+    and produces an output tensor. It knows that it is possible to compose the layers
+    by treating them as functions and building a `tf.keras.Model` object just by passing
+    the input and output layers.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦构建完成，Keras层是一个可调用对象，它接受一个输入张量并生成一个输出张量。它知道可以将这些层当作函数来组合，并通过传递输入层和输出层来构建一个`tf.keras.Model`对象。
+- en: 'The following code shows how we can define a Keras model using the functional
+    interface: the model is a fully connected neural network that accepts a 100-dimensional
+    input and produces a single number as output (as we will see in [Chapter 9](66948c53-131c-43ef-a7fc-3d242d1e0664.xhtml), *Generative
+    Adversarial Networks*, this will be our Generator architecture):'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下代码展示了如何使用功能接口定义Keras模型：该模型是一个全连接的神经网络，接受一个100维的输入并生成一个单一的数字作为输出（正如我们将在[第9章](66948c53-131c-43ef-a7fc-3d242d1e0664.xhtml)
+    *生成对抗网络*中看到的，这将是我们的生成器架构）：
+- en: '`(tf2)`'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE3]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Being a Keras model, `model` can be compiled and trained exactly like any other
+    Keras model that's defined using the Sequential API.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个Keras模型，`model`可以像任何使用Sequential API定义的Keras模型一样进行编译和训练。
+- en: The subclassing method
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 子类化方法
+- en: 'The Sequential and Functional APIs cover almost any possible scenario. However,
+    Keras offers another way of defining models that is object-oriented, more flexible,
+    but error-prone and harder to debug. In practice, it is possible to subclass any `tf.keras.Model` by
+    defining the layers in `__init__` and the forward passing in the `call` method:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序API和功能API涵盖了几乎所有可能的场景。然而，Keras提供了另一种定义模型的方式，它是面向对象的，更灵活，但容易出错且难以调试。实际上，可以通过在`__init__`中定义层并在`call`方法中定义前向传播来子类化任何`tf.keras.Model`：
+- en: '`(tf2)`'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE4]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The subclassing method is not recommended since it separates the layer definition
+    from its usage, making it easy to make mistakes while refactoring the code. However,
+    defining the forward pass using this kind of model definition is sometimes the
+    only way to proceed, especially when working with recurrent neural networks.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不推荐使用子类化方法，因为它将层的定义与其使用分开，容易在重构代码时犯错。然而，使用这种模型定义来定义前向传播有时是唯一可行的方法，尤其是在处理循环神经网络时。
+- en: Subclassing from a `tf.keras.Model` the `Generator` object is a `tf.keras.Model` itself,
+    and as such, it can be trained using the `compile` and `fit` commands, as shown
+    earlier.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从`tf.keras.Model`子类化的`Generator`对象本身就是一个`tf.keras.Model`，因此，它可以像前面所示一样，使用`compile`和`fit`命令进行训练。
+- en: Keras can be used to train and evaluate models, but TensorFlow 2.0, with its
+    eager execution, allows us to write our own custom training loop so that we have
+    complete control of the training process and can debug easily.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras可用于训练和评估模型，但TensorFlow 2.0通过其急切执行功能，允许我们编写自定义训练循环，从而完全控制训练过程，并能够轻松调试。
+- en: Eager execution and new features
+  id: totrans-80
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 急切执行和新特性
+- en: 'The following is stated in the eager execution official documentation ([https://www.tensorflow.org/guide/eager](https://www.tensorflow.org/guide/eager)):'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是急切执行官方文档中声明的内容（[https://www.tensorflow.org/guide/eager](https://www.tensorflow.org/guide/eager)）：
+- en: '*TensorFlow''s eager execution is an imperative programming environment that
+    evaluates operations immediately, without building graphs: operations return concrete
+    values instead of constructing a computational graph to run later. This makes
+    it easy to get started with TensorFlow and debug models, and it reduces boilerplate
+    as well. To follow along with this guide, run the following code samples in an
+    interactive Python interpreter.*'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*TensorFlow的急切执行是一个命令式编程环境，立即执行操作，而不是构建图形：操作返回具体值，而不是构建一个计算图以便稍后运行。这使得开始使用TensorFlow并调试模型变得更加容易，并且减少了样板代码。按照本指南操作时，请在交互式Python解释器中运行以下代码示例。*'
+- en: '*Eager execution is a flexible machine learning platform for research and experimentation,
+    providing the following:*'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*急切执行是一个灵活的机器学习平台，适用于研究和实验，提供以下功能：*'
+- en: '*An intuitive interface: Structure your code naturally and use Python data
+    structures. Quickly iterate on small models and small data.*'
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*直观的接口：自然地组织代码并使用Python数据结构。快速迭代小型模型和小型数据。*'
+- en: '*Easier debugging: Call ops directly to inspect running models and test changes.
+    Use standard Python debugging tools for immediate error reporting.*'
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*更简单的调试：直接调用操作来检查运行中的模型并测试更改。使用标准的Python调试工具进行即时错误报告。*'
+- en: '*Natural control flow: Use Python control flow instead of graph control flow,
+    simplifying the specification of dynamic models.*'
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*自然控制流：使用Python控制流，而不是图形控制流，从而简化了动态模型的规格说明。*'
+- en: As shown in *The Sequential API* section, eager execution allows you to (among
+    other features) use TensorFlow as a standard Python library that is executed immediately
+    by the Python interpreter.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如*顺序API*部分所示，急切执行使你能够（以及其他特性）将TensorFlow作为标准Python库，立即由Python解释器执行。
+- en: As we explained in [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26), *TensorFlow
+    Graph Architecture*, the graph definition and session execution paradigm is no
+    longer the default. Don't worry! Everything you learned in the previous chapter
+    is of extreme importance if you wish to master TensorFlow 2.0, and it will help
+    you understand why certain parts of the framework work in this way, especially
+    when you're using AutoGraph and the Estimator API, which we will talk about next.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在[第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26)中解释的，*TensorFlow图形架构*，图形定义和会话执行范式不再是默认模式。别担心！如果你希望精通TensorFlow
+    2.0，上一章所学的内容极为重要，它将帮助你理解框架中某些部分为什么如此运作，尤其是在使用AutoGraph和Estimator API时，接下来我们将讨论这些内容。
+- en: Let's see how the baseline example from the previous chapter works when eager
+    execution is enabled.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看在启用即时执行时，上一章的基准示例如何工作。
+- en: Baseline example
+  id: totrans-90
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基准示例
+- en: 'Let''s recall the baseline example from the previous chapter:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回顾一下上一章的基准示例：
+- en: '`(tf1)`'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf1)`'
+- en: '[PRE5]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The session''s execution produces the NumPy array:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 会话的执行生成 NumPy 数组：
+- en: '[PRE6]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Converting the baseline example into TensorFlow 2.0 is straightforward:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将基准示例转换为 TensorFlow 2.0 非常简单：
+- en: Don't worry about the graph
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不用担心图
+- en: Don't worry about the session execution
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不用担心会话执行
+- en: 'Just write what you want to be executed whenever you want it to be executed:'
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 只需写下你希望执行的内容，随时都能执行：
+- en: '`(tf2)`'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE7]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The preceding code produces a different output with respect to the 1.x version:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码与 1.x 版本相比会产生不同的输出：
+- en: '[PRE8]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: The numerical value is, of course, the same, but the object that's returned
+    is no longer a NumPy array—instead, it's a `tf.Tensor` object.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数值当然是相同的，但返回的对象不再是 NumPy 数组，而是 `tf.Tensor` 对象。
+- en: In TensorFlow 1.x, a `tf.Tensor` object was only a symbolic representation of
+    the output of a `tf.Operation`; in 2.0, this is no longer the case.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 1.x 中，`tf.Tensor` 对象只是 `tf.Operation` 输出的符号表示；而在 2.0 中，情况不再是这样。
+- en: Since the operations are executed as soon as the Python interpreter evaluates
+    them, every `tf.Tensor` object is not only a symbolic representation of the output
+    of a `tf.Operation`, but also a concrete Python object that contains the result
+    of the operation.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于操作会在 Python 解释器评估时立即执行，因此每个 `tf.Tensor` 对象不仅是 `tf.Operation` 输出的符号表示，而且是包含操作结果的具体
+    Python 对象。
+- en: Please note that a `tf.Tensor` object is still a symbolic representation of
+    the output of a `tf.Operation`. This allows it to support and use 1.x features
+    in order to manipulate `tf.Tensor` objects, thereby building graphs of `tf.Operation` that
+    produce `tf.Tensor`.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，`tf.Tensor` 对象仍然是 `tf.Operation` 输出的符号表示。这使得它能够支持和使用 1.x 特性，以便操作 `tf.Tensor`
+    对象，从而构建生成 `tf.Tensor` 的 `tf.Operation` 图。
+- en: The graph is still present and the `tf.Tensor` objects are returned as a result
+    of every TensorFlow method.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图仍然存在，并且每个 TensorFlow 方法的结果都会返回 `tf.Tensor` 对象。
+- en: 'The `y` Python variable, being a `tf.Tensor` object, can be used as input for
+    any other TensorFlow operation. If, instead, we are interested in extracting the
+    value `tf.Tensor` holds so that we have the identical result of the `sess.run`
+    call of the 1.x version, we can just invoke the `tf.Tensor.numpy` method:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`y` Python 变量，作为 `tf.Tensor` 对象，可以作为任何其他 TensorFlow 操作的输入。如果我们希望提取 `tf.Tensor`
+    所包含的值，以便获得与 1.x 版本中 `sess.run` 调用相同的结果，我们只需调用 `tf.Tensor.numpy` 方法：'
+- en: '[PRE9]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: TensorFlow 2.0, with its focus on eager execution, allows the user to design
+    better-engineered software. In its 1.x version, TensorFlow had the omnipresent
+    concepts of global variables, collections, and sessions.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 专注于即时执行，使得用户能够设计更好工程化的软件。在 1.x 版本中，TensorFlow 有着无处不在的全局变量、集合和会话概念。
+- en: Variables and collections could be accessed from everywhere in the source code
+    since a default graph was always present.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 变量和集合可以从源代码中的任何地方访问，因为默认图始终存在。
+- en: The session is required in order to organize the complete project structure
+    since it knows that only a single session can be present. Every time a node had
+    to be evaluated, the session object had to be instantiated and being accessibe
+    in the current scope.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 会话是组织完整项目结构所必需的，因为它知道只能存在一个会话。每当一个节点需要被评估时，必须实例化会话对象，并且在当前作用域中可以访问。
+- en: TensorFlow 2.0 changed all of these aspects, increasing the overall quality
+    of code that can be written using it. In practice, before 2.0, using TensorFlow
+    to design a complex software system was tough, and many users just gave up and
+    defined huge single file projects that had everything inside them. Now, it is
+    possible to design software in a way better and cleaner way by following all the
+    software engineering good practices.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0 改变了这些方面，提高了可以用它编写的代码的整体质量。实际上，在 2.0 之前，使用 TensorFlow 设计复杂的软件系统非常困难，许多用户最终放弃了，并定义了包含所有内容的巨大的单文件项目。现在，通过遵循所有软件工程的最佳实践，设计软件变得更加清晰和简洁。
+- en: Functions, not sessions
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 函数，而不是会话
+- en: The `tf.Session` object has been removed from the TensorFlow API. By focusing
+    on eager execution, you no longer need the concept of a session because the execution
+    of the operation is immediate—we don't build a computational graph before running
+    the computation.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.Session`对象已经从TensorFlow API中移除。通过专注于急切执行，你不再需要会话的概念，因为操作的执行是即时的——我们在执行计算之前不再构建计算图。'
+- en: This opens up a new scenario, in which the source code can be organized better.
+    In TensorFlow 1.x, it was tough to design software by following object-oriented
+    programming principles or even create modular code that used Python functions.
+    However, in TensorFlow 2.0, this is natural and is highly recommended.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这开启了一个新的场景，其中源代码可以更好地组织。在TensorFlow 1.x中，按照面向对象编程原则设计软件非常困难，甚至很难创建使用Python函数的模块化代码。然而，在TensorFlow
+    2.0中，这是自然的，并且强烈推荐。
+- en: 'As shown in the previous example, the baseline example can be easily converted
+    into its eager execution counterpart. This source code can be improved by following
+    some Python best practices:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前面的示例所示，基础示例可以轻松转换为其急切执行的对应版本。通过遵循一些Python最佳实践，可以进一步改进这段源代码：
+- en: '`(tf2)`'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE10]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: The two operations that could be executed singularly by calling `sess.run` (the
+    matrix multiplication and the sum) have been moved to independent functions. Of
+    course, the baseline example is simple, but just think about the training step
+    of a machine learning model—it is easy to define a function that accepts the model
+    and the input, and then executes a training step.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那些可以通过调用`sess.run`单独执行的两个操作（矩阵乘法和求和）已经被移到独立的函数中。当然，基础示例很简单，但只要想一想机器学习模型的训练步骤——定义一个接受模型和输入数据的函数，然后执行训练步骤，便是轻而易举的。
+- en: 'Let''s go through some of the advantages of this:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下这个的几个优势：
+- en: Better software organization.
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更好的软件组织。
+- en: Almost complete control over the execution flow of the program.
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对程序执行流程几乎完全的控制。
+- en: No need to carry a `tf.Session` object around the source code.
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再需要在源代码中携带`tf.Session`对象。
+- en: No need to use `tf.placeholder`. To feed the graph, you only need to pass the
+    data to the function.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再需要使用`tf.placeholder`。为了给图输入数据，你只需要将数据传递给函数。
+- en: We can document the code! In 1.x, in order to understand what was happening
+    in a certain part of the program, we had to read the complete source code, understand
+    its organization, understand which operations were executed when a node was evaluated
+    in a `tf.Session`, and only then did we have an idea of what was going on.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们可以为代码编写文档！在1.x版本中，为了理解程序某部分发生了什么，我们必须阅读完整的源代码，理解它的组织方式，理解在`tf.Session`中节点评估时执行了哪些操作，只有这样我们才会对发生的事情有所了解。
+- en: Using functions we can write self-contained and well-documented code that does
+    exactly what the documentation states.
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 使用函数，我们可以编写自包含且文档齐全的代码，完全按照文档说明执行。
+- en: The second and most important advantage that eager execution brings is that
+    global graphs are no longer needed and, by extension, neither are its global collections
+    and variables.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 急切执行带来的第二个也是最重要的优势是，不再需要全局图，因此，延伸开来，也不再需要其全局集合和变量。
+- en: No more globals
+  id: totrans-130
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 不再有全局变量
+- en: Global variables are a bad software engineering practice—everyone agrees on
+    that.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全局变量是一个不良的软件工程实践——这是大家一致同意的。
+- en: 'In TensorFlow 1.x, there is a strong separation between the concept of Python
+    variables and graph variables. A Python variable is a variable with a certain
+    name and type that follows the Python language rules: it can be deleted using `del`
+    and it is visible only in its scope and scopes that are at a lower level in the
+    hierarchy.'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow 1.x中，Python变量和图变量的概念有着严格的区分。Python变量是具有特定名称和类型的变量，遵循Python语言规则：它可以通过`del`删除，并且只在其作用域及层次结构中更低的作用域中可见。
+- en: 'The graph variable, on the other hand, is a graph that''s declared in the computational
+    graph and lives outside the Python language rules. We can declare a Graph variable
+    by assigning it to a Python variable, but this bond is not tight: the Python variable
+    gets destroyed as soon as it goes out of scope, while the graph variable is still
+    present: it is a global and persistent object.'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，图变量是声明在计算图中的图，它存在于Python语言规则之外。我们可以通过将图赋值给Python变量来声明图变量，但这种绑定并不紧密：当Python变量超出作用域时，它会被销毁，而图变量仍然存在：它是一个全局且持久的对象。
+- en: 'In order to understand the great advantages this change brings, we will take
+    a look at what happens to the baseline operation definitions when the Python variables
+    are garbage-collected:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解这一变化带来的巨大优势，我们将看看 Python 变量被垃圾回收时，基准操作定义会发生什么：
+- en: '`(tf1)`'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf1)`'
+- en: '[PRE11]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The program fails on the second assertion and the output of `count_op` is the
+    same in the invocation of `[A, x, b]`.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 程序在第二次断言时失败，且在调用 `[A, x, b]` 时 `count_op` 的输出保持不变。
+- en: 'Deleting Python variables is completely useless since all the operations defined
+    in the graph are still there and we can access their output tensor, thus restoring
+    the Python variables if needed or creating new Python variables that point to
+    the graph nodes. We can do this by using the following code:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除 Python 变量完全没有用，因为图中定义的所有操作仍然存在，我们可以访问它们的输出张量，从而在需要时恢复 Python 变量或创建指向图节点的新
+    Python 变量。我们可以使用以下代码来实现这一点：
+- en: '[PRE12]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Why is this behavior bad? Consider the following:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么这种行为不好？请考虑以下情况：
+- en: The operations, once defined in the graph, are always there.
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一旦图中定义了操作，它们就一直存在。
+- en: If any operation that's defined in the graph has a side effect (see the following
+    example regarding variable initialization), deleting the corresponding Python
+    variable is useless and the side effects will remain.
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果图中的任何操作具有副作用（参见下面关于变量初始化的示例），删除相应的 Python 变量是无效的，副作用仍然会存在。
+- en: In general, even if we declared the `A,x,b` variables inside a separate function
+    that has its own Python scope, we can access them from every function by getting
+    the tensor by name, which breaks every sort of encapsulation process out there.
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通常，即使我们在一个具有独立 Python 作用域的函数中声明了 `A, x, b` 变量，我们也可以通过根据名称获取张量的方式在每个函数中访问它们，这打破了所有封装过程。
+- en: 'The following example shows some of the side effects of not having global graph
+    variables connected to Python variables:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例展示了没有全局图变量连接到 Python 变量时的一些副作用：
+- en: '`(tf1)`'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf1)`'
+- en: '[PRE13]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'This code fails to run and highlights several downsides of the global variables
+    approach, alongside the downsides of the naming system used by Tensorfow 1.x:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这段代码无法运行，并突出了全局变量方法的几个缺点，以及 TensorFlow 1.x 使用的命名系统的问题：
+- en: '`sess.run(y)` triggers the execution of an operation that depends on the `z:0` tensor.'
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`sess.run(y)` 会触发依赖于 `z:0` 张量的操作执行。'
+- en: When fetching a tensor using its name, we don't know whether the operation that
+    generates it is an operation without side effects or not. In our case, the operation
+    is a `tf.Variable` definition, which requires the variable's initialization to
+    be executed before the `z:0` tensor can be evaluated; that's why the code fails
+    to run.
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在通过名称获取张量时，我们无法知道生成它的操作是否有副作用。在我们的例子中，操作是 `tf.Variable` 定义，这要求在 `z:0` 张量可以被评估之前必须先执行变量初始化操作；这就是为什么代码无法运行的原因。
+- en: The Python variable name means nothing to TensorFlow 1.x: `test` contains a
+    graph variable named `z` first, and then `test` is destroyed and replaced with
+    the graph constant we require, that is, `z`.
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 变量名对 TensorFlow 1.x 没有意义：`test` 首先包含一个名为 `z` 的图变量，随后 `test` 被销毁并替换为我们需要的图常量，即
+    `z`。
+- en: Unfortunately, the call to `get_y` found a tensor named `z:0`, which refers
+    to the `tf.Variable` operation (that has side effects) and not the constant node, `z`.
+    Why? Even though we deleted the `test` variable in the graph variable, `z` is
+    still defined. Therefore, when calling `tf.constant`, we have a name that conflicts
+    with the graph that TensorFlow solves for us. It does this by adding the `_1` suffix
+    to the output tensor.
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不幸的是，调用 `get_y` 找到一个名为 `z:0` 的张量，它指向 `tf.Variable` 操作（具有副作用），而不是常量节点 `z`。为什么？即使我们在图变量中删除了
+    `test` 变量，`z` 仍然存在。因此，当调用 `tf.constant` 时，我们有一个与图冲突的名称，TensorFlow 为我们解决了这个问题。它通过为输出张量添加
+    `_1` 后缀来解决这个问题。
+- en: All of these problems are gone in TensorFlow 2.0—we just have to write Python
+    code that we are used to. There's no need to worry about graphs, global scopes,
+    naming conflicts, placeholders, graph dependencies, and side effects. Even the
+    control flow is Python-like, as we will see in the next section.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 2.0 中，这些问题都不存在了——我们只需编写熟悉的 Python 代码。无需担心图、全局作用域、命名冲突、占位符、图依赖关系和副作用。甚至控制流也像
+    Python 一样，正如我们在下一节中将看到的那样。
+- en: Control flow
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 控制流
+- en: 'Executing sequential operations in TensorFlow 1.x was not an easy task if the
+    operations had no explicit order of execution constraints. Let''s say we want
+    to use TensorFlow to do the following:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow 1.x中，执行顺序操作并不是一件容易的事，尤其是在操作没有显式执行顺序约束的情况下。假设我们想要使用TensorFlow执行以下操作：
+- en: Declare and initialize two variables: `y` and `y`.
+  id: totrans-155
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 声明并初始化两个变量：`y`和`y`。
+- en: Increment the value of `y` by 1.
+  id: totrans-156
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将`y`的值增加1。
+- en: Compute `x*y`.
+  id: totrans-157
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算`x*y`。
+- en: Repeat this five times.
+  id: totrans-158
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重复此操作五次。
+- en: 'The first, non-working attempt, in TensorFlow 1.x is to just declare the code by
+    following the preceding steps:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow 1.x中，第一个不可用的尝试是仅仅通过以下步骤声明代码：
+- en: '`(tf1)`'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf1)`'
+- en: '[PRE14]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Those of you who completed the exercises that were provided in the previous
+    chapter will have already noticed the problem in this code.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那些完成了前一章提供的练习的人，应该已经注意到这段代码中的问题。
+- en: 'The output node, `out`, has no explicit dependency on the `assign_op` node,
+    and so it never evaluates when `out` is executed, making the output just a sequence
+    of 2\. In TensorFlow 1.x, we have to explicitly force the order of execution using `tf.control_dependencies`,
+    conditioning the assignment operation so that it''s executed before the evaluation
+    of `out`:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出节点`out`对`assign_op`节点没有显式依赖关系，因此它在执行`out`时从不计算，从而使输出仅为2的序列。在TensorFlow 1.x中，我们必须显式地使用`tf.control_dependencies`来强制执行顺序，条件化赋值操作，以便它在执行`out`之前执行：
+- en: '[PRE15]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Now, the output is the sequence of 3, 4, 5, 6, 7, which is what we wanted.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，输出是3、4、5、6、7的序列，这是我们想要的结果。
+- en: More complex examples, such as declaring and executing loops directly inside
+    the graph where conditional execution (using `tf.cond`) could occur, are possible,
+    but the point is the same—in TensorFlow 1.x, we have to worry about the side effects
+    of our operations, we have to think about the graph's structure when writing Python
+    code, and we can't even use the Python interpreter that we're used to. The conditions
+    have to be expressed using `tf.cond` instead of a Python `if` statement and the
+    loops have to be defined using `tf.while_loop` instead of using the Python `for`
+    and `while` statements.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更复杂的示例，例如在图中直接声明并执行循环，其中可能会发生条件执行（使用`tf.cond`），是可能的，但要点是一样的——在TensorFlow 1.x中，我们必须担心操作的副作用，在编写Python代码时，必须考虑图的结构，甚至无法使用我们习惯的Python解释器。条件必须使用`tf.cond`而不是Python的`if`语句来表达，循环必须使用`tf.while_loop`而不是Python的`for`和`while`语句来定义。
+- en: 'TensorFlow 2.x, with its eager execution, makes it possible to use the Python
+    interpreter to control the flow of execution:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.x凭借其即时执行，使得可以使用Python解释器来控制执行流程：
+- en: '`(tf2)`'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE16]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: The previous example, which was developed using eager execution, is simpler
+    to develop, debug, and understand—it's just standard Python, after all!
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前的示例是使用即时执行开发的，更容易开发、调试和理解——毕竟它只是标准的Python代码！
+- en: By simplifying the control flow, eager execution was possible, and is one of
+    the main features that was introduced in TensorFlow 2.0—now, even users without
+    any previous experience of DataFlow graphs or descriptive programming languages
+    can start writing TensorFlow code. Eager execution reduces the overall framework's
+    complexity and lowers the entry barrier.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过简化控制流程，启用了即时执行，这是TensorFlow 2.0中引入的主要特性之一——现在，即便是没有任何数据流图或描述性编程语言经验的用户，也可以开始编写TensorFlow代码。即时执行减少了整个框架的复杂性，降低了入门门槛。
+- en: Users coming from TensorFlow 1.x may start wondering how can we train machine
+    learning models since, in order to compute gradients using automatic differentiation,
+    we need to have a graph of the executed operations.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自TensorFlow 1.x的用户可能会开始想知道我们如何训练机器学习模型，因为为了通过自动微分计算梯度，我们需要有一个执行操作的图。
+- en: TensorFlow 2.0 introduced the concept of GradienTape to efficiently combat this
+    problem.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0引入了GradientTape的概念，以高效解决这个问题。
+- en: GradientTape
+  id: totrans-174
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: GradientTape
+- en: The `tf.GradientTape()` invocation creates a context that records the operations
+    for automatic differentiation. Every operation that's executed within the context
+    manager is recorded on tape if at least one of their inputs is watchable and is
+    being watched.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.GradientTape()`调用创建了一个上下文，在该上下文中记录自动微分的操作。每个在上下文管理器内执行的操作都会被记录在带状磁带上，前提是它们的至少一个输入是可监视的并且正在被监视。'
+- en: 'An input is watchable when the following occurs:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当发生以下情况时，输入是可监视的：
+- en: It's a trainable variable that's been created by using `tf.Variable`
+  id: totrans-177
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这是一个可训练的变量，通过使用`tf.Variable`创建。
+- en: It's being explicitly watched by the tape, which is done by calling the `watch`
+    method on the `tf.Tensor` object
+  id: totrans-178
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它通过在`tf.Tensor`对象上调用`watch`方法显式地被`tape`监视。
+- en: 'The tape records every operation that''s executed within the context in order
+    to build a graph of the forward pass that was executed; then, the tape can be
+    unrolled in order to compute the gradients using reverse-mode automatic differentiation.
+    It does this by calling the `gradient` method:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: tape记录了在该上下文中执行的每个操作，以便构建已执行的前向传递图；然后，tape可以展开以使用反向模式自动微分计算梯度。它通过调用`gradient`方法来实现：
+- en: '[PRE17]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: In the preceding example, we explicitly asked `tape` to watch a constant value
+    that, by its nature, is not watchable (since it is not a `tf.Variable` object).
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，我们显式地要求`tape`监视一个常量值，而该常量值由于其本质不可被监视（因为它不是`tf.Variable`对象）。
+- en: 'A `tf.GradientTape` object such as `tape` releases the resources that it''s
+    holding as soon as the `tf.GradientTape.gradient()` method is called. This is
+    desirable for the most common scenarios, but there are cases in which we need
+    to invoke `tf.GradientTape.gradient()` more than once. To do that, we need to
+    create a persistent gradient tape that allows multiple calls to the gradient method
+    without it releasing the resources. In this case, it is up to the developer to
+    take care of releasing the resources when no more are needed. They do this by
+    dropping the reference to the tape using Python''s `del` instruction:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个`tf.GradientTape`对象，例如`tape`，在调用`tf.GradientTape.gradient()`方法后会释放它所持有的资源。这在大多数常见场景中是可取的，但在某些情况下，我们需要多次调用`tf.GradientTape.gradient()`。为了做到这一点，我们需要创建一个持久的梯度tape，允许多次调用梯度方法而不释放资源。在这种情况下，由开发者在不再需要资源时负责释放这些资源。他们通过使用Python的`del`指令删除对tape的引用来做到这一点：
+- en: '[PRE18]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: It is also possible to nest more than one `tf.GradientTape` object in higher-order
+    derivatives (this should be easy for you to do now, so I'm leaving this as an
+    exercise).
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也可以在更高阶的导数中嵌套多个`tf.GradientTape`对象（现在你应该能轻松做到这一点，所以我将这部分留给你做练习）。
+- en: TensorFlow 2.0 offers a new and easy way to build models using Keras and a highly
+    customizable and efficient way to compute gradients using the concept of tape.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0提供了一种新的、简便的方式，通过Keras构建模型，并通过tape的概念提供了一种高度可定制和高效的计算梯度的方法。
+- en: The Keras models that we mentioned in the previous sections already come with
+    methods to train and evaluate them; however, Keras can't cover every possible
+    training and evaluation scenario. Therefore, TensorFlow 1.x can be used to build
+    custom training loops so that you can train and evaluate the models and have complete
+    control over what's going on. This gives you the freedom to experiment with controlling
+    every part of the training. For instance, as shown in [Chapter 9](66948c53-131c-43ef-a7fc-3d242d1e0664.xhtml), *Generative
+    Adversarial Networks*, the best way to define the adversarial training process
+    is by defining a custom training loop.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在前面章节中提到的Keras模型已经提供了训练和评估它们的方法；然而，Keras不能涵盖所有可能的训练和评估场景。因此，可以使用TensorFlow
+    1.x构建自定义训练循环，这样你就可以训练和评估模型，并完全控制发生的事情。这为你提供了实验的自由，可以控制训练的每一个部分。例如，如[第9章](66948c53-131c-43ef-a7fc-3d242d1e0664.xhtml)所示，*生成对抗网络*，定义对抗训练过程的最佳方式是通过定义自定义训练循环。
+- en: Custom training loop
+  id: totrans-187
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 自定义训练循环
+- en: The `tf.keras.Model` object, through its `compile` and `fit` methods, allows
+    you to train a great number of machine learning models, from classifiers to generative
+    models. The Keras way of training can speed up the definition of the training
+    phase of the most common models, but the customization of the training loop remains
+    limited.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.keras.Model`对象通过其`compile`和`fit`方法，允许你训练大量机器学习模型，从分类器到生成模型。Keras的训练方式可以加速定义最常见模型的训练阶段，但训练循环的自定义仍然有限。'
+- en: There are models, training strategies, and problems that require a different
+    kind of model training. For instance, let's say we need to face the gradient explosion
+    problem. It could happen that, during the training of a model using gradient descent,
+    the loss function starts diverging until it becomes `NaN` because of the size
+    of the gradient update, which becomes higher and higher until it overflows.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些模型、训练策略和问题需要不同类型的模型训练。例如，假设我们需要面对梯度爆炸问题。在使用梯度下降训练模型的过程中，可能会出现损失函数开始发散，直到它变成`NaN`，这通常是因为梯度更新的大小越来越大，直到溢出。
+- en: 'A common strategy that you can use to face this problem is clipping the gradient
+    or capping the threshold: the gradient update can''t have a magnitude greater
+    than the threshold value. This prevents the network from diverging and usually
+    helps us find a better local minima during the minimization process. There are
+    several gradient clipping strategies, but the most common is L2 norm gradient
+    clipping.'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 面对这个问题，你可以使用的一种常见策略是裁剪梯度或限制阈值：梯度更新的大小不能超过阈值。这可以防止网络发散，并通常帮助我们在最小化过程中找到更好的局部最小值。有几种梯度裁剪策略，但最常见的是L2范数梯度裁剪。
+- en: 'In this strategy, the gradient vector is normalized in order to make the L2
+    norm less than or equal to a threshold value. In practice, we want to update the
+    gradient update rule in this way:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个策略中，梯度向量被归一化，使得L2范数小于或等于一个阈值。实际上，我们希望以这种方式更新梯度更新规则：
+- en: '[PRE19]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: TensorFlow has an API for this task: `tf.clip_by_norm`. We only need to access
+    the gradients that have been computed, apply the update rule, and feed it to the
+    chosen optimizer.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow有一个API用于此任务：`tf.clip_by_norm`。我们只需访问已计算的梯度，应用更新规则，并将其提供给选择的优化器。
+- en: In order to create a custom training loop using `tf.GradientTape` to compute
+    the gradients and post-process them, the image classifier training script that
+    we developed at the end of the previous chapter needs to be migrated to its TensorFlow
+    2.0 version.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使用`tf.GradientTape`创建自定义训练循环以计算梯度并进行后处理，我们需要将上一章末尾开发的图像分类器训练脚本迁移到TensorFlow
+    2.0版本。
+- en: 'Please take the time to read the source code carefully: have a look at the
+    new modular organization and compare the previous 1.x code with this new code.'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请花时间仔细阅读源代码：查看新的模块化组织，并将先前的1.x代码与此新代码进行比较。
+- en: 'There are several differences between these APIs:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些API之间存在几个区别：
+- en: The optimizers are now Keras optimizers.
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化器现在是Keras优化器。
+- en: The losses are now Keras losses.
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 损失现在是Keras损失。
+- en: The accuracy is easily computed using the Keras metrics package.
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 精度可以通过Keras指标包轻松计算。
+- en: There is always a TensorFlow 2.0 version of any TensorFlow 1.x symbol.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个TensorFlow 1.x符号都有一个TensorFlow 2.0版本。
+- en: There are no more global collections. The tape needs a list of the variables
+    it needs to use to compute the gradient and the `tf.keras.Model` object has to
+    carry its own set of `trainable_variables`.
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再有全局集合。记录带有需要使用的变量列表以计算梯度，而`tf.keras.Model`对象必须携带其自己的`trainable_variables`集合。
+- en: While in version 1.x there was method invocation, in 2.0, there is a Keras method
+    that returns a callable object. The constructor of almost every Keras object is
+    used to configure it, and they use the `call` method to use it.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在1.x版本中存在方法调用，而在2.0版本中，存在一个返回可调用对象的Keras方法。几乎每个Keras对象的构造函数用于配置它，它们使用`call`方法来使用它。
+- en: 'First, we import the `tensorflow` library and then define the `make_model` function:'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们导入`tensorflow`库，然后定义`make_model`函数：
+- en: '[PRE20]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Then, we define the `load_data` function:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们定义`load_data`函数：
+- en: '[PRE21]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Afterward, we define the `train()` functions that instantiate the model, the
+    input data, and the training parameters:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们定义`train()`函数，实例化模型、输入数据和训练参数：
+- en: '[PRE22]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'To conclude, we need to define the `train_step` function inside the `train`
+    function and use it inside the training loop:'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们需要在`train`函数内定义`train_step`函数，并在训练循环中使用它：
+- en: '[PRE23]'
+  id: totrans-210
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: The previous example does not include model saving, model selection, and TensorBoard
+    logging. Moreover, the gradient clipping part has been left as an exercise for
+    you (see the `TODO` section of the preceding code).
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上一个示例中并没有包括模型保存、模型选择和TensorBoard日志记录。此外，梯度裁剪部分留给你作为练习（参见前面代码的`TODO`部分）。
+- en: At the end of this chapter, all of the missing functionalities will be included;
+    in the meantime, take your time to read through the new version carefully and
+    compare it with the 1.x version.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章末尾，所有缺失的功能将被包括进来；与此同时，请花些时间仔细阅读新版本，并与1.x版本进行比较。
+- en: The next section will focus on how to save the model parameters, restart the
+    training process, and make model selection.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一节将重点介绍如何保存模型参数、重新启动训练过程和进行模型选择。
+- en: Saving and restoring the model's status
+  id: totrans-214
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 保存和恢复模型的状态。
+- en: 'TensorFlow 2.0 introduced the concept of a checkpointable object: every object
+    that inherits from `tf.train.Checkpointable` is automatically serializable, which
+    means that it is possible to save it in a checkpoint. Compared to the 1.x version,
+    where only the variables were checkpointable, in 2.0, whole Keras layers/models
+    inherit from `tf.train.Checkpointable`. Due to this, it is possible to save whole
+    layers/models instead of worrying about their variables; as usual, Keras introduced
+    an additional abstraction layer that simplifies the usage of the framework. There
+    are two ways of saving a model:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0引入了检查点对象的概念：每个继承自`tf.train.Checkpointable`的对象都是可序列化的，这意味着可以将其保存在检查点中。与1.x版本相比，在1.x版本中只有变量是可检查点的，而在2.0版本中，整个Keras层/模型继承自`tf.train.Checkpointable`。因此，可以保存整个层/模型，而不必担心它们的变量；和往常一样，Keras引入了一个额外的抽象层，使框架的使用更加简便。保存模型有两种方式：
+- en: Using a checkpoint
+  id: totrans-216
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用检查点
+- en: Using a SavedModel
+  id: totrans-217
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用SavedModel
+- en: 'As we explained in [Chapter 3](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26), *TensorFlow
+    Graph Architecture*, checkpoints do not contain any description of the model itself:
+    they are just an easy way to store the model parameters and let the developer
+    restore them correctly by defining the model that maps the checkpoint saved variables
+    with Python `tf.Variable` objects or, at a higher level, with `tf.train.Checkpointable`
+    objects.'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在[第3章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=27&action=edit#post_26)中解释的那样，*TensorFlow图架构*，检查点并不包含模型本身的描述：它们只是存储模型参数的简便方法，并通过定义将检查点保存的变量映射到Python中的`tf.Variable`对象，或者在更高层次上，通过`tf.train.Checkpointable`对象来让开发者正确恢复它们。
+- en: 'The SavedModel format, on the other hand, is the serialized description of
+    the computation, in addition to the parameter''s value. We can summarize these
+    two objects as follows:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，SavedModel格式是计算的序列化描述，除了参数值之外。我们可以将这两个对象总结如下：
+- en: '**Checkpoint**: An easy way to store variables on disk'
+  id: totrans-220
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**检查点**：一种将变量存储到磁盘的简便方法'
+- en: '**SavedModel**: Model structure and checkpoint'
+  id: totrans-221
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**SavedModel**：模型结构和检查点'
+- en: SavedModels are language-agnostic representations (Protobuf serialized graphs)
+    that are suitable for deployment in other languages. The last chapter of this
+    book, [Chapter 10](889170ef-f89d-4485-a111-6cd4e72f0daa.xhtml), *Bringing a Model
+    to Production,* is dedicated to the SavedModel since it is the correct way to
+    bring a model to production.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SavedModel是一种与语言无关的表示（Protobuf序列化图），适合在其他语言中部署。本书的最后一章，[第10章](889170ef-f89d-4485-a111-6cd4e72f0daa.xhtml)，*将模型投入生产*，专门讲解SavedModel，因为它是将模型投入生产的正确方法。
+- en: 'While training a model, we have the model definition available in Python. Due
+    to this, we are interested in saving the model status, which we can do as follows:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练模型时，我们在Python中可以获得模型定义。由于这一点，我们有兴趣保存模型的状态，具体方法如下：
+- en: Restart the training process in the case of failures, without wasting all the
+    previous computation.
+  id: totrans-224
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在失败的情况下重新启动训练过程，而不会浪费之前的所有计算。
+- en: Save the model parameters at the end of the training loop so that we can test
+    the trained model on the test set.
+  id: totrans-225
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在训练循环结束时保存模型参数，以便我们可以在测试集上测试训练好的模型。
+- en: Save the model parameters in different locations so that we can save the status
+    of the models that reached the best validation performance (model selection).
+  id: totrans-226
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将模型参数保存在不同位置，以便我们可以保存达到最佳验证性能的模型状态（模型选择）。
+- en: 'To save and restore the model parameters in TensorFlow 2.0, we can use two
+    objects:'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在TensorFlow 2.0中保存和恢复模型参数，我们可以使用两个对象：
+- en: '`tf.train.Checkpoint` is the object-based serializer/deserializer.'
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.Checkpoint`是基于对象的序列化/反序列化器。'
+- en: '`tf.train.CheckpointManager` is an object that can use a `tf.train.Checkpoint`
+    instance to save and manage checkpoints.'
+  id: totrans-229
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.CheckpointManager`是一个可以使用`tf.train.Checkpoint`实例来保存和管理检查点的对象。'
+- en: Compared to TensorFlow 1.x's `tf.train.Saver` method, the `Checkpoint.save`
+    and `Checkpoint.restore` methods write and read object-based checkpoints; the
+    former was only able to write and read `variable.name`-based checkpoints.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与TensorFlow 1.x中的`tf.train.Saver`方法相比，`Checkpoint.save`和`Checkpoint.restore`方法是基于对象的检查点读写；前者只能读写基于`variable.name`的检查点。
+- en: Saving objects instead of variables is more robust when it comes to making changes
+    in the Python program and it works correctly with the eager execution paradigm.
+    In TensorFlow 1.x, saving only the `variable.name` was enough since the graph
+    wouldn't change once defined and executed. In 2.0, where the graph is hidden and
+    the control flow can make the objects and their variables appear/disappear, saving
+    objects is the only way to preserve their status.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其保存变量，不如保存对象，因为它在进行Python程序更改时更为稳健，并且能够正确地与急切执行模式（eager execution）一起工作。在TensorFlow
+    1.x中，只保存`variable.name`就足够了，因为图在定义和执行后不会发生变化。而在2.0版本中，由于图是隐藏的且控制流可以使对象及其变量出现或消失，保存对象是唯一能够保留其状态的方式。
+- en: Using `tf.train.Checkpoint` is amazingly easy—do you want to store a checkpointable
+    object? Just pass it to its constructor or create a new attribute for the object
+    during its lifetime.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`tf.train.Checkpoint`非常简单——你想存储一个可检查点的对象吗？只需将其传递给构造函数，或者在对象生命周期中创建一个新的属性即可。
+- en: Once you've defined the checkpoint object, use it to build a `tf.train.CheckpointManager`
+    object, where you can specify where to save the model parameters and how many
+    checkpoints to keep.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦你定义了检查点对象，使用它来构建一个`tf.train.CheckpointManager`对象，在该对象中你可以指定保存模型参数的位置以及保留多少个检查点。
+- en: 'Because of this, the save and restore capabilities of the previous model''s
+    training are as easy as adding the following lines, right after the model and
+    optimizer definition:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，前一个模型训练的保存和恢复功能只需在模型和优化器定义后，添加以下几行即可：
+- en: '`(tf2)`'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE24]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Trainable and not-trainable variables are automatically added for the checkpoint
+    variables to monitor, allowing you to restore the model and restart the training
+    loop without introducing unwanted fluctuations in the loss functions. In fact,
+    the optimizer object, which usually carries its own set of non-trainable variables
+    (moving means and variances), is a checkpointable object that is added to the
+    checkpoint, allowing you to restart the training loop in the same exact status
+    as when it was interrupted.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可训练和不可训练的变量会自动添加到检查点变量中进行监控，这样你就可以在不引入不必要的损失函数波动的情况下恢复模型并重新启动训练循环。实际上，优化器对象通常携带自己的不可训练变量集（移动均值和方差），它是一个可检查点的对象，被添加到检查点中，使你能够在中断时恢复训练循环的状态。
+- en: 'When a condition is met (`i % 10 == 0`, or when the validation metric is improved),
+    is it possible to use the `manager.save` method invocation to checkpoint the model''s
+    status:'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当满足某个条件（例如`i % 10 == 0`，或当验证指标得到改善时），可以使用`manager.save`方法调用来检查点模型的状态：
+- en: '`(tf2)`'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE25]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: The manager can save the model parameters in the directory that's specified
+    during its construction; therefore, to perform model selection, you need to create
+    a second manager object that is invoked when the model selection condition is
+    met. This is left as an exercise for you.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 管理器可以将模型参数保存到构造时指定的目录中；因此，为了执行模型选择，你需要创建第二个管理器对象，当满足模型选择条件时调用它。这个部分留给你自己完成。
+- en: Summaries and metrics
+  id: totrans-242
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要和指标
+- en: TensorBoard is still the default and recommended data logging and visualization
+    tool for TensorFlow. The `tf.summary` package contains all the required methods
+    to save scalar values, images, plot histograms, distributions, and more.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorBoard 仍然是TensorFlow默认且推荐的数据记录和可视化工具。`tf.summary`包包含所有必要的方法，用于保存标量值、图像、绘制直方图、分布等。
+- en: 'Together with the `tf.metrics` package, it is possible to log aggregated data.
+    Metrics are usually measured on mini-batches and not on the whole training/validation/test
+    set: aggregating data while looping on the complete dataset split allows us to
+    measure the metrics correctly.'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与`tf.metrics`包一起使用时，可以记录聚合数据。指标通常在小批量上进行度量，而不是在整个训练/验证/测试集上：在完整数据集划分上循环时聚合数据，使我们能够正确地度量指标。
+- en: The objects in the `tf.metrics` package are stateful, which means they are able
+    to accumulate/aggregate values and return a cumulative result when calling `.result()`.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.metrics`包中的对象是有状态的，这意味着它们能够累积/聚合值，并在调用`.result()`时返回累积结果。'
+- en: 'In the same way as TensorFlow 1.x, to save a summary to disk, you need a File/Summary
+    writer object. You can create one by doing the following:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与TensorFlow 1.x相同，要将摘要保存到磁盘，你需要一个文件/摘要写入对象。你可以通过以下方式创建一个：
+- en: '`(tf2)`'
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE26]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: This new object doesn't work like it does in 1.x—its usage is now simplified
+    and more powerful. Instead of using a session and executing the `sess.run(summary)` line
+    to get the line to write inside the summary, the new `tf.summary.*` objects are
+    able to detect the context they are used within and log the correct summary inside
+    the writer once the summary line has been computed.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个新对象不像1.x版本那样工作——它的使用现在更加简化且功能更强大。我们不再需要使用会话并执行`(sess.run(summary))`来获取写入摘要的行，新的`tf.summary.*`对象能够自动检测它们所在的上下文，一旦计算出摘要行，就能将正确的摘要记录到写入器中。
+- en: In fact, the summary writer object defines a context manager by calling `.as_default()`;
+    every `tf.summary.*` method that's invoked within this context will add its result
+    to the default summary writer.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，摘要写入器对象通过调用`.as_default()`定义了一个上下文管理器；在这个上下文中调用的每个`tf.summary.*`方法都会将其结果添加到默认的摘要写入器中。
+- en: Combining `tf.summary` with `tf.metrics` allows us to measure and log the training/validation/test
+    metrics correctly and in an easier way with respect to TensorFlow 1.x. In fact,
+    if we decide to log every 10 training steps for the computed metric, we have to
+    visualize the mean value that's computed over those 10 training steps and not
+    just the last one.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将`tf.summary`与`tf.metrics`结合使用，使我们能够更加简单且正确地衡量和记录训练/验证/测试指标，相比于TensorFlow 1.x版本更加简便。事实上，如果我们决定每10步训练记录一次计算的度量值，那么我们需要可视化在这10步训练过程中计算出的均值，而不仅仅是最后一步的值。
+- en: Thus, at the end of every training step, we have to invoke the metric object's `.update_state`
+    method to aggregate and save the computed value inside the object status and then
+    invoke the `.result()` method.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在每一步训练结束时，我们必须调用度量对象的`.update_state`方法来聚合并保存计算值到对象状态中，然后再调用`.result()`方法。
+- en: 'The `.result()` method takes care of correctly computing the metric over the
+    aggregated values. Once computed, we can reset the internal states of the metric
+    by calling `reset_states()`. Of course, the same reasoning holds for every value
+    that''s computed during the training phase because the loss is quite common:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`.result()`方法负责正确计算聚合值上的度量。一旦计算完成，我们可以通过调用`reset_states()`来重置度量的内部状态。当然，所有在训练阶段计算的值都遵循相同的逻辑，因为损失是非常常见的：'
+- en: '[PRE27]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: This defines the metric's `Mean`, which is the mean of the input that's passed
+    during the training phase. In this case, this is the loss value, but the same
+    metric can be used to compute the mean of every scalar value.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这定义了度量的`Mean`，即在训练阶段传入的输入的均值。在这种情况下，这是损失值，但同样的度量也可以用来计算每个标量值的均值。
+- en: 'The `tf.summary` package also contains methods that you can use to log images
+    (`tf.summary.image`), therefore extending the previous example to log both scalar
+    metrics and batches of images on TensorBoard in an extremely easy. The following
+    code shows how the previous example can be extended to log the training loss,
+    accuracy, and three training images—please take the time to analyze the structure,
+    see how metrics and logging are performed, and try to understand how the code
+    structure can be improved by defining more functions in order to make it more
+    modular and easy to maintain:'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.summary`包还包含一些方法，用于记录图像（`tf.summary.image`），因此可以扩展之前的示例，在TensorBoard上非常简单地记录标量指标和图像批次。以下代码展示了如何扩展之前的示例，记录训练损失、准确率以及三张训练图像——请花时间分析结构，看看如何进行指标和日志记录，并尝试理解如何通过定义更多函数使代码结构更加模块化和易于维护：'
+- en: '[PRE28]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Here, we define the `train_step` function:'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，我们定义了`train_step`函数：
+- en: '[PRE29]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'On TensorBoard, at the end of the first epoch, is it possible to see the loss
+    value measured every 10 steps:'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorBoard上，在第一个epoch结束时，可以看到每10步测量的损失值：
+- en: '![](img/47307d71-c49a-4ca7-828a-fab262d72662.png)'
+  id: totrans-261
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/47307d71-c49a-4ca7-828a-fab262d72662.png)'
+- en: The loss value, measured every 10 steps, as visualized in TensorBoard
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每10步测量的损失值，如TensorBoard中所展示
+- en: 'We can also see the training accuracy, measured at the same time as the loss:'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以看到训练准确率，它与损失同时进行测量：
+- en: '![](img/320f3747-b934-4d9e-9973-555f29e29176.png)'
+  id: totrans-264
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/320f3747-b934-4d9e-9973-555f29e29176.png)'
+- en: The training accuracy, as visualized in TensorBoard
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练准确率，如TensorBoard中所展示
+- en: 'Moreover, we can also see the images sampled for the training set:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们还可以看到从训练集采样的图像：
+- en: '![](img/12bba95e-bd24-4be9-a049-c93f8fa2a787.png)'
+  id: totrans-267
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/12bba95e-bd24-4be9-a049-c93f8fa2a787.png)'
+- en: Three image samples from the training set—a dress, a sandal, and a pullover
+    from the fashion-MNIST dataset
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自训练集的三张图像样本——一件裙子、一双凉鞋和来自fashion-MNIST数据集的一件毛衣
+- en: Eager execution allows you to create and execute models on the fly, without
+    explicitly creating a graph. However, working in eager mode does not mean that
+    a graph can't be built from TensorFlow code. In fact, as we saw in the previous
+    section, by using `tf.GradientTape`, is it possible to register what happens during
+    a training step, build a computational graph by tracing the operations that are
+    executed, and use this graph to automatically compute the gradient using automatic
+    differentiation.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 急切执行允许你动态创建和执行模型，而无需显式地创建图。然而，在急切模式下工作并不意味着不能从 TensorFlow 代码中构建图。实际上，正如我们在前一节中所看到的，通过使用
+    `tf.GradientTape`，可以注册训练步骤中发生的事情，通过追踪执行的操作构建计算图，并使用这个图通过自动微分自动计算梯度。
+- en: Tracing what happens during a function's execution allows us to analyze what
+    operations are executed at runtime. Knowing the operations, their input relations,
+    and their output relation makes it possible to build graphs.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 追踪函数执行过程中发生的事情使我们能够分析在运行时执行了哪些操作。知道这些操作，它们的输入关系和输出关系使我们能够构建图形。
+- en: 'This is of extreme importance since it can be exploited to execute a function
+    once, trace its behavior, convert its body into its graph representation, and
+    fall back to the more efficient graph definition and session execution, which
+    has a huge performance boost. It does all of this automatically: this is the concept
+    of AutoGraph.'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这非常重要，因为它可以利用一次执行函数、追踪其行为、将其主体转换为图形表示并回退到更高效的图形定义和会话执行，这会带来巨大的性能提升。所有这些都能自动完成：这就是
+    AutoGraph 的概念。
+- en: AutoGraph
+  id: totrans-272
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: AutoGraph
+- en: Automatically converting Python code into its graphical representation is done
+    with the use of **AutoGraph**. In TensorFlow 2.0, AutoGraph is automatically applied
+    to a function when it is decorated with `@tf.function`. This decorator creates
+    callable graphs from Python functions.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自动将 Python 代码转换为其图形表示形式是通过使用 **AutoGraph** 完成的。在 TensorFlow 2.0 中，当函数被 `@tf.function`
+    装饰时，AutoGraph 会自动应用于该函数。这个装饰器将 Python 函数转换为可调用的图形。
+- en: 'A function, once decorated correctly, is processed by `tf.function` and the `tf.autograph`
+    module in order to convert it into its graphical representation. The following
+    diagram shows a schematic representation of what happens when a decorated function
+    is called:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦正确装饰，函数就会通过 `tf.function` 和 `tf.autograph` 模块进行处理，以便将其转换为图形表示形式。下图展示了装饰函数被调用时的示意图：
+- en: '![](img/ba5dc45f-0079-4085-b76d-2f6fb034fae8.png)'
+  id: totrans-275
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ba5dc45f-0079-4085-b76d-2f6fb034fae8.png)'
+- en: Schematic representation of what happens when a function, f, decorated with
+    @tf.function, which is called on the first call and on any other subsequent call
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示意图表示当一个被 `@tf.function` 装饰的函数 f 被调用时，在首次调用和任何后续调用时会发生的事情：
+- en: 'On the first call of the annotated function, the following occurs:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在注解函数的首次调用时，发生以下情况：
+- en: The function is executed and traced. Eager execution is disabled in this context,
+    and so every `tf.*` method defines a `tf.Operation` node that produces a `tf.Tensor`
+    output, exactly like it does in TensorFlow 1.x.
+  id: totrans-278
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 函数被执行并追踪。在这种情况下，急切执行被禁用，因此每个 `tf.*` 方法都会定义一个 `tf.Operation` 节点，产生一个 `tf.Tensor`
+    输出，正如在 TensorFlow 1.x 中一样。
+- en: The `tf.autograph` module is used to detect Python constructs that can be converted
+    into their graph equivalent. The graph representation is built from the function
+    trace and AutoGraph information. This is done in order to preserve the execution
+    order that's defined in Python.
+  id: totrans-279
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`tf.autograph` 模块用于检测可以转换为图形等价物的 Python 结构。图形表示是从函数追踪和 AutoGraph 信息中构建的。这样做是为了保留在
+    Python 中定义的执行顺序。'
+- en: The `tf.Graph` object has now been built.
+  id: totrans-280
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`tf.Graph` 对象现在已经构建完成。'
+- en: Based on the function name and the input parameters, a unique ID is created
+    and associated with the graph. The graph is then cached into a map so that it
+    can be reused when a second invocation occurs and the ID matches.
+  id: totrans-281
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 基于函数名和输入参数，创建一个唯一的 ID，并将其与图形关联。然后将图形缓存到映射中，以便在第二次调用时，如果 ID 匹配，则可以重用该图形。
+- en: Converting a function into its graph representation usually requires us to think;
+    in TensorFlow 1.x, not every function that works in eager mode can be converted
+    painlessly into its graph version.
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将一个函数转换为其图形表示通常需要我们思考；在 TensorFlow 1.x 中，并非每个在急切模式下工作的函数都能毫无痛苦地转换为其图形版本。
+- en: For instance, a variable in eager mode is a Python object that follows the Python
+    rules regarding its scope. In graph mode, as we found out in the previous chapter,
+    a variable is a persistent object that will continue to exist, even if its associated
+    Python variable goes out of scope and is garbage-collected.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，急切模式下的变量是一个遵循Python作用域规则的Python对象。在图模式下，正如我们在前一章中发现的，变量是一个持久化对象，即使其关联的Python变量超出作用域并被垃圾回收，它仍然存在。
+- en: 'Therefore, special attention has to be placed on software design: if a function
+    has to be graph-accelerated and it creates a status (using `tf.Variable` and similar
+    objects), it is up to the developer to take care of avoiding having to recreate
+    the variable every time the function is called.'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在软件设计中必须特别注意：如果一个函数必须进行图加速并且创建一个状态（使用`tf.Variable`及类似对象），则由开发者负责避免每次调用该函数时都重新创建变量。
+- en: 'For this reason, `tf.function` parses the function body multiple times while
+    looking for the `tf.Variable` definition. If, at the second invocation, it finds
+    out that a variable object is being recreated, it raises an exception:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于这个原因，`tf.function`会多次解析函数体，寻找`tf.Variable`定义。如果在第二次调用时，它发现一个变量对象正在被重新创建，就会抛出异常：
+- en: '[PRE30]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: In practice, if we have defined a function that performs a simple operation
+    that uses a `tf.Variable` inside it, we have to ensure that the object is only
+    created once.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，如果我们定义了一个执行简单操作的函数，并且该函数内部使用了`tf.Variable`，我们必须确保该对象只会被创建一次。
+- en: 'The following function works correctly in eager mode, but it fails to execute
+    if it is decorated with `@tf.function` and is raising the preceding exception:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下函数在急切模式下正常工作，但如果使用`@tf.function`装饰器进行装饰，则无法执行，并且会抛出前述异常：
+- en: '`(tf2)`'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE31]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Handling functions that create a state means that we have to rethink our usage
+    of graph-mode. A state is a persistent object, such as a variable, and the variable
+    can''t be redeclared more than once. Due to this, the function definition can
+    be changed in two ways:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理创建状态的函数意味着我们必须重新思考图模式的使用。状态是一个持久化对象，例如变量，且该变量不能被重新声明多次。由于这一点，函数定义可以通过两种方式进行修改：
+- en: By passing the variable as an input parameter
+  id: totrans-292
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过将变量作为输入参数传递
+- en: By breaking the function scope and inheriting a variable from the external scope
+  id: totrans-293
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过打破函数作用域并从外部作用域继承变量
+- en: 'The first option requires changing the function definition that''s making it:'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个选择需要更改函数定义，使其能够：
+- en: '`(tf2)`'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE32]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '`f` now accepts a Python input variable, `b`. This variable can be a `tf.Variable`,
+    a `tf.Tensor`, and also a NumPy object or a Python type. Every time the input
+    type changes, a new graph is created in order to make an accelerated version of
+    the function that works for any required input type (this is required because
+    of how a TensorFlow graph is statically typed).'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`f`现在接受一个Python输入变量`b`。这个变量可以是`tf.Variable`、`tf.Tensor`，也可以是一个NumPy对象或Python类型。每次输入类型发生变化时，都会创建一个新的图，以便为任何所需的输入类型创建一个加速版本的函数（这是因为TensorFlow图是静态类型的）。'
+- en: 'The second option, on the other hand, requires breaking down the function scope,
+    making the variable available outside the scope of the function itself. In this
+    case, there are two paths we can follow:'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，第二种选择需要分解函数作用域，使变量可以在函数作用域外部使用。在这种情况下，我们可以采取两条路径：
+- en: '**Not recommended**: Use global variables'
+  id: totrans-299
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**不推荐**：使用全局变量'
+- en: '**Recommended**: Use Keras-like objects'
+  id: totrans-300
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**推荐**：使用类似Keras的对象'
+- en: 'The first path, which is **not recommended**, consists of declaring the variable
+    outside the function body and using it inside, ensuring that it will only be declared
+    once:'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一种方法，即**不推荐的方法**，是将变量声明在函数体外，并在其中使用它，确保该变量只会声明一次：
+- en: '`(tf2)`'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE33]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The second path, which is **recommended**, is to use an object-oriented approach
+    and declare the variable as a private attribute of a class. Then, you need to
+    make the objects that were instantiated callable by putting the function body
+    inside the `__call__` method:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种方法，即**推荐的方法**，是使用面向对象的方法，并将变量声明为类的私有属性。然后，你需要通过将函数体放入`__call__`方法中，使实例化的对象可调用：
+- en: '`(tf2)`'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE34]'
+  id: totrans-306
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: AutoGraph and the graph acceleration process work best when it comes to optimizing
+    the training process.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AutoGraph和图加速过程在优化训练过程时表现最佳。
+- en: 'In fact, the most computationally-intensive part of the training is the forward
+    pass, followed by gradient computation and parameter updates. In the previous
+    example, following the new structure that the absence of `tf.Session` allows us
+    to follow, we separate the training step from the training loop. The training
+    step is a function without a state that uses variables inherited from the outer
+    scope. Therefore, it can be converted into its graph representation and accelerated
+    just by decorating it with the `@tf.function` decorator:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，训练过程中最具计算密集型的部分是前向传递（forward pass），接着是梯度计算和参数更新。在前面的例子中，遵循新结构，由于没有`tf.Session`，我们将训练步骤从训练循环中分离出来。训练步骤是一个无状态的函数，使用从外部作用域继承的变量。因此，它可以通过装饰器`@tf.function`转换为图形表示，并加速执行：
+- en: '`(tf2)`'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE35]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: You are invited to measure the speedup that was introduced by the graph conversion
+    of the `train_step` function.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你被邀请测量`train_step`函数图形转换所带来的加速效果。
+- en: The speedup is not guaranteed since eager execution is already fast and there
+    are simple scenarios in which eager execution is as fast as its graphical counterpart.
+    However, the performance boost is visible when the models become more complex
+    and deeper.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能提升不能保证，因为即使是即时执行（eager execution）也已经非常快，并且在一些简单的场景中，即时执行的速度和图形执行（graph execution）相当。然而，当模型变得更加复杂和深层时，性能提升是显而易见的。
+- en: AutoGraph automatically converts Python constructs into their `tf.*` equivalent,
+    but since converting source code that preserves semantics is not an easy task,
+    there are scenarios in which it is better to help AutoGraph perform source code
+    transformation.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AutoGraph会自动将Python构造转换为其`tf.*`等效构造，但由于转换保留语义的源代码并不是一项容易的任务，因此在某些场景下，帮助AutoGraph进行源代码转换会更好。
+- en: In fact, there are constructs that work in eager execution that are already
+    drop-in replacements for Python constructs. In particular, `tf.range` replaces `range`, `tf.print`
+    replaces `print`, and `tf.assert` replaces `assert`.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事实上，已经有一些在即时执行中有效的构造，它们是Python构造的直接替代品。特别是，`tf.range`替代了`range`，`tf.print`替代了`print`，`tf.assert`替代了`assert`。
+- en: For instance, AutoGraph is not able to automatically convert `print` into `tf.print` in
+    order to preserve its semantic. Therefore, if we want a graph-accelerated function
+    to print something when executed in graph mode, we have to write the function
+    using `tf.print` instead of `print`.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，AutoGraph无法自动将`print`转换为`tf.print`以保持其语义。因此，如果我们希望一个图形加速的函数在图形模式下执行时打印内容，我们必须使用`tf.print`而不是`print`来编写函数。
+- en: You are invited to define simple functions that use `tf.range` instead of  `range` and `print`
+    instead of `tf.print`, and then visualize how the source code is converted using
+    the `tf.autograph` module.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你被邀请定义一些简单的函数，使用`tf.range`代替`range`，使用`print`代替`tf.print`，然后通过`tf.autograph`模块可视化源代码的转换过程。
+- en: 'For instance, take a look at the following code:'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，看看以下代码：
+- en: '`(tf2)`'
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE36]'
+  id: totrans-319
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: This produces `0,1,2, ..., 10` when `f` is called—does this happens every time
+    `f` is invoked, or only the first time?
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当调用`f`时，会生成`0,1,2,..., 10`——这是每次调用`f`时都会发生的吗，还是只会发生在第一次调用时？
+- en: 'You are invited to carefully read through the following AutoGraph-generated
+    function (this is machine-generated, and so it is hard to read) in order to understand
+    why `f` behaves in this way:'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你被邀请仔细阅读以下由AutoGraph生成的函数（这是机器生成的，因此难以阅读），以了解为什么`f`会以这种方式表现：
+- en: '[PRE37]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: Migrating an old codebase from Tensorfow 1.x to 2.0 can be a time-consuming
+    process. This is why the TensorFlow authors created a conversion tool that allows
+    us to automatically migrate the source code (it even works on Python notebooks!).
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将旧代码库从TensorFlow 1.x迁移到2.0可能是一个耗时的过程。这就是为什么TensorFlow作者创建了一个转换工具，允许我们自动迁移源代码（它甚至可以在Python笔记本中使用！）。
+- en: Codebase migration
+  id: totrans-324
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 代码库迁移
+- en: As we have already seen, TensorFlow 2.0 brings a lot of breaking changes, which
+    means that we have to relearn how to use the framework. TensorFlow 1.x is the
+    most widely used machine learning framework and so there is a lot of existing
+    code that needs to be upgraded.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们已经看到的，TensorFlow 2.0引入了许多破坏性的变化，这意味着我们必须重新学习如何使用这个框架。TensorFlow 1.x是最广泛使用的机器学习框架，因此有大量现有的代码需要升级。
+- en: 'The TensorFlow engineers developed a conversion tool that can help in the conversion
+    process: unfortunately, it relies on the `tf.compat.v1` module, and it does not
+    remove the graph nor the session execution. Instead, it just rewrites the code,
+    prefixing it using `tf.compat.v1`, and applies some source code transformations
+    to fix some easy API changes.'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 工程师开发了一个转换工具，可以帮助进行转换过程：不幸的是，它依赖于`tf.compat.v1`模块，并且它不会移除图或会话执行。相反，它只是重写代码，使用`tf.compat.v1`进行前缀化，并应用一些源代码转换以修复一些简单的
+    API 更改。
+- en: 'However, it is a good starting point to migrate a whole codebase. In fact,
+    the suggested migration process is as follows:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，它是迁移整个代码库的一个良好起点。事实上，建议的迁移过程如下：
+- en: Run the migration script.
+  id: totrans-328
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 运行迁移脚本。
+- en: Manually remove every `tf.contrib` symbol, looking for the new location of the
+    project that was used in the `contrib` namespace.
+  id: totrans-329
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 手动移除每个`tf.contrib`符号，查找在`contrib`命名空间中使用的项目的新位置。
+- en: Manually switch the models to their Keras equivalent. Remove the sessions.
+  id: totrans-330
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 手动将模型切换到其 Keras 等效版本。移除会话。
+- en: Define the training loop in eager execution mode.
+  id: totrans-331
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在 eager 执行模式下定义训练循环。
+- en: Accelerate the computationally-intensive parts using `tf.function`.
+  id: totrans-332
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`tf.function`加速计算密集型部分。
+- en: The migration tool, `tf_upgrade_v2`, is installed automatically when TensorFlow
+    2.0 is installed via `pip`. The upgrade script works on single Python files, notebooks,
+    or complete project directories.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 迁移工具`tf_upgrade_v2`在通过`pip`安装 TensorFlow 2.0 时会自动安装。该升级脚本适用于单个 Python 文件、笔记本或完整的项目目录。
+- en: 'To migrate a single Python file (or notebook), use the following code:'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要迁移单个 Python 文件（或笔记本），请使用以下代码：
+- en: '[PRE38]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'To run it on a directory tree, use the following code:'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在目录树上运行，请使用以下代码：
+- en: '[PRE39]'
+  id: totrans-337
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: In both cases, the script will print errors if it cannot find a fix for the
+    input code.
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两种情况下，如果脚本无法找到输入代码的修复方法，它将打印错误。
+- en: 'Moreover, it always reports a list of detailed changes in the `report.txt`
+    file, which can help us understand why certain changes have been applied by the
+    tool; for example:'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，它始终会在`report.txt`文件中报告详细的变更列表，这有助于我们理解工具为何应用某些更改；例如：
+- en: '[PRE40]'
+  id: totrans-340
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Migrating the codebase, even using the conversion tool, is a time-consuming
+    process since most of the work is manual. Converting a codebase into TensorFlow
+    2.0 is worth it since it brings many advantages, such as the following:'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使使用转换工具，迁移代码库也是一个耗时的过程，因为大部分工作仍然是手动的。将代码库转换为 TensorFlow 2.0 是值得的，因为它带来了许多优势，诸如以下几点：
+- en: Easy debugging.
+  id: totrans-342
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 轻松调试。
+- en: Increased code quality using an object-oriented approach.
+  id: totrans-343
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过面向对象的方法提高代码质量。
+- en: Fewer lines of code to maintain.
+  id: totrans-344
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 维护的代码行数更少。
+- en: Easy to document.
+  id: totrans-345
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 易于文档化。
+- en: Future-proof—TensorFlow 2.0 follows the Keras standard and the standard will
+    last the test of time.
+  id: totrans-346
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 面向未来——TensorFlow 2.0 遵循 Keras 标准，并且该标准经得起时间的考验。
+- en: Summary
+  id: totrans-347
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, all the major changes that were introduced in TensorFlow 2.0
+    have been presented, including the standardization of the framework on the Keras
+    API specification, the way models are defined using Keras, and how to train them
+    using a custom training loop. We even looked at graph acceleration, which was
+    introduced by AutoGraph, and `tf.function`.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了 TensorFlow 2.0 中引入的所有主要变化，包括框架在 Keras API 规范上的标准化、使用 Keras 定义模型的方式，以及如何使用自定义训练循环进行训练。我们还看到了
+    AutoGraph 引入的图加速，以及`tf.function`。
+- en: AutoGraph, in particular, still requires us to know how the TensorFlow graph
+    architecture works since the Python function that's defined and used in eager
+    mode needs to be re-engineered if there is the need to graph-accelerate them.
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尤其是 AutoGraph，仍然要求我们了解 TensorFlow 图架构的工作原理，因为在 eager 模式中定义并使用的 Python 函数如果需要加速图计算，就必须重新设计。
+- en: The new API is more modular, object-oriented, and standardized; these groundbreaking
+    changes have been made to make the usage of the framework easier and more natural,
+    although the subtleties from the graph architecture are still present and always
+    will be.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新的 API 更加模块化、面向对象且标准化；这些突破性变化旨在使框架的使用更加简单和自然，尽管图架构中的微妙差异仍然存在，并且将始终存在。
+- en: Those of you who have years of experience working with TensorFlow 1.0 may find
+    it really difficult to change your way of thinking to the new object-based and
+    no more graph- and session-based approach; however, it is a struggle that's worth
+    it since the overall quality of the written software increases.
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于那些有 TensorFlow 1.0 工作经验的人来说，改变思维方式到基于对象而不再基于图形和会话的方法可能会非常困难；然而，这是一场值得的斗争，因为它会提高编写软件的整体质量。
+- en: In the next chapter, we will learn about efficient data input pipelines and
+    the Estimator API.
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将学习高效的数据输入流水线和估计器 API。
+- en: Exercises
+  id: totrans-353
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 练习
+- en: 'Please go through the following exercises and answer all questions carefully.
+    This is the only way (by making exercises, via trial and error, and with a lot
+    of struggle) you will be able to master the framework and become an expert:'
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请仔细阅读以下练习，并仔细回答所有问题。通过练习、试错和大量挣扎，这是掌握框架并成为专家的唯一途径：
+- en: Define a classifier using the Sequential, Functional, and Subclassing APIs so
+    that you can classify the fashion-MNIST dataset.
+  id: totrans-355
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用顺序、函数式和子类 API 定义一个分类器，以便对时尚-MNIST数据集进行分类。
+- en: Train the model using the Keras model's built-in methods and measure the prediction
+    accuracy.
+  id: totrans-356
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用 Keras 模型的内置方法训练模型并测量预测准确率。
+- en: Write a class that accepts a Keras model in its constructor and that it trains
+    and evaluates.
+  id: totrans-357
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编写一个类，在其构造函数中接受一个 Keras 模型并进行训练和评估。
+- en: 'The API should work as follows:'
+  id: totrans-358
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: API 应该按照以下方式工作：
+- en: '[PRE41]'
+  id: totrans-359
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: Accelerate the training method using the `@tf.function` annotation. Create a
+    private method called `_train_step` to accelerate only the most computationally-intensive
+    part of the training loop.
+  id: totrans-360
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`@tf.function`注解加速训练方法。创建一个名为`_train_step`的私有方法，仅加速训练循环中最消耗计算资源的部分。
+- en: Run the training and measure the performance boost in milliseconds.
+  id: totrans-361
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 运行训练并测量性能提升的毫秒数。
+- en: Define a Keras model with multiple (2) inputs and multiple (2) outputs.
+  id: totrans-362
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用多个（2个）输入和多个（2个）输出定义一个 Keras 模型。
+- en: The model must accept a grayscale 28 x 28 x 1 image as input, as well as a second
+    grayscale image that's 28 x 28 x 1 in size. The first layer should be a concatenation
+    on the depth of these two images (28 x 28 x 1).
+  id: totrans-363
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该模型必须接受灰度的 28 x 28 x 1 图像作为输入，以及一个与之相同尺寸的第二个灰度图像。第一层应该是这两个图像深度（28 x 28 x 1）的串联。
+- en: The architecture should be an autoencoder-like structure of convolutions that
+    will reduce the input to a vector of 1 x 1 x 128 first, and then in its decoding
+    part will upsample (using the `tf.keras.layer.UpSampling2D` layer) the layers
+    until it gets back to 28 x 28 x D, where D is the depth of your choice.
+  id: totrans-364
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 架构应该是类似自动编码器的卷积结构，将输入缩减到一个大小为 1 x 1 x 128 的向量，然后在其解码部分通过使用`tf.keras.layer.UpSampling2D`层上采样层，直到恢复到
+    28 x 28 x D 的尺寸，其中 D 是您选择的深度。
+- en: Then, two unary convolutional layers should be added on top of this last layer,
+    each of them producing a 28 x 28 x 1 image.
+  id: totrans-365
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后，在这个最后一层之上应该添加两个一元卷积层，每个都产生一个 28 x 28 x 1 的图像。
+- en: Define a training loop using the fashion-MNIST dataset that generates `(image,
+    condition)` pairs, where `condition` is a 28 x 28 x 1 image completely white if
+    the label associated with `image` is 6; otherwise, it needs to be a black image.
+  id: totrans-366
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用时尚-MNIST数据集定义一个训练循环，生成`(image, condition)`对，其中`condition`是一个完全白色的 28 x 28
+    x 1 图像，如果与`image`相关联的标签为 6；否则，它需要是一个黑色图像。
+- en: Before feeding the network, scale the input images in the `[-1, 1]` range.
+  id: totrans-367
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在将图像输入网络之前，将其缩放到`[-1, 1]`范围内。
+- en: Train the network using the sum of two losses. The first loss is the L2 between
+    the first input and the first output of the network. The second loss is the L1
+    between the `condition` and the second output.
+  id: totrans-368
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 使用两个损失的总和来训练网络。第一个损失是网络的第一个输入和第一个输出之间的 L2 距离。第二个损失是`condition`和第二个输出之间的 L1 距离。
+- en: Measure the L1 reconstruction error on the first pair during the training. Stop
+    the training when the value is less than 0.5.
+  id: totrans-369
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在训练过程中测量第一对的 L1 重构误差。当值小于 0.5 时停止训练。
+- en: Use the TensorFlow conversion tool to convert all the scripts in order to solve
+    the exercises that were presented in [Chapter 3](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml),
+    *TensorFlow Graph Architecture*.
+  id: totrans-370
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用 TensorFlow 转换工具转换所有脚本，以便解决在[第 3 章](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml)中提出的练习，“TensorFlow
+    图形架构”。
+- en: 'Analyze the result of the conversion: does it uses Keras? If not, manually
+    migrate the models by getting rid of every `tf.compat.v1` reference. Is this always
+    possible?'
+  id: totrans-371
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 分析转换的结果：是否使用了 Keras？如果没有，通过消除每一个`tf.compat.v1`的引用来手动迁移模型。这总是可能的吗？
+- en: 'Pick a training loop you wrote for one of the preceding exercises: the gradients
+    can be manipulated before applying the updates. Constraints should be the norm
+    of the gradients and in the range of [-1, 1] before the updates are applied. Use
+    the TensorFlow primitives to do that: it should be compatible with `@tf.function`.'
+  id: totrans-372
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择你为前面练习之一编写的训练循环：在应用更新之前，可以操作梯度。约束条件应该是梯度的范数，并且在应用更新之前，范数应该处于[-1, 1]的范围内。使用
+    TensorFlow 的基本操作来实现：它应该与`@tf.function`兼容。
+- en: 'Does the following function produce any output if it''s decorated with `@tf.function`?
+    Describe what happens under the hood:'
+  id: totrans-373
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果以下函数被`@tf.function`装饰，它会输出任何结果吗？描述其内部发生的情况：
+- en: '[PRE42]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Does the following function produce any output if it''s decorated with `@tf.function`?
+    Describe what happens under the hood:'
+  id: totrans-375
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果以下函数被`@tf.function`装饰，它会输出任何结果吗？描述其内部发生的情况：
+- en: '[PRE43]'
+  id: totrans-376
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'Does the following function produce any output if it''s decorated with `@tf.function`?
+    Describe what happens under the hood:'
+  id: totrans-377
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果以下函数被`@tf.function`装饰，它会输出任何结果吗？描述其内部发生的情况：
+- en: '[PRE44]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: Given ![](img/439eb476-406c-4946-93df-996c26702aad.png), compute the first and
+    second-order partial derivatives using `tf.GradientTape` in ![](img/1b1e52b5-6cb9-4b6d-9049-3ae39657a945.png) and ![](img/f976628f-3388-4ab6-b144-e94851e5648c.png).
+  id: totrans-379
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 给定![](img/439eb476-406c-4946-93df-996c26702aad.png)，使用`tf.GradientTape`在![](img/1b1e52b5-6cb9-4b6d-9049-3ae39657a945.png)和![](img/f976628f-3388-4ab6-b144-e94851e5648c.png)中计算一阶和二阶偏导数。
+- en: Remove the side effects from the example that fails to execute in the *No more
+    globals* section and use the constant instead of the variable.
+  id: totrans-380
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 移除在*不再使用全局变量*章节中未能执行的示例中的副作用，并使用常量代替变量。
+- en: Extend the custom training loop defined in the *Custom training loop* section
+    in order to measure the accuracy of the whole training set, of the whole validation
+    set, and at the end of each training epoch. Then, perform model selection using
+    two `tf.train.CheckpointManager` objects.
+  id: totrans-381
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 扩展在*自定义训练循环*章节中定义的自定义训练循环，以便测量整个训练集、整个验证集的准确度，并在每个训练周期结束时进行评估。然后，使用两个`tf.train.CheckpointManager`对象进行模型选择。
+- en: If the validation accuracy stops increasing (with a variation of +/-0.2 at most)
+    for 5 epochs, stop the training.
+  id: totrans-382
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果验证准确度在 5 个周期内没有继续增加（最多变化±0.2），则停止训练。
+- en: In the following training functions, has the `step` variable been converted
+    into a `tf.Variable` object? If not, what are the cons of this?
+  id: totrans-383
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在以下训练函数中，`step`变量是否已转换为`tf.Variable`对象？如果没有，这会有什么不利之处？
+- en: '[PRE45]'
+  id: totrans-384
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: Keep working on all of these exercises throughout this book.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的所有练习中持续进行实践。

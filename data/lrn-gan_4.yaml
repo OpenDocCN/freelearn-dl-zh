@@ -1,0 +1,1047 @@
+- en: Chapter 4. Building Realistic Images from Your Text
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第4章：从文本构建逼真的图像
+- en: For many real-life complex problems, a single Generative Adversarial Network
+    may not be sufficient to solve it. Instead it's better to decompose the complex
+    problem into multiple simpler sub-problems and use multiple GANs to work on each
+    sub-problem separately. Finally, you can stack or couple the GANs together to
+    find a solution.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于许多现实中的复杂问题，单一的生成对抗网络可能不足以解决问题。相反，最好将复杂问题分解为多个更简单的子问题，并使用多个GAN分别解决每个子问题。最后，你可以将这些GAN堆叠或连接在一起，以找到解决方案。
+- en: In this chapter, we will first learn the technique of stacking multiple generative
+    networks to generate realistic images from textual information. Next, you will
+    couple two generative networks, to automatically discover relationships among
+    various domains (relationships between shoes and handbags or actors and actresses).
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将首先学习如何堆叠多个生成网络，从文本信息中生成逼真图像。接下来，你将将两个生成网络结合起来，自动发现不同领域之间的关系（如鞋子和手袋或男女演员之间的关系）。
+- en: 'We will cover the following topics in this chapter:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章我们将讨论以下主题：
+- en: What is StackGAN? Its concept and architecture
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 什么是StackGAN？它的概念和架构
+- en: Synthesizing realistic images from text description using TensorFlow
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用TensorFlow从文本描述合成逼真图像
+- en: Discovering cross-domain relationships with DiscoGAN
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用DiscoGAN发现跨领域关系
+- en: Generating handbag images from edges using PyTorch
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用PyTorch从边缘生成手袋图像
+- en: Transforming gender (actor-to-actress or vice-versa) with facescrub data
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用facescrub数据转换性别（演员到女演员或反之）
+- en: Introduction to StackGAN
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: StackGAN简介
+- en: 'The idea of StackGAN was originally proposed by *Han Zhang*, *Tao Xu*, *Hongsheng
+    Li*, *Shaoting Zhang*, *Xiaolei Huang*, *Xiaogang Wang*, and *Dimitris Metaxas*
+    [*arXiv: 1612.03242,2017*] in the paper *Text to Photo-realistic Image Synthesis
+    with Stacked Generative Adversarial Networks*, where GAN has been used to synthesize
+    forged images starting from the text description.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'StackGAN的思想最初由*Han Zhang*、*Tao Xu*、*Hongsheng Li*、*Shaoting Zhang*、*Xiaolei
+    Huang*、*Xiaogang Wang*和*Dimitris Metaxas*在论文《*Text to Photo-realistic Image Synthesis
+    with Stacked Generative Adversarial Networks*》[*arXiv: 1612.03242, 2017*]中提出，其中使用了GAN从文本描述生成伪造图像。'
+- en: Synthesizing photo realistic images from text is a challenging problem in Computer
+    Vision and has tremendous practical application. The problem of generating images
+    from text can be decomposed into two manageable sub-problems using StackGAN. In
+    this approach, we stack two stages of the generative network based on certain
+    conditions (such as textual description and the output of the previous stage)
+    to achieve this challenging task of realistic image generation from text input.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从文本合成逼真图像是计算机视觉中的一个挑战性问题，具有巨大的实际应用。使用StackGAN，生成图像的问题可以分解成两个可管理的子问题。在这种方法中，我们基于某些条件（如文本描述和前一阶段的输出）将生成网络的两个阶段进行堆叠，从而实现从文本输入生成逼真图像的这一挑战性任务。
+- en: 'Let us define some concepts and notation before diving into the model architecture
+    and implementation details:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入讨论模型架构和实现细节之前，让我们先定义一些概念和符号：
+- en: '*Io*: This is the original image'
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*Io*: 这是原始图像'
+- en: '*t*: Text description'
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*t*: 文本描述'
+- en: '*t*: Text embedding'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*t*: 文本嵌入'
+- en: '*µ(t)*: Mean of text embedding'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*µ(t)*: 文本嵌入的均值'
+- en: '*∑(t)*: Diagonal covariance matrix of text embedding'
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*∑(t)*: 文本嵌入的对角协方差矩阵'
+- en: '*pdata*: Real data distribution'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*pdata*: 真实数据分布'
+- en: '*pz*: Gaussian distribution of noise'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*pz*: 噪声的高斯分布'
+- en: '*z*: Randomly sampled noise from Gaussian distribution'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*z*: 从高斯分布随机采样的噪声'
+- en: Conditional augmentation
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 条件增强
+- en: As we already know from [Chapter 2](ch02.html "Chapter 2. Unsupervised Learning
+    with GAN"), *Unsupervised Learning with GAN*, in Conditional GAN both the generator
+    and discriminator network receive additional conditioning variables *c* to yield
+    *G(z;c)* and *D(x;c)*. This formulation helps the generator to generate images
+    conditioned on variable *c*. The conditioning augmentation yields more training
+    pairs given a small number of image-text pairs and is useful for modeling text
+    to image translation as the same sentence usually maps to objects with various
+    appearances. The textual description is first converted to text embedding *t*
+    by encoding through an encoder and then transformed nonlinearly using a char-CNN-RNN
+    model to create conditioning latent variables as the input of a stage-I generator
+    network.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在[第2章](ch02.html "Chapter 2. Unsupervised Learning with GAN")《无监督学习与GAN》中所知道的，*无监督学习与GAN*，在条件GAN中，生成器和判别器网络都接收附加的条件变量
+    *c* 来生成 *G(z;c)* 和 *D(x;c)*。这种公式化帮助生成器根据变量 *c* 生成图像。条件增强可以在给定少量图像-文本对的情况下生成更多的训练对，并且对于建模文本到图像的转换非常有用，因为同一句话通常会映射到具有不同外观的物体。文本描述首先通过编码器转换为文本嵌入
+    *t*，然后通过 char-CNN-RNN 模型非线性地转换，生成作为第一阶段生成器网络输入的条件潜变量。
+- en: Since the latent space for text embedding is usually high dimensional, to mitigate
+    the problem of discontinuity in latent data manifold with a limited amount of
+    data, a conditioning augmentation technique is applied to produce additional conditioning
+    variable *c^* sampled from a Gaussian distribution *N(µ(t), ∑(t))*.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于文本嵌入的潜空间通常是高维的，为了缓解有限数据量下潜在数据流形不连续的问题，应用条件增强技术以生成从高斯分布 *N(µ(t), ∑(t))* 中采样的附加条件变量
+    *c^*。
+- en: Stage-I
+  id: totrans-24
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 第一阶段
+- en: 'In this stage, the GAN network learns the following:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一阶段，GAN 网络学习以下内容：
+- en: Generating rough shapes and basic colors for creating objects conditioned on
+    textual description
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 生成粗略形状和基本颜色，用于根据文本描述创建物体
+- en: Generating background regions from random noise sampled from prior distribution
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从从先验分布采样的随机噪声生成背景区域
+- en: The low resolution coarse images generated in this stage might not look real
+    because they have some defects such as object shape distortion, missing object
+    parts, and so on.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一阶段生成的低分辨率粗略图像可能看起来不真实，因为它们有一些缺陷，比如物体形状畸变、缺失物体部分等。
+- en: 'The stage-I GAN trains the discriminator *D0* (maximize the loss) and the generator
+    *G0* (minimize the loss), alternatively as shown in the following equation:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一阶段GAN交替训练判别器 *D0*（最大化损失）和生成器 *G0*（最小化损失），如以下方程所示：
+- en: '![Stage-I](img/B08086_04_01.jpg)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![Stage-I](img/B08086_04_01.jpg)'
+- en: Stage-II
+  id: totrans-31
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 第二阶段
+- en: In this stage, the GAN network only focuses on drawing details and rectifying
+    defects in low resolution images generated from stage-I (such as a lack of vivid
+    object parts, shape distortion, and some omitted details from the text) to generate
+    high resolution realistic images conditioned on textual description.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一阶段，GAN 网络仅专注于绘制细节并修正从第一阶段生成的低分辨率图像中的缺陷（例如缺乏生动的物体部分、形状畸变以及文本中遗漏的一些细节），以生成基于文本描述的高分辨率真实图像。
+- en: 'The stage-II GAN alternatively trains the discriminator *D* (maximize the loss)
+    and generator *G* (minimize the loss), conditioned on the result of low resolution
+    *G*[*0*]*(z; c^0)* and the Gaussian latent variable *c^*:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二阶段GAN交替训练判别器 *D*（最大化损失）和生成器 *G*（最小化损失），以低分辨率 *G*[*0*]*(z; c^0)* 结果和高斯潜变量 *c^*
+    为条件：
+- en: '![Stage-II](img/B08086_04_02.jpg)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![Stage-II](img/B08086_04_02.jpg)'
+- en: Note
+  id: totrans-35
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Random noise *z* is replaced with Gaussian conditioning variables *c^* in stage-II.
+    Also, the conditioning augmentation in stage-II has different fully connected
+    layers to generate different means and standard deviation of the text embedding.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第二阶段，随机噪声 *z* 被高斯条件变量 *c^* 替代。此外，第二阶段中的条件增强具有不同的全连接层，用于生成文本嵌入的不同均值和标准差。
+- en: Architecture details of StackGAN
+  id: totrans-37
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: StackGAN 的架构细节
+- en: As illustrated in the following figure, for the generator network *G*[0] of
+    stage-I, the text embedding *t* is first fed into a fully connected layer to generate
+    *µ0* and *σ0* (*σ0* is the diagonal values of *∑0*) for the Gaussian distribution
+    *N(µ0(t); ∑0(t))* and then the text conditioning variable *c^0* is then sampled
+    from the Gaussian distribution.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如下图所示，对于第一阶段的生成器网络 *G*[0]，文本嵌入 *t* 首先输入一个全连接层生成高斯分布 *N(µ0(t); ∑0(t))* 的 *µ0*
+    和 *σ0*（*σ0* 是 *∑0* 的对角线值），然后从高斯分布中采样文本条件变量 *c^0*。
+- en: For the discriminator network *D0* of stage-I, the text embedding *t* is first
+    compressed to *Nd* dimensions with a fully connected layer and then spatially
+    replicated to *Md* x *Md* x *Nd* tensor. The image is passed through a series
+    of down-sampling blocks to squeeze into *Md* x *Md* spatial dimension and then
+    concatenated using a filter map along the channel dimension with the text tensor.
+    The resulting tensor goes through a 1x1 convolutional layer to jointly learn features
+    across the image and the text and finally output the decision score using one
+    node fully connected layer.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于第一阶段的判别器网络 *D0*，文本嵌入 *t* 首先通过全连接层被压缩至 *Nd* 维度，然后在空间上复制成 *Md* x *Md* x *Nd*
+    的张量。图像通过一系列下采样块被压缩到 *Md* x *Md* 的空间维度，然后通过与文本张量沿通道维度拼接的滤波器映射。最终，所得张量通过1x1卷积层共同学习图像和文本中的特征，并最终通过一个单节点全连接层输出决策得分。
+- en: The generator of stage-II is designed as an encoder-decoder network with residual
+    blocks and the text embedding *t* to generate the *Ng* dimensional text conditioning
+    vector *c^*, which is spatially replicated to *Md* x *Md* x *Nd* tensor. The stage-I
+    result *s0* generated is then fed into several down-sampling blocks (that is,
+    encoder) until it is squeezed to spatial size *Mg* x *Mg*. The image features
+    concatenated with text features along the channel dimension are passed through
+    several residual blocks, to learn multi-modal representations across image and
+    text features. Finally, the resulting tensors goes through a series of up-sampling
+    layers (that is, decoder) to generate a *W* x *H* high resolution image.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二阶段的生成器设计为一个带有残差块的编码器-解码器网络，并使用文本嵌入 *t* 来生成 *Ng* 维度的文本条件向量 *c^*，该向量被空间上复制成
+    *Md* x *Md* x *Nd* 的张量。然后，将第一阶段生成的结果 *s0* 输入到几个下采样块（即编码器），直到压缩到 *Mg* x *Mg* 的空间大小。图像特征与文本特征沿通道维度拼接后，通过多个残差块，学习图像和文本特征之间的多模态表示。最后，所得张量通过一系列上采样层（即解码器），生成一个
+    *W* x *H* 的高分辨率图像。
+- en: 'The discriminator of stage-II is similar to stage-1 with only extra down-sampling
+    blocks to cater for the large image size in this stage. During training of the
+    discriminator, the positive sample pairs is built from the real images and their
+    corresponding text descriptions, whereas the negative sample consists of two groups:
+    one having real images with mismatched text embedding and the other having synthetic
+    images with their corresponding text embedding:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二阶段的判别器与第一阶段相似，只是增加了额外的下采样块，以适应这一阶段的大尺寸图像。在训练判别器时，正样本对由真实图像及其相应的文本描述构成，而负样本则由两组组成：一组是包含文本嵌入不匹配的真实图像，另一组是包含合成图像及其相应文本嵌入的图像：
+- en: '![Architecture details of StackGAN](img/B08086_04_03.jpg)'
+  id: totrans-42
+  prefs: []
+  type: TYPE_IMG
+  zh: '![StackGAN架构细节](img/B08086_04_03.jpg)'
+- en: Figure 1\. The architecture of the StackGAN.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图1. StackGAN的架构。
+- en: 'Source: *arXiv: 1612.03242,2017*'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '来源：*arXiv: 1612.03242, 2017*'
+- en: The stage-I generator first draws a low resolution image by sketching a rough
+    shape and basic colors of the object from the given text and painting the background
+    from a random noise vector. The stage-II generator corrects defects and adds compelling
+    details into stage-I results, yielding a more realistic high resolution image
+    conditioned on stage-I results.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一阶段生成器首先通过从给定文本草绘物体的粗略形状和基本颜色，并从随机噪声向量绘制背景，来绘制一张低分辨率的图像。第二阶段生成器则修正缺陷并为第一阶段的结果添加引人注目的细节，从而生成一张更为真实的高分辨率图像，并以第一阶段的结果为条件。
+- en: The up-sampling blocks consist of the nearest-neighbor up-sampling followed
+    by the 33 convolutions, each of stride of 1\. Batch normalization and `ReLU` activation
+    functions are applied after every convolution except the last one. The residual
+    blocks again consist of 33 convolutions, each of stride 1, followed by batch normalization
+    and `ReLU` activation function. The down-sampling blocks consist of 44 convolutions
+    each of stride 2, followed by batch normalization and Leaky-ReLU, except batch
+    normalization is not present in the first convolution layer.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上采样块由最近邻上采样和33卷积层组成，每层步长为1。每次卷积后应用批归一化和`ReLU`激活函数，最后一层除外。残差块再次由33卷积层组成，每层步长为1，之后是批归一化和`ReLU`激活函数。下采样块由44卷积层组成，每层步长为2，后接批归一化和Leaky-ReLU激活函数，第一卷积层不进行批归一化。
+- en: Synthesizing images from text with TensorFlow
+  id: totrans-47
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用TensorFlow从文本合成图像
+- en: 'Let us implement the code to synthesize realistic images from text and produce
+    mind blowing result:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们实现代码，从文本合成现实图像并产生令人震惊的结果：
+- en: 'First clone the `git` repository: [https://github.com/Kuntal-G/StackGAN.git](https://github.com/Kuntal-G/StackGAN.git)
+    and change the directory to `StackGAN`:'
+  id: totrans-49
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先克隆`git`仓库：[https://github.com/Kuntal-G/StackGAN.git](https://github.com/Kuntal-G/StackGAN.git)，然后切换到`StackGAN`目录：
+- en: '[PRE0]'
+  id: totrans-50
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Note
+  id: totrans-51
+  prefs:
+  - PREF_IND
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Currently the code is compatible with an older version of TensorFlow (0.11),
+    so you need to have TensorFlow version below 1.0 to successfully run this code.
+    You can modify your TensorFlow version using: `sudo pip install tensorflow==0.12.0`.'
+  id: totrans-52
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 当前代码与旧版本的TensorFlow（0.11）兼容，因此您需要安装低于1.0版本的TensorFlow才能成功运行此代码。您可以使用以下命令修改TensorFlow版本：`sudo
+    pip install tensorflow==0.12.0`。
+- en: 'Also make sure torch is installed in your system. More information can be found
+    here: [http://torch.ch/docs/getting-started.html](http://torch.ch/docs/getting-started.html).'
+  id: totrans-53
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 另外，请确保您的系统中已安装torch。更多信息请参见此链接：[http://torch.ch/docs/getting-started.html](http://torch.ch/docs/getting-started.html)。
+- en: 'Then install the following packages using the `pip` command:'
+  id: totrans-54
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，使用`pip`命令安装以下软件包：
+- en: '[PRE1]'
+  id: totrans-55
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Next download the pre-processed char-CNN-RNN text embedding birds model from:
+    [https://drive.google.com/file/d/0B3y_msrWZaXLT1BZdVdycDY5TEE/view](https://drive.google.com/file/d/0B3y_msrWZaXLT1BZdVdycDY5TEE/view)
+    using the following command:'
+  id: totrans-56
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，通过以下命令从以下链接下载预处理的char-CNN-RNN文本嵌入鸟类模型：[https://drive.google.com/file/d/0B3y_msrWZaXLT1BZdVdycDY5TEE/view](https://drive.google.com/file/d/0B3y_msrWZaXLT1BZdVdycDY5TEE/view)：
+- en: '[PRE2]'
+  id: totrans-57
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Now extract the downloaded file using the `unzip` command:'
+  id: totrans-58
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，使用`unzip`命令解压下载的文件：
+- en: '[PRE3]'
+  id: totrans-59
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Next download and extract the birds image data from Caltech-UCSD:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，下载并解压来自Caltech-UCSD的鸟类图像数据：
+- en: '[PRE4]'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Now we will do preprocessing on the images to split into training and test
+    sets and save the images in pickle format:'
+  id: totrans-62
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们将对图像进行预处理，拆分为训练集和测试集，并将图像保存为pickle格式：
+- en: '[PRE5]'
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '![Synthesizing images from text with TensorFlow](img/B08086_04_04.jpg)'
+  id: totrans-64
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![从文本生成图像，使用TensorFlow](img/B08086_04_04.jpg)'
+- en: 'Now we will download the pre-trained char-CNN-RNN text embedding model from:
+    [https://drive.google.com/file/d/0B3y_msrWZaXLNUNKa3BaRjAyTzQ/view](https://drive.google.com/file/d/0B3y_msrWZaXLNUNKa3BaRjAyTzQ/view)
+    and save it to the `models/` directory using:'
+  id: totrans-65
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们将从以下链接下载预训练的char-CNN-RNN文本嵌入模型：[https://drive.google.com/file/d/0B3y_msrWZaXLNUNKa3BaRjAyTzQ/view](https://drive.google.com/file/d/0B3y_msrWZaXLNUNKa3BaRjAyTzQ/view)，并将其保存到`models/`目录中，使用以下命令：
+- en: '[PRE6]'
+  id: totrans-66
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Also download the char-CNN-RNN text encoder for birds from [https://drive.google.com/file/d/0B0ywwgffWnLLU0F3UHA3NzFTNEE/view](https://drive.google.com/file/d/0B0ywwgffWnLLU0F3UHA3NzFTNEE/view)
+    and save it under the `models/text_encoder` directory:'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 同样从[https://drive.google.com/file/d/0B0ywwgffWnLLU0F3UHA3NzFTNEE/view](https://drive.google.com/file/d/0B0ywwgffWnLLU0F3UHA3NzFTNEE/view)下载鸟类的char-CNN-RNN文本编码器，并将其保存在`models/text_encoder`目录下：
+- en: '[PRE7]'
+  id: totrans-68
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Next, we will add some sentences to the `example_captions.txt` file to generate
+    some exciting images of birds:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将在`example_captions.txt`文件中添加一些句子，以生成一些令人兴奋的鸟类图像：
+- en: '`A white bird with a black crown and red beak`'
+  id: totrans-70
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`一只白色的鸟，有黑色的头顶和红色的喙`'
+- en: '`this bird has red breast and yellow belly`'
+  id: totrans-71
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`这只鸟有红色的胸部和黄色的腹部`'
+- en: 'Finally, we will execute the `birds_demo.sh` file under the `demo` directory
+    to generate realistic bird images from the text description given in the `example_captions.txt`
+    file:'
+  id: totrans-72
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们将在`demo`目录下执行`birds_demo.sh`文件，从`example_captions.txt`文件中的文本描述生成真实的鸟类图像：
+- en: '[PRE8]'
+  id: totrans-73
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '![Synthesizing images from text with TensorFlow](img/B08086_04_05.jpg)'
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![从文本生成图像，使用TensorFlow](img/B08086_04_05.jpg)'
+- en: Now the generated images will be saved under the `Data/birds/example_captions/`
+    directory as shown in the following screenshot:![Synthesizing images from text
+    with TensorFlow](img/B08086_04_06.jpg)
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，生成的图像将保存在`Data/birds/example_captions/`目录下，以下是相应的截图：![从文本生成图像，使用TensorFlow](img/B08086_04_06.jpg)
+- en: Voila, you have now generated impressive bird images from the textual description.
+    Play with your own sentences to describe birds and visually verify the results
+    with the description.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就这样，您已经根据文本描述生成了令人印象深刻的鸟类图像。您可以尝试自己的句子来描述鸟类，并通过描述来视觉验证结果。
+- en: Discovering cross-domain relationships with DiscoGAN
+  id: totrans-77
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过DiscoGAN发现跨领域关系
+- en: Cross-domain relationships are often natural to humans and they can easily identify
+    the relationship between data from various domains without supervision (for example,
+    recognizing relationships between an English sentence and its translated sentence
+    in Spanish or choosing a shoe to fit the style of a dress), but learning this
+    relation automatically is very challenging and requires a lot of ground truth
+    pairing information that illustrates the relations.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跨领域关系对人类来说通常是自然的，他们可以轻松地识别来自不同领域的数据之间的关系而无需监督（例如，识别英文句子与其西班牙语翻译句子之间的关系，或者选择一双鞋来搭配一件衣服），但是自动学习这种关系是非常具有挑战性的，且需要大量的真实配对信息来说明这些关系。
+- en: '**Discovery Generative Adversarial Networks** (**DiscoGAN**) *arXiv: 1703.05192
+    ,2017* discovers the relationship between two visual domains and successfully
+    transfers styles from one domain to another by generating new images of one domain
+    given an image from the other domain without any pairing information. DiscoGAN
+    seeks to have two GANs coupled together that can map each domain to its counterpart
+    domain. The key idea behind DiscoGAN is to make sure that all images in domain
+    1 are representable by images in domain 2, and use the reconstruction loss to
+    measure how well the original image is reconstructed after the two translations—that
+    is, from domain 1 to domain 2 and back to domain 1.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**发现生成对抗网络**（**DiscoGAN**） *arXiv: 1703.05192 ,2017* 发现了两个视觉领域之间的关系，并通过生成一个领域的新图像来成功地将样式从一个领域转移到另一个领域，无需任何配对信息。DiscoGAN的目标是将两个GAN模型耦合在一起，使每个领域都能映射到其对应的领域。DiscoGAN背后的关键思想是确保领域1中的所有图像都能通过领域2中的图像表示，并使用重构损失来衡量在进行两次转换后——即从领域1到领域2，再回到领域1——原始图像的重构效果。'
+- en: The architecture and model formulation of DiscoGAN
+  id: totrans-80
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: DiscoGAN的架构和模型构造
+- en: 'Before diving into the model formulation and various `loss` functions associated
+    with DiscoGAN, let us first define some related terminology and concepts:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入探讨与DiscoGAN相关的模型构造和各种`损失`函数之前，让我们首先定义一些相关的术语和概念：
+- en: '*G*[*AB*]: The `generator` function that translates input image *x*[*A*] from
+    domain A into image *x*[*AB*] in domain B'
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*G*[*AB*]：`生成器`函数，将输入图像 *x*[*A*]从领域A转换为领域B中的图像 *x*[*AB*]'
+- en: '*G*[*BA*]: The `generator` function that translates input image *x[B]* from
+    domain B into image *x*[*BA*] in domain A'
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*G*[*BA*]：`生成器`函数，将输入图像 *x*[*B*]从领域B转换为领域A中的图像 *x*[*BA*]'
+- en: '*G*[*AB*](*x*[*A*]): This is the complete set of all possible resulting values
+    for all *x*[*A*]s in domain A that should be contained in domain B'
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*G*[*AB*](*x*[*A*])：这是领域A中所有* x *[*A*]值的完整集合，这些值应该包含在领域B中'
+- en: '*G*[*BA*](*x*[*B*]): This is the complete set of all possible resulting values
+    for all *x*[*B*]s in domain B, that should be contained in domain A'
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*G*[*BA*](*x*[*B*])：这是领域B中所有* x *[*B*]值的完整集合，这些值应该包含在领域A中'
+- en: '*D*[*A*]: The `discriminator` function in domain A'
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*D*[*A*]：领域A中的`判别器`函数'
+- en: '*D*[*B*]: The `discriminator` function in domain B![The architecture and model
+    formulation of DiscoGAN](img/B08086_04_07.jpg)'
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*D*[*B*]：领域B中的`判别器`函数！[DiscoGAN的架构和模型构造](img/B08086_04_07.jpg)'
+- en: 'Figure-2: DiscoGAN architecture with two coupled GAN models'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图2：DiscoGAN架构，包含两个耦合的GAN模型
+- en: 'Source: *arXiv- 1703.05192, 2017*'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 来源：*arXiv- 1703.05192, 2017*
+- en: 'The generator modules of DiscoGAN consist of an encoder-decoder pair to perform
+    back to back image translation. A generator *G*[*AB*] first translates input image
+    *x*[*A*] from domain A into the image *x*[*AB*] in domain B. Then the generated
+    image is translated back to domain A image *x*[*ABA*] to match the original input
+    image using reconstruction loss (equation-3) with some form of distance metrics,
+    such as MSE, Cosine distance, and hinge-loss. Finally, the translated output image
+    *x*[*AB*] of the generator is fed into the discriminator and gets scored by comparing
+    it to the real image of domain B:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DiscoGAN的生成器模块由一个编码器-解码器对组成，用于执行图像翻译。生成器 *G*[*AB*]首先将输入图像 *x*[*A*]从领域A转换为领域B中的图像
+    *x*[*AB*]。然后，生成的图像被转换回领域A的图像 *x*[*ABA*]，以使用重构损失（方程式-3）和某种形式的距离度量（如MSE、余弦距离、铰链损失）与原始输入图像匹配。最后，生成器转换后的输出图像
+    *x*[*AB*]被输入到判别器中，并通过与领域B的真实图像进行比较进行评分：
+- en: '![The architecture and model formulation of DiscoGAN](img/B08086_04_08.jpg)'
+  id: totrans-91
+  prefs: []
+  type: TYPE_IMG
+  zh: '![DiscoGAN的架构和模型构造](img/B08086_04_08.jpg)'
+- en: 'The generator *GAB* receives two types of losses as shown (equation-5):'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成器 *GAB* 接收两种类型的损失，如下所示（方程式-5）：
+- en: '*L*[*CONSTA*]: A reconstruction loss that measures how well the original image
+    is reconstructed after the two translations domain A-> domain B-> domain A'
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*L*[*CONSTA*]：一种重建损失，衡量在两次翻译过程中，原始图像从领域A->领域B->领域A后重建得有多好'
+- en: '*L*[*GANB*]: Standard GAN loss that measures how realistic the generated image
+    is in domain B'
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*L*[*GANB*]：标准的GAN损失，衡量生成的图像在B领域中的逼真度'
+- en: 'Whereas the discriminator *D*[*B*] receives the standard GAN discriminator
+    loss as shown (equation-6):'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而判别器*D*[*B*]接收标准的GAN判别器损失，如下所示（方程-6）：
+- en: '![The architecture and model formulation of DiscoGAN](img/B08086_04_09.jpg)'
+  id: totrans-96
+  prefs: []
+  type: TYPE_IMG
+  zh: '![DiscoGAN的架构和模型公式](img/B08086_04_09.jpg)'
+- en: 'The two coupled GANs are trained simultaneously and both the GANs learn mapping
+    from one domain to another along with reverse mapping for reconstruction of the
+    input images from both domains using two reconstruction losses: *L*[*CONSTA*]
+    and *L*[*CONSTB*].'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两个耦合的GANs是同时训练的，两个GANs都学习从一个领域到另一个领域的映射，并且使用两个重建损失：*L*[*CONSTA*]和*L*[*CONSTB*]，通过反向映射从两个领域重建输入图像。
+- en: 'The parameters are shared between generators *G*[*AB*] and *G*[*BA*] of two
+    GANs and the generated images *x*[*BA*] and *x*[*AB*] are then fed into the separate
+    discriminators *L*[*DA*] and *L*[*DB*] respectively:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成器*G*[*AB*]和*G*[*BA*]的参数在两个GANs之间是共享的，生成的图像*x*[*BA*]和*x*[*AB*]分别输入到各自的判别器*L*[*DA*]和*L*[*DB*]中：
+- en: '![The architecture and model formulation of DiscoGAN](img/B08086_04_10.jpg)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![DiscoGAN的架构和模型公式](img/B08086_04_10.jpg)'
+- en: The total generator loss, *L*[*G*], is the sum of two GAN losses of the coupled
+    model and reconstruction loss of each partial model as shown (equation-7). And
+    the total discriminator loss, *L*[*D*], is the sum of the two discriminators losses
+    *L*[*DA*] and *L*[*DB*], which discriminate real and fake images in domain A and
+    domain B, respectively (equation- 8). In order to achieve bijective mapping having
+    one-to-one correspondence, the DiscoGAN model is constrained by two *L*[*GAN*]
+    losses and two *L*[*CONST*] reconstruction losses.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总生成器损失*L*[*G*]是耦合模型的两个GAN损失和每个部分模型的重建损失之和，如下所示（方程-7）。总判别器损失*L*[*D*]是两个判别器损失*L*[*DA*]和*L*[*DB*]的和，它们分别用于判别领域A和领域B中的真实和伪造图像（方程-8）。为了实现双射映射并保持一一对应，DiscoGAN模型通过两个*L*[*GAN*]损失和两个*L*[*CONST*]重建损失进行约束。
+- en: Injective mapping means that every member of **A** has its own unique matching
+    member in **B** and surjective mapping means that every **B** has at least one
+    matching **A**.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注射映射意味着**A**中的每个成员都有其在**B**中的唯一匹配成员，而满射映射意味着**B**中的每个成员至少有一个匹配的**A**成员。
+- en: 'Bijective mapping means both injective and surjective are together and there
+    is a perfect one-to-one correspondence between the members of the sets:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 双射映射意味着注射和满射同时存在，且两个集合之间的成员有完美的一一对应关系。
+- en: '![The architecture and model formulation of DiscoGAN](img/B08086_04_11.jpg)'
+  id: totrans-103
+  prefs: []
+  type: TYPE_IMG
+  zh: '![DiscoGAN的架构和模型公式](img/B08086_04_11.jpg)'
+- en: Implementation of DiscoGAN
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: DiscoGAN的实现
+- en: Let's now dig into the code to understand the concept (loss and measuring criteria)
+    along with the architecture of DiscoGAN.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们深入代码，理解DiscoGAN的概念（损失函数和衡量标准），以及DiscoGAN的架构。
+- en: 'The generator takes an input image of size 64x64x3 and feeds it through an
+    encoder-decoder pair. The encoder part of the generator consists of five convolution
+    layers with 4x4 filters, each followed by batch normalization and Leaky ReLU.
+    The decoder part consists of five deconvolution layers with 4x4 filters, followed
+    by a batch normalization and `ReLU` activation function, and outputs a target
+    domain image of size 64x64x3\. The following is the generator code snippet:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成器接收一个大小为64x64x3的输入图像，并将其通过一个编码器-解码器对进行处理。生成器的编码器部分由五个4x4卷积层组成，每个卷积层后跟着批量归一化和Leaky
+    ReLU。解码器部分由五个4x4的反卷积层组成，每个反卷积层后跟着批量归一化和`ReLU`激活函数，并输出一个目标领域的图像，大小为64x64x3。以下是生成器的代码片段：
+- en: '[PRE9]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The discriminator is similar to the encoder part of the generator and consists
+    of five convolution layers with 4x4 filters, each followed by a batch normalization
+    and `LeakyReLU` activation function. Finally, we apply the `sigmoid` function
+    on the final convolution layer (`conv-5`) to generate a scalar probability score
+    between [0,1] to judge real/fake data. The following is the discriminator code
+    snippet:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 判别器与生成器的编码器部分相似，由五个4x4卷积层组成，每个卷积层后跟着批量归一化和`LeakyReLU`激活函数。最后，我们对最终的卷积层（`conv-5`）应用`sigmoid`函数，生成一个在[0,1]之间的标量概率值，用于判断数据的真假。以下是判别器的代码片段：
+- en: '[PRE10]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Then we define the loss criteria for the generator and reconstruction using
+    mean square error and binary cross entropy measures:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们定义生成器和重构的损失标准，使用均方误差和二元交叉熵度量：
+- en: '[PRE11]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Now we start generating images from one domain to other and calculate the reconstruction
+    loss to understand how well the original image is reconstructed after two translations
+    (`ABA` or `BAB`):'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们开始从一个领域生成图像到另一个领域，并计算重构损失，以了解在两次翻译（`ABA` 或 `BAB`）后原始图像的重构效果：
+- en: '[PRE12]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Next, we calculate the generator loss and discriminator loss across each domain:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们计算每个领域的生成器损失和判别器损失：
+- en: '[PRE13]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Finally, we calculate the total loss of the `discogan` model by summing up
+    the losses from two cross domains (`A` and `B`):'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，通过将两个跨域（`A` 和 `B`）的损失相加，计算 `discogan` 模型的总损失：
+- en: '[PRE14]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Generating handbags from edges with PyTorch
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 PyTorch 从边缘生成手袋
+- en: 'In this example, we will generate realistic handbag images from corresponding
+    edges using the `pix2pix` dataset from Berkley. Make sure you have PyTorch ([http://pytorch.org/](http://pytorch.org/))
+    and OpenCV ([http://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html](http://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html))
+    installed on your machine before going through the following steps:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本示例中，我们将使用来自伯克利的 `pix2pix` 数据集，根据相应的边缘生成逼真的手袋图像。在执行以下步骤之前，请确保已在计算机上安装了 PyTorch（[http://pytorch.org/](http://pytorch.org/)）和
+    OpenCV（[http://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html](http://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html)）：
+- en: 'First clone the `git` repository and change the directory to `DiscoGAN`:'
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先克隆 `git` 仓库并切换到 `DiscoGAN` 目录：
+- en: '[PRE15]'
+  id: totrans-121
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Next download the `edges2handbags` dataset using the following command:'
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来使用以下命令下载 `edges2handbags` 数据集：
+- en: '[PRE16]'
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'And then apply image translation between two domains: edges and handbags with
+    the downloaded dataset:'
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后在两个领域之间应用图像翻译：边缘和手袋，使用下载的数据集：
+- en: '[PRE17]'
+  id: totrans-125
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '![Generating handbags from edges with PyTorch](img/B08086_04_12.jpg)'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 PyTorch 从边缘生成手袋](img/B08086_04_12.jpg)'
+- en: Now, the images will be saved after every 1,000 iterations (as per the `image_save_interval`
+    argument) per epoch, under the `results` directory with the respective task name
+    used previously during the image translation step:![Generating handbags from edges
+    with PyTorch](img/B08086_04_13.jpg)
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，图像将在每个 epoch 后每 1,000 次迭代保存一次（根据 `image_save_interval` 参数），保存在 `results`
+    目录下，文件名包括在图像翻译步骤中之前使用的任务名称：![使用 PyTorch 从边缘生成手袋](img/B08086_04_13.jpg)
+- en: 'The following is a sample output of the cross-domain images generated from
+    domain A to domain B:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是从域 A 到域 B 生成的跨域图像的示例输出：
+- en: '![Generating handbags from edges with PyTorch](img/B08086_04_14.jpg)'
+  id: totrans-129
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用 PyTorch 从边缘生成手袋](img/B08086_04_14.jpg)'
+- en: 'Figure-3: On the left-hand side are cross-domain (A -> B -> A) generated images
+    (edges -> handbags -> edges), while on the right-hand side are cross-domain (B
+    -> A -> B) generated images of (handbags -> edges -> handbags)'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图-3：左侧是跨域（A -> B -> A）生成的图像（边缘 -> 手袋 -> 边缘），而右侧是跨域（B -> A -> B）生成的图像（手袋 -> 边缘
+    -> 手袋）
+- en: Gender transformation using PyTorch
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 PyTorch 进行性别转换
+- en: 'In this example, we will transform the gender of actor-to-actress or vice versa
+    using facial images of celebrities from the `facescrub` dataset. Just like the
+    previous example, please make sure you have PyTorch and OpenCV installed on your
+    machine before executing the following steps:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本示例中，我们将使用 `facescrub` 数据集中的名人面部图像，将演员和女演员之间的性别进行转换，或反之。和之前的示例一样，请确保你在执行以下步骤之前已在计算机上安装了
+    PyTorch 和 OpenCV：
+- en: 'First clone the `git` repository and change directory to `DiscoGAN` (you can
+    skip this step if you executed the previous example of generating handbags from
+    edges):'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先克隆 `git` 仓库并切换目录到 `DiscoGAN`（如果你已经执行过之前的从边缘生成手袋示例，可以跳过这一步）：
+- en: '[PRE18]'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Next download the `facescrub` dataset using the following command:'
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来使用以下命令下载 `facescrub` 数据集：
+- en: '[PRE19]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'And then apply image translation between two domains, male and female, with
+    the downloaded dataset:'
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后在两个领域之间应用图像翻译，男性和女性，使用下载的数据集：
+- en: '[PRE20]'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '![Gender transformation using PyTorch](img/B08086_04_15.jpg)'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![使用 PyTorch 进行性别转换](img/B08086_04_15.jpg)'
+- en: Now, the images will be saved after every 1,000 iterations (as per the `image_save_interval`
+    argument) per epoch, under the `results` directory with the respective task name
+    (`facescrub`) and epoch interval:![Gender transformation using PyTorch](img/B08086_04_16.jpg)
+  id: totrans-140
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，图像将在每个 epoch 后每 1,000 次迭代保存一次（根据 `image_save_interval` 参数），保存在 `results`
+    目录下，文件名包括相应的任务名称（`facescrub`）和 epoch 间隔：![使用 PyTorch 进行性别转换](img/B08086_04_16.jpg)
+- en: 'The following is the sample output of the cross-domain images generated from
+    domain A (male) to domain B (female):'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是从域 A（男性）到域 B（女性）生成的跨域图像的示例输出：
+- en: '![Gender transformation using PyTorch](img/B08086_04_17.jpg)'
+  id: totrans-142
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用 PyTorch 进行性别转换](img/B08086_04_17.jpg)'
+- en: 'Figure-4: On the left-hand side are cross-domain (A -> B -> A) generated images
+    (Male -> Female -> Male), while on the right-hand side are cross-domain (B ->
+    A -> B) generated images of (Female -> Male -> Female)'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4：左侧是跨域（A -> B -> A）生成的图像（男性 -> 女性 -> 男性），右侧是跨域（B -> A -> B）生成的图像（女性 -> 男性
+    -> 女性）
+- en: DiscoGAN versus CycleGAN
+  id: totrans-144
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: DiscoGAN 对比 CycleGAN
+- en: The main objective of both DiscoGAN (discussed previously) and CycleGAN (discussed
+    in [Chapter 2](ch02.html "Chapter 2. Unsupervised Learning with GAN"), *Unsupervised
+    Learning with GAN*) introduces a new approach to the problem of image-to-image
+    translation by finding a mapping between a source domain X and a target domain
+    Y for a given image, without pairing information.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DiscoGAN（之前讨论过）和 CycleGAN（在 [第二章](ch02.html "第二章。GAN 的无监督学习") 中讨论，*GAN 的无监督学习*）的主要目标是通过找到源域
+    X 和目标域 Y 之间的映射来解决图像到图像的转换问题，而不需要配对信息。
+- en: From an architecture standpoint both the models consist of two GANs that map
+    one domain to its counterpart domain and compose their losses as functions of
+    the traditional generator loss (normally seen in GANs) and the reconstruction
+    loss/cycle consistency loss.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从架构角度来看，这两个模型都由两个将一个域映射到其对应域的 GAN 组成，并将它们的损失组合为传统生成器损失的函数（通常在 GAN 中看到）和重建损失/循环一致性损失。
+- en: There isn't a huge dissimilarity between the two models, except from the fact
+    that DiscoGAN uses two reconstruction losses (a measure of how well the original
+    image is reconstructed after the two translations X->Y->X), whereas CycleGAN uses
+    a single cycle consistency loss with two translators F and G (F translates the
+    image from domain X to domain Y and G performs the reverse) to make sure the two
+    equilibriums (*F(G(b)) = b and G(F(a)) = a*, given *a*, *b* are images in domain
+    X , Y respectively) are maintained.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两个模型之间并没有很大的不同之处，除了 DiscoGAN 使用两个重建损失（衡量在两个转换 X->Y->X 后原始图像的重建效果），而 CycleGAN
+    使用单一的循环一致性损失，其中包括两个翻译器 F 和 G（F 将图像从域 X 翻译到域 Y，G 执行相反操作），以确保保持两个平衡（*F(G(b)) = b
+    和 G(F(a)) = a*，其中 *a*，*b* 分别为域 X、Y 中的图像）。
+- en: Summary
+  id: totrans-148
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: So far you have learned the approach of solving complex real-life problems (such
+    as synthesizing images from text and discovering cross-domain relationships) by
+    combining multiple GAN models together using StackGAN and DiscoGAN. In the next
+    chapter, you will learn an important technique for dealing with small datasets
+    in deep learning using pre-trained models and feature transfer and how to run
+    your deep models at a large scale on a distributed system.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，您已经学习了通过使用 StackGAN 和 DiscoGAN 将多个 GAN 模型结合起来解决复杂现实生活中的问题（例如从文本合成图像和发现跨域关系）。在下一章中，您将学习一种处理深度学习中小数据集的重要技术，即使用预训练模型和特征转移，以及如何在分布式系统上大规模运行您的深度模型。

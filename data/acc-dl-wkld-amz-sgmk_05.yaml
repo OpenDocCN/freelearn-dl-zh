@@ -1,0 +1,1152 @@
+- en: '5'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '5'
+- en: Considering Hardware for Deep Learning Training
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 考虑深度学习训练的硬件配置
+- en: Training a large **deep learning** (**DL**) model is typically a lengthy and
+    data- and resource-hungry process. Considering an extreme case of the GPT-3 NLP
+    model, it took approximately 34 days to train it from scratch using 1,024 NVIDIA
+    A100 GPUs. While it’s unlikely that you will have to train such a large model
+    from scratch, even fine-tuning large DL models on your custom data can take days
+    or even weeks.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练一个大型的 **深度学习**（**DL**）模型通常是一个漫长且资源消耗巨大的过程。以极端案例 GPT-3 NLP 模型为例，使用 1,024 个
+    NVIDIA A100 GPU 从零开始训练它大约花费了 34 天。虽然你不太可能需要从零开始训练如此庞大的模型，但即使是在自定义数据上微调大型深度学习模型，也可能需要数天甚至数周的时间。
+- en: Choosing a compute instance type for your specific model is a crucial step that
+    will impact the cost and duration of training. AWS provides a wide spectrum of
+    compute instances for various workload profiles. In this chapter, we will consider
+    the price-performance characteristics of the most suitable instances for DL models,
+    as well as scenarios where you should use one over the other for optimal performance.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为你的特定模型选择计算实例类型是一个至关重要的步骤，它将影响训练的成本和时间。AWS 提供了多种计算实例，适用于不同的工作负载需求。在本章中，我们将考虑最适合深度学习模型的实例的性价比特性，以及在不同场景下如何选择最合适的实例以获得最佳性能。
+- en: 'Training large models also requires scaling training jobs across multiple GPU
+    devices and compute instances, a process known as distributed training. At a high
+    level, the distributed training process has two phases: the computation phase
+    and the communication phase. During the communication phase, individual devices
+    and nodes exchange individual updates and compute average weight updates. The
+    amount of data that’s exchanged is determined by your model size multiplied by
+    its characteristics, such as precision. For large models, it’s frequently the
+    case that bottlenecks in your training process will be network throughput and
+    not computations on individual devices. So, as part of the hardware considerations,
+    we will discuss network throughput requirements and the available options, such
+    as AWS **Elastic Fabric Adapter** (**EFA**), to address potential bottlenecks
+    in the communication phase of your training job.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练大型模型还需要将训练任务跨多个 GPU 设备和计算实例进行扩展，这一过程称为分布式训练。从高层次来看，分布式训练过程分为两个阶段：计算阶段和通信阶段。在通信阶段，单个设备和节点交换各自的更新并计算平均权重更新。交换的数据量由模型大小乘以其特性（如精度）决定。对于大型模型，训练过程中的瓶颈通常是网络吞吐量，而非单个设备的计算。因此，作为硬件考虑的一部分，我们将讨论网络吞吐量的要求以及可用的选项，如
+    AWS **弹性网络适配器**（**EFA**），以解决训练任务通信阶段可能出现的瓶颈。
+- en: Another way to make your training process more efficient is to optimize your
+    model for the hardware platform in question. When training DL models using frameworks
+    such as TensorFlow and PyTorch, we rely on these frameworks to convert model Python
+    code into instructions to be run on accelerators. However, these computational
+    instructions are generic and do not utilize the specifics of your training loop
+    and model architecture. SageMaker Training Compiler provides a set of capabilities
+    for optimizing your model for specific accelerator devices, thus increasing the
+    training speed and reducing the memory footprint.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使你的训练过程更高效的另一种方法是为特定硬件平台优化你的模型。在使用 TensorFlow 和 PyTorch 等框架训练深度学习模型时，我们依赖这些框架将模型的
+    Python 代码转换为要在加速器上运行的指令。然而，这些计算指令是通用的，并没有利用你的训练循环和模型架构的特定细节。SageMaker 训练编译器提供了一组功能，帮助你为特定的加速器设备优化模型，从而提高训练速度并减少内存占用。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Selecting optimal compute instances
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择最佳的计算实例
+- en: Improving network throughput with EFA
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 EFA 提升网络吞吐量
+- en: Compiling models for GPU devices with Training Compiler
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用训练编译器为 GPU 设备编译模型
+- en: After reading this chapter, you will be able to select an efficient hardware
+    configuration for your training jobs with optimal price/performance characteristics
+    and perform further optimizations.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 阅读本章后，你将能够为你的训练任务选择高效的硬件配置，具备最佳的性价比，并进行进一步的优化。
+- en: Technical requirements
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'To follow along with the codes in the chapter, you will need the following:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要跟随本章中的代码，你需要以下内容：
+- en: An AWS account and IAM user with permission to manage Amazon SageMaker resources
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个 AWS 账户和具有管理 Amazon SageMaker 资源权限的 IAM 用户
+- en: Have a SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker compatible
+    environment established
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 已建立一个SageMaker Notebook、SageMaker Studio Notebook或本地兼容的SageMaker环境
+- en: Selecting optimal compute instances
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 选择最佳计算实例
+- en: Amazon SageMaker provides developers with a wide selection of compute instances
+    organized into **instance families**. Each instance family has a set of instance
+    configurations known as *instance types*.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Amazon SageMaker为开发者提供了多种计算实例，按**实例系列**组织。每个实例系列都有一组称为*实例类型*的实例配置。
+- en: 'The following list highlights the instance families that are available on SageMaker:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下列表列出了在SageMaker上可用的实例系列：
+- en: '**ML.M** is a family of standard instances that provides a balanced CPU and
+    memory resource configuration. The more CPU cores you have, the more memory that
+    will be available. This instance family doesn’t come with a GPU device.'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**ML.M** 是一系列标准实例，提供平衡的CPU和内存资源配置。CPU核心越多，内存也就越多。该实例系列不配备GPU设备。'
+- en: '**ML.C** is a family of compute-optimized instance designed for compute-bound
+    applications such as data processing or certain **machine learning** (**ML**)
+    algorithms (for instance, support vector machines). This family can be also used
+    for ML inference. It doesn’t come with GPU devices.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**ML.C** 是一系列针对计算密集型应用（如数据处理或某些**机器学习**（**ML**）算法，举例来说，支持向量机）设计的计算优化实例。该系列也可用于机器学习推理。它不配备GPU设备。'
+- en: '**ML.G** is a family based on NVIDIA GPU devices and is primarily used for
+    DL inference workloads. It can be also used for smaller training jobs and other
+    compute-intense workloads.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**ML.G** 是一系列基于NVIDIA GPU设备的实例，主要用于深度学习推理工作负载。它也可用于较小的训练任务和其他计算密集型工作负载。'
+- en: '**ML.P** is a family that comes with NVIDIA GPU devices and is designed specifically
+    for heavy-duty DL training jobs.'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**ML.P** 是一系列配备NVIDIA GPU设备的实例，专为重型深度学习训练任务设计。'
+- en: 'So far, we’ve only discussed general-purpose instance families that can run
+    any compute operations in principle. In addition to that, there are specialized
+    compute instances (known in the industry as **application-specific integrated
+    circuits** or **ASIC**) designed specifically for DL workloads. At the time of
+    writing, there are several types of ASIC instance families available on SageMaker
+    or as EC2 instances:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们只讨论了原则上可以运行任何计算操作的一般用途实例系列。除此之外，还有专门为深度学习工作负载设计的计算实例（业界称为**应用特定集成电路**或**ASIC**）。在撰写本文时，有几种类型的ASIC实例系列可在SageMaker或作为EC2实例使用：
+- en: '**Inferentia** instances.'
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Inferentia** 实例。'
+- en: '**Tranium** instances, which are only available on EC2 at the time of writing.'
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Tranium** 实例，目前仅在EC2上可用。'
+- en: '**DL1** instances, which are only available on EC2 at the time of writing.
+    However, SageMaker support has already been announced.'
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**DL1** 实例，目前仅在EC2上可用。但已经宣布支持SageMaker。'
+- en: While CPU-based families can be used to run some ML training, it’s rarely a
+    good choice for DL model training. Now, let’s review the available GPU and ASIC
+    instances in detail.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然基于CPU的实例可以用于运行一些机器学习训练，但它通常不是深度学习模型训练的理想选择。现在，让我们详细回顾一下可用的GPU和ASIC实例。
+- en: Reviewing specialized DL hardware
+  id: totrans-27
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 回顾专业的深度学习硬件
+- en: In this chapter, we will focus on two types of hardware used for intensive DL
+    training workloads – GPUs and ASICs – and discuss what makes them suitable for
+    DL training, their characteristics, and their use cases.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将重点讨论两种用于高强度深度学习训练工作负载的硬件——GPU和ASIC——并讨论它们为何适合深度学习训练、它们的特点以及它们的使用案例。
+- en: If we look at the overall trends in ML and DL, we can observe that the industry
+    is going from more general-purpose compute to more specialized devices.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们观察机器学习和深度学习的整体趋势，可以看到行业正从更通用的计算转向更专用的设备。
+- en: Initial ML and DL models are trained using CPU devices since CPUs allow you
+    to run almost any type of compute operation. A CPU is also a latency-optimized
+    device when executing a single small compute operation. However, most DL models
+    need to run massive compute operations in parallel (for instance, when multiplying
+    matrices). So, the CPU spends a lot of time executing atomic operations one by
+    one.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 初始的机器学习和深度学习模型使用CPU设备进行训练，因为CPU允许执行几乎任何类型的计算操作。CPU在执行单个小计算操作时也是一个优化延迟的设备。然而，大多数深度学习模型需要并行执行大量的计算操作（例如，矩阵乘法）。因此，CPU需要花费大量时间逐一执行原子操作。
+- en: GPU devices are designed to solve a different class of problems – running large
+    operations in parallel. You can say that the GPU is a throughput-optimized device
+    as it runs many operations in parallel. Since DL models include large amounts
+    of matrix computations that can be efficiently parallelized, GPUs are significantly
+    more efficient than CPUs.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GPU设备旨在解决不同类型的问题——并行运行大量操作。你可以说GPU是一种通过并行运行许多操作来优化吞吐量的设备。由于深度学习（DL）模型包括大量可以高效并行化的矩阵运算，GPU比CPU更具效率。
+- en: Advances in GPUs have made a whole new array of DL model architectures possible.
+    For instance, the ground-breaking AlexNet model was trained on the ImageNet dataset
+    in 2012 using GPU devices. The research team implemented convolution and matrix
+    operations to run specifically on a GPU and, thus, achieved a considerable speedup
+    at training time.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GPU的进步使得全新的深度学习模型架构成为可能。例如，突破性的AlexNet模型在2012年使用GPU设备在ImageNet数据集上进行了训练。研究团队将卷积和矩阵操作专门实现为在GPU上运行，从而在训练时实现了显著的加速。
+- en: To simplify the usage of GPU devices for ML workloads, hardware vendors provide
+    specialized libraries for GPU development. For example, NVIDIA created the CUDA
+    platform – a set of libraries alongside a runtime to execute general-purpose computations
+    on GPU devices. The CuBLAS library (part of CUDA) comes with a wide range of compute
+    operations (such as matrix operations). You can also develop your own operations
+    using the CUTLASS component. This is especially handy for new model architectures.
+    Optimizing compute operations on CUDA also improves training performance.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简化GPU设备在机器学习工作负载中的使用，硬件供应商提供了用于GPU开发的专门库。例如，NVIDIA创建了CUDA平台——一组库以及一个运行时，用于在GPU设备上执行通用计算。CuBLAS库（CUDA的一部分）提供了多种计算操作（如矩阵操作）。你还可以使用CUTLASS组件开发自己的操作。这对于新模型架构尤其有用。在CUDA上优化计算操作也能提升训练性能。
+- en: 'Recently, a new approach for DL hardware design became popular: ASIC. This
+    is a device designed to do a limited set of operations but perform these operations
+    extremely efficiently. Google’s **Tensor Processor Unit** (**TPU**) is an example
+    of an ASIC designed for DL workloads. AWS is also actively working on specialized
+    hardware devices for DL workloads. So far, AWS has launched Inferentia (2018)
+    for inference and Tranium (2021) and DL1 instances (2022) based on Gaudi accelerators
+    for training. Note that the Tranium and DL1 accelerators are only available as
+    EC2 instances at the time of writing. We expect them to be available on SageMaker
+    in the future.'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最近，一种新的深度学习硬件设计方法变得流行起来：ASIC。这是一种旨在执行有限集操作的设备，但能极其高效地完成这些操作。谷歌的**张量处理单元**（**TPU**）就是一种为深度学习工作负载设计的ASIC示例。AWS也在积极开发用于深度学习工作负载的专用硬件设备。目前，AWS已推出Inferentia（2018年）用于推理，Tranium（2021年）和DL1实例（2022年）基于Gaudi加速器用于训练。请注意，在撰写本文时，Tranium和DL1加速器仅作为EC2实例提供。我们预计它们未来将在SageMaker上可用。
+- en: As a result of ASIC’s high specialization, it’s always a good idea to confirm
+    that a specific DL framework or model architecture is supported by a given ASIC
+    device. Usually, you need to convert your model code into ASIC’s instructions.
+    This is usually done automatically by provided compilers. In the case of AWS ASICs,
+    you need to compile your model using the open source Neuron SDK ([https://aws.amazon.com/machine-learning/neuron/](https://aws.amazon.com/machine-learning/neuron/)).
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于ASIC的高度专业化，确认特定的深度学习框架或模型架构是否支持某个ASIC设备始终是个好主意。通常，你需要将模型代码转换为ASIC的指令。这通常由提供的编译器自动完成。对于AWS的ASIC，你需要使用开源的Neuron
+    SDK编译你的模型（[https://aws.amazon.com/machine-learning/neuron/](https://aws.amazon.com/machine-learning/neuron/)）。
+- en: When compiling your model, Neuron SDK provides several optimizations, such as
+    batching operations together. It uses ahead-of-time compilation, so the dimensions
+    of the input data batches should be defined as part of the model configuration
+    ahead of time, though note that Neuron SDK also supports a set of defined operators.
+    If your model has unsupported operators (for instance, a custom control flow operation),
+    you will not be able to compile your model at all. Neuron SDK supports the TensorFlow,
+    PyTorch, and MXNet frameworks.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在编译你的模型时，Neuron SDK提供了多种优化方法，例如将操作进行批处理。它使用提前编译，因此输入数据批次的维度应该在模型配置时提前定义，尽管需要注意的是，Neuron
+    SDK还支持一套已定义的操作符。如果你的模型有不受支持的操作符（例如自定义控制流操作），你将无法编译你的模型。Neuron SDK支持TensorFlow、PyTorch和MXNet框架。
+- en: In many cases, choosing an optimal ASIC or GPU device depends on your specific
+    model and training hyperparameters. You can use the industry-standard benchmark
+    known as MLPerf ([https://mlcommons.org/en/training-normal-11/](https://mlcommons.org/en/training-normal-11/))
+    for guidance. Leading GPU and ASIC vendors submit the performance details of their
+    hardware accelerators once they’ve been trained on eight popular DL models. As
+    of December 2021, the NVIDIA A100 GPU demonstrated superior performance on all
+    models among commercially available hardware accelerators. Google’s TPUv4 ASIC
+    accelerator improved benchmarks on six models, though at the time of submission,
+    TPUv4 was not commercially available.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多情况下，选择最佳的 ASIC 或 GPU 设备取决于你的特定模型和训练超参数。你可以使用业界标准基准测试 MLPerf（[https://mlcommons.org/en/training-normal-11/](https://mlcommons.org/en/training-normal-11/)）作为参考。领先的
+    GPU 和 ASIC 厂商在八个流行的深度学习模型上训练后，提交了其硬件加速器的性能详情。截至 2021 年 12 月，NVIDIA A100 GPU 在所有模型上表现优于市面上所有可用的硬件加速器。Google
+    的 TPUv4 ASIC 加速器在六个模型上提高了基准测试成绩，但在提交时，TPUv4 尚未上市。
+- en: Choosing optimal instance types
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择最佳实例类型
+- en: Your choice of instance family and specific instance type is always driven by
+    your use case requirements. Importantly, you may utilize several instance types
+    and families within the same use case. For instance, you may want to start experimenting
+    with single GPU training while getting your hyperparameters right and performing
+    overall model debugging. Then, you can gradually scale your training to a larger
+    number of nodes or move the training job to an instance type with a more performant
+    accelerator.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你选择的实例系列和具体实例类型始终由你的使用案例需求驱动。重要的是，你可以在同一使用案例中使用多个实例类型和系列。例如，你可能想先从单 GPU 训练开始，同时调整超参数并进行整体模型调试。然后，你可以逐步将训练扩展到更多节点，或将训练任务迁移到具有更高性能加速器的实例类型上。
+- en: 'You must consider some of the following criteria when selecting an optimal
+    instance type:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择最佳实例类型时，你必须考虑以下一些标准：
+- en: '**Model architecture and its size**: This defines the memory requirements for
+    storing the model on a GPU accelerator.'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型架构及其大小**：这决定了在 GPU 加速器上存储模型的内存需求。'
+- en: '**Desired training mode**: Here, you must choose whether you want to train
+    the model on a single GPU, multi-GPU, or multi-GPU multi-node.'
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**所需训练模式**：在这里，你需要选择是否希望在单个 GPU、多个 GPU 或多个 GPU 多节点上进行训练。'
+- en: '**Business priorities**: Here, you must choose whether you want to train your
+    model as fast as possible or as cheap as possible or find an acceptable cost-performance
+    balance.'
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**业务优先级**：在这里，你需要选择是想尽可能快地训练模型，还是尽可能便宜，或者找到一个可接受的性价比平衡点。'
+- en: 'It’s important to keep the following characteristics of instance types in mind
+    when choosing the right one for your particular case:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择适合自己特定情况的实例时，牢记以下实例类型的特点是很重要的：
+- en: '**Accelerator architecture**: This influences the performance of computations.
+    For instance, the newest NVIDIA A100 chip delivers ~2.5x performance improvement
+    over the previous generation V100 chip.'
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**加速器架构**：这会影响计算性能。例如，最新的 NVIDIA A100 芯片比上一代 V100 芯片提升了约 2.5 倍的性能。'
+- en: '**vCPU cores available**: These will be used in operations such as data loading
+    and processing.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**可用 vCPU 核心**：这些将用于数据加载和处理等操作。'
+- en: '**Intra- and inter-GPU network throughput**: This defines how quickly data
+    (gradients) can be exchanged between training devices when running multi-GPU and/or
+    multi-node training jobs.'
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**GPU 内部和节点间的网络吞吐量**：这定义了在进行多 GPU 和/或多节点训练任务时，数据（梯度）在训练设备之间交换的速度。'
+- en: The price of using the chosen instance type.
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择的实例类型的价格。
+- en: In the following subsections, we will outline several typical use cases, ordered
+    from the small and most cost-efficient to the largest and most performant.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下小节中，我们将概述几个典型的使用案例，从最小且最具成本效益的模型到最大且最具性能的模型按顺序排列。
+- en: The G5 family – cost-efficient training for small and medium models
+  id: totrans-50
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: G5 系列——为小型和中型模型提供高效的训练
+- en: 'When experimenting with training small or medium-sized DL models, you may consider
+    G5 instances as cost-efficient yet powerful. They come with up to eight **NVIDIA
+    A10G** accelerators, up to 100 Gbps network bandwidth, and up to 192 vCPUs. The
+    following table shows the specifications for the G5 family:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实验中训练小型或中型深度学习模型时，你可以考虑使用 G5 实例，因为它们具有成本效益且性能强大。它们配备最多八个**NVIDIA A10G**加速器，最高
+    100 Gbps 网络带宽，以及最多 192 个 vCPU。下表展示了 G5 系列的规格：
+- en: '|  | Instance Size | GPU | GPU Memory (GiB) | vCPUs | Memory (GiB) | Network
+    Bandwidth (Gbps) |'
+  id: totrans-52
+  prefs: []
+  type: TYPE_TB
+  zh: '| 实例规格 | GPU | GPU内存（GiB） | vCPUs | 内存（GiB） | 网络带宽（Gbps） |'
+- en: '| Single-GPU VMs | g5.xlarge | 1 | 24 | 4 | 16 | Up to 10 |'
+  id: totrans-53
+  prefs: []
+  type: TYPE_TB
+  zh: '| 单GPU虚拟机 | g5.xlarge | 1 | 24 | 4 | 16 | 高达10 |'
+- en: '| g5.2xlarge | 1 | 24 | 8 | 32 | Up to 10 |'
+  id: totrans-54
+  prefs: []
+  type: TYPE_TB
+  zh: '| g5.2xlarge | 1 | 24 | 8 | 32 | 高达10 |'
+- en: '| g5.4xlarge | 1 | 24 | 16 | 64 | Up to 25 |'
+  id: totrans-55
+  prefs: []
+  type: TYPE_TB
+  zh: '| g5.4xlarge | 1 | 24 | 16 | 64 | 高达25 |'
+- en: '| g5.8xlarge | 1 | 24 | 32 | 128 | 25 |'
+  id: totrans-56
+  prefs: []
+  type: TYPE_TB
+  zh: '| g5.8xlarge | 1 | 24 | 32 | 128 | 25 |'
+- en: '| g5.16xlarge | 1 | 24 | 64 | 256 | 25 |'
+  id: totrans-57
+  prefs: []
+  type: TYPE_TB
+  zh: '| g5.16xlarge | 1 | 24 | 64 | 256 | 25 |'
+- en: '| Multi-GPU VMs | g5.12xlarge | 4 | 96 | 48 | 192 | 40 |'
+  id: totrans-58
+  prefs: []
+  type: TYPE_TB
+  zh: '| 多GPU虚拟机 | g5.12xlarge | 4 | 96 | 48 | 192 | 40 |'
+- en: '| g5.24xlarge | 4 | 96 | 96 | 384 | 50 |'
+  id: totrans-59
+  prefs: []
+  type: TYPE_TB
+  zh: '| g5.24xlarge | 4 | 96 | 96 | 384 | 50 |'
+- en: '| g5.48xlarge | 8 | 192 | 192 | 768 | 100 |'
+  id: totrans-60
+  prefs: []
+  type: TYPE_TB
+  zh: '| g5.48xlarge | 8 | 192 | 192 | 768 | 100 |'
+- en: Figure 5.1 – G5 family specification
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图5.1 – G5系列规格
+- en: If you are looking to run a model on a single GPU device, you should choose
+    a single-GPU VM, depending on other system requirements (network, RAM, vCPUs,
+    and so on). If you would like to run several experiments simultaneously (each
+    using a different GPU device), you should choose a multi-GPU VM. Note that in
+    the case of multi-GPU VMs, individual GPU devices are not connected using a high-speed
+    **NVLink interconnect**. So, if you are looking to run multi-GPU distributed training,
+    the P3 family with NVLink will be more appropriate.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你希望在单个GPU设备上运行模型，你应该根据其他系统需求（网络、RAM、vCPUs等）选择单GPU虚拟机。如果你希望同时运行多个实验（每个使用不同的GPU设备），你应该选择多GPU虚拟机。需要注意的是，在多GPU虚拟机的情况下，单个GPU设备之间并未通过高速的**NVLink互联**连接。因此，如果你打算进行多GPU分布式训练，带有NVLink的P3系列会更加合适。
+- en: Alternatively, you can also consider the previous generation of G4 instances,
+    which has a lower hourly price (up to 50% of the G5 rate for certain instances).
+    However, according to AWS internal benchmarks, G5 has up to a 40% better price-performance
+    ratio than G4.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外，你也可以考虑上一代的G4实例，它的小时价格较低（某些实例的价格最高可比G5便宜50%）。然而，根据AWS内部基准测试，G5在性价比方面比G4高出多达40%。
+- en: The P3 family – high-performance and cost-efficient training
+  id: totrans-64
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: P3系列 – 高性能与高性价比的训练
+- en: 'The P3 family offers high performance and cost efficiency for large-scale models.
+    It comes with up to eight **NVIDIA V100** accelerators and unlike the G5 family,
+    it supports the highly efficient NVLink GPU interconnect:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: P3系列提供高性能和高性价比，适用于大规模模型。它最多配备八个**NVIDIA V100**加速器，并且与G5系列不同，它支持高效的NVLink GPU互联：
+- en: '| Instance Size | GPUs – Tesla V100 | GPU Peer-to-Peer | GPU Memory (GB) |
+    vCPUs | Memory (GB) | Network Bandwidth |'
+  id: totrans-66
+  prefs: []
+  type: TYPE_TB
+  zh: '| 实例规格 | GPU – Tesla V100 | GPU点对点 | GPU内存（GB） | vCPUs | 内存（GB） | 网络带宽 |'
+- en: '| p3.2xlarge | 1 | N/A | 16 | 8 | 61 | Up to 10 Gbps |'
+  id: totrans-67
+  prefs: []
+  type: TYPE_TB
+  zh: '| p3.2xlarge | 1 | 无 | 16 | 8 | 61 | 高达10 Gbps |'
+- en: '| p3.8xlarge | 4 | NVLink | 64 | 32 | 244 | 10 Gbps |'
+  id: totrans-68
+  prefs: []
+  type: TYPE_TB
+  zh: '| p3.8xlarge | 4 | NVLink | 64 | 32 | 244 | 10 Gbps |'
+- en: '| p3.16xlarge | 8 | NVLink | 128 | 64 | 488 | 25 Gbps |'
+  id: totrans-69
+  prefs: []
+  type: TYPE_TB
+  zh: '| p3.16xlarge | 8 | NVLink | 128 | 64 | 488 | 25 Gbps |'
+- en: '| p3dn.24xlarge | 8 | NVLink | 256 | 96 | 768 | 100 Gbps |'
+  id: totrans-70
+  prefs: []
+  type: TYPE_TB
+  zh: '| p3dn.24xlarge | 8 | NVLink | 256 | 96 | 768 | 100 Gbps |'
+- en: Figure 5.2 – P3 family specification
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图5.2 – P3系列规格
+- en: The `p3.2xlarge` instance is a good choice for running single-GPU training of
+    complex DL models (assuming you can fit them into memory). If your model doesn’t
+    fit into a single-GPU device, you may choose `p3.8xlarge` or `p3.16xlarge`, which
+    are multi-node instances. In this case, you will store parts of your model in
+    several GPUs. NVLink interconnect provides high-speed data exchange between GPUs
+    during forward and backward passes.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`p3.2xlarge`实例是运行复杂DL模型单GPU训练的不错选择（假设模型可以装入内存）。如果你的模型无法适应单个GPU设备，你可以选择`p3.8xlarge`或`p3.16xlarge`，它们是多节点实例。在这种情况下，你将把模型的部分存储在多个GPU中。NVLink互联在前向和反向传播过程中提供GPU之间的高速数据交换。'
+- en: Another application area for `p3.8xlarge` and `p3.16xlarge` is running multi-GPU
+    data parallel training jobs. In this use case, you load the copy of your DL model
+    into each GPU device but use different batches of data to train. NVLink interconnect
+    ensures high-speed gradient exchange and computations at the end of each training
+    iteration between GPU nodes.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`p3.8xlarge`和`p3.16xlarge`的另一个应用领域是运行多GPU数据并行训练任务。在这种使用场景中，你将深度学习模型的副本加载到每个GPU设备中，但使用不同的数据批次进行训练。NVLink互联确保在每次训练迭代结束时，GPU节点之间进行高速的梯度交换和计算。'
+- en: The most powerful instance, `p3dn.24xlarge`, comes with an EFA network device,
+    which provides low latency and consistence communication between nodes. This makes
+    `p3dn.24xlarge` instances a great choice for large-scale multi-GPU multi-mode
+    training jobs, especially if your training job is network constrained.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最强大的实例`p3dn.24xlarge`配备了EFA网络设备，提供低延迟和一致的节点间通信。这使得`p3dn.24xlarge`实例成为大规模多GPU多模式训练任务的优秀选择，尤其是当你的训练任务受限于网络时。
+- en: The P4 family – highest performance for training
+  id: totrans-75
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: P4系列 – 训练的最高性能
+- en: The P4 family is based on NVIDIA A100 GPU accelerators, which beats the MLPerf
+    benchmark among any commercially available accelerators as of December 2021\.
+    The P4 family has a single instance, `p4d.24xlarge`, which comes with eight A100
+    GPU devices, 96 vCPUs, and 1,152 GBs of RAM.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: P4系列基于NVIDIA A100 GPU加速器，截至2021年12月，超越了任何市售加速器在MLPerf基准测试中的表现。P4系列有一个单一实例，`p4d.24xlarge`，配备了八个A100
+    GPU设备、96个vCPU和1,152 GB的RAM。
+- en: 'These characteristics make the `p4d.24xlarge` instance ideal for training large
+    SOTA DL models using distributed training approaches. However, when training large
+    models, the amount of data that needs to be exchanged between devices in your
+    training cluster might be higher than your inter-GPU and inter-node network bandwidth,
+    which may lead to slowing your overall training speed and the underutilization
+    of expensive GPU resources. AWS provides several networking capabilities for the
+    `p4d.24xlarge` instance to mitigate this issue:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些特性使得`p4d.24xlarge`实例成为使用分布式训练方法训练大型SOTA深度学习模型的理想选择。然而，在训练大型模型时，训练集群中设备之间需要交换的数据量可能会超过GPU之间和节点之间的网络带宽，这可能导致整体训练速度变慢，并且浪费昂贵的GPU资源。AWS为`p4d.24xlarge`实例提供了几种网络功能来缓解此问题：
+- en: Up to 600 GB/s bidirectional bandwidth between GPUs in the same node using NVLink
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过NVLink，在同一节点内的GPU之间实现高达600 GB/s的双向带宽
+- en: Up to 400 GB/s bandwidth between GPUs on different nodes using **GPUDirect RDMA**
+    over EFA
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过EFA使用**GPUDirect RDMA**，在不同节点之间实现高达400 GB/s的带宽
+- en: Additionally, `p4d.24xlarge` supports a wide spectrum of precision point types: FP64,
+    FP32, FP16, INT8, BF16, and TF32\. If your framework and model support has mixed
+    precision, you may be able to achieve better performance with minimal compromise
+    in terms of model accuracy.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，`p4d.24xlarge`支持广泛的精度点类型：FP64、FP32、FP16、INT8、BF16和TF32。如果你的框架和模型支持混合精度，你可能能够在不大幅牺牲模型精度的情况下实现更好的性能。
+- en: 'Naturally, `p4d.24xlarge` is more expensive than other instances. However,
+    the price difference between the second-most expensive instance, `p3dn.24xlarge`,
+    is only around ~5%. Given its superior performance, P4 can deliver up to 60% lower
+    costs for training and over 2.5x better DL performance according to internal AWS
+    benchmarks. This makes `p4d.24xlarge` not only the most performant instance for
+    DL training but also the most cost-efficient for large SOTA DL models. You can
+    find detailed performance benchmarks for the P4d instance family in the following
+    article: [https://aws.amazon.com/blogs/compute/amazon-ec2-p4d-instances-deep-dive/](https://aws.amazon.com/blogs/compute/amazon-ec2-p4d-instances-deep-dive/).'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自然地，`p4d.24xlarge`的价格高于其他实例。然而，第二昂贵的实例`p3dn.24xlarge`与之相比的价格差距只有约5%。根据其卓越的性能，P4可以为训练提供高达60%的成本节约，并且根据AWS内部基准测试，深度学习性能提高超过2.5倍。这使得`p4d.24xlarge`不仅是深度学习训练中性能最强的实例，也是训练大型SOTA深度学习模型中性价比最高的选择。你可以在以下文章中找到有关P4d实例系列的详细性能基准：
+    [https://aws.amazon.com/blogs/compute/amazon-ec2-p4d-instances-deep-dive/](https://aws.amazon.com/blogs/compute/amazon-ec2-p4d-instances-deep-dive/)。
+- en: Improving network throughput with EFA
+  id: totrans-82
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过EFA提高网络吞吐量
+- en: 'When training large DL models, you need to break your large training task into
+    smaller tasks and distribute them across multiple compute devices. Distributed
+    training includes the following key steps:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练大型深度学习模型时，你需要将大型训练任务分解成更小的任务，并分布到多个计算设备上。分布式训练包括以下关键步骤：
+- en: 'Each device in the training cluster does the following:'
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练集群中的每个设备执行以下操作：
+- en: Reads a unique minibatch from the global data batch
+  id: totrans-85
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从全局数据批次中读取一个独特的mini-batch
+- en: Runs a minibatch through the model and computes loss
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过模型运行一个mini-batch并计算损失
+- en: Computes the gradients to minimize loss
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算梯度以最小化损失
+- en: Each device communicates gradients to its peers. Average gradients are computed.
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每个设备将梯度传递给其同伴。计算平均梯度。
+- en: Each device updates the model according to the averaged gradients.
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每个设备根据平均梯度更新模型。
+- en: 'To measure the efficiency of distributed training, we can use the scaling factor,
+    which is defined as follows:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了衡量分布式训练的效率，我们可以使用扩展因子，定义如下：
+- en: '![](img/B17519_05_001.jpg)'
+  id: totrans-91
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B17519_05_001.jpg)'
+- en: Here, *T* is the throughput of a single device, *n* is the number of devices
+    in the training cluster, and *nT* is the achieved overall throughput of your training
+    cluster. While ideal scaling is rarely achievable (meaning adding more resources
+    proportionally reduces the training time), in many recent benchmarks, it was shown
+    that scaling efficiency as high as 90% is achievable with careful application,
+    hardware, and network optimizations.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*T* 是单个设备的吞吐量，*n* 是训练集群中的设备数量，*nT* 是你的训练集群所实现的整体吞吐量。虽然理想的扩展性通常难以实现（即增加资源并不总是能成比例地减少训练时间），但在许多最近的基准测试中，已经证明通过精心应用、硬件和网络优化，可以实现高达
+    90% 的扩展效率。
+- en: To profile your training job for performance bottlenecks, it’s important to
+    measure the performance of each step. It was shown that in many instances, the
+    communication phase (*s**tep 2*) is a global bottleneck in the training process
+    (for an example, see *Is Network the Bottleneck of Distributed Training?* At [https://arxiv.org/pdf/2006.10103.pdf](https://arxiv.org/pdf/2006.10103.pdf)).
+    In this section, we will focus on understanding how to optimize the communication
+    phase.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了对你的训练任务进行性能瓶颈分析，测量每个步骤的性能非常重要。研究表明，在许多情况下，通信阶段（*步骤 2*）是训练过程中的全球性瓶颈（例如，可以参考
+    *网络是分布式训练瓶颈吗？* 见 [https://arxiv.org/pdf/2006.10103.pdf](https://arxiv.org/pdf/2006.10103.pdf)）。在本节中，我们将重点理解如何优化通信阶段。
+- en: 'Several factors define the amount of data that’s sent and received on each
+    node:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个因素决定了每个节点发送和接收的数据量：
+- en: 'First, there’s the communication algorithm, which defines how training devices
+    exchange gradient updates with each other. At the time of writing, the most popular
+    approach is called Ring-AllReduce. This algorithm allows you to efficiently communicate
+    gradient updates between each training device. Each of the *N* nodes communicates
+    with two of its peers ![](img/B17519_05_002.png) times. The overall amount of
+    information that’s sent in a single iteration by each training device is ![](img/B17519_05_003.png)
+    for large *N*, where *D* is the size of the gradient updates. This can be seen
+    in the following diagram:'
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 首先是通信算法，它定义了训练设备之间如何交换梯度更新。在撰写时，最流行的方法被称为 Ring-AllReduce。这个算法使你能够高效地在每个训练设备之间传输梯度更新。每个
+    *N* 节点与其两个同行进行通信 ![](img/B17519_05_002.png) 次。每个训练设备在单次迭代中发送的总体信息量是 ![](img/B17519_05_003.png)，对于大
+    *N* 来说，其中 *D* 是梯度更新的大小。以下图所示：
+- en: '![Figure 5.3 – Ring-AllReduce communication algorithm ](img/B17519_05_03.jpg)'
+  id: totrans-96
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 5.3 – Ring-AllReduce 通信算法](img/B17519_05_03.jpg)'
+- en: Figure 5.3 – Ring-AllReduce communication algorithm
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 5.3 – Ring-AllReduce 通信算法
+- en: Second, there’s the size of the model and its precision (*D* in the preceding
+    formula).
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 其次是模型的大小及其精度（在前面的公式中为 *D*）。
+- en: For instance, if we use the Ring-AllReduce algorithm to train the BERT model
+    (which contains approximately 340 million parameters) with half-precision, each
+    training device will send and receive approximately 650 MB of data during a single
+    iteration. Communication needs to happen quickly. The slowdown of an individual
+    device will cause an overall slowdown in the training process.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果我们使用 Ring-AllReduce 算法来训练 BERT 模型（该模型包含大约 3.4 亿个参数）并采用半精度，每个训练设备在单次迭代中将发送和接收大约
+    650 MB 的数据。通信需要快速进行。单个设备的性能下降将导致整体训练过程的放缓。
+- en: Introducing EFA
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入 EFA
+- en: Amazon EFA is a network device that provides lower and more consistent latency
+    than traditional TCP transport. EFA was designed specifically for high-performance
+    and ML use cases where inter-instance communication is critical for distributed
+    jobs.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Amazon EFA 是一种网络设备，提供比传统 TCP 传输更低且更稳定的延迟。EFA 专门为高性能和机器学习应用场景设计，其中实例间通信对分布式任务至关重要。
+- en: 'EFA provides the following benefits:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: EFA 提供了以下优势：
+- en: OS bypass functionally, which allows DL applications to communicate directly
+    with the network interface hardware to provide low latency and reliable transport
+    functionality.
+  id: totrans-103
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 操作系统绕过功能，允许深度学习应用直接与网络接口硬件通信，从而提供低延迟和可靠的传输功能。
+- en: Support for high-performance message protocols such as **MPI** and **NCCL**.
+    For DL use cases, we are specifically interested in the NVIDIA NCCL library, which
+    provides high-performance communication routines for GPU devices.
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 支持高性能消息协议，如**MPI**和**NCCL**。对于深度学习用例，我们特别关注 NVIDIA 的 NCCL 库，它为 GPU 设备提供高性能的通信例程。
+- en: Using EFA allows you to significantly increase training job performance. According
+    to AWS benchmarks, using EFA allows you to train BERT 130% faster on 32 instances
+    of `ml.p4dl.24xlarge` compared to the default **Elastic Network Adapter** (**ENA**).
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 EFA 可以显著提高训练任务的性能。根据 AWS 基准测试，使用 EFA 可以使 BERT 在 `ml.p4dl.24xlarge` 的 32 个实例上训练速度比默认的
+    **弹性网络适配器** (**ENA**) 快 130%。
+- en: There is no additional cost to using EFA on SageMaker. EFA is available for
+    the `ml.p3dn.24xlarge`, `ml.p4d.24xlarge`, and `ml.c5n.18xlarge` SageMaker instances.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 SageMaker 上使用 EFA 不会产生额外费用。EFA 可用于 `ml.p3dn.24xlarge`、`ml.p4d.24xlarge` 和
+    `ml.c5n.18xlarge` SageMaker 实例。
+- en: Using EFA with custom training containers
+  id: totrans-107
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在自定义训练容器中使用 EFA
+- en: SageMaker provides seamless integration with EFA devices. If you are using TensorFlow
+    or PyTorch DL containers with supported training instances, EFA will be enabled
+    automatically.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 提供与 EFA 设备的无缝集成。如果您使用 TensorFlow 或 PyTorch 深度学习容器与支持的训练实例，EFA 将自动启用。
+- en: 'If you choose to use a custom container, you will need to install the necessary
+    EFA packages, as well as the MPI and NCCL libraries, in that container. The following
+    steps show how to do it in your Dockerfile:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您选择使用自定义容器，您需要在该容器中安装必要的 EFA 包以及 MPI 和 NCCL 库。以下步骤展示了如何在 Dockerfile 中执行这些操作：
+- en: 'First, you must define the versions of the MPI, NCCL, EFA, and OFI libraries
+    you will be using, as follows:'
+  id: totrans-110
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，您需要定义您将使用的 MPI、NCCL、EFA 和 OFI 库的版本，如下所示：
+- en: '[PRE0]'
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Then, you must download and execute the EFA driver installer:'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，您必须下载并执行 EFA 驱动程序安装程序：
+- en: '[PRE1]'
+  id: totrans-113
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Now, you must clone and build the NCCL library from the public NVIDIA repository:'
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，您必须从公共的 NVIDIA 仓库克隆并构建 NCCL 库：
+- en: '[PRE2]'
+  id: totrans-115
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Next, you must install the AWS OFI NCCL plugin, which allows you to use the
+    EFA networking module with NCCL applications:'
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，您必须安装 AWS OFI NCCL 插件，它允许您将 EFA 网络模块与 NCCL 应用程序一起使用：
+- en: '[PRE3]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Finally, you must install NCCL tests and execute them to check the correctness
+    and performance of NCCL operations:'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，您必须安装 NCCL 测试并执行它们，以检查 NCCL 操作的正确性和性能：
+- en: '[PRE4]'
+  id: totrans-119
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: In this section, we discussed the network between devices in distributed training
+    and its implications for overall training efficiency. Since the network frequently
+    becomes a global bottleneck for your training, we shared an intuition on how you
+    can size your network bandwidth based on your cluster configuration and model
+    parameters. Then, we reviewed the EFA network device from AWS, which improves
+    network bandwidth and efficiency. Since EFA comes at no additional cost or any
+    drawbacks for users, it’s advisable to use it when possible.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们讨论了分布式训练中设备之间的网络以及它对整体训练效率的影响。由于网络经常成为训练的全球瓶颈，我们分享了如何根据集群配置和模型参数来估算网络带宽。然后，我们回顾了
+    AWS 的 EFA 网络设备，它提高了网络带宽和效率。由于 EFA 对用户没有额外费用或任何缺点，因此建议在可能的情况下使用它。
+- en: Compiling models for GPU devices with Training Compiler
+  id: totrans-121
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用训练编译器为 GPU 设备编译模型
+- en: SageMaker Training Compiler is a capability that allows you to automatically
+    optimize NLP DL models to run on GPU instances. For supported model architectures
+    and frameworks, no code changes are required in your training scripts. You will
+    only need to enable Training Compiler in your SageMaker training job configuration.
+    Training Compiler can both reduce training speed time and memory requirements
+    without this having any impact on model accuracy. For instance, according to AWS
+    benchmarks, the training time and cost for the RoBERTa-based model are reduced
+    by 30% when using Training Compiler.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 训练编译器是一项能力，允许您自动优化 NLP 深度学习模型，以便在 GPU 实例上运行。对于支持的模型架构和框架，您的训练脚本无需进行代码更改。您只需在
+    SageMaker 训练任务配置中启用训练编译器即可。训练编译器不仅可以减少训练时间和内存需求，而且不会影响模型的准确性。例如，根据 AWS 基准测试，使用训练编译器时，基于
+    RoBERTa 的模型训练时间和成本降低了 30%。
+- en: Let’s review how SageMaker Training Compiler works under the hood and how to
+    use it in training jobs.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回顾一下 SageMaker 训练编译器的工作原理，以及如何在训练任务中使用它。
+- en: Introducing the XLA optimization library
+  id: totrans-124
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入 XLA 优化库
+- en: '**Accelerated Linear Algebra** (**XLA**) is a domain-specific compiler that
+    accelerates model training and execution with little to no changes in model code.
+    At the time of writing, XLA is supported for the TensorFlow and PyTorch frameworks.
+    SageMaker Training Compiler abstracts interactions with the XLA library and uses
+    them to optimize training jobs running on SageMaker. SageMaker Training Compiler
+    supports both single-GPU and distributed training jobs.'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**加速线性代数**（**XLA**）是一种特定领域的编译器，它通过几乎不修改模型代码的方式加速模型训练和执行。到目前为止，XLA 已经支持 TensorFlow
+    和 PyTorch 框架。SageMaker 训练编译器抽象化了与 XLA 库的交互，并利用它们来优化在 SageMaker 上运行的训练任务。SageMaker
+    训练编译器支持单 GPU 和分布式训练任务。'
+- en: 'When you’re training your model without XLA, all operations are executed individually.
+    Let’s say your model has two sequential operations: matrix multiplication and
+    matrix addition. Without XLA, your framework execution engine will send these
+    two operations (known as *kernels*) one by one to the GPU device. When running
+    with XLA, it will compile two operations into a single kernel launch by fusing
+    the addition and multiplication operations. Fused operations must be executed
+    entirely on GPU registers and only joined results should be streamed to end users.
+    Removing redundant memory operations is one of the key optimization features of
+    the XLA compiler.'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你在没有 XLA 的情况下训练模型时，所有操作都会单独执行。假设你的模型有两个顺序操作：矩阵乘法和矩阵加法。没有 XLA 时，你的框架执行引擎会将这两个操作（称为
+    *kernels*）一个接一个地发送到 GPU 设备。当使用 XLA 时，它会通过将加法和乘法操作融合，将这两个操作编译成一个单独的内核启动。融合的操作必须完全在
+    GPU 寄存器上执行，只有最终的结果会被流式传输给用户。去除冗余的内存操作是 XLA 编译器的关键优化特性之一。
+- en: Another notable difference between the XLA compiler and others is that unlike
+    your regular CUDA operations, which are executed immediately (known as *eager*
+    execution), XLA tensors operations are “lazy.” First, the XLA compiler constructs
+    the graph of fused operations and keeps tensors as placeholders in this execution
+    graph. Only when the results of operations are needed will the compute operations
+    be performed. By deferring execution, XLA finds opportunities to fuse operations
+    in your model’s computational graph.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: XLA 编译器与其他编译器的另一个显著区别是，不像常规的 CUDA 操作会立即执行（称为 *eager* 执行），XLA 张量操作是“惰性”的。首先，XLA
+    编译器构建融合操作的图，并将张量作为占位符保留在这个执行图中。只有在操作结果需要时，计算操作才会被执行。通过延迟执行，XLA 能够在模型的计算图中找到融合操作的机会。
+- en: Using SageMaker Training Compiler
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 SageMaker 训练编译器
+- en: 'SageMaker Training Compiler is tested on a wide range of NLP models, as well
+    as on popular CV models for image classification and object detection for both
+    PyTorch and TensorFlow implementations. As we expect this list to grow over time,
+    please consult the following page for the latest set of supported models: [https://docs.aws.amazon.com/sagemaker/latest/dg/training-compiler-support.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/training-compiler-support.xhtml).
+    This page also provides suggested training and model configurations, such as instance
+    type, precision (mixed or not), and batch size.'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 训练编译器已在广泛的 NLP 模型上进行了测试，并且也支持流行的计算机视觉模型，如用于图像分类和目标检测的 PyTorch 和 TensorFlow
+    实现。随着我们预计这个列表会随着时间增长，请查阅以下页面以了解最新的支持模型：[https://docs.aws.amazon.com/sagemaker/latest/dg/training-compiler-support.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/training-compiler-support.xhtml)。此页面还提供了建议的训练和模型配置，如实例类型、精度（是否混合）和批大小。
+- en: 'SageMaker Training Compiler can also be used for models that have not been
+    officially tested. When using Training Compiler with untested models, keep the
+    following in mind:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 训练编译器也可以用于尚未正式测试的模型。在使用训练编译器处理未测试的模型时，请注意以下事项：
+- en: You may need to modify your training script, such as by setting a proper XLA
+    device, using XLA-compatible optimizers, data loaders, and XLA training loop semantics.
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你可能需要修改你的训练脚本，例如设置合适的 XLA 设备，使用兼容 XLA 的优化器、数据加载器和 XLA 训练循环语义。
+- en: You may need to do a hyperparameter search (specifically, batch size and learning
+    rate) to find the optimal configuration for your training job. This is because
+    SageMaker Training Compiler changes the memory footprint of your model.
+  id: totrans-132
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你可能需要进行超参数搜索（特别是批大小和学习率），以找到适合你训练任务的最优配置。这是因为 SageMaker 训练编译器会改变你模型的内存占用。
+- en: 'Training Compiler is only available for a subset of SageMaker Deep Learning
+    Containers. Refer to the following page for the latest containers with Training
+    Compiler support: [https://github.com/aws/deep-learning-containers/blob/master/available_images.md](https://github.com/aws/deep-learning-containers/blob/master/available_images.md).'
+  id: totrans-133
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练编译器仅适用于部分 SageMaker 深度学习容器。请参阅以下页面以获取最新支持训练编译器的容器：[https://github.com/aws/deep-learning-containers/blob/master/available_images.md](https://github.com/aws/deep-learning-containers/blob/master/available_images.md)。
+- en: When benchmarking the results of your custom models with and without Training
+    Compiler enabled, keep in mind that it takes some time for SageMaker to compile
+    your model, which adds to the overall training time. Hence, it may not be practical
+    to use Training Compiler for short-running training jobs (such as fine-tuning
+    a task on a small dataset). Also, it’s important to get your batch size right.
+    Typically, you can expect Training Compiler to reduce the memory print of your
+    model so that you can increase the maximum batch size. With increased batch size,
+    you will need to scale your learning rate proportionally. Please note that the
+    memory requirements for a given model may not always be reduced. In this case,
+    you won’t be able to increase your batch size. Using Training Compiler for untested
+    models requires experimentation to achieve optimal results.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基准测试您的自定义模型时，比较启用和未启用训练编译器的结果，请记住，SageMaker 编译您的模型需要一些时间，这会增加整体训练时间。因此，可能不适合在短时间训练作业（例如在小数据集上微调任务）中使用训练编译器。此外，正确设置批处理大小也很重要。通常，您可以期待训练编译器减少模型的内存占用，从而增加最大批处理大小。随着批处理大小的增加，您需要按比例调整学习率。请注意，给定模型的内存需求可能并不总是会减少。在这种情况下，您将无法增加批处理大小。对于未经测试的模型，使用训练编译器需要通过实验来获得最佳结果。
+- en: Using Training Compiler
+  id: totrans-135
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用训练编译器
+- en: 'To use Training Compiler for one of the tested models, you will need to enable
+    it explicitly as part of your training job configuration. Follow these steps:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要在已测试的模型中使用训练编译器，您需要显式地在训练作业配置中启用它。请按照以下步骤操作：
+- en: 'Start by importing the `TrainingCompilerConfig` object. Note that it’s available
+    in PythonSDK > 2.7.x:'
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先导入 `TrainingCompilerConfig` 对象。请注意，它适用于 PythonSDK > 2.7.x：
+- en: '[PRE5]'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The `TrainingCompilerConfig` object supports the following arguments:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TrainingCompilerConfig` 对象支持以下参数：'
+- en: '`enabled` (`bool`): Optional. This is a switch that enables SageMaker Training Compiler.
+    The default is `True`.'
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`enabled` （`bool`）：可选项。此项是一个开关，用于启用 SageMaker 训练编译器。默认值为 `True`。'
+- en: '`debug` (`bool`): Optional. This specifies whether detailed logs for debugging
+    are dumped. This comes with a potential performance slowdown. The default is `False`.'
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`debug` （`bool`）：可选项。此项指定是否输出调试的详细日志，这可能会导致性能下降。默认值为 `False`。'
+- en: 'Next, you need to configure the necessary hyperparameters for SageMaker Training
+    Compiler:'
+  id: totrans-142
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，您需要为 SageMaker 训练编译器配置必要的超参数：
+- en: '[PRE6]'
+  id: totrans-143
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Next, you must configure the `HuggingFace` training job, as you did previously,
+    with the only exception that you must explicitly pass `TrainingCompilerObject`
+    in the default `enabled` state as part of the training configuration:'
+  id: totrans-144
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，您必须像之前一样配置 `HuggingFace` 训练作业，唯一的区别是您必须显式传递 `TrainingCompilerObject`，并将其设置为训练配置中的默认
+    `enabled` 状态：
+- en: '[PRE7]'
+  id: totrans-145
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Note
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: It’s recommended that you disable the SageMaker Profile and SageMaker Debugger
+    capabilities for the optimal performance of Training Compiler. Note the appropriate
+    settings in our training job.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了获得训练编译器的最佳性能，建议禁用 SageMaker 配置文件和 SageMaker 调试器功能。请注意在我们的训练作业中设置适当的配置。
+- en: 'Once the training job has started, you must ensure that the model was compiled.
+    For this, you should expect to see the following message in the training job logs,
+    which indicates that Training Compiler worked as expected:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦训练作业启动，您必须确保模型已被编译。为此，您应期望在训练作业日志中看到以下消息，这表示训练编译器按预期工作：
+- en: '[PRE8]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Now, let’s summarize this chapter.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们总结一下本章内容。
+- en: Summary
+  id: totrans-151
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we focused on the hardware aspects of engineering DL distributed
+    training. We reviewed the available SageMaker compute instances and focused on
+    instance families with GPU devices. After that, we discussed different DL use
+    cases and how to select optimal compute instances for them. Then, we reviewed
+    the network requirements for distributed training and learned how Amazon EFA can
+    help you avoid network bottlenecks when running large-scale training jobs. We
+    also reviewed how models can be optimized to run on GPU devices using SageMaker
+    Training Compiler and gained practical experience in using this feature.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们重点讨论了工程化深度学习分布式训练的硬件方面。我们回顾了可用的SageMaker计算实例，并聚焦于带有GPU设备的实例系列。接着，我们讨论了不同的深度学习用例，以及如何为它们选择最优的计算实例。然后，我们回顾了分布式训练的网络需求，并学习了Amazon
+    EFA如何帮助你避免在运行大规模训练任务时遇到网络瓶颈。我们还回顾了如何使用SageMaker训练编译器优化模型，使其能够在GPU设备上运行，并通过实践体验了这一功能。
+- en: In the next chapter, [*Chapter 6*](B17519_06.xhtml#_idTextAnchor097), *Engineering
+    Distributed Training*, we will continue this discussion of distributed training.
+    We will focus on how to select the most appropriate type of distributed training
+    for your use case, DL framework, and model architecture and then develop practical
+    experience in these areas.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，[*第6章*](B17519_06.xhtml#_idTextAnchor097)，*分布式训练工程化*，我们将继续讨论分布式训练。我们将重点讨论如何为你的用例、深度学习框架和模型架构选择最合适的分布式训练类型，并在这些领域积累实践经验。

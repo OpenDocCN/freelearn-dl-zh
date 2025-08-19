@@ -1,0 +1,1626 @@
+- en: '*Chapter 6*: Running Hyperparameter Tuning at Scale'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第六章*：大规模运行超参数调优'
+- en: '**Hyperparameter tuning** or **hyperparameter optimization** (**HPO**) is a
+    procedure that finds the best possible deep neural network structures, types of
+    pretrained models, and model training process within a reasonable computing resource
+    constraint and time frame. Here, hyperparameter refers to parameters that cannot
+    be changed or learned during the ML training process, such as the number of layers
+    inside a deep neural network, the choice of a pretrained language model, or the
+    learning rate, batch size, and optimizer of the training process. In this chapter,
+    we will use HPO as a shorthand to refer to the process of hyperparameter tuning
+    and optimization. HPO is a critical step for producing a high-performance ML/DL
+    model. Given that the search space of the hyperparameter is very large, efficiently
+    running HPO at scale is a major challenge. The complexity and high cost of evaluating
+    a DL model, compared to classical ML models, further compound the challenges.
+    Therefore, we will need to learn state-of-the-art HPO approaches and implementation
+    frameworks, implement increasingly complex and scalable HPO methods, and track
+    them with MLflow to ensure a reproducible tuning process. By the end of this chapter,
+    you will be comfortable with implementing scalable HPO for DL model pipelines.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**超参数调优**或**超参数优化**（**HPO**）是一种在合理的计算资源约束和时间框架内，找到最佳深度神经网络结构、预训练模型类型以及模型训练过程的程序。这里的超参数是指在机器学习训练过程中无法改变或学习的参数，例如深度神经网络中的层数、预训练语言模型的选择，或训练过程中的学习率、批量大小和优化器。在本章中，我们将使用HPO作为超参数调优和优化过程的简称。HPO是生成高性能机器学习/深度学习模型的关键步骤。由于超参数的搜索空间非常大，因此在大规模上高效地运行HPO是一个主要挑战。与经典的机器学习模型相比，深度学习模型的评估复杂性和高成本进一步加剧了这些挑战。因此，我们需要学习最先进的HPO方法和实现框架，实现越来越复杂和可扩展的HPO方法，并通过MLflow跟踪它们，以确保调优过程是可复现的。在本章结束时，你将能够熟练地实现适用于深度学习模型管道的可扩展HPO。'
+- en: 'In this chapter, first, we will give an overview of the different automatic
+    HPO frameworks and applications of DL model tuning. Additionally, we will understand
+    what to optimize and when to choose what frameworks to use. We will compare three
+    popular HPO frameworks: **HyperOpt**, **Optuna**, and **Ray Tune**. We will show
+    which of these is the best choice for running HPO at scale. Then, we will focus
+    on learning how to create HPO-ready DL model codes that can use Ray Tune and MLflow.
+    Following this, we will show how we can switch to using different HPO algorithms
+    easily with Optuna as a primary example.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，首先，我们将概述不同的自动化HPO框架以及深度学习模型调优的应用。此外，我们还将了解应该优化哪些内容以及何时选择使用哪些框架。我们将比较三种流行的HPO框架：**HyperOpt**、**Optuna**和**Ray
+    Tune**。我们将展示在大规模运行HPO时，哪一种框架是最合适的选择。接着，我们将重点学习如何创建适合HPO的深度学习模型代码，这些代码可以使用Ray Tune和MLflow。之后，我们将展示如何轻松切换到使用不同的HPO算法，并以Optuna为主要示例进行说明。
+- en: 'In this chapter, we''ll cover the following topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主题：
+- en: Understanding automatic HPO for DL pipelines
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 了解深度学习管道的自动化HPO
+- en: Creating HPO-ready DL models using Ray Tune and MLflow
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Ray Tune和MLflow创建适合HPO的深度学习模型
+- en: Running the first Ray Tune HPO experiment with MLflow
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用MLflow运行第一个Ray Tune HPO实验
+- en: Running Ray Tune HPO with Optuna and HyperBand
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Optuna和HyperBand运行Ray Tune HPO
+- en: Technical requirements
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'To understand the examples in this chapter, the following key technical requirements
+    are needed:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要理解本章的示例，以下是所需的关键技术要求：
+- en: 'Ray Tune 1.9.2: This is a flexible and powerful hyperparameter tuning framework
+    ([https://docs.ray.io/en/latest/tune/index.html](https://docs.ray.io/en/latest/tune/index.html)).'
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Ray Tune 1.9.2：这是一个灵活且强大的超参数调优框架（[https://docs.ray.io/en/latest/tune/index.html](https://docs.ray.io/en/latest/tune/index.html)）。
+- en: 'Optuna 2.10.0: This is an imperative and define-by-run hyperparameter tuning
+    Python package ([https://optuna.org/](https://optuna.org/)).'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Optuna 2.10.0：这是一个命令式的、按运行定义的超参数调优Python包（[https://optuna.org/](https://optuna.org/)）。
+- en: 'The code for this chapter can be found in the following GitHub URL, which also
+    includes the `requirements.txt` file that contains the preceding key packages
+    and other dependencies: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter06](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter06).'
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 本章的代码可以在以下 GitHub 地址找到，其中还包括包含前述关键包和其他依赖项的`requirements.txt`文件：[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter06](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter06)。
+- en: Understanding automatic HPO for DL pipelines
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解深度学习管道中的自动超参数优化
+- en: Automatic HPO has been studied for over two decades since the first known paper
+    on this topic was published in 1995 ([https://www.sciencedirect.com/science/article/pii/B9781558603776500451](https://www.sciencedirect.com/science/article/pii/B9781558603776500451)).
+    It has been widely understood that tuning hyperparameters for an ML model can
+    improve the performance of the model – sometimes, dramatically. The rise of DL
+    models in recent years has triggered a new wave of innovation and the development
+    of new frameworks to tackle HPO for DL pipelines. This is because a DL model pipeline
+    imposes many new and large-scale optimization challenges that cannot be easily
+    solved by previous HPO methods. Note that, in contrast to the model parameters
+    that can be learned during the model training process, a set of hyperparameters
+    must be set before training.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自动超参数优化（HPO）已经研究了超过二十年，自1995年首次发布有关该主题的已知论文以来（[https://www.sciencedirect.com/science/article/pii/B9781558603776500451](https://www.sciencedirect.com/science/article/pii/B9781558603776500451)）。人们普遍理解，调优机器学习模型的超参数可以提升模型的性能——有时，甚至能显著提升。近年来，深度学习（DL）模型的崛起催生了一股新的创新浪潮，并推动了新框架的开发，以应对深度学习管道的超参数优化问题。这是因为，深度学习模型管道带来了许多新的、大规模的优化挑战，而这些挑战不能轻易通过以往的超参数优化方法解决。需要注意的是，与模型训练过程中可以学习到的模型参数不同，超参数集必须在训练之前设定。
+- en: Difference between HPO and Transfer Learning's Fine-Tuning
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 超参数优化与迁移学习微调的区别
+- en: In this book, we have been focusing on one successful DL approach called **Transfer
+    Learning** (please refer to [*Chapter 1*](B18120_01_ePub.xhtml#_idTextAnchor015),
+    *Deep Learning Life Cycle and MLOps Challenges*, for a full discussion). The key
+    step of a transfer learning process is to fine-tune a pretrained model with some
+    task- and domain-specific labeled data to get a good task-specific DL model. However,
+    the fine-tuning step is just a special kind of model training step that also has
+    lots of hyperparameters to optimize. That's where HPO comes into play.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，我们一直专注于一种成功的深度学习方法——**迁移学习**（有关详细讨论，请参阅[*第1章*](B18120_01_ePub.xhtml#_idTextAnchor015)，*深度学习生命周期与MLOps挑战*）。迁移学习过程中的关键步骤是用一些任务和领域特定的标注数据来微调一个预训练模型，以获得一个良好的任务特定深度学习模型。然而，微调步骤仅仅是模型训练过程中的一种特殊训练方式，它同样涉及许多超参数需要优化。这就是超参数优化发挥作用的地方。
+- en: Types of hyperparameters and their challenges
+  id: totrans-17
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数类型及其挑战
+- en: 'There are several types of hyperparameters that you can use for a DL pipeline:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种类型的超参数可以用于深度学习管道：
+- en: '**DL model type and architecture**: In the case of transfer learning, choosing
+    which pretrained models to use is one possible hyperparameter. For example, there
+    are over 27,000 pretrained models in the **Hugging Face** model repository ([https://huggingface.co/models](https://huggingface.co/models)),
+    including **BERT**, **RoBERTa**, and many more. For a particular prediction task,
+    we might want to try a few of them to decide which is the best one to use.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**深度学习模型类型与架构**：在迁移学习的情况下，选择使用哪些预训练模型是一个可能的超参数。例如，**Hugging Face**模型库中有超过27,000个预训练模型（[https://huggingface.co/models](https://huggingface.co/models)），包括**BERT**、**RoBERTa**等。对于特定的预测任务，我们可能会尝试其中的几个模型，决定哪个模型是最适合的。'
+- en: '**Learning- and training-related parameters**: These include different types
+    of optimizers such as **stochastic gradient descent** (**SGD**) and **Adam** (you
+    can view a list of PyTorch optimizers at [https://machinelearningknowledge.ai/pytorch-optimizers-complete-guide-for-beginner/](https://machinelearningknowledge.ai/pytorch-optimizers-complete-guide-for-beginner/)).
+    It also includes the associated parameters such as learning rate and batch size.
+    It is recommended that, when applicable, the following parameters should be first
+    tuned in their order of importance for a neural network model: learning rate,
+    momentum, mini-batch size, the number of hidden layers, learning rate decay, and
+    regularization ([https://arxiv.org/abs/2003.05689](https://arxiv.org/abs/2003.05689)).'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**学习和训练相关的参数**：这些包括不同类型的优化器，如**随机梯度下降**（**SGD**）和**Adam**（你可以在[https://machinelearningknowledge.ai/pytorch-optimizers-complete-guide-for-beginner/](https://machinelearningknowledge.ai/pytorch-optimizers-complete-guide-for-beginner/)查看PyTorch优化器的完整列表）。它还包括相关的参数，如学习率和批量大小。建议在适用时，首先根据其重要性顺序调整神经网络模型的以下参数：学习率、动量、迷你批量大小、隐藏层数量、学习率衰减和正则化（[https://arxiv.org/abs/2003.05689](https://arxiv.org/abs/2003.05689)）。'
+- en: '**Data and pipeline configurations**: A DL pipeline can include data processing
+    and transformation steps that could impact model training. For example, if we
+    want to compare the performance of a classification model for an email message
+    with or without the signature text body, then a hyperparameter for whether to
+    include an email signature is needed. Another example is when we don''t have enough
+    data or variations of data; we could try to use various data augmentation techniques
+    that will lead to different sets of input for the model training ([https://neptune.ai/blog/data-augmentation-nlp](https://neptune.ai/blog/data-augmentation-nlp)).'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**数据和管道配置**：深度学习管道可能包括数据处理和转换步骤，这些步骤可能会影响模型训练。例如，如果我们想比较带有或不带有签名文本主体的电子邮件消息的分类模型的性能，那么就需要一个超参数来决定是否包含电子邮件签名。另一个例子是当我们没有足够的数据或数据的变化时，我们可以尝试使用各种数据增强技术，这些技术会为模型训练提供不同的输入集（[https://neptune.ai/blog/data-augmentation-nlp](https://neptune.ai/blog/data-augmentation-nlp)）。'
+- en: As a reminder, not all hyperparameters are tunable or require tuning. For example,
+    it is not necessary for the **number of epochs** in a DL model to be tuned. This
+    is because training should stop when the accuracy metric stops improving or does
+    not hold any promise to do better than other hyperparameter configurations. This
+    is called early stopping or pruning and is one of the key techniques underpinning
+    some recent state-of-the-art HPO algorithms (for more discussions on early stopping,
+    please refer to [https://databricks.com/blog/2019/08/15/how-not-to-scale-deep-learning-in-6-easy-steps.html](https://databricks.com/blog/2019/08/15/how-not-to-scale-deep-learning-in-6-easy-steps.html)).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提醒一下，并非所有超参数都是可调的或需要调整的。例如，在深度学习模型中，**训练轮次**不需要调整。这是因为当准确度指标停止提升或不再有改善的可能时，训练应停止。这被称为早停或剪枝，是支撑一些近期最先进超参数优化（HPO）算法的关键技术之一（关于早停的更多讨论，请参考[https://databricks.com/blog/2019/08/15/how-not-to-scale-deep-learning-in-6-easy-steps.html](https://databricks.com/blog/2019/08/15/how-not-to-scale-deep-learning-in-6-easy-steps.html)）。
+- en: 'Note that all these three categories of hyperparameters can be mixed and matched,
+    and the configuration of the entire hyperparameter space can be very large. For
+    example, if we want to choose the type of pretrained model we want to use as a
+    hyperparameter (for example, the choice could be **BERT** or **RoBERTa**), two
+    learning-related parameters (such as the learning rate and batch size), and two
+    different data augmentation techniques for NLP texts (such as random insertion
+    and synonym replacement), then we have five hyperparameters to optimize. Note
+    that each hyperparameter can have quite a few different candidate values to choose
+    from, and if each hyperparameter has 5 different values, then we will have a total
+    of 55 = 3125 combinations of hyperparameters to try. In practice, it is very common
+    to have dozens of hyperparameters to try, and each hyperparameter could have dozens
+    of choices or distributions to sample from. This quickly leads to a curse of dimensionality
+    problem ([https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a](https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a)).
+    This high-dimensional search space challenge is compounded by the expensive training
+    and evaluation costs of DL models; we know that even 1 epoch of a tiny BERT, which
+    we tried in the previous chapters, with a tiny set of training and validation
+    dataset can take 1–2 mins. Now imagine a realistic production-grade DL model with
+    HPO that could take hours, days, or even weeks if not executed efficiently. In
+    general, the following is a list of the main challenges that require the application
+    of high-performance HPO at scale:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，所有这三类超参数可以进行混合搭配，整个超参数空间的配置可能非常庞大。例如，如果我们希望选择一个预训练模型的类型作为超参数（例如，选择可能是**BERT**或**RoBERTa**），再加上两个与学习相关的参数（如学习率和批处理大小），以及两种不同的NLP文本数据增强技术（如随机插入和同义词替换），那么我们就有五个超参数需要优化。请注意，每个超参数可能有许多不同的候选值可以选择，如果每个超参数有5个不同的值，那么我们总共有55
+    = 3125种超参数组合需要尝试。在实际应用中，通常需要尝试几十个超参数，每个超参数可能有几十个选择或分布可供采样。这很容易导致维度灾难问题（[https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a](https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a)）。这种高维搜索空间的挑战由于DL模型训练和评估成本高昂而变得更加复杂；我们知道，即使是一个小型BERT的1个周期（我们在前几章中尝试过），使用一个小规模的训练和验证数据集也可能需要1到2分钟。现在想象一个实际的生产级DL模型，若要进行HPO，可能需要数小时、数天，甚至数周，如果没有高效执行的话。通常，以下是需要大规模应用高性能HPO的主要挑战：
+- en: The high-dimensional search space of hyperparameters
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 超参数的高维搜索空间
+- en: The high cost of model training and evaluation time for increasingly large DL
+    models
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 随着DL模型越来越大，模型训练和评估时间的高成本
+- en: Time-to-production and deployment for DL models used in production
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于生产环境中DL模型的生产时间和部署
+- en: Performing Model Training and HPO Simultaneously
+  id: totrans-27
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 同时进行模型训练和HPO
+- en: It is possible to change the hyperparameters dynamically during the training
+    process. This is a hybrid approach that does model training and HPO simultaneously,
+    such as **Population-Based Training** (**PBT**; [https://deepmind.com/blog/article/population-based-training-neural-networks](https://deepmind.com/blog/article/population-based-training-neural-networks)).
+    However, this does not change the fact that when starting a new epoch of training,
+    a set of hyperparameters needs to be predefined. This PBT is one of the innovations
+    that tries to reduce both the cost of searching for high-dimensional hyperparameter
+    space and the training cost of a DL model. Interested readers should consult the
+    *Further reading* section to dive deeper into this topic.
+  id: totrans-28
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在训练过程中是可以动态改变超参数的。这是一种混合方法，它同时进行模型训练和HPO，例如**基于种群的训练**（**PBT**；[https://deepmind.com/blog/article/population-based-training-neural-networks](https://deepmind.com/blog/article/population-based-training-neural-networks)）。然而，这并不改变这样一个事实：当开始新的训练周期时，一组超参数需要预先定义。PBT是尝试减少搜索高维超参数空间和深度学习（DL）模型训练成本的创新之一。感兴趣的读者可以查阅*进一步阅读*部分，深入了解这个话题。
+- en: Now that we understand the general challenges and categories of hyperparameters
+    to optimize, let's look at how HPO works and how to choose a framework for our
+    usage.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经了解了优化超参数的一般挑战和类别，接下来让我们看看HPO是如何工作的，以及如何选择适合我们使用的框架。
+- en: How HPO works and which ones to choose
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: HPO是如何工作的，以及如何选择
+- en: 'There are different ways to understand how HPO works. The classical HPO methods
+    include grid search and random search, where a set of hyperparameters are chosen
+    with a range of candidate values. Each one is run independently to completion,
+    and then we pick the best hyperparameter configuration from the set of trials
+    we run, given the best model performance metric we found. Although this type of
+    search is easy to implement and might not even require a sophisticated framework
+    to support it, it is inherently inefficient and might not even find the best configuration
+    of hyperparameters due to the non-convex nature of HPO. The term non-convex means
+    that multiple local minimal or maximal points exist, and an optimization method
+    might not be able to find a global optimal (that is, minimum or maximum). Put
+    simply, a modern HPO needs to do two things:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有不同的方式理解HPO的工作原理。经典的HPO方法包括网格搜索和随机搜索，其中会选择一组具有候选值范围的超参数。每个超参数组合独立运行，直到完成，然后根据我们找到的最佳模型性能指标，从我们运行的试验中挑选出最佳的超参数配置。虽然这种搜索方法易于实现，甚至可能不需要复杂的框架来支持，但它本质上是低效的，且由于HPO的非凸性质，可能找不到最佳的超参数配置。非凸的意思是存在多个局部最小值或最大值，优化方法可能无法找到全局最优（即最小值或最大值）。简单来说，现代的HPO需要做两件事：
+- en: 'The adaptive sampling of hyperparameters (also known as **Configuration Selection**
+    or **CS**): This means it needs to find which set of hyperparameters to try by
+    taking advantage of prior knowledge. This is mostly about using different variants
+    of Bayesian optimization to adaptively identify new configurations based on previous
+    trials in a sequential way. This has been proven to outperform traditional grid
+    search and random search methods.'
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 超参数的自适应采样（也称为**配置选择**或**CS**）：这意味着需要通过利用先前的知识来选择要尝试的超参数集。这主要是通过使用不同变种的贝叶斯优化方法，根据先前的试验以顺序方式自适应地识别新的配置。已证明这种方法优于传统的网格搜索和随机搜索方法。
+- en: 'The adaptive evaluation of the performance of a set of hyperparameters (also
+    known as **Configuration Evaluation** or **CE**): These approaches focus on adaptively
+    allocating more resources to promising hyperparameter configurations while quickly
+    pruning the poor ones. Resources can be in different forms such as the size of
+    the training dataset (for example, only using a small fraction of the training
+    dataset) or the number of iterations (for example, only using a few iterations
+    to decide which ones to terminate without running to convergence). There is a
+    family of methods called multi-armed bandit algorithms, such as the **Asynchronous
+    Successive Halving Algorithm** (**ASHA**). Here, all trials start with an initial
+    budget, then the worst half is removed, the budget is adjusted for the remaining
+    ones, and this repeats until only one trial is left.'
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 超参数集的自适应评估（也称为**配置评估**或**CE**）：这些方法专注于自适应地将更多资源分配给有前景的超参数配置，同时迅速去除效果不佳的配置。资源可以以不同的形式存在，如训练数据集的大小（例如，仅使用训练数据集的一小部分）或迭代次数（例如，仅使用少量迭代来决定哪些任务需要终止，而不是运行到收敛）。有一类方法称为多臂赌博机算法，例如**异步成功缩减算法**（**ASHA**）。在这里，所有试验从一个初始预算开始，然后去除最差的一半，调整剩余试验的预算，这个过程会重复进行，直到只剩下一个试验。
+- en: 'In practice, we want to select a suitable HPO framework using the following
+    five criteria:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，我们希望使用以下五个标准来选择一个合适的HPO框架：
+- en: Callback integration with MLflow
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与MLflow的回调集成
+- en: Scalability and support of GPU clusters
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可扩展性和对GPU集群的支持
+- en: Ease of use and flexible APIs
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 易于使用和灵活的API
+- en: Integration with cutting edge HPO algorithms (**CS** and **CE**)
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与前沿HPO算法的集成（**CS** 和 **CE**）
+- en: Support of DL frameworks
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 深度学习框架的支持
+- en: 'In this book, three frameworks have been compared, and the results are summarized
+    in *Figure 6.1*:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，比较了三种框架，结果总结在*图6.1*中：
+- en: '![Figure 6.1: Comparison of Ray Tune, Optuna, and HyperOpt'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图6.1：Ray Tune、Optuna和HyperOpt的比较'
+- en: '](img/B18120_06_01.jpg)'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_06_01.jpg)'
+- en: 'Figure 6.1: Comparison of Ray Tune, Optuna, and HyperOpt'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.1：Ray Tune、Optuna和HyperOpt的比较
+- en: 'As you can see from *Figure 6.1*, the winner is **Ray Tune** ([https://docs.ray.io/en/latest/tune/index.html](https://docs.ray.io/en/latest/tune/index.html)),
+    when compared to **Optuna** ([https://optuna.org/](https://optuna.org/)) and **HyperOpt**
+    ([https://hyperopt.github.io/hyperopt/](https://hyperopt.github.io/hyperopt/)).
+    Let''s explain the five criteria, as follows:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如*图6.1*所示，**Ray Tune**（[https://docs.ray.io/en/latest/tune/index.html](https://docs.ray.io/en/latest/tune/index.html)）的表现优于**Optuna**（[https://optuna.org/](https://optuna.org/)）和**HyperOpt**（[https://hyperopt.github.io/hyperopt/](https://hyperopt.github.io/hyperopt/)）。接下来，我们将依次解释以下五个标准：
+- en: '**Callback integration with MLflow**: Optuna''s support of the MLflow callback
+    is still an experimental feature, while HyperOpt does not support callback at
+    all, leaving additional work for users to manage the MLflow tracking for each
+    trial run.'
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**与MLflow的回调集成**：Optuna对MLflow回调的支持仍然是一个实验性功能，而HyperOpt根本不支持回调，这就让用户需要额外管理每次试验运行的MLflow跟踪。'
+- en: 'Only Ray Tune supports both the Python mixin decorator and callback integration
+    with MLflow. Python mixin is a pattern that allows a standalone function to be
+    mixed in whenever needed. In this case, the MLflow functionality is automatically
+    mixed in during model training through the `mlflow_mixin` decorator. This can
+    turn any training function into a Ray Tune trainable function, automatically configuring
+    MLflow and creating a run in the same process as each Tune trial. You can then
+    use the MLflow API inside the training function and it will automatically get
+    reported to the correct run. Additionally, it supports MLflow''s autologging,
+    which means that all of the MLflow tracking information will be logged into the
+    correct trial. For example, the following code snippet shows that our previous
+    DL fine-tuning function can be turned into a `mlflow_mixin` Ray Tune function,
+    as follows:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只有Ray Tune支持Python混合装饰器和与MLflow的回调集成。Python混合装饰器是一种模式，允许在需要时将独立的函数混合进来。在这种情况下，MLflow的功能通过`mlflow_mixin`装饰器在模型训练期间自动混合进来。这可以将任何训练函数转变为Ray
+    Tune可训练的函数，自动配置MLflow并在与每次Tune试验相同的进程中创建运行。然后，你可以在训练函数内部使用MLflow API，结果会自动报告到正确的运行中。此外，它还支持MLflow的自动日志记录，这意味着所有的MLflow跟踪信息将被记录到正确的试验中。例如，以下代码片段展示了如何将我们之前的深度学习微调函数转换为一个`mlflow_mixin`的Ray
+    Tune函数：
+- en: '[PRE0]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Note that when we define the trainer, we can add `TuneReportCallback` as one
+    of the callbacks, which will pass the metrics back to Ray Tune, while the MLflow
+    autologging does its job of logging all the tracking results simultaneously. In
+    the next section, we will show you how to turn the previous chapter's example
+    of fine-tuning the DL model into a Ray Tune trainable.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，当我们定义训练器时，可以将`TuneReportCallback`作为回调之一添加，这将把指标反馈给Ray Tune，而MLflow的自动日志记录会同时完成所有跟踪结果的记录。在下一节中，我们将展示如何将上一章中微调深度学习模型的示例转变为Ray
+    Tune可训练函数。
+- en: '**Scalability and support of GPU clusters**: Although Optuna and HyperOpt support
+    parallelization, they both have dependencies on some external databases (relational
+    databases or MongoDB) or SparkTrials. Only Ray Tune supports parallel and distributed
+    HPO through the Ray distributed framework natively, and it is also the only one
+    that supports running on a GPU cluster among these three frameworks.'
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**可扩展性和GPU集群支持**：尽管Optuna和HyperOpt支持并行化，但它们都依赖于一些外部数据库（如关系数据库或MongoDB）或SparkTrials。只有Ray
+    Tune通过Ray分布式框架原生支持并行和分布式HPO，而且在这三种框架中，它也是唯一支持在GPU集群上运行的。'
+- en: '**Ease of use and flexibility of the APIs**: Among all the three frameworks,
+    only Optuna supports **define-by-run** APIs, which allows you to dynamically define
+    the hyperparameters in a Pythonic programming style, including loops and branches
+    ([https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html)).
+    This is in contrast to the **define-and-run** APIs, which both Ray Tune and HyperOpt
+    support, where the search space is defined by a predefined dictionary prior to
+    evaluating the objective function. These two terms, **define-by-run** and **define-and-run**,
+    were actually coined by the DL framework''s development community. In the early
+    days, when TensorFlow 1.0 was initially released, a neural network needed to be
+    defined first and then lazily executed later, which is called define-and-run.
+    These two phases, 1) the construction of the neural network phase and 2) the evaluation
+    phases, are sequentially executed, and the neural network structure cannot be
+    changed after the construction phase. The newer DL frameworks, such as TensorFlow
+    2.0 (or the eager execution version of TensorFlow) and PyTorch, support the **define-by-run**
+    neural network computation. There are no two separate phases for constructing
+    and evaluating neural networks. Users can directly manipulate the neural networks
+    while doing the computation. While the **define-by-run** API provided by Optuna
+    can be used to directly define the hyperparameter search space dynamically, it
+    does have some drawbacks. The main problem is that the parameter concurrence is
+    not known until runtime, which could complicate the implementation of the optimization
+    method. This is because knowing the parameter concurrence beforehand is well supported
+    for many sampling methods. Thus, in this book, we prefer using **define-and-run**
+    APIs. Also, note that Ray Tune can support the **define-by-run** API through integration
+    with Optuna (you can see an example in Ray Tune''s GitHub repository at [https://github.com/ray-project/ray/blob/master/python/ray/tune/examples/optuna_define_by_run_example.py#L35](https://github.com/ray-project/ray/blob/master/python/ray/tune/examples/optuna_define_by_run_example.py#L35)).'
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**API的易用性和灵活性**：在这三个框架中，只有Optuna支持**按运行时定义**的API，这允许您以Pythonic编程风格动态定义超参数，包括循环和分支（[https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html)）。这与Ray
+    Tune和HyperOpt支持的**定义-运行**API形成对比，其中搜索空间在评估目标函数之前由预定义的字典定义。这两个术语**按运行时定义**和**定义-运行**实际上是由DL框架开发社区创造的。在早期，当TensorFlow
+    1.0最初发布时，神经网络首先需要定义，然后稍后惰性执行，这称为定义-运行。这两个阶段，1）神经网络构建阶段和2）评估阶段，是按顺序执行的，神经网络结构在构建阶段之后不能更改。更新的DL框架，如TensorFlow
+    2.0（或TensorFlow的急切执行版本）和PyTorch，支持按运行时定义神经网络计算。没有用于构建和评估神经网络的两个单独阶段。用户可以在计算过程中直接操作神经网络。虽然Optuna提供的按运行时定义API可以用于动态定义超参数搜索空间，但它确实有一些缺点。主要问题是在运行时不知道参数并发性，这可能会使优化方法的实现复杂化。这是因为事先了解参数并发性对于许多采样方法是有很好的支持的。因此，在本书中，我们更喜欢使用**定义-运行**API。还请注意，Ray
+    Tune可以通过与Optuna的集成支持**按运行时定义**API（您可以在Ray Tune的GitHub存储库中看到一个示例，位于[https://github.com/ray-project/ray/blob/master/python/ray/tune/examples/optuna_define_by_run_example.py#L35](https://github.com/ray-project/ray/blob/master/python/ray/tune/examples/optuna_define_by_run_example.py#L35)）。'
+- en: '**Integration with cutting-edge HPO algorithms** (**CS and CE**): On the **CS**
+    side, among these three frameworks, HyperOpt has the least active development
+    to support or integrate with the latest cutting-edge HPO sampling and search methods.
+    Its primary search method is **Tree-Structured Parzen Estimators** (**TPE**),
+    which is a Bayesian optimization variant that''s especially effective for a mixed
+    categorical and conditional hyperparameter search space. Similarly, Optuna''s
+    primary sampling method is TPE. On the contrary, Ray Tune supports all cutting-edge
+    searching methods, including the following:'
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**与前沿HPO算法集成**（**CS和CE**）：在**CS**方面，这三种框架中，HyperOpt在支持或集成最新的前沿HPO采样和搜索方法方面开发活跃度最低。其主要的搜索方法是**树结构帕森估计器**（**TPE**），这是一种贝叶斯优化变体，特别适用于混合分类和条件超参数搜索空间。同样，Optuna的主要采样方法也是TPE。相反，Ray
+    Tune支持包括以下内容的所有前沿搜索方法：'
+- en: DragonFly ([https://dragonfly-opt.readthedocs.io/en/master/](https://dragonfly-opt.readthedocs.io/en/master/)),
+    which is a highly scalable Bayesian optimization framework
+  id: totrans-52
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: DragonFly ([https://dragonfly-opt.readthedocs.io/en/master/](https://dragonfly-opt.readthedocs.io/en/master/))，这是一个高度可扩展的贝叶斯优化框架
+- en: BlendSearch ([https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function/#hyperparameter-optimization-algorithm](https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function/#hyperparameter-optimization-algorithm))
+    from Microsoft Research
+  id: totrans-53
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: BlendSearch ([https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function/#hyperparameter-optimization-algorithm](https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function/#hyperparameter-optimization-algorithm))，来自微软研究院
+- en: In addition, Ray Tune also supports TPE through integration with Optuna and
+    HyperOpt.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，Ray Tune 还通过与 Optuna 和 HyperOpt 的集成支持 TPE。
+- en: On the **CE** side, HyperOpt does not support any pruning or schedulers to stop
+    the non-promising hyperparameter configuration. Both Optuna and Ray Tune support
+    quite a few pruners (in Optuna) or schedulers (in Ray Tune). However, only Ray
+    Tune supports PBT. Given the active development community and flexible API developed
+    by Ray Tune, it is possible for Ray tune to continue to integrate and support
+    any emerging schedulers or pruners in a timely fashion.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 **CE** 方面，HyperOpt 不支持任何修剪或调度器来停止不 promising 的超参数配置。Optuna 和 Ray Tune 都支持相当多的修剪器（在
+    Optuna 中）或调度器（在 Ray Tune 中）。然而，只有 Ray Tune 支持 PBT。考虑到 Ray Tune 活跃的开发社区和灵活的 API，Ray
+    Tune 很有可能会继续及时集成并支持任何新兴的调度器或修剪器。
+- en: '**Support of DL frameworks**: HyperOpt is not specifically designed or integrated
+    with any DL frameworks. This does not mean you cannot use HyperOpt for tuning
+    DL models. However, HyperOpt does not offer any pruning or scheduler support to
+    perform early stopping for unpromising hyperparameter configuration, which is
+    a major disadvantage for HyperOpt to be used for DL model tuning. Both Ray Tune
+    and Optuna have integration with popular DL frameworks such as PyTorch Lightning
+    and TensorFlow/Keras.'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**深度学习框架的支持**：HyperOpt 并非专为任何深度学习框架设计或集成。这并不意味着不能使用 HyperOpt 调优深度学习模型。然而，HyperOpt
+    不提供任何修剪或调度器支持来对不 promising 的超参数配置进行早停，这是 HyperOpt 用于深度学习模型调优的一个主要缺点。Ray Tune 和
+    Optuna 都与流行的深度学习框架如 PyTorch Lightning 和 TensorFlow/Keras 集成。'
+- en: In addition to the major criteria that we just discussed, Ray Tune also has
+    the best documentation, extensive code examples, and a vibrant open source developer
+    community, which is why we prefer to use Ray Tune for our learning in this chapter.
+    In the following sections, we will learn how to create HPO-ready DL models with
+    Ray Tune and MLflow.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了我们刚才讨论的主要标准，Ray Tune 还拥有最佳的文档、广泛的代码示例和充满活力的开源开发者社区，这也是我们在本章中偏向使用 Ray Tune
+    进行学习的原因。在接下来的部分中，我们将学习如何使用 Ray Tune 和 MLflow 创建适合超参数优化的深度学习模型。
+- en: Creating HPO-ready DL models with Ray Tune and MLflow
+  id: totrans-58
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 Ray Tune 和 MLflow 创建适合超参数优化的深度学习模型
+- en: 'To use Ray Tune with MLflow for HPO, let''s use the fine-tuning step in our
+    DL pipeline example from [*Chapter 5*](B18120_05_ePub.xhtml#_idTextAnchor060),
+    *Running DL Pipelines in Different Environments*, to see what needs to be set
+    up and what code changes we need to make. Before we start, first, let''s review
+    a few key concepts that are specifically relevant to our usage of Ray Tune:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在超参数优化中使用 Ray Tune 与 MLflow，我们将使用我们在 [*第 5 章*](B18120_05_ePub.xhtml#_idTextAnchor060)
+    中的深度学习管道示例中的微调步骤，看看需要设置什么内容以及我们需要做哪些代码更改。在开始之前，首先让我们回顾一下几个与我们使用 Ray Tune 特别相关的关键概念：
+- en: '**Objective function**: An objective function can be either to minimize or
+    maximize some metric values for a given configuration of hyperparameters. For
+    example, in the DL model training and fine-tuning scenarios, we would like to
+    maximize the F1-score for the accuracy of an NLP text classifier. This objective
+    function needs to be wrapped as a trainable function, where Ray Tune can do HPO.
+    In the following section, we will illustrate how to wrap our NLP text sentiment
+    model.'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**目标函数**：目标函数可以是最小化或最大化给定超参数配置的某个指标值。例如，在深度学习模型训练和微调的场景中，我们希望最大化 NLP 文本分类器的
+    F1 分数。这一目标函数需要被包装成一个可训练的函数，Ray Tune 可以进行超参数优化。在接下来的部分中，我们将演示如何包装我们的 NLP 文本情感分析模型。'
+- en: '`tune.report` for reporting model metrics ([https://docs.ray.io/en/latest/tune/api_docs/trainable.html#function-api](https://docs.ray.io/en/latest/tune/api_docs/trainable.html#function-api)).
+    A class-based API requires the model training function (trainable) to be a subclass
+    of `tune.Trainable` ([https://docs.ray.io/en/latest/tune/api_docs/trainable.html#trainable-class-api](https://docs.ray.io/en/latest/tune/api_docs/trainable.html#trainable-class-api)).
+    A class-based API provides more control of how Ray Tune controls the model training
+    processing. This might be very helpful if you start writing a new piece of architecture
+    for a neural network model. However, when using a pretrained foundation model
+    for fine-tuning, it is much easier to use a function-based API since we can leverage
+    packages such as PyTorch Lightning Flash to do HPO.'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tune.report` 用于报告模型指标 ([https://docs.ray.io/en/latest/tune/api_docs/trainable.html#function-api](https://docs.ray.io/en/latest/tune/api_docs/trainable.html#function-api))。基于类的
+    API 要求模型训练函数（trainable）是 `tune.Trainable` 的子类 ([https://docs.ray.io/en/latest/tune/api_docs/trainable.html#trainable-class-api](https://docs.ray.io/en/latest/tune/api_docs/trainable.html#trainable-class-api))。基于类的
+    API 提供了更多控制 Ray Tune 如何控制模型训练过程的方式。如果你开始编写神经网络模型的新架构，这可能非常有用。然而，当使用预训练的基础模型进行微调时，使用基于函数的
+    API 会更容易，因为我们可以利用像 PyTorch Lightning Flash 这样的包来进行 HPO。'
+- en: '`tune.run`, where Ray Tune will orchestrate the HPO process.'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tune.run`，在这里 Ray Tune 将协调超参数优化（HPO）过程。'
+- en: '`tune.loguniform`) or from some categorical variables (for example, `tune.choice([''a'',
+    ''b'' ,''c''])` can allow you to choose these three choices uniformly). Usually,
+    this search space is defined as a Python dictionary variable called `config`.'
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tune.loguniform`) 或来自某些类别变量（例如，`tune.choice([''a'', ''b'' ,''c''])` 允许你均匀选择这三个选项）。通常，这个搜索空间被定义为一个名为
+    `config` 的 Python 字典变量。'
+- en: '`tune.suggest` API ([https://docs.ray.io/en/latest/tune/api_docs/suggestion.html#tune-search-alg](https://docs.ray.io/en/latest/tune/api_docs/suggestion.html#tune-search-alg)).'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tune.suggest` API ([https://docs.ray.io/en/latest/tune/api_docs/suggestion.html#tune-search-alg](https://docs.ray.io/en/latest/tune/api_docs/suggestion.html#tune-search-alg))。'
+- en: '`tune.suggest` API provides the optimization algorithms for searching, it does
+    not offer the early stopping or pruning capability to halt the obviously unpromising
+    trials after just a few iterations. Since early stopping or pruning can significantly
+    speed up the HPO process, it is highly recommended that you use a scheduler in
+    conjunction with a searcher. Ray Tune provides many popular schedulers through
+    its scheduler API (`tune.schedulers`), such as ASHA, HyperBand, and more. (Please
+    visit [https://docs.ray.io/en/latest/tune/api_docs/schedulers.html#trial-schedulers-tune-schedulers](https://docs.ray.io/en/latest/tune/api_docs/schedulers.html#trial-schedulers-tune-schedulers).)'
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tune.suggest` API 提供了用于搜索的优化算法，但它不提供早期停止或修剪功能，以便在仅经过几次迭代后停止明显不太可能成功的实验。由于早期停止或修剪可以显著加速
+    HPO 过程，因此强烈建议你结合搜索器使用调度器。Ray Tune 通过其调度器 API (`tune.schedulers`) 提供了许多流行的调度器，如
+    ASHA、HyperBand 等。（请访问 [https://docs.ray.io/en/latest/tune/api_docs/schedulers.html#trial-schedulers-tune-schedulers](https://docs.ray.io/en/latest/tune/api_docs/schedulers.html#trial-schedulers-tune-schedulers).)'
+- en: Having reviewed the basic concepts and APIs of Ray Tune, in the next section,
+    we will be setting up Ray Tune and MLflow to run HPO experiments.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在回顾了 Ray Tune 的基本概念和 API 后，在下一节中，我们将设置 Ray Tune 和 MLflow 来运行 HPO 实验。
+- en: Setting up Ray Tune and MLflow
+  id: totrans-67
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 设置 Ray Tune 和 MLflow
+- en: 'Now that we understand the basic concepts and APIs of Ray Tune, let''s see
+    how we can set up Ray Tune to perform HPO for the fine-tuning step of our previous
+    NLP sentiment classifier. You might want to download this chapter''s code ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/))
+    to follow along with these instructions:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们理解了 Ray Tune 的基本概念和 API，让我们看看如何设置 Ray Tune 来执行之前的 NLP 情感分类器的微调步骤的 HPO。你可能想要下载本章的代码
+    ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/))，以便跟随这些说明：
+- en: 'Install Ray Tune by typing the following command into your conda virtual environment,
+    `dl_model_hpo`:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过在你的 conda 虚拟环境 `dl_model_hpo` 中输入以下命令来安装 Ray Tune：
+- en: '[PRE1]'
+  id: totrans-70
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'This will install Ray Tune in the virtual environment where you will launch
+    the HPO runs for your DL model fine-tuning. Note that we have also provided the
+    complete `requirements.txt` file in this chapter''s GitHub repository ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/requirements.txt](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/requirements.txt)),
+    where you should be able to run the following installation command:'
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这将会在你启动DL模型微调的HPO任务时，在虚拟环境中安装Ray Tune。请注意，我们还提供了完整的`requirements.txt`文件，位于本章的GitHub仓库中（[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/requirements.txt](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/requirements.txt)），你应该能够运行以下安装命令：
+- en: '[PRE2]'
+  id: totrans-72
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The complete instructions in the `README.md` file, which are in the same folder,
+    should give you more guidance if you need to know how to set up a proper virtual
+    environment.
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 位于同一文件夹中的`README.md`文件包含完整的说明，如果你需要了解如何设置合适的虚拟环境，它将为你提供更多的指导。
+- en: 'For the MLflow setup, assuming you already have a full-fledged MLflow tracking
+    server set up, the only thing you need to pay attention to is making sure that
+    you have the environment variables set up correctly to access the MLflow tracking
+    server. Run the following in your shell to set them up. Alternatively, you can
+    overwrite your environmental variables by calling `os.environ["environmental_name"]=value`
+    in the Python code. As a reminder, we have shown the following environment variables
+    that can be set in the command lines per Terminal session:'
+  id: totrans-74
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于MLflow设置，假设你已经设置好了完整的MLflow跟踪服务器，唯一需要注意的是确保你正确配置了环境变量，以便访问MLflow跟踪服务器。在你的终端中运行以下命令来设置这些变量。或者，你也可以通过在Python代码中调用`os.environ["environmental_name"]=value`来覆盖你的环境变量。提醒一下，我们已经在终端会话中展示了以下可以设置的环境变量：
+- en: '[PRE3]'
+  id: totrans-75
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Run the step of `download_data` to download the raw data to the local folder
+    under the `chapter06` parent folder:'
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 运行`download_data`步骤将原始数据下载到`chapter06`父文件夹下的本地文件夹：
+- en: '[PRE4]'
+  id: totrans-77
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: When the preceding execution is done, you should be able to find the IMDB data
+    under the **chapter06/data/** folder.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前面的执行完成后，你应该能够在**chapter06/data/**文件夹下找到IMDB数据。
+- en: Now we are ready to create an HPO step to fine-tune the NLP sentiment model
+    we built earlier.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备创建一个HPO步骤，以微调我们之前构建的NLP情感分析模型。
+- en: Creating the Ray Tune trainable for the DL model
+  id: totrans-80
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 为DL模型创建Ray Tune可训练对象
+- en: 'There are multiple changes that we need to make to allow Ray Tune to run HPO
+    to fine-tune the DL model that we developed in previous chapters. Let''s walk
+    through the steps, as follows:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要做多个更改，才能让Ray Tune运行HPO任务来微调我们在前几章中开发的DL模型。我们将逐步演示这些步骤，如下所示：
+- en: 'First, let''s identify the list of possible hyperparameters (both tunable and
+    non-tunable) in our previous fine-tuning code. Recall that our fine-tuning code
+    looks similar to the following (only the key lines of code are shown here; the
+    complete code can be found in `chapter05` in the GitHub repository at [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter05/pipeline/fine_tuning_model.py#L19](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter05/pipeline/fine_tuning_model.py#L19)):'
+  id: totrans-82
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，让我们列出在之前的微调代码中可能的超参数（包括可调和不可调的）。回想一下，我们的微调代码看起来如下（这里只显示关键代码行；完整代码可以在GitHub仓库的`chapter05`中找到，地址为[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter05/pipeline/fine_tuning_model.py#L19](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter05/pipeline/fine_tuning_model.py#L19)）：
+- en: '[PRE5]'
+  id: totrans-83
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The preceding code has four major pieces:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码包含四个主要部分：
+- en: 'The `datamodule` variable: This defines the data sources for training, validation,
+    and testing. There is a `batch_size` parameter with a default value of `1`, which
+    is not shown here, but it is one of the most important hyperparameters to tune.
+    For more details, please see the explanation in the `lightning-flash` code documentation
+    ([https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/core/data/data_module.py#L64](https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/core/data/data_module.py#L64)).'
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`datamodule`变量：这定义了训练、验证和测试的数据源。这里有一个`batch_size`参数，默认值为`1`，虽然在这里没有显示，但它是需要调优的最重要的超参数之一。更多详情，请参阅`lightning-flash`代码文档中的说明（[https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/core/data/data_module.py#L64](https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/core/data/data_module.py#L64)）。'
+- en: '`classifier_model`: This defines a classifier with the exposed parameters through
+    the `TextClassifier` API of `lightning-flash`. There are multiple hyperparameters
+    in the input arguments that could be tuned, including `learning_rate`, the `backbone`
+    foundation model, `optimizer`, and more. You can see the complete list of input
+    arguments in the `lightning-flash` code documentation for the `TextClassifier`
+    API ([https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/text/classification/model.py#L44](https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/text/classification/model.py#L44)).'
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`classifier_model`：这定义了一个通过`lightning-flash`的`TextClassifier` API暴露参数的分类器。输入参数中有多个超参数可以调优，包括`learning_rate`、`backbone`基础模型、`optimizer`等。你可以在`lightning-flash`代码文档中查看`TextClassifier`
+    API的完整输入参数列表（[https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/text/classification/model.py#L44](https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/text/classification/model.py#L44)）。'
+- en: '`trainer`: This defines a trainer variable that can be used for fine-tuning.
+    Here, there are a few hyperparameters that need to be set, but not necessarily
+    tuned, such as `num_epochs`, as discussed earlier.'
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`trainer`：这定义了一个训练器变量，可用于微调。这里有一些需要设置的超参数，但不一定需要调优，比如`num_epochs`，正如前面所讨论的那样。'
+- en: '`trainer.finetune`: This does the actual finetuning (transfer learning). Note
+    that there is also a possible hyperparameter **strategy** that could be tuned.'
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`trainer.finetune`：这实现了实际的微调（迁移学习）。注意，还有一个可能需要调优的超参数**strategy**。'
+- en: For learning purposes, we will pick `learning_rate` and `batch_size` as the
+    two hyperparameters to tune, as these two are the most important hyperparameters
+    to optimize for a DL model. Once you finish this chapter, you should be able to
+    easily add additional hyperparameters to the list of candidates for optimization.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了学习目的，我们将选择`learning_rate`和`batch_size`作为两个需要调优的超参数，因为这两个参数对于优化深度学习模型至关重要。一旦你完成这一章，你应该能够轻松地将更多的超参数添加到优化候选列表中。
+- en: 'Ray Tune requires a trainable function to be passed into `tune.run`. This means
+    we need to create a trainable function. By default, a trainable function only
+    takes one required input parameter, `config`, which contains a dictionary of key-value
+    pairs of hyperparameters and other parameters for identifying an execution environment
+    such as an MLflow tracking URL. However, Ray Tune provides a wrapper function,
+    called `tune.with_parameters`, which allows you to pass along additional arbitrary
+    parameters and objects ([https://docs.ray.io/en/latest/tune/tutorials/overview.html#how-can-i-pass-further-parameter-values-to-my-trainable](https://docs.ray.io/en/latest/tune/tutorials/overview.html#how-can-i-pass-further-parameter-values-to-my-trainable)).
+    First, let''s create a function called `finetuning_dl_model` to encapsulate the
+    logic that we just examined regarding the fine-tuning step, using a `mlflow_mixin`
+    decorator. This allows MLflow to be initialized automatically when this function
+    is called:'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Ray Tune要求传入一个可训练的函数到`tune.run`。这意味着我们需要创建一个可训练的函数。默认情况下，训练函数只接受一个必需的输入参数`config`，它包含超参数和其他参数的键值对字典，并用于标识执行环境，如MLflow跟踪URL。然而，Ray
+    Tune提供了一个包装函数，叫做`tune.with_parameters`，它允许你传递额外的任意参数和对象（[https://docs.ray.io/en/latest/tune/tutorials/overview.html#how-can-i-pass-further-parameter-values-to-my-trainable](https://docs.ray.io/en/latest/tune/tutorials/overview.html#how-can-i-pass-further-parameter-values-to-my-trainable)）。首先，让我们创建一个名为`finetuning_dl_model`的函数，将我们刚才检查的微调步骤逻辑封装起来，并使用`mlflow_mixin`装饰器。这样可以确保每次调用该函数时，MLflow会自动初始化。
+- en: '[PRE6]'
+  id: totrans-91
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'This function takes a `config` dictionary as input where a list of hyperparameters
+    and MLflow configurations can be passed in. Additionally, we add three additional
+    arguments to the function signature: `data_dir` for the location of the directory,
+    `num_epochs` for the maximum number of epochs for each trial to run, and `num_gpus`
+    for the number of GPUs for each trial to use if there is any.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数接受一个`config`字典作为输入，其中可以传入一组超参数和MLflow配置。此外，我们为函数签名添加了三个额外的参数：`data_dir`表示目录的位置，`num_epochs`表示每个试验的最大训练轮数，`num_gpus`表示每个试验使用的GPU数量（如果有的话）。
+- en: 'In this `mlflow_mixin` decorated function, we can use all the MLflow tracking
+    APIs if necessary, but as of MLflow version 1.22.0, since MLflow''s autologging
+    support no longer is an experimental feature, but a mature production quality
+    feature ([https://github.com/mlflow/mlflow/releases/tag/v1.22.0](https://github.com/mlflow/mlflow/releases/tag/v1.22.0)),
+    we should just use autologging in our code, as follows:'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在这个`mlflow_mixin`装饰的函数中，如果需要，我们可以使用所有MLflow跟踪API，但从MLflow版本1.22.0开始，由于MLflow的自动日志记录支持不再是实验性特性，而是一个成熟的生产级特性（[https://github.com/mlflow/mlflow/releases/tag/v1.22.0](https://github.com/mlflow/mlflow/releases/tag/v1.22.0)），因此我们应该直接在代码中使用自动日志记录，如下所示：
+- en: '[PRE7]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'This is efficient and requires no change. However, the `batch_size` hyperparameter
+    is not automatically captured by autologging, so we need to add one more logging
+    statement after the fine-tuning is done, as follows:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样做是高效的，并且无需进行任何更改。然而，`batch_size`超参数不会被自动记录，因此我们需要在微调完成后再添加一个日志记录语句，如下所示：
+- en: '[PRE8]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'In the rest of the implementation body of the `finetuning_dl_model` function,
+    the majority of the code is the same as before. There are a few changes. In the
+    `datamodule` variable assignment statement, we add `batch_size=config[''batch_size'']`
+    to allow the mini-batch size of the training data to be tunable, as shown here:'
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`finetuning_dl_model`函数的其余实现部分，大部分代码与之前相同。这里有一些更改。在`datamodule`变量赋值语句中，我们添加了`batch_size=config['batch_size']`，以便训练数据的迷你批量大小可以调整，如下所示：
+- en: '[PRE9]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'When defining the `classifier_model` variable, instead of using the default
+    values of the set of hyperparameters, now we need to pass in the `config` dictionary
+    to assign these values:'
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在定义`classifier_model`变量时，不再使用默认的超参数集值，而是需要传入`config`字典来分配这些值：
+- en: '[PRE10]'
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Next, we need to modify the trainer assignment code. Here, we need to do two
+    things: first, we need to define a metrics key-value dictionary to pass from PyTorch
+    Lightning to Ray Tune. The key in this metrics dictionary is the name to be referenced
+    in the Ray Tune trial run, while the value of the key in this dictionary is the
+    corresponding metric name reported by PyTorch Lightning.'
+  id: totrans-101
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要修改训练器赋值代码。在这里，我们需要做两件事：首先，我们需要定义一个度量标准的键值字典，以便从PyTorch Lightning传递到Ray
+    Tune。该字典中的键是Ray Tune试验运行中要引用的名称，而该字典中键的值是PyTorch Lightning报告的相应度量标准名称。
+- en: Metric Names in the PyTorch Lightning's Validation Step
+  id: totrans-102
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: PyTorch Lightning验证步骤中的度量标准名称
+- en: When passing the metrics to Ray Tune, first, we need to know the metric names
+    used in PyTorch Lightning during the validation step since HPO only uses validation
+    data for evaluation, not the hold-out test datasets. It turns out PyTorch Lightning
+    has a hardcoded convention to prefix all metrics with the corresponding training,
+    validation, and testing step names and an underscore. A metric named `f1` will
+    be reported in PyTorch Lightning as `train_f1` during the training step, `val_f1`
+    during the validation step, and `test_f1` during the testing step. (You can view
+    the PyTorch Lightning code logic at [https://github.com/PyTorchLightning/lightning-flash/blob/8b244d785c5569e9aa7d2b878a5f94af976d3f55/flash/core/model.py#L462](https://github.com/PyTorchLightning/lightning-flash/blob/8b244d785c5569e9aa7d2b878a5f94af976d3f55/flash/core/model.py#L462)).
+    In our example, we can pick `cross_entropy` and `f1` as the metrics during the
+    validation step, which are named `val_cross_entropy` and `val_f1`, to pass back
+    to Ray Tune as `loss` and `f1`, respectively. That means, in Ray Tune's trial
+    run, we reference these two metrics as simply `loss` and `f1`.
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在将metrics传递给Ray Tune时，首先我们需要了解在PyTorch Lightning中验证步骤期间使用的指标名称，因为HPO仅使用验证数据进行评估，而不使用保留的测试数据集。实际上，PyTorch
+    Lightning有一个硬编码的约定，所有指标的名称都会以相应的训练、验证和测试步骤名称及下划线为前缀。名为`f1`的指标将在PyTorch Lightning中作为`train_f1`在训练步骤中报告，在验证步骤中报告为`val_f1`，在测试步骤中报告为`test_f1`。（你可以在[https://github.com/PyTorchLightning/lightning-flash/blob/8b244d785c5569e9aa7d2b878a5f94af976d3f55/flash/core/model.py#L462](https://github.com/PyTorchLightning/lightning-flash/blob/8b244d785c5569e9aa7d2b878a5f94af976d3f55/flash/core/model.py#L462)查看PyTorch
+    Lightning的代码逻辑）。在我们的示例中，我们可以选择`cross_entropy`和`f1`作为验证步骤中的指标，它们分别命名为`val_cross_entropy`和`val_f1`，并将它们作为`loss`和`f1`传递回Ray
+    Tune。这意味着，在Ray Tune的试验运行中，我们将这两个指标引用为`loss`和`f1`。
+- en: 'So, here we define two metrics that we want to pass from the PyTorch Lightning
+    validation step, `val_cross_entropy` and `val_f1`, to Ray Tune as `loss` and `f1`,
+    respectively:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在这里我们定义了两个希望从PyTorch Lightning验证步骤中传递到Ray Tune的指标，分别是`val_cross_entropy`和`val_f1`，它们分别作为`loss`和`f1`传递：
+- en: '[PRE11]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Now, we can pass this metrics dictionary to the trainer assignment, as follows:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以将这个metrics字典传递给trainer赋值，如下所示：
+- en: '[PRE12]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Notice that the metrics dictionary is passed through `TuneReportCallBack` when
+    the `validation_end` event happens. This means that when the validation step is
+    done in PyTorch Lightning, it will automatically trigger the Ray Tune report function
+    to report the list of metrics back to Ray Tune for evaluation. The supported list
+    of valid events for `TuneReportCallback` to use can be found in Ray Tune's integration
+    with the PyTorch Lightning source code ([https://github.com/ray-project/ray/blob/fb0d6e6b0b48b0a681719433691405b96fbea104/python/ray/tune/integration/pytorch_lightning.py#L170](https://github.com/ray-project/ray/blob/fb0d6e6b0b48b0a681719433691405b96fbea104/python/ray/tune/integration/pytorch_lightning.py#L170)).
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，metrics字典会在`validation_end`事件发生时通过`TuneReportCallBack`传递。这意味着当PyTorch Lightning中的验证步骤完成时，它会自动触发Ray
+    Tune报告函数，将指标列表反馈给Ray Tune进行评估。有关`TuneReportCallback`可以使用的有效事件的支持列表，请参考Ray Tune与PyTorch
+    Lightning的集成源代码（[https://github.com/ray-project/ray/blob/fb0d6e6b0b48b0a681719433691405b96fbea104/python/ray/tune/integration/pytorch_lightning.py#L170](https://github.com/ray-project/ray/blob/fb0d6e6b0b48b0a681719433691405b96fbea104/python/ray/tune/integration/pytorch_lightning.py#L170)）。
+- en: 'Finally, we can call `trainer.finetune` to execute the fine-tuning step. Here,
+    we can pass `finetuning_strategies` as one of the tunable hyperparameters to the
+    argument list:'
+  id: totrans-109
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们可以调用`trainer.finetune`来执行微调步骤。在这里，我们可以将`finetuning_strategies`作为可调超参数传递给参数列表：
+- en: '[PRE13]'
+  id: totrans-110
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'This completes the changes to the original function of fine-tuning the DL model.
+    Now we have a new `finetuning_dl_model` function that''s ready to be wrapped in
+    `tune.with_parameters` to become a Ray Tune trainable function. It should be called
+    as follows:'
+  id: totrans-111
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这完成了原始微调DL模型函数的更改。现在我们有一个新的`finetuning_dl_model`函数，准备被`with_parameters`包装以成为Ray
+    Tune的可训练函数。它应该如下所示调用：
+- en: '[PRE14]'
+  id: totrans-112
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Note that there is no need to pass the `config` parameter, as it is implicitly
+    assumed that it's the first parameter of `finetuning_dl_model`. The other three
+    parameters need to be passed to the `tune.with_parameters` wrapper. Also, make
+    sure this statement to create a trainable object for Ray Tune is placed outside
+    of the `finetuning_dl_model` function.
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 请注意，无需传递`config`参数，因为默认假设它是`finetuning_dl_model`的第一个参数。其他三个参数需要传递给`tune.with_parameters`包装器。同时，确保创建Ray
+    Tune可训练对象的语句放在`finetuning_dl_model`函数外部。
+- en: In the next section, it will be placed inside Ray Tune's HPO running function
+    called `run_hpo_dl_model`.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一部分，它将被放入Ray Tune的HPO运行函数中，名为`run_hpo_dl_model`。
+- en: Creating the Ray Tune HPO run function
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建Ray Tune HPO运行函数
+- en: 'Now, let''s create a Ray Tune HPO run function to do the following five things:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们创建一个Ray Tune HPO运行函数来执行以下五个步骤：
+- en: Define the MLflow runtime configuration parameters including a tracking URI
+    and an experiment name.
+  id: totrans-117
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义MLflow运行时配置参数，包括追踪URI和实验名称。
+- en: Define the hyperparameter search space using Ray Tune's random distributions
+    API ([https://docs.ray.io/en/latest/tune/api_docs/search_space.html#random-distributions-api](https://docs.ray.io/en/latest/tune/api_docs/search_space.html#random-distributions-api))
+    to sample the list of hyperparameters we identified earlier.
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Ray Tune的随机分布API定义超参数搜索空间（[https://docs.ray.io/en/latest/tune/api_docs/search_space.html#random-distributions-api](https://docs.ray.io/en/latest/tune/api_docs/search_space.html#random-distributions-api)），以采样我们之前确定的超参数列表。
+- en: Define a Ray Tune trainable object using `tune.with_parameters`, as shown toward
+    the end of the previous subsection.
+  id: totrans-119
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`tune.with_parameters`定义Ray Tune的可训练对象，如前一小节末尾所示。
+- en: Call `tune.run`. This will execute the HPO run and return Ray Tune's experiment
+    analysis object when it has been completed.
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 调用`tune.run`。这将执行HPO运行，并在完成时返回Ray Tune的实验分析对象。
+- en: Log the best configuration parameters when the entire HPO run is finished.
+  id: totrans-121
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在整个HPO运行完成后，记录最佳配置参数。
+- en: 'Let''s walk through the implementation to see how this function can be implemented:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们一起查看实现过程，看看这个函数是如何实现的：
+- en: 'First, let''s define the hyperparameter''s `config` dictionary, as follows:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，让我们定义超参数的`config`字典，如下所示：
+- en: '[PRE15]'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: This will take `tracking_uri` and `experiment_name` of MLflow as the input parameters
+    and set them up correctly. If this is the first time you're running this, MLflow
+    will also create the experiment.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将接受`tracking_uri`和`experiment_name`作为MLflow的输入参数，并正确设置它们。如果这是你第一次运行，MLflow还将创建该实验。
+- en: 'Then, we can define the `config` dictionary, which can include both tunable
+    and non-tunable parameters, and the MLflow configuration parameters. As discussed
+    in the previous section, we will tune `learning_rate` and `batch_size` but will
+    also include other hyperparameters for bookkeeping and future tuning purposes:'
+  id: totrans-126
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们可以定义`config`字典，其中可以包括可调和不可调的参数，以及MLflow的配置参数。如前所述，我们将调整`learning_rate`和`batch_size`，但也会包括其他超参数用于记账和未来的调优目的：
+- en: '[PRE16]'
+  id: totrans-127
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: As you can see from the `config` dictionary, we called `tune.loguniform` to
+    sample a log uniform distribution between `1e-4` and `1e-1` to select a learning
+    rate. For the batch size, we called `tune.choice` to select one of three distinct
+    values uniformly. For the rest of the key-value pairs, they are non-tunable since
+    they do not use any sampling methods but are needed to run the trials.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从`config`字典中可以看到，我们调用了`tune.loguniform`来在`1e-4`和`1e-1`之间采样一个对数均匀分布，以选择学习率。对于批量大小，我们调用了`tune.choice`从三个不同的值中均匀选择。对于其余的键值对，它们是不可调的，因为它们没有使用任何采样方法，但在运行试验时是必需的。
+- en: 'Define the trainable object using `tune.with_parameters` with all of the extra
+    parameters except for the `config` parameter:'
+  id: totrans-129
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`tune.with_parameters`定义可训练对象，包含除`config`参数之外的所有额外参数：
+- en: '[PRE17]'
+  id: totrans-130
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: In the next statement, this will be called the `tune.run` function.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一个语句中，这将被称为` tune.run`函数。
+- en: 'Now we are ready to run the HPO by calling `tune.run`, as follows:'
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们准备通过调用`tune.run`来运行HPO，如下所示：
+- en: '[PRE18]'
+  id: totrans-133
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Here, the objective is to find the set of hyperparameters that maximizes the
+    F1-score among all of the trials, so the mode is `max` and the metric is `f1`.
+    Note that this metric name, `f1`, is from the `metrics` dictionary that we defined
+    in the previous `finetuning_dl_model` function, where we mapped PyTorch Lightning's
+    `val_f1` to `f1`. This `f1` value is then passed to Ray Tune at the end of each
+    trial's validation step. The `trainable` object is passed to `tune.run` as the
+    first parameter, which will be executed as many times as the parameter of `num_samples`
+    allows. Following this, `resources_per_trial` defines the CPU and GPU to use.
+    Note that in the preceding example, we haven't specified any search algorithms.
+    This means it will use `tune.suggest.basic_variant` by default, which is a grid
+    search algorithm. There is also no scheduler defined, so, by default, there is
+    no early stopping, and all trials will be run in parallel with the maximum number
+    of CPUs allowed on the execution machine. When the run finishes, an `analysis`
+    variable is returned, which contains the best hyperparameters found, along with
+    other information.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，目标是找到一组超参数，使得所有实验中的 F1-score 最大化，因此模式是 `max`，而指标是 `f1`。请注意，这个指标名称 `f1` 来自我们在之前的
+    `finetuning_dl_model` 函数中定义的 `metrics` 字典，其中我们将 PyTorch Lightning 的 `val_f1` 映射到
+    `f1`。然后，这个 `f1` 值会在每次实验验证步骤结束时传递给 Ray Tune。`trainable` 对象作为第一个参数传递给 `tune.run`，这个函数将根据
+    `num_samples` 的参数被执行多次。接下来，`resources_per_trial` 定义了每个实验使用的 CPU 和 GPU。请注意，在前面的示例中，我们没有指定任何搜索算法，这意味着它将默认使用
+    `tune.suggest.basic_variant`，这是一种网格搜索算法。我们也没有定义调度器，因此默认情况下不会进行早期停止，所有实验将并行运行，且使用执行机器上允许的最大
+    CPU 数量。当运行结束时，会返回一个 `analysis` 变量，包含找到的最佳超参数以及其他信息。
+- en: 'Log the best configuration of the hyperparameters found. This can be done by
+    using the returned `analysis` variable from `tune.run`, as follows:'
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 记录找到的最佳超参数配置。这可以通过使用从 `tune.run` 返回的 `analysis` 变量来完成，代码如下：
+- en: '[PRE19]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: That's it. Now we can give it a try. If you download the complete code from
+    this chapter's GitHub repository, you should be able to find the `hpo_finetuning_model.py`
+    file under the `pipeline` folder.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就这样。现在我们可以试试看。如果你从本章的 GitHub 仓库下载完整代码，你应该能在 `pipeline` 文件夹下找到 `hpo_finetuning_model.py`
+    文件。
+- en: With the preceding change, now we are ready to run our first HPO experiment.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过上述更改，我们现在已经准备好运行我们的第一个 HPO 实验。
+- en: Running the first Ray Tune HPO experiment with MLflow
+  id: totrans-139
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 MLflow 运行第一个 Ray Tune HPO 实验
+- en: 'Now that we have set up Ray Tune, MLflow, and created the HPO run function,
+    we can try to run our first Ray Tune HPO experiment, as follows:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经设置好了 Ray Tune、MLflow，并创建了 HPO 运行函数，我们可以尝试运行我们的第一个 Ray Tune HPO 实验，如下所示：
+- en: '[PRE20]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'After a couple of seconds, you will see the following screen, *Figure 6.2*,
+    which shows that all 10 trials (that is, the values that we set for `num_samples`)
+    are running concurrently:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几秒钟后，你将看到以下屏幕，*图 6.2*，显示所有 10 次实验（即我们为 `num_samples` 设置的值）正在并行运行：
+- en: '![Figure 6.2 – Ray Tune running 10 trials in parallel on a local multi-core
+    laptop'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.2 – Ray Tune 在本地多核笔记本上并行运行 10 次实验'
+- en: '](img/B18120_06_02.jpg)'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_06_02.jpg)'
+- en: Figure 6.2 – Ray Tune running 10 trials in parallel on a local multi-core laptop
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.2 – Ray Tune 在本地多核笔记本上并行运行 10 次实验
+- en: 'After approximately 12–14 mins, you will see that all the trials have finished
+    and the best hyperparameters will be printed out on the screen, as shown in the
+    following (your results might vary due to the stochastic nature, the limited number
+    of samples, and the use of grid search, which does not guarantee a global optimal):'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大约 12-14 分钟后，你会看到所有实验都已完成，并且最佳超参数将显示在屏幕上，如下所示（由于随机性、样本数量有限以及网格搜索的使用，结果可能会有所不同，且网格搜索不保证全局最优解）：
+- en: '[PRE21]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: You can find the results for each trial under the result log directory, which,
+    by default, is in the current user's `ray_results` folder. From *Figure 6.2*,
+    we can see that the results are in `/Users/yongliu/ray_results/hpo_tuning_dl_model`.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在结果日志目录下找到每个实验的结果，默认情况下该目录位于当前用户的 `ray_results` 文件夹中。从 *图 6.2* 中我们可以看到，结果位于
+    `/Users/yongliu/ray_results/hpo_tuning_dl_model`。
+- en: 'You will see the final output of the best hyperparameters on your screen, which
+    means you have completed running your first HPO experiment! You can see that all
+    10 trials are logged in the MLflow tracking server, and you can visualize and
+    compare all 10 runs using the parallel coordinates plot provided by the MLflow
+    tracking server. You can produce such a plot by going to the MLflow experiment
+    page and selecting the 10 trials you just finished and then clicking on the **Compare**
+    button near the top of the page (see *Figure 6.3*). This will bring you to the
+    side-by-side comparison page with the plotting options being displayed at the
+    bottom of the page:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你将在屏幕上看到最佳超参数的最终输出，这意味着你已经完成了第一次 HPO 实验！你可以看到所有 10 次试验都已记录在 MLflow 跟踪服务器中，并且可以使用
+    MLflow 跟踪服务器提供的平行坐标图来可视化和比较所有 10 次运行。你可以通过进入 MLflow 实验页面，选择你刚完成的 10 次试验，然后点击页面顶部附近的**Compare**按钮来生成该图（参见*图
+    6.3*）。这将带你进入并排比较页面，页面底部会显示绘图选项：
+- en: '![Figure 6.3 – Clicking Compare to compare all 10 trial runs on the MLflow
+    experiment page'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.3 – 点击“Compare”以比较 MLflow 实验页面上所有 10 次试验运行'
+- en: '](img/B18120_06_03.jpg)'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_06_03.jpg)'
+- en: Figure 6.3 – Clicking Compare to compare all 10 trial runs on the MLflow experiment
+    page
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.3 – 点击“Compare”以比较 MLflow 实验页面上所有 10 次试验运行
+- en: 'You can click on the **Parallel Coordinates Plot** menu item, which allows
+    you to select the parameters and metrics to plot. Here, we select **lr** and **batch_size**
+    as the parameters and **val_f1** and **val_cross_entropy** as the metrics. The
+    plot is shown in *Figure 6.4*:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以点击**平行坐标图**菜单项，这将允许你选择要绘制的参数和指标。在这里，我们选择**lr**和**batch_size**作为参数，**val_f1**和**val_cross_entropy**作为指标。绘图显示在*图
+    6.4*中：
+- en: '![Figure 6.4 –Parallel Coordinates Plot for comparing the HPO trial results'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.4 – 用于比较 HPO 实验结果的平行坐标图'
+- en: '](img/B18120_06_04.jpg)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_06_04.jpg)'
+- en: Figure 6.4 –Parallel Coordinates Plot for comparing the HPO trial results
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.4 – 用于比较 HPO 实验结果的平行坐标图
+- en: As you can see in *Figure 6.4*, it is very easy to see that **batch_size** of
+    128 and **lr** of 0.02874 produce the best **val_f1** score of 0.6544 and **val_cross_entropy**
+    (the loss value) of 0.62222\. As mentioned earlier, this HPO run did not use any
+    advanced search algorithms and schedulers, so let's see whether we can do better
+    with more experiments in the following sections using early stopping and pruning.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你在*图 6.4*中看到的，非常容易看出**batch_size**为128，**lr**为0.02874时，能够产生最佳的**val_f1**得分0.6544和**val_cross_entropy**（损失值）为0.62222。正如前面所提到的，这次
+    HPO 运行没有使用任何高级搜索算法和调度器，因此让我们看看在接下来的部分中，通过使用提前停止和修剪，我们能否通过更多的实验做得更好。
+- en: Running HPO with Ray Tune using Optuna and HyperBand
+  id: totrans-158
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 Optuna 和 HyperBand 通过 Ray Tune 运行 HPO
+- en: Now, let's do some experiments with different search algorithms and schedulers.
+    Given that Optuna is such a great TPE-based search algorithm, and ASHA is a great
+    scheduler that does asynchronous parallel trials with early termination of the
+    unpromising ones, it would be interesting to see how many changes we need to do
+    to make this work.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们尝试一些不同的搜索算法和调度器的实验。鉴于 Optuna 是一种非常优秀的基于 TPE 的搜索算法，ASHA 是一种优秀的调度器，可以通过异步并行试验并提前终止那些不太有前景的试验，看看我们需要做多少更改才能使其工作将会很有趣。
+- en: 'It turns out the change is very minimal based on what we have already done
+    in the previous section. Here, we will illustrate the four main changes:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果表明，基于我们在前一部分所做的工作，变化非常微小。这里，我们将展示四个主要的变化：
+- en: 'Install the **Optuna** package. This can be done by running the following command:'
+  id: totrans-161
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 安装**Optuna**包。可以通过运行以下命令来完成：
+- en: '[PRE22]'
+  id: totrans-162
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: This will install Optuna in the same virtual environment that we had before.
+    If you have already run `pip install -r requirements.text`, then Optuna has already
+    been installed and you can skip this step.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将把 Optuna 安装到我们之前的虚拟环境中。如果你已经运行了`pip install -r requirements.text`，那么 Optuna
+    已经被安装，你可以跳过这一步。
+- en: 'Import the relevant Ray Tune modules that integrate with Optuna and the ASHA
+    scheduler (here, we use the HyperBand implementation of ASHA) as follows:'
+  id: totrans-164
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入与 Optuna 和 ASHA 调度器集成的相关 Ray Tune 模块（在这里，我们使用 ASHA 的 HyperBand 实现）如下：
+- en: '[PRE23]'
+  id: totrans-165
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Now we are ready to add the search algorithm variable and scheduler variable
+    to the HPO execution function, `run_hpo_dl_model`, as follows:'
+  id: totrans-166
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们准备好将搜索算法变量和调度器变量添加到 HPO 执行函数`run_hpo_dl_model`中了，具体如下：
+- en: '[PRE24]'
+  id: totrans-167
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Note that the `searcher` variable is now using Optuna, and we set the maximal
+    number of concurrent runs to `4` for this `searcher` variable to try at any given
+    time during the HPO search process. The scheduler is initialized with the HyperBand
+    scheduler.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，`searcher` 变量现在使用的是 Optuna，我们将并发运行的最大次数设置为 `4`，让这个 `searcher` 变量在 HPO 搜索过程中每次尝试最多同时运行四个试验。调度器初始化时使用
+    HyperBand 调度器。
+- en: 'Assign the searcher and scheduler to the corresponding parameters of the `tune.run`
+    call, as follows:'
+  id: totrans-169
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将 searcher 和 scheduler 分配给 `tune.run` 调用的相应参数，如下所示：
+- en: '[PRE25]'
+  id: totrans-170
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Note that `searcher` is assigned to the `search_alg` parameter, and `scheduler`
+    is assigned to the `scheduler` parameter. That's it. Now we are ready to run HPO
+    with Optuna under the unified Ray Tune framework, with all of the MLflow integration
+    that's already been provided by Ray Tune.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，`searcher` 被分配给了 `search_alg` 参数，`scheduler` 被分配给了 `scheduler` 参数。就这样。现在，我们已经准备好在统一的
+    Ray Tune 框架下使用 Optuna 进行 HPO，并且已经通过 Ray Tune 提供了所有的 MLflow 集成。
+- en: 'We have provided the complete Python code in the `hpo_finetuning_model_optuna.py`
+    file under the `pipeline` folder. Let''s run this HPO experiment as follows:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经在 `pipeline` 文件夹中的 `hpo_finetuning_model_optuna.py` 文件中提供了完整的 Python 代码。我们可以按照以下步骤运行这个
+    HPO 实验：
+- en: '[PRE26]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'You will immediately notice the following in the console output:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你将立即注意到控制台输出中的以下内容：
+- en: '[PRE27]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'This means that we are now using Optuna as the search algorithm. Additionally,
+    you will notice that there are four concurrent trials in the status output displayed
+    on the screen. As time goes by, some trials will be terminated after one or two
+    iterations (epochs) before completion. This means ASHA is at work and has eliminated
+    those unpromising trials to save computing resources and speed up the searching
+    process. *Figure 6.5* shows one of the outputs during the run where three trials
+    were terminated with only one iteration. You can find `num_stopped=3` in the status
+    output (the third line in *Figure 6.5*), where it says `Using AsynHyerBand: num_stopped=3`.
+    This means that `AsyncHyperBand` terminated these three trials before they were
+    completed:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '这意味着我们现在使用 Optuna 作为搜索算法。此外，你会注意到在屏幕显示的状态输出中有四个并发的试验。随着时间的推移，一些试验会在完成之前的一个或两个迭代（epoch）后被终止。这意味着
+    ASHA 正在工作，已经淘汰了那些没有前景的试验，以节省计算资源并加快搜索过程。*图 6.5* 显示了运行过程中的一个输出，其中三个试验仅进行了一个迭代就被终止。你可以在状态输出中找到
+    `num_stopped=3`（在*图 6.5*中的第三行），其中显示 `Using AsynHyerBand: num_stopped=3`。这意味着 `AsyncHyperBand`
+    在试验完成之前就终止了这三个试验：'
+- en: '![Figure 6.5 – Running HPO with Ray Tune using Optuna and AsyncHyperBand'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.5 – 使用 Optuna 和 AsyncHyperBand 在 Ray Tune 上运行 HPO'
+- en: '](img/B18120_06_05.jpg)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_06_05.jpg)'
+- en: Figure 6.5 – Running HPO with Ray Tune using Optuna and AsyncHyperBand
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.5 – 使用 Optuna 和 AsyncHyperBand 在 Ray Tune 上运行 HPO
+- en: 'At the end of the run, you will see the following results:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行结束时，你将看到以下结果：
+- en: '[PRE28]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Notice that the total run time was only 10 minutes. Compared with the previous
+    section that used grid search without early stopping, this saves 2–4 minutes.
+    Now, this might seem brief, but remember that we are only using a tiny BERT model
+    here with only 3 epochs. In a production HPO run, using a large pretrained foundation
+    model with 20 epochs is not uncommon, and the speed of searching will be significant
+    with a good search algorithm combined with a scheduler such as the Asynchronous
+    HyperBand scheduler. The integration of MLflow provided by Ray Tune comes for
+    free, as we can now switch to a different search algorithm and/or a scheduler
+    under a single framework.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，总运行时间仅为 10 分钟。与上一节中使用没有提前停止的网格搜索相比，这节省了 2-4 分钟。现在，这看起来可能很短，但请记住，我们这里只使用了一个小型的
+    BERT 模型，且只有 3 个 epoch。在生产环境中的 HPO 运行中，使用 20 个 epoch 的大型预训练基础模型并不罕见，而结合良好的搜索算法和调度器（如异步
+    HyperBand 调度器）搜索速度将会显著提升。Ray Tune 提供的 MLflow 集成是免费的，现在我们可以在一个框架下切换不同的搜索算法和/或调度器。
+- en: While this section only shows you how to use Optuna within the Ray Tune and
+    MLflow framework, replacing Optuna with HyperOpt is a simple drop-in change. Instead
+    of initializing a searcher with `OptunaSearch`, we can use `HyperOptSearch` (you
+    can see an example at [https://github.com/ray-project/ray/blob/d6b0b9a209e3f693afa6441eb284e48c02b10a80/python/ray/tune/examples/hyperopt_conditional_search_space_example.py#L80](https://github.com/ray-project/ray/blob/d6b0b9a209e3f693afa6441eb284e48c02b10a80/python/ray/tune/examples/hyperopt_conditional_search_space_example.py#L80)),
+    and the rest of the code is the same. We leave this as an exercise for you to
+    explore.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然本节仅向您展示了如何在 Ray Tune 和 MLflow 框架中使用 Optuna，但将 Optuna 替换为 HyperOpt 只是一个简单的替换操作。我们可以用
+    `HyperOptSearch` 替代 `OptunaSearch` 来初始化搜索器（您可以参考示例：[https://github.com/ray-project/ray/blob/d6b0b9a209e3f693afa6441eb284e48c02b10a80/python/ray/tune/examples/hyperopt_conditional_search_space_example.py#L80](https://github.com/ray-project/ray/blob/d6b0b9a209e3f693afa6441eb284e48c02b10a80/python/ray/tune/examples/hyperopt_conditional_search_space_example.py#L80)），其他代码保持不变。我们将这个作为练习留给你自行探索。
+- en: Using Different Search Algorithms and Schedulers with Ray Tune
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用不同的搜索算法和调度器与 Ray Tune 配合
+- en: 'Note that not all search algorithms can work with any scheduler. What search
+    algorithms and schedulers you choose depends on the model complexity and evaluation
+    cost. For a DL model, since the cost of running one epoch is usually high, it
+    is very desirable to use a modern search algorithm such as TPE, Dragonfly, and
+    BlendSearch, coupled with an ASHA type scheduler such as the HyperBand scheduler
+    that we use. For more detailed guidance on which search algorithms and schedulers
+    to use, you should consult the following documentation on the Ray Tune website:
+    [https://docs.ray.io/en/latest/tune/tutorials/overview.html#which-search-algorithm-scheduler-should-i-choose](https://docs.ray.io/en/latest/tune/tutorials/overview.html#which-search-algorithm-scheduler-should-i-choose).'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，并不是所有的搜索算法都能与任何调度器配合使用。你选择的搜索算法和调度器取决于模型的复杂性和评估成本。对于深度学习模型，由于每个训练周期的运行成本通常很高，因此非常推荐使用现代搜索算法，如TPE、Dragonfly
+    和 BlendSearch，并结合像我们使用的 HyperBand 调度器等 ASHA 类型的调度器。有关选择哪些搜索算法和调度器的更详细指南，您可以查阅
+    Ray Tune 网站上的以下文档：[https://docs.ray.io/en/latest/tune/tutorials/overview.html#which-search-algorithm-scheduler-should-i-choose](https://docs.ray.io/en/latest/tune/tutorials/overview.html#which-search-algorithm-scheduler-should-i-choose)。
+- en: Now that we understand how to use Ray Tune and MLflow to do highly parallel
+    and efficient HPO for DL models, this builds the foundation for us to do more
+    advanced HPO experiments at scale in the future.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经理解了如何使用 Ray Tune 和 MLflow 为深度学习模型进行高并行和高效的 HPO，这为我们将来在大规模环境中进行更高级的 HPO
+    实验奠定了基础。
+- en: Summary
+  id: totrans-187
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 小结
+- en: In this chapter, we covered the fundamentals and challenges of HPO, why it is
+    important for the DL model pipeline, and what a modern HPO framework should support.
+    We compared three popular frameworks – Ray Tune, Optuna, and HyperOpt – and picked
+    Ray Tune as the winner for running state-of-the-art HPO at scale. We saw how to
+    create HPO-ready DL model code using Ray Tune and MLflow and ran our first HPO
+    experiment with Ray Tune and MLflow. Additionally, we covered how to switch to
+    other search and scheduler algorithms once we have our HPO code framework set
+    up, using the Optuna and HyperBand schedulers as an example. The learnings from
+    this chapter will help you to competently carry out large-scale HPO experiments
+    in real-life production environments, allowing you to produce high-performance
+    DL models in a cost-effective way. We have also provided many references in the
+    *Further reading* section at the end of this chapter to encourage you to study
+    further.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了 HPO 的基本原理和挑战，为什么它对深度学习模型管道非常重要，以及现代 HPO 框架应该支持哪些内容。我们比较了三种流行的框架——Ray
+    Tune、Optuna 和 HyperOpt，并选择了 Ray Tune 作为在大规模运行最先进 HPO 的最佳框架。我们展示了如何使用 Ray Tune
+    和 MLflow 创建适合 HPO 的深度学习模型代码，并使用 Ray Tune 和 MLflow 运行了我们的第一次 HPO 实验。此外，我们还介绍了在设置好
+    HPO 代码框架后，如何切换到其他搜索和调度算法，举例说明了如何使用 Optuna 和 HyperBand 调度器。通过本章的学习，您将能够在真实的生产环境中胜任大规模的
+    HPO 实验，从而以一种具有成本效益的方式产生高性能的深度学习模型。我们还在本章末尾提供了许多参考文献，在*进一步阅读*部分鼓励您深入学习。
+- en: In our next chapter, we will continue learning how to build preprocessing and
+    postprocessing steps for a model inference pipeline using MLflow, which is a typical
+    scenario in a real production environment after having an HPO-tuned DL model that's
+    ready for production.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将继续学习如何使用 MLflow 构建模型推理管道的预处理和后处理步骤，这是在深度学习模型经过 HPO 调优并准备投入生产后，真实生产环境中的典型场景。
+- en: Further reading
+  id: totrans-190
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '*Best Tools for Model Tuning and Hyperparameter Optimization*: [https://neptune.ai/blog/best-tools-for-model-tuning-and-hyperparameter-optimization](https://neptune.ai/blog/best-tools-for-model-tuning-and-hyperparameter-optimization%20)'
+  id: totrans-191
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*模型调优与超参数优化的最佳工具*: [https://neptune.ai/blog/best-tools-for-model-tuning-and-hyperparameter-optimization](https://neptune.ai/blog/best-tools-for-model-tuning-and-hyperparameter-optimization%20)'
+- en: 'Comparison between Optuna and HyperOpt: [https://neptune.ai/blog/optuna-vs-hyperopt](https://neptune.ai/blog/optuna-vs-hyperopt)'
+  id: totrans-192
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Optuna与HyperOpt的比较: [https://neptune.ai/blog/optuna-vs-hyperopt](https://neptune.ai/blog/optuna-vs-hyperopt)'
+- en: '*How (Not) to Tune Your Model with Hyperopt*: [https://databricks.com/blog/2021/04/15/how-not-to-tune-your-model-with-hyperopt.html](https://databricks.com/blog/2021/04/15/how-not-to-tune-your-model-with-hyperopt.html%20)'
+  id: totrans-193
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*如何（不）使用Hyperopt调优您的模型*: [https://databricks.com/blog/2021/04/15/how-not-to-tune-your-model-with-hyperopt.html](https://databricks.com/blog/2021/04/15/how-not-to-tune-your-model-with-hyperopt.html%20)'
+- en: '*Why Hyper parameter tuning is important for your model?*: [https://medium.com/analytics-vidhya/why-hyper-parameter-tuning-is-important-for-your-model-1ff4c8f145d3](https://medium.com/analytics-vidhya/why-hyper-parameter-tuning-is-important-for-your-model-1ff4c8f145d3)'
+  id: totrans-194
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*为什么超参数调优对您的模型很重要？*: [https://medium.com/analytics-vidhya/why-hyper-parameter-tuning-is-important-for-your-model-1ff4c8f145d3](https://medium.com/analytics-vidhya/why-hyper-parameter-tuning-is-important-for-your-model-1ff4c8f145d3)'
+- en: '*The Art of Hyperparameter Tuning in Deep Neural Nets by Example*: [https://towardsdatascience.com/the-art-of-hyperparameter-tuning-in-deep-neural-nets-by-example-685cb5429a38](https://towardsdatascience.com/the-art-of-hyperparameter-tuning-in-deep-neural-nets-by-example-685cb5429a38)'
+  id: totrans-195
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*通过示例学习深度神经网络的超参数调优艺术*: [https://towardsdatascience.com/the-art-of-hyperparameter-tuning-in-deep-neural-nets-by-example-685cb5429a38](https://towardsdatascience.com/the-art-of-hyperparameter-tuning-in-deep-neural-nets-by-example-685cb5429a38)'
+- en: '*Automated Hyperparameter tuning*: [https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a](https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a)'
+  id: totrans-196
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*自动化超参数调优*: [https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a](https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a)'
+- en: '*Get better at building PyTorch models with Lightning and Ray Tune*: [https://towardsdatascience.com/get-better-at-building-pytorch-models-with-lightning-and-ray-tune-9fc39b84e602](https://towardsdatascience.com/get-better-at-building-pytorch-models-with-lightning-and-ray-tune-9fc39b84e602)'
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*通过Lightning和Ray Tune让你的PyTorch模型更强大*: [https://towardsdatascience.com/get-better-at-building-pytorch-models-with-lightning-and-ray-tune-9fc39b84e602](https://towardsdatascience.com/get-better-at-building-pytorch-models-with-lightning-and-ray-tune-9fc39b84e602)'
+- en: '*Ray & MLflow: Taking Distributed Machine Learning Applications to Production*:
+    [https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88](https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88)'
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*Ray & MLflow: 将分布式机器学习应用程序推向生产环境*: [https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88](https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88)'
+- en: '*A Novice''s Guide to Hyperparameter Optimization at Scale*: [https://wood-b.github.io/post/a-novices-guide-to-hyperparameter-optimization-at-scale/](https://wood-b.github.io/post/a-novices-guide-to-hyperparameter-optimization-at-scale/)'
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*初学者的超参数优化指南*: [https://wood-b.github.io/post/a-novices-guide-to-hyperparameter-optimization-at-scale/](https://wood-b.github.io/post/a-novices-guide-to-hyperparameter-optimization-at-scale/)'
+- en: 'A Databricks notebook to run Ray Tune and MLflow on a Databricks cluster: [https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/6762389964551879/1089858099311442/7376217192554178/latest.html](https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/6762389964551879/1089858099311442/7376217192554178/latest.html)'
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '在Databricks集群上运行Ray Tune和MLflow的Databricks笔记本: [https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/6762389964551879/1089858099311442/7376217192554178/latest.html](https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/6762389964551879/1089858099311442/7376217192554178/latest.html)'
+- en: '*A Brief Introduction to Ray Distributed Objects, Ray Tune, and a Small Comparison
+    to Parsl*: [https://cloud4scieng.org/2021/04/08/a-brief-introduction-to-ray-distributed-objects-ray-tune-and-a-small-comparison-to-parsl/](https://cloud4scieng.org/2021/04/08/a-brief-introduction-to-ray-distributed-objects-ray-tune-and-a-small-comparison-to-parsl/)'
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*Ray分布式对象、Ray Tune简介及与Parsl的简要比较*: [https://cloud4scieng.org/2021/04/08/a-brief-introduction-to-ray-distributed-objects-ray-tune-and-a-small-comparison-to-parsl/](https://cloud4scieng.org/2021/04/08/a-brief-introduction-to-ray-distributed-objects-ray-tune-and-a-small-comparison-to-parsl/)'

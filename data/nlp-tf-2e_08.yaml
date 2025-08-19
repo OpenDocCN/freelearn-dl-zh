@@ -1,0 +1,2073 @@
+- en: '8'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '8'
+- en: Applications of LSTM – Generating Text
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: LSTM的应用——生成文本
+- en: Now that we have a good understanding of the underlying mechanisms of LSTMs,
+    such as how they solve the problem of the vanishing gradient and update rules,
+    we can look at how to use them in NLP tasks. LSTMs are employed for tasks such
+    as text generation and image caption generation. For example, language modeling
+    is at the core of any NLP task, as the ability to model language effectively leads
+    to effective language understanding. Therefore, this is typically used for pretraining
+    downstream decision support NLP models. By itself, language modeling can be used
+    to generate songs ([https://towardsdatascience.com/generating-drake-rap-lyrics-using-language-models-and-lstms-8725d71b1b12](https://towardsdatascience.com/generating-drake-rap-lyrics-using-language-models-and-lstms-8725d71b1b12)),
+    movie scripts ([https://builtin.com/media-gaming/ai-movie-script](https://builtin.com/media-gaming/ai-movie-script)),
+    etc.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们已经对LSTM的基本机制有了充分的理解，例如它们如何解决梯度消失问题和更新规则，我们可以看看如何在NLP任务中使用它们。LSTM被用于文本生成和图像标题生成等任务。例如，语言建模是任何NLP任务的核心，因为有效的语言建模能力直接导致了有效的语言理解。因此，语言建模通常用于预训练下游决策支持NLP模型。单独使用时，语言建模可以用于生成歌曲（[https://towardsdatascience.com/generating-drake-rap-lyrics-using-language-models-and-lstms-8725d71b1b12](https://towardsdatascience.com/generating-drake-rap-lyrics-using-language-models-and-lstms-8725d71b1b12)），电影剧本（[https://builtin.com/media-gaming/ai-movie-script](https://builtin.com/media-gaming/ai-movie-script)）等。
+- en: The application that we will cover in this chapter is building an LSTM that
+    can write new folk stories. For this task, we will download translations of some
+    folk stories by the Grimm brothers. We will use these stories to train an LSTM
+    and then ask it to output a fresh new story. We will process the text by breaking
+    it into character-level bigrams (n-grams where *n=2*) and make a vocabulary out
+    of the unique bigrams. Note that representing bigrams as one-hot-encoded vectors
+    is very ineffective for machine learning models, as it forces the model to treat
+    each bigram as an independent unit of text that is entirely different from other
+    bigrams. But bigrams do share semantics, where certain bigrams co-occur where
+    certain ones would not. One-hot encoding will ignore this important property,
+    which is undesirable. To leverage this property in our modeling, we will use an
+    embedding layer and jointly train it with the model.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将介绍的应用是构建一个能够编写新民间故事的LSTM。为此任务，我们将下载格林兄弟的一些民间故事的翻译版本。我们将使用这些故事来训练一个LSTM，并让它输出一个全新的故事。我们将通过将文本拆分为字符级的二元组（n-gram，其中*n=2*）来处理文本，并用唯一的二元组构建词汇表。请注意，将二元组表示为独热编码向量对机器学习模型来说非常低效，因为它迫使模型将每个二元组视为完全不同于其他二元组的独立文本单元。而二元组之间是共享语义的，某些二元组会共同出现，而有些则不会。独热编码将忽略这一重要属性，这是不理想的。为了在建模中利用这一特性，我们将使用嵌入层，并与模型一起联合训练。
+- en: We will also explore ways to implement previously described techniques such
+    as greedy sampling or beam search for improving the quality of predictions. Afterward,
+    we will see how we can implement time-series models other than standard LSTMs,
+    such as GRUs.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还将探索如何实现先前描述的技术，如贪婪采样或束搜索，以提高预测质量。之后，我们将看看如何实现除了标准LSTM之外的时间序列模型，如GRU。
+- en: 'Specifically, this chapter will cover the following main topics:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具体来说，本章将涵盖以下主要内容：
+- en: Our data
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们的数据
+- en: Implementing the language model
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现语言模型
+- en: Comparing LSTMs to LSTMs with peephole connections and GRUs
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将LSTM与带有窥视孔连接的LSTM以及GRU进行比较
+- en: Improving sequential models – beam search
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 改进序列模型——束搜索
+- en: Improving LSTMs – generating text with words instead of n-grams
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 改进LSTM——用单词而不是n-gram生成文本
+- en: Our data
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 我们的数据
+- en: First, we will discuss the data we will use for text generation and various
+    preprocessing steps employed to clean the data.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将讨论用于文本生成的数据以及为了清理数据而进行的各种预处理步骤。
+- en: About the dataset
+  id: totrans-13
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 关于数据集
+- en: First, we will understand what the dataset looks like so that when we see the
+    generated text, we can assess whether it makes sense, given the training data.
+    We will download the first 100 books from the website [https://www.cs.cmu.edu/~spok/grimmtmp/](https://www.cs.cmu.edu/~spok/grimmtmp/).
+    These are translations of a set of books (from German to English) by the Grimm
+    brothers.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将了解数据集的样子，以便在看到生成的文本时，能够评估它是否合乎逻辑，基于训练数据。我们将从网站[https://www.cs.cmu.edu/~spok/grimmtmp/](https://www.cs.cmu.edu/~spok/grimmtmp/)下载前100本书。这些是格林兄弟的一组书籍的翻译（从德语到英语）。
+- en: 'Initially, we will download all 209 books from the website with an automated
+    script, as follows:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一开始，我们将通过自动化脚本从网站上下载所有209本书，具体如下：
+- en: '[PRE0]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We will now show example text snippets extracted from two randomly picked stories.
+    The following is the first snippet:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将展示从两个随机挑选的故事中提取的示例文本。以下是第一个片段：
+- en: Then she said, my dearest benjamin, your father has had these coffins made for
+    you and for your eleven brothers, for if I bring a little girl into the world,
+    you are all to be killed and buried in them. And as she wept while she was saying
+    this, the son comforted her and said, weep not, dear mother, we will save ourselves,
+    and go hence. But she said, go forth into the forest with your eleven brothers,
+    and let one sit constantly on the highest tree which can be found, and keep watch,
+    looking towards the tower here in the castle. If I give birth to a little son,
+    I will put up a white flag, and then you may venture to come back. But if I bear
+    a daughter, I will hoist a red flag, and then fly hence as quickly as you are
+    able, and may the good God protect you.
+  id: totrans-18
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 然后她说，我亲爱的本杰明，你父亲为你和你的十一位兄弟做了这些棺材，因为如果我生了一个小女孩，你们都将被杀死并埋葬在其中。当她说这些话时，她哭了起来，而儿子安慰她说，别哭，亲爱的母亲，我们会自救的，去外面吧。但她说，带着你的十一位兄弟走进森林，让其中一个始终坐在能找到的最高的树上，守望着，朝着城堡中的塔楼看。如果我生了一个小儿子，我会举白旗，然后你们可以回来。但如果我生了一个女孩，我会升起红旗，那个时候你们要尽快逃走，愿上帝保佑你们。
+- en: 'The second text snippet is as follows:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二段文字如下：
+- en: Red-cap did not know what a wicked creature he was, and was not at all afraid
+    of him.
+  id: totrans-20
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 红帽子并不知道自己是多么邪恶的生物，根本不怕他。
+- en: ''
+  id: totrans-21
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “Good-day, little red-cap,” said he.
+  id: totrans-22
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “早上好，小红帽。”他说。
+- en: ''
+  id: totrans-23
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “Thank you kindly, wolf.”
+  id: totrans-24
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “非常感谢，狼。”
+- en: ''
+  id: totrans-25
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “Whither away so early, little red-cap?”
+  id: totrans-26
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “这么早去哪儿，小红帽？”
+- en: ''
+  id: totrans-27
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “To my grandmother’s.”
+  id: totrans-28
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “去我奶奶家。”
+- en: ''
+  id: totrans-29
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “What have you got in your apron?”
+  id: totrans-30
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “你围裙里装的是什么？”
+- en: ''
+  id: totrans-31
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “Cake and wine. Yesterday was baking-day, so poor sick grandmother is to have
+    something good, to make her stronger.”
+  id: totrans-32
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “蛋糕和酒。昨天是烘焙日，所以可怜的生病奶奶得吃点好的，增强她的体力。”
+- en: ''
+  id: totrans-33
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “Where does your grandmother live, little red-cap?”
+  id: totrans-34
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “你奶奶住在哪里，小红帽？”
+- en: ''
+  id: totrans-35
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: “A good quarter of a league farther on in the wood. Her house stands under the
+    three large oak-trees, the nut-trees are just below. You surely must know it,”
+    replied little red-cap.
+  id: totrans-36
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: “在森林里再走四分之一里程，过了三棵大橡树，她的房子就在这三棵树下，栗树就在它们下面。你一定知道的。”小红帽回答道。
+- en: ''
+  id: totrans-37
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The wolf thought to himself, what a tender young creature. What a nice plump
+    mouthful, she will be better to eat than the old woman.
+  id: totrans-38
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 狼心想，这个小家伙多么温柔。真是一个美味的嫩肉，吃她比吃老太婆要好。
+- en: We now understand what our data looks like. With that understanding, let us
+    move on to processing our data further.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在已经了解了数据的样子。通过这些理解，我们接下来将继续处理我们的数据。
+- en: Generating training, validation, and test sets
+  id: totrans-40
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 生成训练集、验证集和测试集
+- en: 'We will segregate the stories we downloaded into three sets: training, validation,
+    and test files. We will use the content in each set of files as the training,
+    validation, and test data. We will use scikit-learn’s `train_test_split()` function
+    to do so.'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将把下载的故事分成三个集合：训练集、验证集和测试集。我们将使用每个集合中文件的内容作为训练、验证和测试数据。我们将使用scikit-learn的`train_test_split()`函数来完成这项工作。
+- en: '[PRE1]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The `train_test_split()` function takes an `iterable` (e.g. list, tuple, array,
+    etc.) as an input and splits it into two sets based on a defined split ratio.
+    In this case, the input is a list of filenames and we first make a split of 80%-20%
+    training and [validation + test] data. Then we further split the `test_and_valid_filenames`
+    50%-50% to generate test and validation sets. Note how we also pass a random seed
+    to the `train_test_split` function to make sure we get the same split over multiple
+    runs.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`train_test_split()`函数接受一个`iterable`（例如列表、元组、数组等）作为输入，并根据定义的拆分比例将其拆分为两个集合。在此案例中，输入是一个文件名列表，我们首先按80%-20%的比例拆分为训练数据和[验证
+    + 测试]数据。然后，我们进一步将`test_and_valid_filenames`按50%-50%拆分，生成测试集和验证集。请注意，我们还将一个随机种子传递给`train_test_split`函数，以确保在多次运行中获得相同的拆分。'
+- en: 'This code will output the following text:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这段代码将输出以下文本：
+- en: '[PRE2]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: We can see that from our 209 files, we have roughly 80% of files allocated as
+    training data, 10% as validation data, and the final 10% as testing data.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到，从209个文件中，大约80%的文件被分配为训练数据，10%为验证数据，剩下的10%为测试数据。
+- en: Analyzing the vocabulary size
+  id: totrans-47
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分析词汇量
+- en: 'We will be using bigrams (i.e. n-grams with *n=2*) to train our language model.
+    That is, we will split the story into units of two characters. Furthermore, we
+    will convert all characters to lowercase to reduce the input dimensionality. Using
+    character-level bigrams helps us to language model with a reduced vocabulary,
+    leading to faster model training. For example:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用二元组（即*n=2*的n-gram）来训练我们的语言模型。也就是说，我们将把故事拆分为两个字符的单元。此外，我们将把所有字符转换为小写，以减少输入的维度。使用字符级的二元组有助于我们使用较小的词汇表进行语言建模，从而加速模型训练。例如：
+- en: '*The king was hunting in the forest.*'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*国王正在森林中打猎。*'
+- en: 'would break down to a sequence of bigrams as follows:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将被分解为如下的二元组序列：
+- en: '*[‘th’, ‘e ‘, ‘ki’, ‘ng’, ‘ w’, ‘as’, …]*'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*[‘th’, ‘e ‘, ‘ki’, ‘ng’, ‘ w’, ‘as’, …]*'
+- en: Let’s find out how large the vocabulary is. For that, we first define a `set`
+    object. Next, we go through each training file, read the content, and store that
+    as a string in the variable document.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们找出词汇表的大小。为此，我们首先定义一个`set`对象。接下来，我们遍历每个训练文件，读取内容，并将其作为字符串存储在变量document中。
+- en: 'Finally, we update the `set` object with all the bigrams in the string containing
+    each story. We get the bigrams by traversing the string two characters at a time:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们用包含每个故事的字符串中的所有二元组更新`set`对象。通过每次遍历字符串两个字符来获取二元组：
+- en: '[PRE3]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'This would print:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将打印：
+- en: '[PRE4]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: We have a vocabulary of 705 bigrams. It would have been a lot more if we decided
+    to treat each word as a unit, as opposed to character-level bigrams.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的词汇表包含705个二元组。如果我们决定将每个单词视为一个单元，而不是字符级的二元组，词汇量会更大。
+- en: Defining the tf.data pipeline
+  id: totrans-58
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义tf.data管道
+- en: 'We will now define a fully fledged data pipeline that is capable of reading
+    the files from the disk and transforming the content into a format or structure
+    that can be used to train the model. The `tf.data` API in TensorFlow allows you
+    to define data pipelines that can manipulate data in specific ways to suite machine
+    learning models. For that we will define a function called `generate_tf_dataset()`
+    that takes:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在将定义一个完善的数据管道，能够从磁盘读取文件，并将内容转换为可用于训练模型的格式或结构。TensorFlow中的`tf.data` API允许你定义数据管道，可以以特定的方式处理数据，以适应机器学习模型。为此，我们将定义一个名为`generate_tf_dataset()`的函数，它接受以下内容：
+- en: '`filenames` – A list of filenames containing the text to be used for the model'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`filenames` – 包含用于模型的文本的文件名列表'
+- en: '`ngram_width` – Width of the n-grams to be extracted'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ngram_width` – 要提取的n-gram的宽度'
+- en: '`window_size` – Length of the sequence of n-grams to be used to generate a
+    single data point for the model'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`window_size` – 用于生成模型单一数据点的n-gram序列的长度'
+- en: '`batch_size` – Size of the batch'
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`batch_size` – 批量大小'
+- en: '`shuffle` – (defaults to `False`) Whether to shuffle the data or not'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`shuffle` – （默认为`False`）是否打乱数据'
+- en: 'For example assume an `ngram_width` of 2, `batch size` of 1, and `window_size`
+    of 5\. This function would take the string “*the king was hunting in the forest*”
+    and output:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设`ngram_width`为2，`batch_size`为1，`window_size`为5。此函数将接受字符串“*国王正在森林中打猎*”并输出：
+- en: '[PRE5]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The left list in each batch represents the input sequence, and the right list
+    represents the target sequence. Note how the right list is simply the left one
+    shifted one to the right. Also note how there’s no overlap between the inputs
+    in the two records. But in the actual function, we will maintain a small overlap
+    between records. *Figure 8.1* illustrates the high-level process:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个批次中的左侧列表表示输入序列，右侧列表表示目标序列。注意右侧列表只是将左侧列表向右移了一位。还要注意，两条记录中的输入没有重叠。但在实际的函数中，我们将在记录之间保持小的重叠。*图8.1*展示了高级过程：
+- en: '![](img/B14070_08_01.png)'
+  id: totrans-68
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_01.png)'
+- en: 'Figure 8.1: The high-level steps of the data transformation we will be implementing
+    with the tf.data API'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.1：我们将使用tf.data API实现的数据转换的高级步骤
+- en: 'Let’s discuss the specifics of how the pipeline is implemented using TensorFlow’s
+    `tf.data` API. We define the code to generate the data pipeline as a reusable
+    function:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们讨论如何使用TensorFlow的`tf.data` API实现管道的具体细节。我们将定义生成数据管道的代码作为可重用的函数：
+- en: '[PRE6]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Let’s now discuss the above code in more detail. First we go through each file
+    in the `filenames` variable and read the content in each with:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们更详细地讨论上述代码。首先，我们遍历`filenames`变量中的每个文件，并使用以下方法读取每个文件的内容：
+- en: '[PRE7]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: After the content is read, we generate n-grams from that using the `tf.strings.ngrams()`
+    function. However, this function excepts a list of chars as opposed to a string.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在读取内容后，我们使用`tf.strings.ngrams()`函数从中生成n-gram。然而，该函数需要的是字符列表，而不是字符串。
+- en: 'Therefore, we convert the string into a list of chars with the `tf.strings.bytes_split()`
+    function. Additionally, we perform several preprocessing steps, such as:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们使用`tf.strings.bytes_split()`函数将字符串转换为字符列表。此外，我们还会执行一些预处理步骤，例如：
+- en: Converting text to lowercase with `tf.strings.lower()`
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`tf.strings.lower()`将文本转换为小写
+- en: Replacing new-line characters (`\n`) with space to have a continuous stream
+    of words
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将换行符（`\n`）替换为空格，以获得一个连续的词流
+- en: 'Each of these stories is stored in a list object `(documents)`. It is important
+    to note that, `tf.strings.ngrams()` produces all possible n-grams for a given
+    n-gram length. In other words, consecutive n-grams would overlap. For example,
+    the sequence “*The king was hunting*” with an n-gram length of 2 would produce
+    `["Th", "he", "e ", " k", …]`. Therefore, we will need an extra processing step
+    later to remove the overlapping n-grams from the sequence. After all of them are
+    read and processed, we create a `RaggedTensor` object from the documents:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个故事都存储在一个列表对象`(documents)`中。需要注意的是，`tf.strings.ngrams()`会为给定的n-gram长度生成所有可能的n-grams。换句话说，连续的n-grams会有重叠。例如，序列“*国王在打猎*”如果n-gram长度为2，将生成`["Th",
+    "he", "e ", " k", …]`。因此，我们稍后需要额外的处理步骤来去除序列中的重叠n-grams。在所有n-grams读取和处理完成后，我们从文档中创建一个`RaggedTensor`对象：
+- en: '[PRE8]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: A `RaggedTensor` is a special type of tensor that can have dimensions that accept
+    arbitrarily sized inputs. For example, it is almost impossible that all the stories
+    would have the same number of n-grams in each as they vary from each other a lot.
+    In this case, we will have arbitrarily long sequences of n-grams representing
+    our stories. Therefore, we can use a `RaggedTensor` to store these arbitrarily
+    sized sequences.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`RaggedTensor`是一个特殊类型的张量，它可以有接受任意大小输入的维度。例如，几乎不可能所有的故事在每个地方都有相同数量的n-gram，因为它们彼此之间差异很大。在这种情况下，我们将有任意长的n-gram序列来表示我们的故事。因此，我们可以使用`RaggedTensor`来存储这些任意大小的序列。'
+- en: '`tf.RaggedTensor` objects are a special type of tensor that can have variable-sized
+    dimensions. You can read more about ragged tensors at [https://www.tensorflow.org/api_docs/python/tf/RaggedTensor](https://www.tensorflow.org/api_docs/python/tf/RaggedTensor).
+    There are many ways to define a ragged tensor.'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.RaggedTensor`对象是一种特殊类型的张量，可以具有可变大小的维度。你可以在[https://www.tensorflow.org/api_docs/python/tf/RaggedTensor](https://www.tensorflow.org/api_docs/python/tf/RaggedTensor)上阅读有关ragged
+    tensor的更多信息。有许多方法可以定义一个ragged tensor。'
+- en: 'We can define a ragged tensor by passing a nested list containing values to
+    the `tf.ragged.constant()` function:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过将包含值的嵌套列表传递给`tf.ragged.constant()`函数来定义一个ragged tensor：
+- en: '[PRE9]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We can also define a flat sequence of values and define where to split the
+    rows:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以定义一个平坦的值序列，并定义在哪里拆分行：
+- en: '[PRE10]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Here, each value in the `row_splits` argument defines where the subsequent
+    row in the resulting tensor ends. For example, the first row will contain elements
+    from index 0 to 3 (i.e. 0, 1, 2). This will output:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，`row_splits`参数中的每个值定义了结果张量中后续行的结束位置。例如，第一行将包含从索引0到3的元素（即0、1、2）。这将输出：
+- en: '[PRE11]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'You can get the shape of the tensor using `b.shape`, which will return:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用`b.shape`获取张量的形状，它将返回：
+- en: '[PRE12]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Next, we create a `tf.data.Dataset` from the tensor with the `tf.data.Dataset.from_tensor_slices()`
+    function.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们使用`tf.data.Dataset.from_tensor_slices()`函数从张量创建一个`tf.data.Dataset`。
+- en: 'This function simply produces a dataset, where a single item in the dataset
+    would be a row of the provided tensor. For example, if you provide a standard
+    tensor of shape `[10, 8, 6]`, it will produce 10 samples of shape `[8, 6]`:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数简单地生成一个数据集，其中数据集中的单个项将是提供的张量的一行。例如，如果你提供一个形状为`[10, 8, 6]`的标准张量，它将生成10个形状为`[8,
+    6]`的样本：
+- en: '[PRE13]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Here, we simply get rid of the overlapping n-grams by taking only every *n*^(th)
+    n-gram in the sequence:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们仅通过每次取序列中的每个*n*^(th)个n-gram来去除重叠的n-grams：
+- en: '[PRE14]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'We will then use the `tf.data.Dataset.window()` function to create shorter,
+    fixed-length windowed sequences from each story:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将使用`tf.data.Dataset.window()`函数从每个故事中创建较短的固定长度窗口序列：
+- en: '[PRE15]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'From each window, we generate input and target pairs, as follows. We take all
+    the n-grams except the last as inputs and all the n-grams except the first as
+    targets. This way, at each time step, the model will be predicting the next n-gram
+    given all the previous n-grams. The shift determines how much we shift the window
+    at each iteration. Having some overlap between records make sure the model doesn’t
+    treat the story as independent windows, which may lead to poor performance. We
+    will maintain around 25% overlap between two consecutive sequences:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从每个窗口中，我们生成输入和目标对，如下所示。我们将所有n-gram（除了最后一个）作为输入，将所有n-gram（除了第一个）作为目标。这样，在每个时间步，模型将根据所有先前的n-gram预测下一个n-gram。shift决定了在每次迭代时窗口的移动量。记录之间的一些重叠可以确保模型不会将故事视为独立的窗口，这可能导致性能差。我们将保持两个连续序列之间大约25%的重叠：
+- en: '[PRE16]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We shuffle the data using `tf.data.Dataset.shuffle()` and batch the data with
+    a predefined batch size. Note that we have to specify a `buffer_size` for the
+    `shuffle()` function. `buffer_size` determines how much data is retrieved before
+    shuffling. The more data you buffer, the better the shuffling would be, but also
+    the worse the memory consumption would be:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用`tf.data.Dataset.shuffle()`对数据进行洗牌，并按预定义的批量大小对数据进行分批。请注意，我们需要为`shuffle()`函数指定`buffer_size`。`buffer_size`决定了洗牌前获取多少数据。你缓存的数据越多，洗牌效果会越好，但内存消耗也会越高：
+- en: '[PRE17]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Finally, we specify the necessary hyperparameters and generate three datasets:
+    training, validation, and testing:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们指定必要的超参数，并生成三个数据集：训练集、验证集和测试集：
+- en: '[PRE18]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Let’s generate some data and look at the data generated by this function:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们生成一些数据，并查看这个函数生成的数据：
+- en: '[PRE19]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'This returns:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将返回：
+- en: '[PRE20]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Here, you can see that the target sequence is just the input sequence shifted
+    one to the right. The `b` in front of the characters denotes that the characters
+    are stored as bytes. Next, we will look at how we can implement the model.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，你可以看到目标序列只是将输入序列向右移动一个位置。字符前面的`b`表示这些字符作为字节存储。接下来，我们将查看如何实现模型。
+- en: Implementing the language model
+  id: totrans-108
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现语言模型
+- en: Here, we will discuss the details of the LSTM implementation.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将讨论LSTM实现的细节。
+- en: First, we will discuss the hyperparameters that are used for the LSTM and their
+    effects.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将讨论LSTM使用的超参数及其效果。
+- en: Thereafter, we will discuss the parameters (weights and biases) required to
+    implement the LSTM. We will then discuss how these parameters are used to write
+    the operations taking place within the LSTM. This will be followed by understanding
+    how we will sequentially feed data to the LSTM. Next, we will discuss how to train
+    the model. Finally, we will investigate how we can use the learned model to output
+    predictions, which are essentially bigrams that will eventually add up to a meaningful
+    story.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，我们将讨论实现LSTM所需的参数（权重和偏置）。然后，我们将讨论这些参数如何用于编写LSTM内部发生的操作。接下来，我们将理解如何按顺序将数据传递给LSTM。接着，我们将讨论如何训练模型。最后，我们将研究如何使用训练好的模型输出预测结果，这些预测结果本质上是bigrams，最终将构成一个有意义的故事。
+- en: Defining the TextVectorization layer
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义TextVectorization层
+- en: We discussed the `TextVectorization` layer and used it in *Chapter 6, R**ecurrent
+    Neural Networks*. We’ll be using the same text vectorization mechanism to tokenize
+    text. In summary, the `TextVectorization` layer provides you with a convenient
+    way to integrate text tokenization (i.e. converting strings into a list of tokens
+    that are represented by integer IDs) into the model as a layer.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们讨论了`TextVectorization`层，并在*第6章，递归神经网络*中使用了它。我们将使用相同的文本向量化机制对文本进行分词。总结来说，`TextVectorization`层为你提供了一种方便的方式，将文本分词（即将字符串转换为整数ID表示的标记列表）集成到模型中作为一个层。
+- en: 'Here, we will define a `TextVectorization` layer to convert the sequences of
+    n-grams to sequences of integer IDs:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将定义一个`TextVectorization`层，将n-gram序列转换为整数ID序列：
+- en: '[PRE21]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Note that we are defining several important arguments, such as the `max_tokens`
+    (size of the vocabulary), the `standardize` argument to not perform any text preprocessing,
+    the `split` argument to not perform any splitting, and finally, the `input_shape`
+    argument to inform the layer that the input will be a batch of sequences of n-grams.
+    With that, we have to train the text vectorization layer to recognize the available
+    n-grams and map them to unique IDs. We can simply pass our training `tf.data`
+    pipeline to this layer to learn the n-grams.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们正在定义几个重要的参数，例如 `max_tokens`（词汇表的大小）、`standardize` 参数（不进行任何文本预处理）、`split`
+    参数（不进行任何分割），最后是 `input_shape` 参数，用于告知该层输入将是一个由 n-gram 序列组成的批次。通过这些参数，我们需要训练文本向量化层，以识别可用的
+    n-gram 并将其映射到唯一的 ID。我们可以直接将训练好的 `tf.data` 数据管道传递给该层，让它学习这些 n-gram。
+- en: '[PRE22]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Next, let’s print the words in the vocabulary to see what this layer has learned:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们打印词汇表中的单词，看看这一层学到了什么：
+- en: '[PRE23]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This will output:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它将输出：
+- en: '[PRE24]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Once the `TextVectorization` layer is trained, we have to modify our training,
+    validation, and testing data pipelines slightly. Remember that our data pipelines
+    output sequences of n-gram strings as inputs and targets. We need to convert the
+    target sequences to sequences of n-gram IDs so that a loss can be computed. For
+    that we will simply pass the targets in the datasets through the `text_vectorizer`
+    layer using the `tf.data.Dataset.map()` functionality:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦 `TextVectorization` 层训练完成，我们必须稍微修改我们的训练、验证和测试数据管道。请记住，我们的数据管道将 n-gram 字符串序列作为输入和目标输出。我们需要将目标序列转换为
+    n-gram ID 序列，以便计算损失。为此，我们只需通过 `text_vectorizer` 层使用 `tf.data.Dataset.map()` 功能将数据集中的目标传递给该层：
+- en: '[PRE25]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Next, we will look at the LSTM-based model we’ll be using. We’ll go through
+    various components of the model such as the embedding layer, LSTM layers, and
+    the final prediction layer.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将查看我们将使用的基于 LSTM 的模型。我们将逐一介绍模型的各个组件，如嵌入层、LSTM 层和最终的预测层。
+- en: Defining the LSTM model
+  id: totrans-125
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义 LSTM 模型。
+- en: 'We will define a simple LSTM-based model. Our model will have:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将定义一个简单的基于 LSTM 的模型。我们的模型将包含：
+- en: The previously trained `TextVectorization` layer
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 之前训练过的 `TextVectorization` 层。
+- en: An embedding layer randomly initialized and jointly trained with the model
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个随机初始化并与模型一起训练的嵌入层。
+- en: Two LSTM layers each with 512 and 256 nodes respectively
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 两个 LSTM 层，分别具有 512 和 256 个节点。
+- en: A fully-connected hidden layer with 1024 nodes and ReLU activation
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个具有 1024 个节点并使用 ReLU 激活函数的全连接隐藏层。
+- en: The final prediction layer with `n_vocab` nodes and `softmax` activation
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最终的预测层具有 `n_vocab` 个节点，并使用 `softmax` 激活函数。
+- en: 'Since the model is quite straightforward with the layers defined sequentially,
+    we will use the Sequential API to define this model:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于模型的结构非常简单，层是顺序定义的，因此我们将使用 Sequential API 来定义该模型。
+- en: '[PRE26]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'We start by calling `K.clear_session()`, which is a function that clears the
+    current TensorFlow session (e.g. layers and variables defined and their states).
+    Otherwise, if you run multiple times in a notebook, it will create an unnecessary
+    number of layers and variables. Additionally, let’s look at the parameters of
+    the LSTM layer in more detail:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从调用 `K.clear_session()` 开始，这是一个清除当前 TensorFlow 会话的函数（例如，清除已定义的层、变量及其状态）。否则，如果你在笔记本中多次运行，它将创建不必要的层和变量。此外，让我们更详细地查看
+    LSTM 层的参数：
+- en: '`return_state` – Setting this to `False` means that the layer outputs only
+    the final output, whereas if set to `True`, it will return state vectors along
+    with the final output of the layer. For example, for an LSTM layer, setting `return_state=True`
+    means you’ll get three outputs: the final output, cell state, and hidden state.
+    Note that the final output and the hidden state will be identical in this case.'
+  id: totrans-135
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`return_state` – 将此设置为 `False` 表示该层仅输出最终输出，而如果设置为 `True`，则它将返回状态向量以及该层的最终输出。例如，对于一个
+    LSTM 层，设置 `return_state=True` 会得到三个输出：最终输出、单元状态和隐藏状态。请注意，在这种情况下，最终输出和隐藏状态将是相同的。'
+- en: '`return_sequences` – Setting this to true will cause the layer to output the
+    full output sequences, as opposed to just the last output. For example, setting
+    this to false will give you a [*b, n*]-sized output where *b* is the batch size
+    and *n* is the number of nodes in the layer. If true, it will output a [*b, t,
+    n*]-sized output, where *t* is the number of time steps.'
+  id: totrans-136
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`return_sequences` – 将此设置为 `True` 将使得该层输出完整的输出序列，而不仅仅是最后一个输出。例如，将其设置为 `False`
+    将得到一个大小为 [*b, n*] 的输出，其中 *b* 是批次大小，*n* 是该层中的节点数。如果设置为 `True`，它将输出一个大小为 [*b, t,
+    n*] 的输出，其中 *t* 是时间步数。'
+- en: 'You can see a summary of this model by executing:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过执行以下命令查看该模型的摘要：
+- en: '[PRE27]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'which returns:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它返回的结果为：
+- en: '[PRE28]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Next, let’s look at the metrics we can use to track model performance and finally
+    compile the model with appropriate loss, optimizer, and metrics.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们看看可以用来跟踪模型性能的指标，并最终使用适当的损失函数、优化器和指标来编译模型。
+- en: Defining metrics and compiling the model
+  id: totrans-142
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义指标并编译模型
+- en: For our language model, we have to define a performance metric that we can use
+    to demonstrate how good the model is. We have typically seen accuracy being used
+    widely as a general-purpose evaluation metric across different ML tasks. However,
+    accuracy might not be cut out for this task, mainly because it relies on the model
+    choosing the exact word/bigram for a given time step as in the dataset. However,
+    languages are complex and there can be many different choices to generate the
+    next word/bigram given a text. Therefore, NLP practitioners rely on a metric known
+    as **perplexity**, which measures how “perplexed” or “surprised” the model was
+    to see a *t*+1 bigram given 1:*t* bigrams.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们的语言模型，我们需要定义一个性能指标，用以展示模型的优劣。我们通常看到准确度作为一种通用的评估指标，广泛应用于不同的机器学习任务。然而，准确度可能不适合这个任务，主要是因为它依赖于模型在给定时间步选择与数据集中完全相同的单词/二元组。而语言是复杂的，给定一段文本，生成下一个单词/二元组可能有多种不同的选择。因此，自然语言处理从业者依赖于一个叫做**困惑度**的指标，它衡量的是模型在看到1:*t*二元组后，对下一个*t*+1二元组的“困惑”或“惊讶”程度。
+- en: 'Perplexity computation is simple. It’s simply the entropy to the power of two.
+    Entropy is a measure of the uncertainty or randomness of an event. The more uncertain
+    the outcome of the event, the higher the entropy (to learn more about entropy
+    visit [https://machinelearningmastery.com/what-is-information-entropy/](https://machinelearningmastery.com/what-is-information-entropy/)).
+    Entropy is computed as:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 困惑度计算很简单。它只是熵的平方。熵是衡量事件的不确定性或随机性的指标。事件结果越不确定，熵值越高（想了解更多关于熵的信息，请访问[https://machinelearningmastery.com/what-is-information-entropy/](https://machinelearningmastery.com/what-is-information-entropy/)）。熵的计算公式为：
+- en: '![](img/B14070_08_001.png)'
+  id: totrans-145
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_001.png)'
+- en: 'In machine learning, to optimize ML models, we measure the difference between
+    the predicted probability distribution versus the target probability distribution
+    for a given sample. For that, we use cross-entropy, an extension of entropy for
+    two distributions:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在机器学习中，为了优化机器学习模型，我们会衡量给定样本的预测概率分布与目标概率分布之间的差异。为此，我们使用交叉熵，它是熵在两个分布之间的扩展：
+- en: '![](img/B14070_08_002.png)'
+  id: totrans-147
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_002.png)'
+- en: 'Finally, we define perplexity as:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们定义困惑度为：
+- en: '![](img/B14070_08_003.png)'
+  id: totrans-149
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_003.png)'
+- en: To learn more about the relationship between cross entropy and perplexity visit
+    [https://thegradient.pub/understanding-evaluation-metrics-for-language-models/](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/).
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想了解更多关于交叉熵和困惑度之间关系的信息，请访问[https://thegradient.pub/understanding-evaluation-metrics-for-language-models/](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/)。
+- en: 'In TensorFlow, we define a custom `tf.keras.metrics.Metric` object to compute
+    perplexity. We are going to use `tf.keras.metrics.Mean` as our super-class as
+    it already knows how to compute and track the mean value of a given metric:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow中，我们定义了一个自定义的`tf.keras.metrics.Metric`对象来计算困惑度。我们将使用`tf.keras.metrics.Mean`作为我们的父类，因为它已经知道如何计算和跟踪给定指标的均值：
+- en: '[PRE29]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Here we are simply computing the cross-entropy loss for a given batch of predictions
+    and targets using the built-in `SparseCategoricalCrossentropy` loss object. Then
+    we raise it to the power of exponential to get the perplexity. We will now compile
+    our model using:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们只是为给定批次的预测和目标计算交叉熵损失，然后将其指数化以获得困惑度。接下来，我们将使用以下命令编译我们的模型：
+- en: Sparse categorical cross-entropy as our loss function
+  id: totrans-154
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用稀疏类别交叉熵作为我们的损失函数
+- en: Adam as our optimizer
+  id: totrans-155
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Adam作为我们的优化器
+- en: Accuracy and perplexity as our metrics
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用准确度和困惑度作为我们的指标
+- en: '[PRE30]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: Here, the perplexity metric will be tracked during model training and validation
+    and be printed out, similar to the accuracy metric.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，困惑度指标将在模型训练和验证过程中被跟踪并打印出来，类似于准确度指标。
+- en: Training the model
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练模型
+- en: 'It’s time to train our model. Since we have done all the heavy-lifting required
+    (e.g. reading files, preprocessing and transforming text, and compiling the model),
+    all we have to do is call our model with the `fit()` function:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在是训练我们模型的时候了。由于我们已经完成了所有需要的繁重工作（例如读取文件、预处理和转换文本，以及编译模型），我们只需要调用模型的`fit()`函数：
+- en: '[PRE31]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Here we are passing `train_ds` (training data pipeline) as the first argument
+    and `valid_ds` (validation data pipeline) for the `validation_data` argument,
+    and setting the training to run for 60 epochs. Once the model is trained, let
+    us evaluate it on the test dataset by simply calling:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里我们将 `train_ds`（训练数据管道）作为第一个参数，将 `valid_ds`（验证数据管道）作为 `validation_data` 参数，并设置训练运行
+    60 个周期。训练完成后，我们通过简单地调用以下代码来评估模型在测试数据集上的表现：
+- en: '[PRE32]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'This gives the following output:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这会产生如下输出：
+- en: '[PRE33]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: You might have slight variations in the metrics you see, but it should roughly
+    converge to the same value.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会看到度量有所不同，但它应该大致收敛到相同的值。
+- en: Defining the inference model
+  id: totrans-167
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义推理模型
+- en: During training, we trained our model and evaluated it on sequences of bigrams.
+    This works for us because during training and evaluation, we have the full text
+    available to us. However, when we need to generate new text, we do not have anything
+    available to us. Therefore, we have to make adjustments to our trained model so
+    that it can generate text from scratch.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，我们训练了模型并对大双字组序列进行了评估。这对我们有效，因为在训练和评估时，我们可以使用完整的文本。然而，当我们需要生成新文本时，我们无法访问任何现有的内容。因此，我们必须对训练模型进行调整，使其能够从零开始生成文本。
+- en: The way we do this is by defining a recursive model that takes the current time
+    step’s output of the model as the input to the next time step. This way we can
+    keep predicting words/bigrams for an infinite number of steps. We provide the
+    initial seed as a random word/bigram picked from the corpus (or even a sequence
+    of bigrams).
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过定义一个递归模型来实现这一点，该模型将当前时间步的模型输出作为下一个时间步的输入。通过这种方式，我们可以无限次地预测单词/双字组。我们提供的初始种子是从语料库中随机选取的单词/双字组（或甚至一组双字组）。
+- en: '*Figure 8.2* illustrates how the inference model works.'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*图 8.2* 展示了推理模型的工作原理。'
+- en: '![](img/B14070_08_02.png)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_02.png)'
+- en: 'Figure 8.2: The operational view of the inference model we’ll be building from
+    our trained model'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.2：我们将基于训练模型构建的推理模型的操作视图
+- en: 'Our inference model is going to be comparatively more sophisticated, as we
+    need to design an iterative process to generate text using previous predictions
+    as inputs. Therefore, we will be using Keras’s Functional API to implement the
+    model:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的推理模型将会更加复杂，因为我们需要设计一个迭代过程，使用先前的预测作为输入生成文本。因此，我们将使用 Keras 的功能性 API 来实现该模型：
+- en: '[PRE34]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: We start by defining an input layer that takes an input having one time step.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从定义一个输入层开始，该层接收一个时间步长的输入。
+- en: 'Note that we are defining the `shape` argument. This means it can accept an
+    arbitrarily sized batch of data (as long as it has one time step). We also define
+    several other inputs to maintain the states of the LSTM layers we have. This is
+    because we have to maintain state vectors of LSTM layers explicitly as we are
+    recursively generating outputs from the model:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们正在定义 `shape` 参数。这意味着它可以接受任意大小的批量数据（只要它具有一个时间步）。我们还定义了其他几个输入，以维持 LSTM 层的状态。这是因为我们必须显式维护
+    LSTM 层的状态向量，因为我们正在递归地从模型中生成输出：
+- en: '[PRE35]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Next we retrieve the trained model’s `text_vectorization` layer and transform
+    the text to integer IDs using it:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们检索训练好的模型的 `text_vectorization` 层，并使用它将文本转换为整数 ID：
+- en: '[PRE36]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Then we obtain the embeddings layer of the train model and use it to generate
+    the embedding output:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们获取训练模型的嵌入层并使用它来生成嵌入输出：
+- en: '[PRE37]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'We will create a fresh new LSTM layer to represent the first LSTM layer in
+    the trained model. This is because the inference LSTM layers will have slight
+    differences to the trained LSTM layers. Therefore, we will define new layers and
+    copy the trained weights over later. We set the `return_state` argument to `True`.
+    By setting this to true we get three outputs when we call the layer with an input:
+    the final output, the cell state, and the final state vector. Note how we are
+    also passing another argument called `initial_state`. The `initial_state` needs
+    to be a list of tensors: the cell state and the final state vector, in that order.
+    We are passing the input layers as those states and will populate them accordingly
+    during runtime:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将创建一个全新的 LSTM 层，代表训练模型中的第一个 LSTM 层。这是因为推理 LSTM 层与训练 LSTM 层之间会有一些细微差异。因此，我们将定义新的层，并稍后将训练好的权重复制过来。我们将
+    `return_state` 参数设置为 `True`。通过将其设置为 `True`，我们在调用该层时将获得三个输出：最终输出、单元状态和最终状态向量。注意，我们还传递了另一个名为
+    `initial_state` 的参数。`initial_state` 需要是一个张量列表：按顺序包括单元状态和最终状态向量。我们将输入层作为这些状态并将在运行时相应地填充它们：
+- en: '[PRE38]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: Similarly, the second LSTM layer will be defined. We get the dense layers and
+    replicate the fully connected layers found in the trained model. Note that we
+    don’t use `softmax` in the last layer.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样地，第二层LSTM将被定义。我们得到稠密层，并复制在训练模型中找到的全连接层。请注意，最后一层我们没有使用`softmax`。
+- en: 'This is because at inference time `softmax` is only an overhead, as we only
+    need the output class with the highest output score (i.e. it doesn’t need to be
+    a probability distribution):'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是因为在推理时，`softmax`只是额外的开销，因为我们只需要输出具有最高输出分数的类（即不需要是概率分布）：
+- en: '[PRE39]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Don’t forget to copy the weights of the trained LSTM layers to our newly created
+    LSTM layers:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要忘记将训练好的LSTM层的权重复制到我们新创建的LSTM层：
+- en: '[PRE40]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Finally, we define the model:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们定义模型：
+- en: '[PRE41]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: Our model takes a sequence of 1 bigram as the input, along with state vectors
+    of both LSTM layers, and outputs the final prediction probabilities and the new
+    state vectors of both LSTM layers. Let us now generate new text from the model.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的模型将1个二元组作为输入序列，以及两个LSTM层的状态向量，输出最终的预测概率和两个LSTM层的新状态向量。现在，让我们从模型中生成新文本。
+- en: Generating new text with the model
+  id: totrans-192
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用模型生成新文本
+- en: 'We’ll use our new inference model to generate a story. We will define an initial
+    seed that we will use to generate a story. Here, we take the first phrase from
+    one of the test files. Then we use it to generate text recursively, by using the
+    predicted bigram at time *t* as the input at time *t*+1\. We will run this for
+    500 steps:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用新的推理模型生成一个故事。我们将定义一个初始种子，用来生成故事。这里，我们从一个测试文件的第一句话开始。然后我们通过递归使用预测的二元组在时间*t*时作为时间*t*+1的输入来生成文本。我们将运行500步：
+- en: '[PRE42]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Notice how we are recursively using the variables `x`, `state_c`, `state_h`,
+    `state_c_1`, and `state_h_1` to generate and assign new values.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意我们如何递归地使用变量`x`、`state_c`、`state_h`、`state_c_1`和`state_h_1`来生成并分配新值。
+- en: '[PRE43]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'Moreover, we will use a simple condition to diversify the inputs we are generating:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们将使用一个简单的条件来多样化我们生成的输入：
+- en: '[PRE44]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Essentially, if the predicted bigram ends with the `'' ''` character, we will
+    choose the next bigram randomly, from the top five bigrams. Each bigram will be
+    chosen according to its predicted likelihood. Let’s see what the output text looks
+    like:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本质上，如果预测的二元组以`' '`字符结尾，我们将随机选择下一个二元组，从前五个二元组中选择。每个二元组将根据其预测的可能性被选中。让我们看看输出文本是什么样的：
+- en: '[PRE45]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: It seems our model is able to generate actual words and phrases that make sense.
+    Next we will investigate how the text generated from standard LSTMs compares to
+    other models, such as LSTMs with peepholes and GRUs.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 看起来我们的模型能够生成实际的单词和短语，且有意义。接下来，我们将研究从标准LSTM生成的文本与其他模型的比较，例如带有窥视连接的LSTM和GRU。
+- en: Comparing LSTMs to LSTMs with peephole connections and GRUs
+  id: totrans-202
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将LSTM与带有窥视连接的LSTM和GRU进行比较
+- en: Now we will compare LSTMs to LSTMs with peepholes and GRUs in the text generation
+    task. This will help us to compare how well different models (LSTMs with peepholes
+    and GRUs) perform in terms of perplexity. Remember that we prefer perplexity over
+    accuracy, as accuracy assumes there’s only one correct token given a previous
+    input sequence. However, as we have learned, language is complex and there can
+    be many different correct ways to generate text given previous inputs. This is
+    available as an exercise in `ch08_lstms_for_text_generation.ipynb` located in
+    the `Ch08-Language-Modelling-with-LSTMs` folder.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将在文本生成任务中将LSTM与带有窥视连接的LSTM和GRU进行比较。这将帮助我们比较不同模型（带窥视连接的LSTM和GRU）在困惑度方面的表现。记住，我们更看重困惑度而不是准确率，因为准确率假设给定一个先前的输入序列时只有一个正确的标记。然而，正如我们所学，语言是复杂的，给定先前的输入，生成文本有很多不同正确的方式。这个内容作为练习可以在`ch08_lstms_for_text_generation.ipynb`中找到，位于`Ch08-Language-Modelling-with-LSTMs`文件夹中。
+- en: Standard LSTM
+  id: totrans-204
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 标准LSTM
+- en: First, we will reiterate the components of a standard LSTM. We will not repeat
+    the code for standard LSTMs as it is identical to what we discussed previously.
+    Finally, we will see some text generated by an LSTM.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将重述标准LSTM的组件。我们不会重复标准LSTM的代码，因为它与我们之前讨论的完全相同。最后，我们将看到一个LSTM生成的文本。
+- en: Review
+  id: totrans-206
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 回顾
+- en: 'Here, we will revisit what a standard LSTM looks like. As we already mentioned,
+    an LSTM consists of the following:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将重新审视标准LSTM的结构。如前所述，一个LSTM包含以下组件：
+- en: '**Input gate** – This decides how much of the current input is written to the
+    cell state'
+  id: totrans-208
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**输入门** – 它决定当前输入有多少被写入到单元状态'
+- en: '**Forget gate** – This decides how much of the previous cell state is written
+    to the current cell state'
+  id: totrans-209
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**遗忘门** – 它决定了多少前一个单元状态将写入当前单元状态'
+- en: '**Output gate** – This decides how much information from the cell state is
+    exposed to output into the external hidden state'
+  id: totrans-210
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**输出门** – 它决定了多少来自单元状态的信息将暴露到外部隐藏状态中'
+- en: 'In *Figure 8.3*, we illustrate how each of these gates, inputs, cell states,
+    and the external hidden states are connected:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*图8.3*中，我们展示了每个门、输入、单元状态和外部隐藏状态是如何连接的：
+- en: '![Review](img/B14070_08_03.png)'
+  id: totrans-212
+  prefs: []
+  type: TYPE_IMG
+  zh: '![回顾](img/B14070_08_03.png)'
+- en: 'Figure 8.3: An LSTM cell'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.3：LSTM单元
+- en: Gated Recurrent Units (GRUs)
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 门控递归单元（GRU）
+- en: Here we will first briefly delineate what a GRU is composed of, followed by
+    showing the code for implementing a GRU cell. Finally, we look at some code generated
+    by a GRU cell.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将首先简要描述一个GRU由哪些部分组成，接着展示实现GRU单元的代码。最后，我们来看一些由GRU单元生成的代码。
+- en: Review
+  id: totrans-216
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 回顾
+- en: 'Let’s briefly revisit what a GRU is. A GRU is an elegant simplification of
+    the operations of an LSTM. A GRU introduces two different modifications to an
+    LSTM (see *Figure 8.4*):'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们简要回顾一下GRU是什么。GRU是LSTM操作的优雅简化。GRU对LSTM进行了两项不同的修改（见*图8.4*）：
+- en: It connects the internal cell state and the external hidden state into a single
+    state
+  id: totrans-218
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它将内部单元状态和外部隐藏状态连接成一个单一的状态
+- en: Then it combines the input gate and the forget gate into one update gate
+  id: totrans-219
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 然后它将输入门和遗忘门结合为一个更新门
+- en: '![Review](img/B14070_08_04.png)'
+  id: totrans-220
+  prefs: []
+  type: TYPE_IMG
+  zh: '![回顾](img/B14070_08_04.png)'
+- en: 'Figure 8.4: A GRU cell'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.4：GRU单元
+- en: The GRU model uses a simpler gating mechanism than the LSTM. However, it still
+    manages to capture important capabilities such as memory updates, forgets, etc.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GRU模型采用了比LSTM更简单的门控机制。然而，它仍然能够捕获重要的功能，如记忆更新、遗忘等。
+- en: The model
+  id: totrans-223
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 模型
+- en: 'Here we will define a GRU-based language model:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将定义一个基于GRU的语言模型：
+- en: '[PRE46]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: The training code is identical to how we trained the LSTM-based model. Therefore,
+    we won’t duplicate our discussion here. Next we’ll look at a slightly different
+    variant of LSTM models.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练代码与我们训练基于LSTM的模型时相同。因此，我们在这里不再重复讨论。接下来，我们将看看LSTM模型的一个略有不同的变体。
+- en: LSTMs with peepholes
+  id: totrans-227
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 带有窥视连接的LSTM
+- en: Here we will discuss LSTMs with peepholes and how they are different from a
+    standard LSTM. After that, we will discuss their implementation.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将讨论带有窥视连接的LSTM，以及它们与标准LSTM的不同之处。之后，我们将讨论它们的实现。
+- en: Review
+  id: totrans-229
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 回顾
+- en: 'Now, let’s briefly look at LSTMs with peepholes. Peepholes are essentially
+    a way for the gates (input, forget, and output) to directly see the cell state,
+    instead of waiting for the external hidden state (see *Figure 8.5*):'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们简要看一下带有窥视连接的LSTM。窥视连接本质上是一种让门（输入、遗忘和输出门）直接看到单元状态的方式，而不是等待外部隐藏状态（见*图8.5*）：
+- en: '![Review](img/B14070_08_05.png)'
+  id: totrans-231
+  prefs: []
+  type: TYPE_IMG
+  zh: '![回顾](img/B14070_08_05.png)'
+- en: 'Figure 8.5: An LSTM with peepholes'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.5：带有窥视连接的LSTM
+- en: The code
+  id: totrans-233
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 代码
+- en: Note that we’re using an implementation of the peephole connections that are
+    diagonal. We found that nondiagonal peephole connections (proposed by Gers and
+    Schmidhuber in their paper *Recurrent Nets that Time and Count*, *Neural Networks*,
+    *2000*) hurt performance more than they help, for this language modeling task.
+    Therefore, we’re using a different variation that uses diagonal peephole connections,
+    as used by Sak, Senior, and Beaufays in their paper *Long Short-Term Memory Recurrent
+    Neural Network Architectures for Large Scale Acoustic Modeling*, *Proceedings
+    of the Annual Conference of the International Speech Communication Association*.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们使用的是对角线的窥视连接实现。我们发现，非对角线窥视连接（由Gers和Schmidhuber在他们的论文《*时间和计数的递归网络*》，《*神经网络*》，*2000*中提出）对于这个语言建模任务的表现影响较大，反而更多是有害而非有益。因此，我们使用了不同的变体，它使用了对角线窥视连接，就像Sak、Senior和Beaufays在他们的论文《*大规模声学建模的长短时记忆递归神经网络架构*》，《*国际语音通信协会年会会议录*》中所使用的那样。
+- en: 'Fortunately, we have this technique implemented as an `RNNCell` object in `tensorflow_addons`.
+    Therefore, all we need to do is wrap this `PeepholeLSTMCell` object in a `layers.RNN`
+    object to produce the desired layer. The following is the code implementation:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幸运的是，我们已经将此技术作为`tensorflow_addons`中的`RNNCell`对象进行了实现。因此，我们所需要做的就是将这个`PeepholeLSTMCell`对象包装在`layers.RNN`对象中，以生成所需的层。以下是代码实现：
+- en: '[PRE47]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: Now let’s look at the training and validation perplexities of different models
+    and how they change over time.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看不同模型的训练和验证困惑度，以及它们如何随时间变化。
+- en: Training and validation perplexities over time
+  id: totrans-238
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练和验证困惑度随时间变化
+- en: In *Figure 8.6*, we have plotted the behavior of perplexity over time for LSTMs,
+    LSTMs with peepholes, and GRUs. We can see that GRUs are a clear-cut winner in
+    terms of performance. This can be attributed to the innovative simplification
+    of LSTM cells found in GRU cells. But it looks like GRU model does overfit quite
+    heavily. Therefore, it’s important to use techniques such as early stopping to
+    prevent such behavior. We can see that LSTMs with peepholes haven’t given us much
+    advantage in terms of performance. But it is important to keep in mind that we
+    are using a relatively small dataset.
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 *图8.6* 中，我们绘制了LSTM、带窥视孔的LSTM和GRU的困惑度随时间变化的行为。我们可以看到，GRU在性能上明显优于其他模型。这可以归因于GRU单元对LSTM单元的创新性简化。但看起来GRU模型确实会过拟合。因此，使用早停等技术来防止这种行为是非常重要的。我们可以看到，带窥视孔的LSTM在性能上并没有给我们带来太多优势。但需要记住的是，我们使用的是一个相对较小的数据集。
+- en: 'For larger, more complex datasets, the performance might vary. We will leave
+    experimenting with GRU cells for the reader and continue with the LSTM model:'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于更大、更复杂的数据集，性能可能会有所不同。我们将把GRU单元的实验留给读者，继续讨论LSTM模型：
+- en: '![](img/B14070_08_06.png)'
+  id: totrans-241
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_06.png)'
+- en: 'Figure 8.6: Perplexity change for training data over time (LSTMs, LSTM (peephole),
+    and GRUs)'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.6：训练数据的困惑度随时间的变化（LSTM、LSTM（窥视孔）和GRU）
+- en: '**Note**'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**注意**'
+- en: The current literature suggests that among LSTMs and GRUs, there is no clear
+    winner and a lot depends on the task (refer to the paper *Empirical Evaluation
+    of Gated Recurrent Neural Networks on Sequence Modeling*, *Chung and others*,
+    *NIPS 2014 Workshop on Deep Learning*, *December 2014* at[https://arxiv.org/abs/1412.3555](https://arxiv.org/abs/1412.3555)).
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前文献表明，在LSTM和GRU之间，没有明显的胜者，很多因素取决于任务本身（参见论文 *门控递归神经网络在序列建模中的经验评估*，*Chung等人*，*2014年NIPS深度学习工作坊*，*2014年12月*，[https://arxiv.org/abs/1412.3555](https://arxiv.org/abs/1412.3555)）。
+- en: 'In this section, we discussed three different models: standard LSTMs, GRUs,
+    and LSTMs with peepholes.'
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们讨论了三种不同的模型：标准LSTM、GRU和带窥视孔的LSTM。
+- en: The results clearly indicate that, for this dataset, GRUs outperform other variants.
+    In the next section, we will discuss techniques that can enhance the predictive
+    power of sequential models.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果清楚地表明，对于这个数据集，GRU优于其他变体。在下一节中，我们将讨论可以增强序列模型预测能力的技术。
+- en: Improving sequential models – beam search
+  id: totrans-247
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 改进序列模型——束搜索
+- en: As we saw earlier, the generated text can be improved. Now let’s see if beam
+    search, which we discussed in *Chapter 7, Understanding Long Short-Term Memory
+    Networks*, might help to improve the performance. The standard way to predict
+    from a language model is by predicting one step at a time and using the prediction
+    from the previous time step as the new input. In beam search, we predict several
+    steps ahead before picking an input.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们之前所看到的，生成的文本可以改进。现在，让我们看看我们在 *第7章，理解长短期记忆网络* 中讨论的束搜索，是否能够帮助提高性能。从语言模型进行预测的标准方法是一次预测一个步骤，并使用前一个时间步的预测结果作为新的输入。在束搜索中，我们会在选择输入之前预测多个步骤。
+- en: 'This enables us to pick output sequences that may not look as attractive if
+    taken individually, but are better when considered as a sequence. The way beam
+    search works is by, at a given time, predicting *m*^n output sequences or beams.
+    *m* is known as the beam width and *n* is the beam depth. Each output sequence
+    (or a beam) is *n* bigrams predicted into the future. We compute the joint probability
+    of each beam by multiplying individual prediction probabilities of the items in
+    that beam. We then pick the beam with the highest joint probability as our output
+    sequence for that given time step. Note that this is a greedy search, meaning
+    that we will calculate the best candidates at each depth of the tree iteratively,
+    as the tree grows. It should be noted that this search will not result in the
+    globally best beam. *Figure 8.7* shows an example. We will indicate the best beam
+    candidates (and their probabilities) with bold font and arrows:'
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这使我们能够选择那些单独看可能不那么吸引人的输出序列，但作为一个整体来看会更好。束搜索的工作方式是，在给定的时间，通过预测 *m*^n 个输出序列或束来进行。*m*
+    被称为束宽度，*n* 是束的深度。每个输出序列（或束）是预测的 *n* 个二元组，预测到未来。我们通过将束中每个项的单独预测概率相乘来计算每个束的联合概率。然后我们选择具有最高联合概率的束作为该时间步的输出序列。请注意，这是一个贪心搜索，这意味着我们会在树的每个深度计算最佳候选项，并逐步进行，随着树的增长。需要注意的是，这种搜索不会得到全局最优的束。*图
+    8.7* 展示了一个例子。我们将用粗体字和箭头标出最佳束候选（及其概率）：
+- en: '![](img/B14070_08_07.png)'
+  id: totrans-250
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_07.png)'
+- en: 'Figure 8.7: A beam search illustrating the requirement for updating beam states
+    at each step. Each number underneath the word represents the probability of that
+    word being chosen. For the words not in bold, you can assume the probabilities
+    are negligible'
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.7：一个束搜索示例，展示了在每一步更新束状态的需求。每个单词下方的数字表示该单词被选择的概率。对于非粗体字的单词，你可以认为它们的概率可以忽略不计。
+- en: We can see that in the first step, the word “*hunting*” has the highest probability.
+    However, if we perform a beam search with a beam depth of 3, we get the sequence
+    [*“king”, “was”, “hunting”*] with a joint probability of *0.3 * 0.5 * 0.4 = 0.06*
+    as the best beam.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到，在第一步中，单词“*hunting*”具有最高的概率。然而，如果我们执行一个深度为 3 的束搜索，我们得到的序列是 [*“king”, “was”,
+    “hunting”*]，其联合概率为 *0.3 * 0.5 * 0.4 = 0.06*，作为最佳束。
+- en: This is higher than a beam that would start from the word “*hunting*” (which
+    has a joint probability of *0.5 * 0.1 * 0.3 = 0.015*).
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个概率高于从单词“*hunting*”开始的束（它的联合概率为 *0.5 * 0.1 * 0.3 = 0.015*）。
+- en: Implementing beam search
+  id: totrans-254
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现束搜索
+- en: We implement beam search as a recursive function. But first we will implement
+    a function that performs a single step of our recursive function called `beam_one_step()`.
+    This function simply takes a model, an input, and states (from the LSTM) and produces
+    the output and new states.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将束搜索实现为一个递归函数。但首先，我们将实现一个执行递归函数单步操作的函数，称为 `beam_one_step()`。该函数简单地接受模型、输入和状态（来自
+    LSTM），并生成输出和新状态。
+- en: '[PRE48]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'Next, we write the main recursive function that performs beam search. This
+    function takes the following arguments:'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们编写执行束搜索的主要递归函数。该函数接受以下参数：
+- en: '`model` – An inference-based language model'
+  id: totrans-258
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`model` – 基于推理的语言模型'
+- en: '`input_` – The initial input'
+  id: totrans-259
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`input_` – 初始输入'
+- en: '`states` – The initial state vectors'
+  id: totrans-260
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`states` – 初始状态向量'
+- en: '`beam_depth` – The search depth of the beam'
+  id: totrans-261
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`beam_depth` – 束的搜索深度'
+- en: '`beam_width` – The search width of the beam (i.e. number of candidates considered
+    at a given depth)'
+  id: totrans-262
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`beam_width` – 束搜索的宽度（即在给定深度下考虑的候选词数）'
+- en: 'Let’s now discuss the function:'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们讨论这个函数：
+- en: '[PRE49]'
+  id: totrans-264
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'The `beam_search()` function in fact defines a nested recursive function (`recursive_fn`)
+    that accumulates the outputs as it is called and stores the results in a list
+    called results. The `recursive_fn()` does the following. If the function has been
+    called a number of times equal to the `beam_depth`, then it returns the current
+    result. If the number of function calls hasn’t reached the predefined depth, for
+    a given depth index, then the `recursive_fn()`:'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`beam_search()` 函数实际上定义了一个嵌套的递归函数（`recursive_fn`），每次调用时都会累积输出，并将结果存储在一个名为 results
+    的列表中。`recursive_fn()` 做如下操作。如果函数已经被调用了与 `beam_depth` 相等的次数，那么它会返回当前结果。如果函数调用次数尚未达到预定深度，那么对于给定的深度索引，`recursive_fn()`
+    会：'
+- en: Computes the new output and states using the `beam_one_step()` function
+  id: totrans-266
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `beam_one_step()` 函数计算新的输出和状态
+- en: Gets the IDs and probabilities of the top bigram candidates
+  id: totrans-267
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 获取前两个候选词的 ID 和概率
+- en: Computes the joint probability of each beam in the log space (in log space we
+    get better numerical stability for smaller probability values)
+  id: totrans-268
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在对数空间中计算每个束的联合概率（在对数空间中，我们可以获得更好的数值稳定性，尤其是对于较小的概率值）
+- en: Finally, we call the same function with the new inputs, new state, and the next
+    depth index
+  id: totrans-269
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最后，我们使用新的输入、新的状态和下一个深度索引调用相同的函数
+- en: With that you can simply call the `beam_search()` function to get beams of predictions
+    from the inference model. Let’s look at how we can do that next.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这个，你可以简单地调用 `beam_search()` 函数，从推理模型中获得预测的束。接下来让我们看看如何实现这一点。
+- en: Generating text with beam search
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用束搜索生成文本
+- en: Here we will only show the part where we iteratively call `beam_search()` to
+    generate new text. For the full code refer to `ch08_lstms_for_text_generation.ipynb`.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们只展示我们如何通过迭代调用 `beam_search()` 来生成新文本的部分。完整的代码请参见 `ch08_lstms_for_text_generation.ipynb`。
+- en: '[PRE50]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: We simply call the function `beam_search()` with `infer_model`, current input
+    `x`, current states `states`, `beam depth`, and `beam width`, and update `x` and
+    `states` to reflect the winning beam. Then the model will iteratively use the
+    winning beam to produce the next beam.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们简单地调用函数 `beam_search()`，传入 `infer_model`、当前输入 `x`、当前状态 `states`、`beam_depth`
+    和 `beam_width`，并更新 `x` 和 `states` 以反映获胜的束。然后模型将迭代使用获胜的束生成下一个束。
+- en: 'Let’s see how our LSTM performs with beam search:'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看 LSTM 在使用束搜索（beam search）时的表现：
+- en: '[PRE51]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'Here’s what the standard LSTM with greedy sampling (i.e. predicting one word
+    at a time) outputs:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是标准的 LSTM 使用贪婪采样（即一次预测一个词）时的输出：
+- en: '[PRE52]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Compared to the text produced by the LSTM, this text seems to have more variation
+    in it while keeping the text grammatically consistent as well. So, in fact, beam
+    search helps to produce quality predictions compared to predicting one word at
+    a time. But still, there are instances where words together don’t make much sense.
+    Let’s see how we can improve our LSTM further.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 LSTM 生成的文本相比，这段文本似乎有更多的变化，同时保持了语法的一致性。因此，实际上，束搜索（beam search）相比逐字预测能帮助生成更高质量的预测。但仍然有些情况下，词语组合在一起并没有太大意义。让我们看看如何进一步改进我们的
+    LSTM。
+- en: Improving LSTMs – generating text with words instead of n-grams
+  id: totrans-280
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 改进 LSTMs —— 使用词汇而非 n-gram 生成文本
+- en: Here we will discuss ways to improve LSTMs. We have so far used bigrams as our
+    basic unit of text. But you would get better results by incorporating words, as
+    opposed to bigrams. This is because using words reduces the overhead of the model
+    by alleviating the need to learn to form words from bigrams. We will discuss how
+    we can employ word vectors in the code to generate better-quality text compared
+    to using bigrams.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将讨论如何改进 LSTM。到目前为止，我们一直使用二元组（bigrams）作为文本的基本单位。但如果使用词汇而非二元组，你将获得更好的结果。这是因为使用词汇可以减少模型的开销，避免需要学习如何从二元组中构建词汇。我们将讨论如何在代码中使用词向量，以便与使用二元组相比，生成更高质量的文本。
+- en: The curse of dimensionality
+  id: totrans-282
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 维度诅咒
+- en: 'One major limitation stopping us from using words instead of n-grams as the
+    input to our LSTM is that this will drastically increase the number of parameters
+    in our model. Let’s understand this through an example. Consider that we have
+    an input of size *500* and a cell state of size *100*. This would result in a
+    total of approximately *240K* parameters (excluding the softmax layer), as shown
+    here:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 阻止我们将词汇作为 LSTM 输入的一个主要限制是，这将大幅增加模型中的参数数量。让我们通过一个例子来理解这一点。假设我们的输入大小为*500*，单元状态大小为*100*。这将导致大约*240K*的参数数量（不包括
+    softmax 层），如图所示：
+- en: '![](img/B14070_08_004.png)'
+  id: totrans-284
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_004.png)'
+- en: 'Let’s now increase the size of the input to *1000*. Now the total number of
+    parameters would be approximately *440K*, as shown here:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将输入大小增加到*1000*。此时，总参数数目将约为*440K*，如图所示：
+- en: '![](img/B14070_08_005.png)'
+  id: totrans-286
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14070_08_005.png)'
+- en: As you can see, for an increase of 500 units of the input dimensionality, the
+    number of parameters has grown by 200,000\. This not only increases the computational
+    complexity but also increases the risk of overfitting due to the large number
+    of parameters. So, we need ways of restricting the dimensionality of the input.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，当输入维度增加 500 单位时，参数的数量增长了 20 万。这不仅增加了计算复杂度，还因大量的参数而增加了过拟合的风险。因此，我们需要一些方法来限制输入的维度。
+- en: Word2vec to the rescue
+  id: totrans-288
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Word2vec 来拯救我们
+- en: 'As you will remember, not only can Word2vec give a lower-dimensional feature
+    representation of words compared to one-hot encoding, but it also gives semantically
+    sound features. To understand this, let’s consider three words: *cat*, *dog*,
+    and *volcano*. If we one-hot encode just these words and calculate the Euclidean
+    distance between them, it would be the following:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所记得，Word2vec 不仅能提供比独热编码（one-hot encoding）更低维度的词特征表示，还能提供语义上合理的特征。为了理解这一点，我们来看三个词：*cat*、*dog*
+    和 *volcano*。如果我们对这三个词进行独热编码，并计算它们之间的欧氏距离，结果会如下：
+- en: '*distance(cat,volcano) = distance(cat,dog)*'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*distance(cat,volcano) = distance(cat,dog)*'
+- en: 'However, if we learn word embeddings, it would be the following:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果我们学习词嵌入，它将如下所示：
+- en: '*distance(cat,volcano) > distance(cat,dog)*'
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*distance(cat,volcano) > distance(cat,dog)*'
+- en: We would like our features to represent the latter, where similar things have
+    a lower distance than dissimilar things. Consequently, the model will be able
+    to generate better-quality text.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望我们的特征能代表后一种情况，其中相似的东西之间的距离小于不相似的东西。这样，模型将能够生成更高质量的文本。
+- en: Generating text with Word2vec
+  id: totrans-294
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 Word2vec 生成文本
+- en: The structure of the model remains more or less the same as what we have discussed.
+    It is only the units of text we would consider that changes.
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型的结构基本保持不变，我们所考虑的仅是文本单元的变化。
+- en: '*Figure 8.8* depicts the overall architecture of LSTM-Word2vec:'
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*图 8.8* 展示了 LSTM-Word2vec 的总体架构：'
+- en: '![Generating text with Word2vec](img/B14070_08_08.png)'
+  id: totrans-297
+  prefs: []
+  type: TYPE_IMG
+  zh: '![使用 Word2vec 生成文本](img/B14070_08_08.png)'
+- en: 'Figure 8.8: The structure of a language modeling LSTM using word vectors'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.8：使用词向量的语言建模 LSTM 结构
+- en: 'You have a few options when it comes to using word vectors. You can either:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用词向量时，你有几个选择。你可以：
+- en: Randomly initialize the vectors and jointly learn them during the task
+  id: totrans-300
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 随机初始化词向量，并在任务过程中共同学习它们
+- en: Train the embeddings using a word vector algorithm (e.g. Word2vec, GloVe, etc.)
+    beforehand
+  id: totrans-301
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 预先使用词向量算法（例如 Word2vec、GloVe 等）训练嵌入层
+- en: Use pretrained word vectors freely available to download, to initialize the
+    embedding layer
+  id: totrans-302
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用可以自由下载的预训练词向量来初始化嵌入层
+- en: '**Note**'
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**注意**'
+- en: 'Below we list a few freely available pretrained word vectors. Word vectors
+    found by learning from a text corpus with billions of words are freely available
+    to be downloaded and used:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面列出了一些可以自由下载的预训练词向量。通过从包含数十亿单词的文本语料库中学习得到的词向量可以自由下载并使用：
+- en: '**Word2vec**: [https://code.google.com/archive/p/word2vec/](https://code.google.com/archive/p/word2vec/)'
+  id: totrans-305
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Word2vec**: [https://code.google.com/archive/p/word2vec/](https://code.google.com/archive/p/word2vec/)'
+- en: '**Pretrained GloVe word vectors**: [https://nlp.stanford.edu/projects/glove/](https://nlp.stanford.edu/projects/glove/)'
+  id: totrans-306
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**预训练 GloVe 词向量**: [https://nlp.stanford.edu/projects/glove/](https://nlp.stanford.edu/projects/glove/)'
+- en: '**fastText word vectors**: [https://github.com/facebookresearch/fastText](https://github.com/facebookresearch/fastText)'
+  id: totrans-307
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**fastText 词向量**: [https://github.com/facebookresearch/fastText](https://github.com/facebookresearch/fastText)'
+- en: We end our discussion on language modeling here.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这里结束关于语言建模的讨论。
+- en: Summary
+  id: totrans-309
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we looked at the implementations of the LSTM algorithm and
+    other various important aspects to improve LSTMs beyond standard performance.
+    As an exercise, we trained our LSTM on the text of stories by the Grimm brothers
+    and asked the LSTM to output a fresh new story. We discussed how to implement
+    an LSTM model with code examples extracted from exercises.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们研究了 LSTM 算法的实现以及其他各个重要方面，以提升 LSTM 超越标准性能。作为练习，我们在格林兄弟的故事文本上训练了我们的 LSTM，并让
+    LSTM 输出一个全新的故事。我们讨论了如何通过提取自练习的代码示例来实现一个 LSTM 模型。
+- en: Next, we had a technical discussion about how to implement LSTMs with peepholes
+    and GRUs. Then we did a performance comparison between a standard LSTM and its
+    variants. We saw that the GRUs performed the best compared to LSTMs with peepholes
+    and LSTMs.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们进行了关于如何实现带窥视孔的 LSTM 和 GRU 的技术讨论。然后，我们对标准 LSTM 及其变种进行了性能比较。我们发现 GRU 比带窥视孔的
+    LSTM 和 LSTM 表现更好。
+- en: Then we discussed some of the various improvements possible for enhancing the
+    quality of outputs generated by an LSTM. The first improvement was beam search.
+    We looked at an implementation of beam search and covered how to implement it
+    step by step. Then we looked at how we can use word embeddings to teach our LSTM
+    to output better text.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们讨论了提升 LSTM 输出质量的一些改进方法。第一个改进是束搜索。我们查看了束搜索的实现，并逐步介绍了如何实现它。接着，我们研究了如何利用词嵌入来教导
+    LSTM 输出更好的文本。
+- en: In conclusion, LSTMs are very powerful machine learning models that can capture
+    both long-term and short-term dependencies.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总之，LSTM 是非常强大的机器学习模型，能够捕捉长期和短期的依赖关系。
+- en: Moreover, beam search in fact helps to produce more realistic-looking textual
+    phrases compared to predicting one at a time.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，与逐个预测相比，束搜索实际上有助于生成更具现实感的文本短语。
+- en: In the next chapter, we will look at how sequential models can be used to solve
+    a more complex type of problem known as sequence-to-sequence problems. Specifically,
+    we will look at how we can perform machine translation by formulating it as a
+    sequence-to-sequence problem.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨如何使用顺序模型来解决一种更复杂的问题类型，称为序列到序列问题。具体来说，我们将研究如何将机器翻译问题转化为序列到序列问题。
+- en: 'To access the code files for this book, visit our GitHub page at: [https://packt.link/nlpgithub](https://packt.link/nlpgithub)'
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要访问本书的代码文件，请访问我们的 GitHub 页面：[https://packt.link/nlpgithub](https://packt.link/nlpgithub)
+- en: 'Join our Discord community to meet like-minded people and learn alongside more
+    than 1000 members at: [https://packt.link/nlp](https://packt.link/nlp)'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加入我们的 Discord 社区，结识志同道合的人，与超过 1000 名成员一起学习：[https://packt.link/nlp](https://packt.link/nlp)
+- en: '![](img/QR_Code5143653472357468031.png)'
+  id: totrans-318
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/QR_Code5143653472357468031.png)'

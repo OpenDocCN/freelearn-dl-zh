@@ -1,0 +1,1549 @@
+- en: Word Representations in FastText
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: FastText中的词表示
+- en: Now that you have taken a look at creating models in the command line, you might
+    be wondering how fastText creates those word representations. In this chapter,
+    you will get to know what happens behind the scenes and the algorithms that power
+    fastText.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经了解了如何在命令行中创建模型，你可能会想知道fastText是如何创建这些词表示的。在本章中，你将了解背后发生的事情以及驱动fastText的算法。
+- en: 'We will cover the following topics in this chapter:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下内容：
+- en: Word-to-vector representations
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 词到向量的表示
+- en: Types of word representations
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单词表示的类型
+- en: Getting vector representations from text
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从文本中获取向量表示
+- en: Model architecture in fastText
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: fastText中的模型架构
+- en: The unsupervised model
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 无监督模型
+- en: fastText skipgram implementation
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: fastText skipgram实现
+- en: '**CBOW** (**Continuous bag of words**)'
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**CBOW**（**连续词袋模型**）'
+- en: Comparison between skipgram and CBOW
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: skipgram和CBOW的比较
+- en: Loss functions and optimizations
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 损失函数和优化
+- en: Softmax
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Softmax
+- en: Context definitions
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 上下文定义
+- en: Word-to-vector representations
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 词到向量的表示
+- en: 'Almost all machine learning and deep learning algorithms manipulate vectors
+    and matrices. The reason they work is because of their base mathematics, which
+    is heavily rooted in linear algebra. So, in short, for both supervised and unsupervised
+    learning, you will need to create matrices of numbers. In other domains, this
+    is not an issue as information is generally captured as numbers. For example,
+    in retail, the sales information for how many units were sold or how much revenue
+    the store is making in the current month is all numbers. Even in a more abstract
+    field such as computer vision, the image is always stored as pixel intensity of
+    the three basic colors: red, green, and blue. 0 for a particular color means no
+    intensity and 255 means the highest possible intensity for the screen. Similarly,
+    in the case of sound, it is stored as power spectral density coefficients. In
+    the case of sound, the analog signal that is picked up by the microphone is then
+    converted to a discrete time and discrete amplitude. The amplitude is essentially
+    the number of bits that can be passed in a given amount of time and hence that
+    is essentially a number.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几乎所有的机器学习和深度学习算法都在处理向量和矩阵。它们之所以有效，是因为它们的基础数学原理深深根植于线性代数。因此，简而言之，无论是监督学习还是无监督学习，你都需要创建数字矩阵。在其他领域，这不是问题，因为信息通常以数字形式捕捉。例如，在零售行业，销售信息（如销售了多少单位或商店在当前月的收入）都是数字。即使是在计算机视觉这样的更抽象的领域，图像始终以三种基本颜色的像素强度存储：红色、绿色和蓝色。某种颜色的0表示没有强度，而255表示屏幕上可能的最高强度。同样，在声音的情况下，它被存储为功率谱密度系数。在声音的情况下，麦克风接收到的模拟信号会被转换为离散时间和离散振幅。振幅本质上是指在给定时间内能够传递的位数，因此它本质上是一个数字。
+- en: The challenge that comes in raw text in computer systems is that they are stored
+    and analyzed as strings, which do not work well with these matrix systems. So
+    you need a method to convert text into matrices.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算机系统中原始文本面临的挑战是，它们通常以字符串形式存储和分析，而这与这些矩阵系统不太兼容。因此，你需要一种方法将文本转换为矩阵。
+- en: Types of word representations
+  id: totrans-17
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 单词表示的类型
+- en: 'Depending on the target languages, there are various concepts that should be
+    taken care of for an optimal word representation of the given corpus:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据目标语言，有各种概念需要注意，以便为给定语料库提供最佳的词表示：
+- en: '**Distributed word representation**: In a distributed representation, the sense
+    of the word should not be concentrated on only one dimension but be distributed
+    across all dimensions. If it is not distributed, then the resulting vectors may
+    be too big, which can be a limiting factor when performing the necessary vector
+    transformations both in terms of memory and the time needed to perform the transformations.
+    A distributed representation is compact and can represent an exponential number
+    of clusters in the number of dimensions.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**分布式词表示**：在分布式表示中，词的语义不应仅集中在一个维度上，而应分布在所有维度上。如果没有分布，那么生成的向量可能会过大，这可能在执行必要的向量变换时，既在内存方面也在执行变换所需的时间方面成为限制因素。分布式表示是紧凑的，并且能够表示一个维度数量上指数级的聚类。'
+- en: '**Distributional word representation**: You can argue that there is some kind
+    of similarity between "cat" and "dog" and another kind of similarity between "cat"
+    and "tiger". Word representations that focus on capturing those kinds of implicit
+    relationships are called distributional. To get such distributional properties,
+    the following very common paradigm is used:'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**分布式词表示**：你可以认为“猫”和“狗”之间有某种相似性，而“猫”和“老虎”之间又是另一种相似性。专注于捕捉这些隐含关系的词表示被称为分布式词表示。为了获得这样的分布式特性，通常采用以下非常常见的范式：'
+- en: You shall know the meaning of the word by the company it keeps
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过词汇所处的语境来理解其含义
+- en: '- John Rupert Firth (1962)'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '- 约翰·鲁珀特·弗斯（1962）'
+- en: So if we take an example with two sentences, "Mary has a cat" and "Mary has
+    a dog", the context around "dog" and "cat" is the same and hence the word representation
+    should be able to get the "pet" context by reading the two sentences.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，如果我们以两个句子为例，“玛丽有一只猫”和“玛丽有一只狗”，那么“狗”和“猫”周围的上下文是相同的，因此词表示应该能够通过阅读这两个句子来获得“宠物”这一语境。
+- en: '**Zipf''s law and Heap''s law**: We will have some more discussion on Zipf''s
+    law when we go to the n-grams but we will state Heap''s law here:'
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**齐夫定律与海普定律**：当我们讲到n-grams时，我们会对齐夫定律进行更多讨论，但这里我们将陈述海普定律：'
+- en: The number of distinct words in a document (or set of documents) as a function
+    of the document length (so called type-token relation).
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档（或文档集）中不同词的数量与文档长度的关系（即所谓的词型-词令关系）。
+- en: Taken together, Heap's law and Zipf's law are essentially saying the same thing,
+    which is that you will always have new words. Hence, you should not be throwing
+    away rare words from the document and will need a word representation that is
+    more welcoming of new words. You cannot model language, close the vocabulary,
+    and say you are done.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结来看，齐夫定律和海普定律基本上是在传达同一个意思，那就是你总会遇到新词。因此，你不应该将文档中的稀有词丢弃，而需要一种更能容纳新词的词表示方法。你不能通过构建语言模型并关闭词汇表来宣告任务完成。
+- en: Getting vector representations from text
+  id: totrans-27
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从文本中获取词向量表示
+- en: In this section, we will take a look at what it means to have a vector representation
+    for the target group of text. We will start with one of the simplest forms of
+    word vectors and how to implement it. Then we will explore the rationale behind
+    some other types of word vectors and, finally, we will take an in-depth look at
+    the algorithms that are used in fastText to create the word vectors.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将探讨为目标文本群体提供向量表示的含义。我们将从最简单的一种词向量形式及其实现方法开始。接着，我们将探索其它类型词向量背后的理论依据，最后，我们将深入研究用于在fastText中创建词向量的算法。
+- en: One-hot encoding
+  id: totrans-29
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 独热编码
+- en: 'In the simplest approach, raw text can be taken as a collection of tokens,
+    where are assumption is that each "word" contributes in some way to the meaning
+    of the sentence as a whole. All words are meant to signify something specific
+    and hence are categories by themselves. The presence of a word would mean the
+    presence of the category for which the word stands for, and absence of the word
+    would mean that the category is not there. Hence, the traditional method was to
+    represent categorical variables as binary variables. First the dictionary of words
+    is created and then each word is assigned a unique position. Then the vectors
+    are created by putting 1 in the respective index and 0 for all other variables.
+    This system of creating vectors is called one-hot encoding:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在最简单的方法中，可以将原始文本看作一个词汇的集合，假设每个“词”都以某种方式对整个句子的意义作出贡献。所有的词都有特定的含义，因此它们本身就是类别。一个词的出现意味着该词所代表的类别存在，而缺少该词则意味着该类别不存在。因此，传统方法是将分类变量表示为二进制变量。首先创建词汇表，然后为每个词分配一个唯一位置。接着，通过在相应的索引位置放置1，其它位置则放置0，来创建向量。这种创建向量的方式被称为独热编码：
+- en: '![](img/00018.jpeg)'
+  id: totrans-31
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00018.jpeg)'
+- en: 'Implementation of the one-hot model is shown here:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 独热模型的实现如下：
+- en: '[PRE0]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Although one-hot encoding is simple to understand and implement, there are
+    a number of disadvantages associated with it:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管独热编码简单易懂且易于实现，但它也有一些缺点：
+- en: '**Not a distributed representation**: The number of dimensions for each vector
+    grows with the size of the vocabulary. The matrix that is formed is highly sparse—which
+    means that most of the individual values are 0s. Hence, the matrix manipulations
+    become computationally too expensive even for a corpus of normal size.'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**不是分布式表示**：每个向量的维度随着词汇表的大小增长而增加。形成的矩阵非常稀疏——这意味着大多数单独的值都是0。因此，矩阵操作变得计算上非常昂贵，即使是对于一个正常大小的语料库。'
+- en: '**Out-of-vocabulary words**: It is not able to handle new words at test time.'
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**超出词汇表的词**：它无法处理测试时的新词。'
+- en: '**Not a distributional representation**: In one-hot encoding, all the vectors
+    are equidistant from each other.'
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**不是分布式表示**：在独热编码中，所有的向量彼此间是等距的。'
+- en: Bag of words
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 词袋模型
+- en: 'The bag of words model is concerned about whether known words occur in the
+    document and only the frequency of the tokens in the document will be taken into
+    account. So to create the document matrix using the bag of words approach, the
+    following algorithm is used:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 词袋模型关注的是已知词汇在文档中是否出现，并且只考虑文档中词汇的频率。因此，为了使用词袋方法创建文档矩阵，使用以下算法：
+- en: Find the number of separate words that are used in all the documents. Words
+    are identified using spaces and punctuation as the separators.
+  id: totrans-40
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找在所有文档中使用的独立词汇数量。词汇通过空格和标点符号作为分隔符进行识别。
+- en: Using the tokens, a feature space is created. For each document, each feature
+    value is the count of the number of times the feature is present in the document.
+    Hence, each row in the resultant matrix will correspond to each document. Count
+    the number of tokens in each document. This is because each document will generate
+    its own vector.
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用这些词汇，创建特征空间。对于每个文档，每个特征值是该特征在文档中出现的次数。因此，结果矩阵中的每一行将对应于每个文档。计算每个文档中的词汇数。这是因为每个文档都会生成自己的向量。
+- en: Normalize the vectors.
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 归一化向量。
+- en: 'For example, let''s say that there are two documents comprising the whole corpus:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设有两个文档构成整个语料库：
+- en: '[PRE1]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'So for all the sentences, our vocabulary is as follows:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以对于所有的句子，我们的词汇表如下：
+- en: '[PRE2]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'To get the bag of words, we count the number of times each word occurs in the
+    sentence. So the following are the vectors formed for each document:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取词袋，我们统计每个词在句子中出现的次数。因此，以下是为每个文档形成的向量：
+- en: '[PRE3]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The main disadvantage of the bag of words approach is that the context of the
+    word is lost. You can think of examples such as "Toy Dog" and "Dog Toy", which
+    do not mean the same thing but will share the same vector. A simple implementation
+    of bag of words is shown here:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 词袋方法的主要缺点是丧失了词汇的上下文。例如，“玩具狗”和“狗玩具”这两个词组并不意味着相同的事情，但它们会共享相同的向量。这里展示了词袋方法的一个简单实现：
+- en: '[PRE4]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: TF-IDF
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TF-IDF
+- en: Just counting the number of tokens in a document may not give sufficient information
+    about the whole corpus. The idea is that rarer words give more information about
+    what the document is about. In TF-IDF, the term frequency is normalized by the
+    document frequency. The intuition is that TF-IDF makes rare words more prominent
+    and scales down the effect of common words.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅仅计算文档中词汇的数量可能无法提供足够的有关整个语料库的信息。这个想法是，稀有词汇能提供更多关于文档内容的信息。在TF-IDF中，词频被文档频率归一化。直观地说，TF-IDF让稀有词汇更加突出，同时减小了常见词汇的影响。
+- en: N-grams
+  id: totrans-54
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: N-gram（N-元组）
+- en: 'N-gram-based approaches are based on Zipf''s law which states the following:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于N-gram的方法基于Zipf定律，Zipf定律指出：
+- en: The nth most common word in a human language text occurs with a frequency inversely
+    proportional to n.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在人类语言文本中，第n个最常见的词出现的频率与n成反比。
+- en: In all languages, there are some words that are used more commonly than the
+    others. The difference between more common words and less common words is not
+    drastic but continuous. Another good corollary of this law is that if a class
+    of documents corresponding to a specific frequency gets cut off, that will not
+    massively affect the n-gram frequency profile. Hence, if we are comparing documents
+    of the same category, they should have similar frequency profile.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在所有语言中，有一些词汇比其他词汇使用得更频繁。常见词汇与不常见词汇之间的差异并不是剧烈的，而是连续的。这个定律的另一个重要推论是，如果一个特定频率的文档类别被切断，这不会大幅影响N-gram频率的分布。因此，如果我们比较同一类别的文档，它们的频率分布应该是相似的。
+- en: 'N-grams frequency means the frequency of overlapping sequence of words. Here
+    is a quote:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: N-gram频率是指重叠词序列的频率。这里有一句话：
+- en: '"Even now They talked in Their tombs."'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “即使现在，他们也在自己的坟墓中交谈。”
+- en: - H.P. Lovecraft
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '- H.P. 洛夫克拉夫特'
+- en: 'From this sentence you can obtain the following n-grams. "_" is to show the
+    start and end of the sentence:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个句子你可以得到以下n-grams。"_"用来表示句子的开始和结束：
+- en: '**1**-**grams (unigrams)**: Even, now, They, talked, in, Their, tombs (number
+    of features: 7).'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**1**-**grams (单元组)**：Even, now, They, talked, in, Their, tombs（特征数量：7）。'
+- en: '**2**-**grams (bigrams)**: (_, Even), (Even, now), (now, They), (They, talked),
+    (talked, in), (in, Their), (Their, tombs), (tombs, _) (number of features: 8).'
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**2**-**grams (双元组)**：(_, Even)，(Even, now)，(now, They)，(They, talked)，(talked,
+    in)，(in, Their)，(Their, tombs)，(tombs, _)（特征数量：8）。'
+- en: '**3**-**grams (trigrams)**: (_, _, Even), (_, Even, now), (Even, now, They),
+    (now, They, talked), (They, talked, in), (talked, in, Their), (in, Their, tombs),
+    (Their, tombs, _), (tombs, _, _) (features: 9).'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**3**-**grams (三元组)**：(_, _, Even)，(_, Even, now)，(Even, now, They)，(now, They,
+    talked)，(They, talked, in)，(talked, in, Their)，(in, Their, tombs)，(Their, tombs,
+    _)，(tombs, _, _)（特征：9）。'
+- en: '**4**-**grams (trigrams)**: (_, _, _, Even), (_, _, Even, now), (_, Even, now,
+    They), (Even, now, They, talked), (now, They, talked, in), (They, talked, in,
+    Their), (talked, in, Their, tombs), (in, Their, tombs, _), (Their, tombs, _, _),
+    (tombs, _, _, _) (features: 10).'
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**4**-**grams (三元组)**：(_, _, _, Even)，(_, _, Even, now)，(_, Even, now, They)，(Even,
+    now, They, talked)，(now, They, talked, in)，(They, talked, in, Their)，(talked,
+    in, Their, tombs)，(in, Their, tombs, _)，(Their, tombs, _, _)，(tombs, _, _, _)（特征：10）。'
+- en: And so on.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 依此类推。
+- en: 'When dealing with only unigrams, the probability of the whole sentence can
+    be written as follows:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当只处理单元组时，整个句子的概率可以写成如下：
+- en: '[PRE6]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Similarly, in the case of bigrams, the probability of the whole sentence can
+    be written as follows:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，在双元组的情况下，整个句子的概率可以写成如下：
+- en: '[PRE7]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: As per maximum likelihood estimation, the conditional probability of something
+    like P("now" | "Even") can be given as the ratio of count of the observed occurrence
+    of "Even now" together by the count of the observed occurrence of "Even". This
+    probability model can now be used to predict new sentences.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据最大似然估计，类似P("now" | "Even")的条件概率可以表示为“Even now”出现的观测次数与“Even”出现的观测次数之比。这个概率模型现在可以用于预测新的句子。
+- en: Let's build a model in case of bigrams. This file has been taken from the servers
+    of University of Maryland Institute for Advanced Computer Studies, [http://www.umiacs.umd.edu/](http://www.umiacs.umd.edu/) or
+    you can use your own corpus. Keep it in the `data` folder.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在双元组的情况下构建一个模型。这个文件已从马里兰大学高级计算机研究所的服务器上获取，[http://www.umiacs.umd.edu/](http://www.umiacs.umd.edu/)，你也可以使用自己的语料库。将它保存在`data`文件夹中。
+- en: 'Now, the following command will remove the new lines, then squash all the consecutive
+    spaces, then get all the bigrams and sort them as per frequency:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，以下命令将删除换行符，然后将所有连续的空格压缩为一个空格，接着获取所有的双元组并根据频率进行排序：
+- en: '[PRE8]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Now we can build a sentence generator using this n-grams file:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以使用这个n-grams文件构建一个句子生成器：
+- en: '[PRE9]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Using this n-gram sentence builder, we get the following sentence:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这个n-gram句子生成器，我们得到如下句子：
+- en: '[PRE10]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: If this fascinates you, then try to build with trigrams or more.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果这让你感兴趣，可以尝试用三元组或更多来构建。
+- en: The major drawback of n-grams is that they are extremely sparse and are not
+    able to distinguish when encountering new words in the test data.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: n-grams的主要缺点是它们非常稀疏，并且在测试数据中遇到新词时无法区分。
+- en: Model architecture in fastText
+  id: totrans-81
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: fastText中的模型架构
+- en: FastText models are a little bit different depending on whether they are unsupervised
+    models or supervised models. In this chapter, we will mostly look at the unsupervised
+    model.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: fastText模型会有些不同，取决于它们是无监督模型还是有监督模型。在本章中，我们主要讨论无监督模型。
+- en: The unsupervised model
+  id: totrans-83
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 无监督模型
+- en: In fastText, you can have the option to use two model architectures for computing
+    a distributed representation of words. They are skipgram and CBOW. The model architectures
+    used in fastText are both distributed architectures. So the aim is to learn a
+    high-dimensional dense representation for each vocabulary term. The representation
+    should be distributional as well as it tries to learn from context.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在fastText中，你可以选择使用两种模型架构来计算词汇的分布式表示。这些模型分别是skipgram和CBOW。fastText中使用的模型架构都是分布式架构。因此，目标是为每个词汇项学习一个高维度的密集表示。这个表示应该是分布式的，并且尝试从上下文中学习。
+- en: In both the architectures, you train a two-layer, shallow neural network to
+    construct the context of words.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两种架构中，你训练一个两层的浅层神经网络来构建词汇的上下文。
+- en: Skipgram
+  id: totrans-86
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Skipgram
+- en: 'In skipgram, a context window of *k* is considered. All the other positions
+    are skipped and only the relationship between the panel and the word is explored.
+    This is done by feeding a one-hot encoding of the word to a two-layer shallow
+    neural network. Since the input is one-hot encoded, the hidden layer consists
+    of only one row of input hidden weight matrix. The task for the neural network
+    is to predict the *i*th context given the word:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在skipgram中，考虑了一个大小为*k*的上下文窗口。所有其他位置都会被跳过，只有面板和单词之间的关系会被探讨。这是通过将单词的one-hot编码输入到一个两层的浅层神经网络来实现的。由于输入是one-hot编码，隐藏层只包含一行输入隐藏权重矩阵。神经网络的任务是根据单词预测第*i*个上下文：
+- en: '![](img/00019.jpeg)'
+  id: totrans-88
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00019.jpeg)'
+- en: 'The scores for each word are computed using the following equation:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个单词的得分是通过以下方程计算的：
+- en: '![](img/00020.jpeg)'
+  id: totrans-90
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00020.jpeg)'
+- en: 'Here, *h* is a vector in the hidden layer and *W* is the hidden output weight
+    matrix. After computing *u*, *c* multinomial weight distributions are computed,
+    where *c* is the window size. The distributions are computed using the following
+    equation:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*h*是隐藏层中的一个向量，*W*是隐藏输出权重矩阵。在计算出*u*之后，*c*多项式权重分布被计算出来，其中*c*是窗口大小。这些分布是通过以下方程计算的：
+- en: '![](img/00021.jpeg)'
+  id: totrans-92
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00021.jpeg)'
+- en: 'Here, *w[c,j]* is the *j*th word on the *c*th panel of the output layer; *w[O,c]*
+    is the actual *c*th word in the output context words; *w[I]* is the only input
+    word; and *u[c,j]* is the net input of the *j*th unit on the *c*th panel of the
+    output layer. So you can see this is, in effect, trying to predict the context
+    words given the input word. The probability is then converted into a softmax.
+    If you try to visualize the above architecture, this should translate to something
+    like the following:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*w[c,j]*是输出层中第*c*面板上的第*j*个单词；*w[O,c]*是输出上下文单词中实际的第*c*个单词；*w[I]*是唯一的输入单词；*u[c,j]*是输出层第*c*面板上第*j*个单元的净输入。所以你可以看到，实际上这是试图根据输入单词预测上下文单词。然后，概率会被转换为softmax。如果你尝试将上面的架构可视化，它应该转化为如下所示：
+- en: '![](img/00022.jpeg)'
+  id: totrans-94
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00022.jpeg)'
+- en: In addition, more distant words are given less weight-age by randomly sampling
+    them. When you give the window size parameter, only the maximum window size is
+    configured. In effect, the actual window size is randomly chosen between 1 and
+    the maximum window size for each training sample. Thus the words that are the
+    farthest are chosen with the probability of 1/*c*, whereas the nearest words are
+    always chosen.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，通过随机采样，较远的单词会被赋予较小的权重。当你给定窗口大小参数时，实际上只配置了最大窗口大小。实际上，实际窗口大小会在1和最大窗口大小之间随机选择，适用于每个训练样本。因此，最远的单词以1/*c*的概率被选择，而最近的单词则始终被选择。
+- en: Subword information skipgram
+  id: totrans-96
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 子词信息skipgram
+- en: 'The skipgram model was taken in its original form from the word2vec implementation.
+    The skipgram model is effective because it emphasizes the specific word and the
+    word that comes along with it. But along with the specific word, the character
+    of the n-grams may also have a lot of information. This is especially true of
+    languages which are morphologically rich. In fastText, the authors took the skipgram
+    implementation in word2vec, which is simply taking the vector representation of
+    the whole word, and said that the vector representation of the word is actually
+    the sum of the vector representations of the n-grams. Hence, in fastText, the
+    scoring function (*u*) that you saw earlier is actually changed to the following:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: skipgram模型是从word2vec实现中直接采用的原始形式。skipgram模型之所以有效，是因为它强调了特定单词和与之相关联的单词。但是，除了特定的单词，n-grams的特性也可能包含大量的信息。对于形态学丰富的语言尤其如此。在fastText中，作者采用了word2vec中的skipgram实现，这只是将整个单词的向量表示取出，然后表示为该单词向量实际上是n-grams向量表示的总和。因此，在fastText中，你之前看到的得分函数（*u*）实际上被改成了以下形式：
+- en: '![](img/00023.jpeg)'
+  id: totrans-98
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00023.jpeg)'
+- en: '*SCORE* = [*3-6 char level n-grams*] + [*word*]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*得分* = [*3-6字符级n-grams*] + [*单词*]'
+- en: 'In the library, n-grams for n greater or equal to 3 and less or equal to 6
+    is taken along with the word. So for something like `Schadenfreude` the collection
+    of n-grams taken are as follows:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在库中，n-grams的范围是大于或等于3且小于或等于6的，因此像`Schadenfreude`这样的词汇所采集的n-grams如下：
+- en: '[PRE11]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The major advantage of this method is that in the case of out-of-vector words,
+    the [word] vector is not present and hence the score function transforms to the
+    following:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法的主要优势在于，对于超出词汇表的单词，[word]向量不存在，因此得分函数会转变为以下形式：
+- en: '*SCORE* = [*3-6 char level n-grams*]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*得分* = [*3-6字符级n-grams*]'
+- en: Implementing skipgram
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现skipgram
+- en: Now let's try to understand the skipgram method through some Python code. The
+    Keras library has a very good and easy to understand skipgram function that you
+    can see and understand how the skipgram should be implemented. For code in this
+    section, you can take a look at the `fasttext skipgram cbow.ipynb` notebook which
+    is inspired by the Keras implementations.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们通过一些 Python 代码来理解 skipgram 方法。Keras 库提供了一个非常好且易于理解的 skipgram 函数，你可以查看并理解
+    skipgram 应该如何实现。在本节的代码中，你可以查看 `fasttext skipgram cbow.ipynb` 笔记本，它灵感来源于 Keras
+    的实现。
+- en: As discussed in skipgram, the task for the model is to predict the *i*th context
+    given the word. How this is achieved in practice is by taking pairs of words from
+    the document and then saying output is `1` in case the second word is the context
+    word.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如在 skipgram 中讨论的那样，模型的任务是根据单词预测第 *i* 个上下文。实践中，这是通过从文档中提取词对，然后在第二个词是上下文词时，输出为
+    `1` 来实现的。
+- en: 'Now, given a sequence or an individual document (which, in this case, is probably
+    a particular sentence), first create two lists: `couples` and `labels`. Now, for
+    each target word, get the context window and in the context window for each combination
+    of target word and context word, capture the combination in the `couples` list,
+    and capture the label in the `labels` list:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，给定一个序列或一个单独的文档（在此情况下，可能是一个特定的句子），首先创建两个列表：`couples` 和 `labels`。现在，对于每个目标词，获取上下文窗口，并在上下文窗口中，对于目标词和上下文词的每一个组合，将该组合捕捉到
+    `couples` 列表中，并将标签捕捉到 `labels` 列表中：
+- en: '[PRE12]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Since we have captured only positive values right now, we will need to capture
+    some negative cases as well to train the model effectively. In the negative sampling
+    case, for the number of negative samples, randomly generate some out-of-context
+    word indexes with the target words that we have:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们目前只捕捉了正例，我们还需要捕捉一些负例，以便有效地训练模型。在负采样的情况下，对于负样本的数量，需要随机生成一些与目标单词无关的词索引：
+- en: '[PRE13]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'You can encapsulate the previous logic in a function, as has been done in the
+    Keras function `skipgrams`  and then return the combinations (denoted by the `couples`
+    list) and the labels. This will be then passed on to the neural network, which
+    will train on these combinations and corresponding labels:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以将之前的逻辑封装到一个函数中，就像在 Keras 函数 `skipgrams` 中所做的那样，然后返回组合（由 `couples` 列表表示）和标签。接下来，这些将传递给神经网络，神经网络将基于这些组合和对应的标签进行训练：
+- en: '[PRE15]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The skipgram model is essentially a hidden layer sandwiched between an input
+    layer and the output layer. We can create a simple Keras model to capture that:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: skipgram 模型本质上是一个隐藏层，夹在输入层和输出层之间。我们可以创建一个简单的 Keras 模型来捕捉这一点：
+- en: '[PRE16]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'This creates the following model:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将创建以下模型：
+- en: '![](img/00024.gif)'
+  id: totrans-117
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00024.gif)'
+- en: 'Finally, once the model is trained, we get the vectors from the trained weights
+    of the embedding dimension:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，一旦模型训练完成，我们将从训练好的嵌入维度的权重中获取向量：
+- en: '[PRE17]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Now we can save the vectors in our file and load them up when necessary.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以将向量保存在文件中，并在需要时加载它们。
+- en: CBOW
+  id: totrans-121
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: CBOW
+- en: CBOW is the opposite of skipgram, where the specific word is taken as the target
+    given the context. The number of words that are used as context words depends
+    on the context word. So in this case, taking the previous example "Even now They
+    talked in Their tombs", we can take the whole context `["Even" "now" "They" "in"
+    "Their" "tombs."]` and generate the word "talked" from it.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CBOW 是 skipgram 的反向操作，其中给定上下文时，特定的词被作为目标。用作上下文词的词数取决于上下文词。所以在这个例子中，假设句子是 "Even
+    now They talked in Their tombs"，我们可以取整个上下文 `["Even" "now" "They" "in" "Their"
+    "tombs."]`，并从中生成单词 "talked"。
+- en: 'So the algorithm is to take the one-hot vectors of all the words since now
+    we are taking all the context words as the input. Considering that the window
+    size is k, there will be 2 million one-hot vectors. Then take the embedding words
+    vectors for all the words. Average out the word vectors to get the cumulative
+    context. The output of the hidden layer is thus generated using the following
+    equation:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以该算法是将所有单词的一热编码向量作为输入，因为现在我们将所有上下文词作为输入。考虑到窗口大小为 k，那么将有 200 万个一热向量。接着取所有单词的嵌入向量。将词向量平均以得到累积上下文。隐藏层的输出由以下公式生成：
+- en: '![](img/00025.jpeg)'
+  id: totrans-124
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00025.jpeg)'
+- en: It is worth noting that the hidden layer is one of the main differences between
+    skipgram and CBOW in terms of being mirror images of one another.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得注意的是，隐藏层是 skipgram 和 CBOW 之间的主要区别之一，它们是彼此的镜像。
+- en: 'Generate the score with the same score function as we saw when defining skipgram.
+    The equation is almost the same except that since we are predicting all the words
+    in the output based on the context, hence u and ν for the different columns (denoted
+    by j) needs to be computed:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用我们在定义skipgram时看到的相同评分函数生成得分。这个方程几乎是相同的，唯一不同的是，因为我们是根据上下文预测输出中的所有单词，因此需要计算不同列的u和ν（由j表示）：
+- en: '![](img/00026.jpeg)'
+  id: totrans-127
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00026.jpeg)'
+- en: 'Turn the score into probabilities using the softmax. Now we need to train this
+    model so that the probabilities match the true probabilities of the word, which
+    is the one-hot encoding of the actual word:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用softmax将得分转换为概率。现在，我们需要训练这个模型，以使得这些概率与单词的真实概率匹配，即实际单词的one-hot编码：
+- en: '![](img/00027.jpeg)'
+  id: totrans-129
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00027.jpeg)'
+- en: 'The CBOW architecture looks something like the following:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CBOW架构看起来像下面这样：
+- en: '![](img/00028.jpeg)'
+  id: totrans-131
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00028.jpeg)'
+- en: CBOW implementation
+  id: totrans-132
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: CBOW实现
+- en: CBOW implementation is easier to code than skipgram as the `cbow` method is
+    pretty much straightforward. For each target word, you take the context and try
+    to predict the target word, keeping the context as the input.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CBOW实现比skipgram更容易编写代码，因为`cbow`方法相当直接。对于每个目标单词，你需要获取上下文并尝试预测目标单词，同时保持上下文作为输入。
+- en: 'Hence, for the implementation perspective, writing code for CBOW is simpler.
+    For each word in the sequence, the same labels lists will be created but this
+    list will be the actual target word under focus. The other list is the context
+    list which will have the context words depending on the window. Now, once the
+    input and output are fixed, we can then yield them so that the model can train
+    on it:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，从实现的角度来看，编写CBOW的代码更简单。对于序列中的每个单词，都会创建相同的标签列表，但这个列表将是当前关注的实际目标单词。另一个列表是上下文列表，取决于窗口，它会包含上下文单词。现在，一旦输入和输出确定，我们就可以将它们传递出去，以便模型进行训练：
+- en: '[PRE18]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The output of the preceding model will be in terms of NumPy vectors which can
+    be passed to a keras model for batch training, similar to what you saw in the
+    *Implementing skipgram* section. Here, `cbow` is the Keras model:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述模型的输出将是NumPy向量，可以传递给keras模型进行批量训练，类似于你在*实现skipgram*部分看到的内容。在这里，`cbow`是Keras模型：
+- en: '[PRE19]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'For the CBOW model, you will need to define a input layer first. The embedding
+    layer can be the average of the embedding layer, which is then passed on to an
+    output layer using the `softmax` function. Hence we have the following:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于CBOW模型，你需要首先定义一个输入层。嵌入层可以是嵌入层的平均值，然后通过`softmax`函数传递到输出层。因此，我们得到以下内容：
+- en: '[PRE20]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'You should see the following architecture being built:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该看到以下架构正在构建：
+- en: '![](img/00029.jpeg)'
+  id: totrans-141
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00029.jpeg)'
+- en: Run the code in the `fasttext skipgram cbow.ipynb` notebook. You will be able
+    to compare the vectors created using skipgram and CBOW.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`fasttext skipgram cbow.ipynb`笔记本中运行代码。你将能够比较使用skipgram和CBOW创建的向量。
+- en: Comparison between skipgram and CBOW
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: skipgram和CBOW的比较
+- en: 'Now, you might be wondering which architecture should be used more during the
+    actual training of data. The following are some guidelines for differentiating
+    between CBOW and skipgram when choosing to train the data:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，你可能会想知道在实际训练数据时应该使用哪种架构。以下是一些区分CBOW和skipgram的指南，帮助你在选择训练数据时做出决策：
+- en: Skipgram works well with a small amount of training data. It works well even
+    on rare words and phrases.
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Skipgram在少量训练数据上表现良好。即使在稀有单词和短语上，它也能很好地工作。
+- en: CBOW is faster to train than skipgram. It also has higher accuracy on frequent
+    words and phrases.
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: CBOW的训练速度比skipgram更快。在频繁出现的单词和短语上，它也具有更高的准确性。
+- en: Loss functions and optimization
+  id: totrans-147
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 损失函数和优化
+- en: Choosing a loss function and an optimizing algorithm along with it is one of
+    the fundamental strategies of machine learning.  Loss functions are a way of associating
+    a cost with the difference between the present model and the actual data distribution.
+    The idea is that for specific loss function, optimizing algorithm pair, it would
+    be possible to optimize the parameters of the model to make them mimic the real
+    data as closely as possible.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择损失函数和优化算法是机器学习的基本策略之一。损失函数是一种将成本与当前模型和实际数据分布之间的差异相关联的方法。其思路是，对于特定的损失函数和优化算法配对，优化模型的参数使其尽可能模仿真实数据。
+- en: Language models that use the neural probabilistic networks are generally trained
+    using the maximum likelihood principle. The task is to maximize the probability
+    of the next word *w[t]*, which is taken as the target, given the previous words
+    h which is the "history". We can model that in terms of the softmax function that
+    we will discuss next.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用神经概率网络的语言模型通常使用最大似然原理进行训练。任务是最大化下一个单词*w[t]*的概率，将其视为目标，给定前面的单词h作为“历史”。我们可以通过softmax函数来建模这一点，接下来我们将讨论该函数。
+- en: Softmax
+  id: totrans-150
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Softmax
+- en: The most popular methods for learning parameters of a model is using gradient
+    descent. Gradient descent is basically an optimization algorithm that is meant
+    for minimizing a function, based on which way the negative gradient points toward.
+    In machine learning, the input function that gradient descent acts on is a loss
+    function that is decided for the model. The idea is that if we move towards minimizing
+    the loss function, the actual model will "learn" the ideal parameters and will
+    ideally generalize to out-of-sample or new data to a large extent as well. In
+    practice, it has been seen this is generally the case and stochastic gradient,
+    which is a variant of gradient descent, has a fast training time as well.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最流行的学习模型参数的方法是使用梯度下降。梯度下降基本上是一个优化算法，旨在最小化一个函数，基于负梯度指向的方向。在机器学习中，梯度下降作用的输入函数是为模型决定的损失函数。这个想法是，如果我们朝着最小化损失函数的方向移动，实际模型将“学习”理想的参数，并且理想情况下也能够很好地推广到外部样本或新数据。在实践中，通常会看到这种情况，并且随机梯度下降，作为梯度下降的一种变种，具有较快的训练时间。
+- en: 'For the gradient descent to be effective, we need such an optimizing function
+    that is convex and we want the logarithm of the model''s output to be well behaved
+    for gradient-based optimization of the likelihood, going with the **maximum likelihood
+    estimation** (**MLE**) principle. Now, consider the fact that taking the logarithm
+    of a series of products transforms it to a series of additions, and because the
+    likelihood for the whole training dataset is actually the product of the individual
+    likelihoods of each sample, it is easier to maximize the log-likelihood as this
+    would mean that you are optimizing the sum of the log-likelihood of each sample
+    indexed by k:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使梯度下降有效，我们需要一个凸优化函数，并且希望模型输出的对数对于基于梯度的似然优化是良好的，采用**最大似然估计**（**MLE**）原理。现在，考虑到对一系列乘积取对数会将其转换为一系列加法，并且由于整个训练数据集的似然实际上是每个样本的个别似然的乘积，因此最大化对数似然变得更加容易，因为这意味着你正在优化每个样本的对数似然和，样本由k索引：
+- en: '![](img/00030.jpeg)'
+  id: totrans-153
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00030.jpeg)'
+- en: 'Now we need to chose a suitable function for determining the probabilities,
+    given by P in this case. There are some good functions out there that can be used
+    and one popular function is the sigmoid function. The sigmoid function looks like
+    an S:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们需要选择一个合适的函数来确定概率，在这种情况下由P给出。有一些很好的函数可以使用，其中一个流行的函数是sigmoid函数。sigmoid函数的形状像一个S：
+- en: '![](img/00031.jpeg)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00031.jpeg)'
+- en: The sigmoid function is best used for binary classification tasks and is used
+    in logistic regression.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: sigmoid函数最适用于二分类任务，并且在逻辑回归中使用。
+- en: Since we need to obtain the posterior distribution of words, our problem statement
+    is more of a multinomial distribution instead of a binary one. Hence, we can chose
+    the softmax distribution, which is a generalization of the sigmoid for the multi-class
+    problem.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们需要获得单词的后验分布，我们的问题陈述更像是一个多项式分布而不是二项式分布。因此，我们可以选择softmax分布，它是sigmoid函数在多类问题上的推广。
+- en: 'The softmax function calculates the probabilities distribution of the event
+    over n different events. The softmax takes a class of values and converts them
+    to probabilities with sum 1\. So you can say that it is effectively squashing
+    a k-dimensional vector of arbitrary real values to k-dimensional vector of real
+    values within the range 0 to 1\. The function is given by the following equation:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: softmax函数计算事件在n个不同事件上的概率分布。softmax将一类值转换为概率，且总和为1。因此，你可以说它有效地将一个k维的任意实数值向量压缩成一个0到1范围内的k维实数值向量。该函数由以下方程给出：
+- en: '![](img/00032.jpeg)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00032.jpeg)'
+- en: 'You can use the following code to see what the softmax function looks like:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用以下代码查看softmax函数的表现：
+- en: '[PRE21]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'If you run the previous code in a Jupyter notebook, you should see a graph
+    similar to the following. You can also see this in the `softmax function.ipynb`
+    notebook under `chapter 3` folder:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在 Jupyter notebook 中运行之前的代码，你应该会看到类似下面的图表。你也可以在 `softmax function.ipynb`
+    笔记本中看到这个内容，位于 `chapter 3` 文件夹下：
+- en: '![](img/00033.jpeg)'
+  id: totrans-163
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00033.jpeg)'
+- en: Note that as the values are higher, the probabilities are also higher. This
+    is an interesting property of softmax, that is, the reaction to low stimuli is
+    a rather uniform distribution and the reaction to high stimuli is probabilities
+    that are closer to 0 and 1\. If you are wondering why that is the case, this is
+    because of the impact of the exponential function, which focuses on the extreme
+    values.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意到随着数值的增大，概率也随之增大。这是 softmax 的一个有趣特性，即对低刺激的反应是一个相当均匀的分布，而对高刺激的反应是接近 0 和 1 的概率。如果你想知道为什么会这样，这是因为指数函数的影响，它聚焦于极端值。
+- en: 'So, for a given input word, this function will calculate the probabilities
+    of each word over all possible words. If you train using the softmax function,
+    the probability associated with the actual word should be the highest:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，对于给定的输入单词，这个函数将计算所有可能单词的概率。如果你使用 softmax 函数进行训练，那么与实际单词相关的概率应该是最高的：
+- en: '![](img/00034.jpeg)'
+  id: totrans-166
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00034.jpeg)'
+- en: Here, the score function can be considered to be the compatibility of the word
+    w[t] with the context h.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，分数函数可以看作是单词 *w[t]* 与上下文 *h* 的兼容性。
+- en: 'Since we are training this model using the negative log likelihood on the training
+    set:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们正在使用训练集上的负对数似然来训练这个模型：
+- en: '![](img/00035.jpeg)'
+  id: totrans-169
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00035.jpeg)'
+- en: 'Now we need to learn our softmax model using gradient descent and hence we
+    need to compute the gradient with respect to the input words:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们需要使用梯度下降来学习我们的 softmax 模型，因此我们需要计算关于输入单词的梯度：
+- en: '![](img/00036.jpeg)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00036.jpeg)'
+- en: 'The update of the parameter models will be in the opposite direction to the
+    gradient:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参数模型的更新将与梯度的方向相反：
+- en: '![](img/00037.jpeg)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00037.jpeg)'
+- en: In our context, let the vocabulary be *V* and the hidden layer size be *N*.
+    The units on the adjacent layer are fully connected. The input is a one-hot encoded
+    vector, which means for a given word input word context, only one out of the *V*
+    units, {*x[1], x[2], ..., x[V]}*, will be 1, and all other units are 0.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的上下文中，设词汇表为 *V*，隐藏层的大小为 *N*。相邻层之间的单元是完全连接的。输入是一个独热编码向量，这意味着对于给定的单词输入上下文，只有
+    *V* 单元中的一个， {*x[1], x[2], ..., x[V]}*，会是 1，其他所有单元都是 0。
+- en: 'The weights between the input layer and output layer can be represented by
+    a *V* x *N* matrix *W*. Each row of *W* is the *N*-dimensional vector representation
+    *v[w]* of the associated word of the input layer. Formally, row *i* of *W* is
+    *v[w]^T*. Given a context, assuming *x[k]*=*1* for a specific context word and
+    0 otherwise, we have the following:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入层和输出层之间的权重可以通过一个 *V* x *N* 矩阵 *W* 来表示。*W* 的每一行是与输入层相关的单词的 *N* 维向量表示 *v[w]*。形式上，*W*
+    的第 *i* 行是 *v[w]^T*。给定一个上下文，假设 *x[k]* = *1* 代表一个特定的上下文单词，其它情况下为 0，我们得到以下公式：
+- en: '![](img/00038.jpeg)'
+  id: totrans-176
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00038.jpeg)'
+- en: 'This is essentially the *k^(th)* row of *W*. Lets call this *ν[wI^T]*. From
+    the hidden layer to the output matrix, there is a different weight *W^'' = {w[ij]^''}*,
+    which is a *N* x *V* matrix. Using these weights, you can compute a score *u[j]*
+    for each word in the vocabulary:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本质上，这就是 *W* 的第 *k^(th)* 行。我们称之为 *ν[wI^T]*。从隐藏层到输出矩阵，有一个不同的权重 *W^' = {w[ij]^'}*，它是一个
+    *N* x *V* 矩阵。使用这些权重，你可以为词汇表中的每个单词计算一个分数 *u[j]*：
+- en: '![](img/00039.jpeg)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00039.jpeg)'
+- en: 'Here, *ν[w]^''[j]* is the *jth* column of the matrix *W^''*. Now, using the
+    softmax equation, we can obtain the following:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*ν[w]^'[j]* 是矩阵 *W^'* 的第 *j* 列。现在，使用 softmax 方程，我们可以得到以下结果：
+- en: '![](img/00040.jpeg)'
+  id: totrans-180
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00040.jpeg)'
+- en: '*ν[w]* and *ν[w]^''* are two representations of the word *w*.  *ν[w]* comes
+    from rows of *W*, which is the input to hidden weight matrix, and *ν[w]^''* comes
+    from columns of *W^''*, which is the hidden output matrix. In subsequent analysis,
+    we will call *ν[w]* the "input vector" and *ν[w]^''* the "output vector" of the
+    word *w*. Considering *u[j]* as the score as described, we can transform the loss
+    function to equation (6) to the one as follows:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*ν[w]* 和 *ν[w]^''* 是单词 *w* 的两种表示。 *ν[w]* 来自 *W* 的行，*W* 是输入到隐藏权重矩阵的，而 *ν[w]^''*
+    来自 *W^''* 的列，*W^''* 是隐藏输出矩阵。在后续分析中，我们将称 *ν[w]* 为单词 *w* 的“输入向量”，而 *ν[w]^''* 为其“输出向量”。考虑
+    *u[j]* 为描述的分数，我们可以将损失函数从方程 (6) 转换为如下形式：'
+- en: '![](img/00041.jpeg)'
+  id: totrans-182
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00041.jpeg)'
+- en: Hierarchical softmax
+  id: totrans-183
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分层 softmax
+- en: 'Finding the softmax is highly computationally intensive. For each training
+    instance, we have to iterate through every word in the vocabulary and compute
+    the softmax. Thus, it is impractical to scale up to large vocabularies and large
+    training corpora. To solve this problem, there are two approaches that are used
+    in fastText: the hierarchical softmax and the negative sampling approach. We will
+    discuss hierarchical softmax in this section and will discuss negative sampling
+    in the next section. In both the approaches, the trick is to recognize that we
+    don''t need to update all the output vectors per training instance.'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算 softmax 是高度计算密集型的。对于每个训练实例，我们必须遍历词汇表中的每个单词并计算 softmax。因此，在大词汇表和大规模训练语料库下，这种方法是不可行的。为了解决这个问题，fastText
+    使用了两种方法：层次化软最大化和负采样方法。在本节中，我们将讨论层次化软最大化，并将在下一节中讨论负采样。在这两种方法中，技巧是认识到我们不需要在每个训练实例中更新所有的输出向量。
+- en: 'In hierarchical softmax, a binary tree is computed to represent all the words
+    in the vocabulary. The *V* words must be leaf units of the tree. It can be proved
+    that there are *V-1* inner units. For each unit, there exists a unique path from
+    the root of the tree to the unit, and this path is used to estimate the probability
+    of the word represented in the leaf unit:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在层次化软最大化中，计算出一棵二叉树来表示词汇表中的所有单词。*V* 个单词必须是树的叶子节点。可以证明，树中有 *V-1* 个内部节点。对于每个节点，从树的根到该节点存在一条唯一的路径，并且这条路径用于估计表示在叶节点中的单词的概率：
+- en: '![](img/00042.gif)'
+  id: totrans-186
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00042.gif)'
+- en: 'Each of the words can be reached by a path from the root through the inner
+    nodes, which represent probability mass along the way. Those values are produced
+    by the usage of simple sigmoid function as long as the path we are calculating
+    is simply the product of those probability mass functions defined with the following:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个单词可以通过从根节点经过内节点的路径到达，这些内节点表示路径上概率质量。这些值是通过简单的 sigmoid 函数生成的，只要我们计算的路径是这些概率质量函数的乘积，定义如下：
+- en: '![](img/00043.jpeg)'
+  id: totrans-188
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00043.jpeg)'
+- en: 'What is *x* in our specific case? It is calculated with the dot product of
+    input and output vector representations of the word we are working with:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们特定的情况下，*x* 是如何计算的？它是通过输入和输出词向量表示的点积来计算的：
+- en: '![](img/00044.jpeg)'
+  id: totrans-190
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00044.jpeg)'
+- en: Here, *n(w, j)* is the *j*th node on the path from the root to *w*.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，*n(w, j)* 是从根到 *w* 的路径上的第 *j* 个节点。
+- en: 'In the hierarchical softmax model, there is no output representation of words.
+    Instead, each of the *V - 1* inner units has an output vector *ν[n(w,j)]^''*.
+    And the probability of a word being the output word is defined as follows:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在层次化软最大化模型中，单词没有输出表示。相反，每个 *V - 1* 的内部单元都有一个输出向量 *ν[n(w,j)]^'*。而一个单词作为输出单词的概率定义如下：
+- en: '![](img/00045.jpeg)'
+  id: totrans-193
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00045.jpeg)'
+- en: 'Here, *ch(n)* is the left child of unit *n*; *ν[n(w,j)]^''* is the vector representation
+    ("output vector" ) of the inner unit *n(w,j)*; *h* is the output value of the
+    hidden layer (in the skipgram model *h = ν[ω]* and in CBOW, ![](img/00046.jpeg));
+    ![](img/00047.jpeg) is a special function defined as follows:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，*ch(n)* 是单元 *n* 的左孩子；*ν[n(w,j)]^'* 是内部单元 *n(w,j)* 的向量表示（"输出向量"）；*h* 是隐藏层的输出值（在
+    skipgram 模型中 *h = ν[ω]*，而在 CBOW 中，![](img/00046.jpeg)）；![](img/00047.jpeg) 是一个特殊的函数，定义如下：
+- en: '![](img/00048.jpeg)'
+  id: totrans-195
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00048.jpeg)'
+- en: To calculate the probability of any output word, we need the probabilities of
+    each intermediate node in the path from the root to the output word.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了计算任何输出单词的概率，我们需要知道从根节点到输出单词路径中每个中间节点的概率。
+- en: 'We define the probability of going right at an intermediate node as follows:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们定义在一个中间节点上向右走的概率如下：
+- en: '![](img/00049.jpeg)'
+  id: totrans-198
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00049.jpeg)'
+- en: 'Since we are computing a binary tree, the probability of going left will be
+    as follows:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们计算的是一棵二叉树，向左走的概率如下：
+- en: '![](img/00050.jpeg)'
+  id: totrans-200
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00050.jpeg)'
+- en: 'Theoretically one can use many different types of trees for hierarchical softmax.
+    You can randomly generate the tree. Or you can use existing linguistic resources
+    such as WordNet. Morin and Benzio used this and showed that there was a 258x improvement
+    over the randomly generated tree. But the nodes in the trees built this way generally
+    have more than one edge. Another strategy is to learn the hierarchy using a recursive
+    partitioning strategy or clustering strategy. The clustering algorithm can be
+    a greedy approach, as shown in *Self-organized Hierarchical Softmax* by Yikang
+    Shen, Shawn Tan, Christopher Pal, and Aaron Courville. We have another option
+    in the form of Huffman codes, which are traditionally used in data compression
+    circles. Since we are quite interested in clustering the documents by Nikhil Pawar,
+    2012, it is seen that when Huffman encoding is used to encode strings to integers,
+    the clustering on the integer instances is much more effective. In word2vec and
+    fastText, the Huffman tree is used. An interesting property of Huffman trees is
+    that while an inner unit of a binary tree may not always have both children, a
+    binary Huffman tree''s inner units always do:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，可以使用许多不同类型的树来实现层次化软最大化（hierarchical softmax）。你可以随机生成树，或者使用现有的语言学资源，如WordNet。Morin和Benzio使用了这种方法，并展示了相对于随机生成树，效果提升了258倍。但这种方式构建的树中的节点通常具有多个边。另一种策略是使用递归划分策略或聚类策略来学习层次结构。聚类算法可以采用贪心方法，正如Yikang
+    Shen、Shawn Tan、Christopher Pal和Aaron Courville在*自组织层次化软最大化*中所展示的那样。我们还可以选择Huffman编码，这在数据压缩领域传统上被使用。由于我们对通过Nikhil
+    Pawar（2012）进行的文档聚类非常感兴趣，研究表明，当使用Huffman编码将字符串编码为整数时，基于整数实例的聚类效果要有效得多。在word2vec和fastText中，使用了Huffman树。Huffman树的一个有趣属性是，虽然二叉树的内部节点可能并不总是具有两个子节点，但二叉Huffman树的内部节点总是具有两个子节点：
+- en: '![](img/00051.jpeg)'
+  id: totrans-202
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00051.jpeg)'
+- en: Tree generated using http://huffman.ooz.ie/?text=abcab
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用http://huffman.ooz.ie/?text=abcab生成的树
+- en: When building a Huffman tree, codes are assigned to the tokens such that the
+    length of the code depends on the relative frequency or weight of the token. For
+    example, in the previous example, the code for word E is 0000, which is one of
+    the highest, and hence you can think that this word has occurred the most number
+    of times in the corpus.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在构建Huffman树时，代码被分配给令牌，代码的长度取决于令牌的相对频率或权重。例如，在前面的例子中，单词E的代码是0000，这是其中一个最长的代码，因此你可以认为这个词在语料库中出现的次数最多。
+- en: The code to build the tree can be found at [https://github.com/facebookresearch/fastText/blob/d72255386b8cd00981f4a83ae346754697a8f4b4/src/model.cc#L279.](https://github.com/facebookresearch/fastText/blob/d72255386b8cd00981f4a83ae346754697a8f4b4/src/model.cc#L279)
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于构建树的代码可以在[https://github.com/facebookresearch/fastText/blob/d72255386b8cd00981f4a83ae346754697a8f4b4/src/model.cc#L279](https://github.com/facebookresearch/fastText/blob/d72255386b8cd00981f4a83ae346754697a8f4b4/src/model.cc#L279)找到。
+- en: You can find the python implementation as part of the `Vocab` class in the method
+    `encode_huffman`. For a simpler implementation, you can find the python implementation
+    in the `huffman coding.ipynb` notebook in `chapter3` folder of the repository.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在`Vocab`类中的`encode_huffman`方法找到Python实现。对于更简单的实现，你可以在仓库中的`chapter3`文件夹下的`huffman
+    coding.ipynb`笔记本中找到Python实现。
+- en: For the update equations, the computational complexity per training instance
+    reduces from *O(V)* to *O(log(V))*, which is a huge improvement in terms of speed.
+    We still roughly have the same number of parameters (*V-1* vectors for the inner
+    units as compared to originally *V* output vectors for words).
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于更新方程，每个训练实例的计算复杂度从*O(V)*降低到*O(log(V))*，这在速度方面是一个巨大的提升。我们仍然大致保留相同数量的参数（与最初的*V*个输出向量相比，内节点的*V-1*个向量）。
+- en: Google Allo uses hierarchical softmax layer to make their phrase recommendation
+    faster.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Google Allo使用层次化软最大化层使得短语推荐更快速。
+- en: Negative sampling
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 负采样
+- en: An alternative to the hierarchical softmax is **noise contrast estimation**
+    (**NCE**), which was introduced by Gutmann and Hyvarinen and applied to language
+    modeling by Mnih and Teh. NCE posits that a good model should be able to differentiate
+    data from noise by means of logistic regression.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 层次化软最大化的替代方法是**噪声对比估计（NCE）**，该方法由Gutmann和Hyvarinen提出，并由Mnih和Teh应用于语言建模。NCE认为，一个好的模型应该能够通过逻辑回归区分数据与噪声。
+- en: 'While NCE can be shown to approximate the log probability of the softmax, the
+    skipgram model is only concerned with the learning high-quality vector representations,
+    so we are free to simplify NCE as long as the vector representations retrain their
+    quality. We define negative sampling by the following objective:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管可以证明 NCE 近似了 softmax 的对数概率，skipgram 模型只关心学习高质量的向量表示，因此只要向量表示保持其质量，我们可以自由简化
+    NCE。我们通过以下目标定义负采样：
+- en: '![](img/00052.jpeg)'
+  id: totrans-212
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00052.jpeg)'
+- en: This is used to replace the *log(P(W[O] | W[I]))* term in the skipgram objective.
+    Thus, the task is to distinguish the target word *w[O]* from draws from the noise
+    distribution *P[n](w)* using logistic regression, where there are *k* negative
+    samples for each data sample. In fastText, five negatives are sampled by default.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这用于替代 skipgram 目标中的 *log(P(W[O] | W[I]))* 项。因此，任务是通过逻辑回归区分目标词 *w[O]* 和来自噪声分布
+    *P[n](w)* 的抽样，其中每个数据样本都有 *k* 个负样本。在 fastText 中，默认情况下会采样五个负样本。
+- en: Subsampling of frequent words
+  id: totrans-214
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 常见词的子采样
+- en: In a very large corpus, the most frequent words can easily occur hundreds of
+    millions of times, for example, words such as "in", "the" and "a". Such words
+    generally provide less information value than the rare words. You can easily see
+    that while the fastText model benefits from observing co-occurrences of "France"
+    and "Paris", it benefits much less from observing co-occurrences of "France" and
+    "the", as nearly every word co-occurs frequently within a sentence with "the".
+    The idea can also be applied in the opposite direction. The vector representations
+    of frequent words do not change significantly after training on several million
+    additional examples.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一个非常大的语料库中，最常见的单词可能会出现数亿次，例如 "in"、"the" 和 "a" 这样的词。此类单词提供的信息价值通常低于稀有词。你可以很容易地看出，尽管
+    fastText 模型通过观察 "France" 和 "Paris" 的共现获益，但通过观察 "France" 和 "the" 的共现获得的收益则要小得多，因为几乎每个单词都频繁地与
+    "the" 一起出现在句子中。这一思想也可以反向应用。频繁单词的向量表示在训练了几百万个额外的示例后不会发生显著变化。
+- en: 'To counter the imbalance between the rare and frequent words, we use a simple
+    subsampling approach: each word *w[i]* in the training set is discarded with the
+    probability computed by the following formula:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了应对稀有词和常见词之间的不平衡，我们使用一种简单的子采样方法：训练集中每个单词 *w[i]* 被以以下公式计算的概率丢弃：
+- en: '![](img/00053.jpeg)'
+  id: totrans-217
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00053.jpeg)'
+- en: Here, the function *f* is the frequency of the ith word *w* and *t* is a chosen
+    threshold and hence a hyperparameter. In fastText, the default value of t is chosen
+    to be 0.0001\. The code for this can be found at [https://github.com/facebookresearch/fastText/blob/53dd4c5cefec39f4cc9f988f9f39ab55eec6a02f/src/dictionary.cc#L281.](https://github.com/facebookresearch/fastText/blob/53dd4c5cefec39f4cc9f988f9f39ab55eec6a02f/src/dictionary.cc#L281)
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中，函数 *f* 是第 i 个单词 *w* 的频率，*t* 是选择的阈值，因此是一个超参数。在 fastText 中，默认的 t 值选择为 0.0001。相关代码可以在
+    [https://github.com/facebookresearch/fastText/blob/53dd4c5cefec39f4cc9f988f9f39ab55eec6a02f/src/dictionary.cc#L281](https://github.com/facebookresearch/fastText/blob/53dd4c5cefec39f4cc9f988f9f39ab55eec6a02f/src/dictionary.cc#L281)
+    找到。
+- en: Context definitions
+  id: totrans-219
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 上下文定义
+- en: 'Generally speaking, for a sentence of n words *w[1]*, *w[2]*[, ...,] *w[n]*
+    contexts of a word *w[i]* comes from window of size *k* around the word:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，对于一个包含 n 个单词 *w[1]*, *w[2]*, ..., *w[n]* 的句子，单词 *w[i]* 的上下文来自于围绕该单词的大小为
+    *k* 的窗口：
+- en: '![](img/00054.jpeg)'
+  id: totrans-221
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/00054.jpeg)'
+- en: 'Here, *k* is a parameter. However there are two subtleties:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*k* 是一个参数。但有两个细节：
+- en: '**Dynamic window size**: The window size that is being used is dynamic—the
+    parameter *k* denotes the maximal window size. For each word in the corpus, a
+    window size *k^''* is sampled uniformly from *1*,...,*k*.'
+  id: totrans-223
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**动态窗口大小**：所使用的窗口大小是动态的——参数 *k* 表示最大窗口大小。对于语料库中的每个单词，从 *1* 到 *k* 中均匀地采样一个窗口大小
+    *k^''*。'
+- en: '**Effect of subsampling and rare word pruning: **Similar to word2vec, fastText
+    has two additional parameters for discarding some of the input words: words appearing
+    less frequently than `minCount` are not considered as either words or contexts,
+    and in addition, frequent words (as defined by the *-t* parameter) are down sampled.
+    Importantly, these words are removed from the text before generating the contexts.
+    This has the effect of increasing the effective window size for certain words.
+    Subsampling of frequent words should improve the quality of the resultant embeddings.'
+  id: totrans-224
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**子采样和稀有词修剪的效果：**与 word2vec 类似，fastText 有两个额外的参数用于丢弃一些输入词：出现频率低于 `minCount`
+    的词既不被视为词汇也不被视为上下文，此外，频繁词汇（由 *-t* 参数定义）会被下采样。重要的是，这些词会在生成上下文之前从文本中移除。这种方法增加了某些词的有效窗口大小。对频繁词的下采样应该会提高结果嵌入的质量。'
+- en: Summary
+  id: totrans-225
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, you have taken a look at unsupervised learning in fastText,
+    as well as the algorithms and methods that enable it.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，你已经了解了 fastText 中的无监督学习，以及使其成为可能的算法和方法。
+- en: The next chapter will be about how fastText has approached supervised learning
+    and you will also learn about how model quantization works in fastText.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将介绍 fastText 如何进行监督学习，你还将了解模型量化在 fastText 中的工作原理。

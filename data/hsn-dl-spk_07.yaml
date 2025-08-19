@@ -1,0 +1,1099 @@
+- en: Training Neural Networks with Spark
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Spark训练神经网络
+- en: In the previous two chapters, we have learned how to programmatically configure
+    and build **convolutional neural networks** (**CNNs**) and **recurrent neural
+    networks** (**RNNs**) using the **DeepLearning4j** (**DL4J**) API in Scala. There,
+    implementing the training of these networks was mentioned, but very little explanation
+    has been provided. This chapter finally goes into details of how to implement
+    the training strategies for both kinds of network. The chapter also explains why
+    Spark is important in the training process and what the fundamental role of DL4J
+    is from a performance perspective.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前两章中，我们学习了如何使用**DeepLearning4j**（**DL4J**）API在Scala中编程配置和构建**卷积神经网络**（**CNNs**）和**递归神经网络**（**RNNs**）。在那里提到了这些网络的训练实现，但并没有提供详细的解释。本章最终详细讲解了如何实现这两种网络的训练策略。本章还解释了为什么Spark在训练过程中至关重要，以及从性能角度看，DL4J的基本作用。
+- en: The second and third sections focus on specific training strategies for CNNs
+    and RNNs respectively. The fourth section of this chapter also provides suggestions,
+    tips, and tricks for a proper Spark environment configuration. The final section
+    describes how to use the DL4J Arbiter component for hyperparameter optimization.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的第二和第三部分分别聚焦于CNN和RNN的具体训练策略。第四部分还提供了关于如何正确配置Spark环境的建议、技巧和窍门。最后一部分介绍了如何使用DL4J的Arbiter组件进行超参数优化。
+- en: 'Here is a summary of what we will cover in this chapter:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是本章将涵盖内容的总结：
+- en: CNN distributed training with Spark and DL4J
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Spark和DL4J进行CNN分布式训练
+- en: RNN distributed training with Spark and DL4J
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Spark和DL4J进行RNN分布式训练
+- en: Performance considerations
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 性能考虑事项
+- en: Hyperparameter optimization
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 超参数优化
+- en: Distributed network training with Spark and DeepLearning4j
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Spark和DeepLearning4j进行分布式网络训练
+- en: The training of **Multilayer Neural Networks** (**MNNs**) is computationally
+    expensive—it involves huge datasets, and there is also the need to complete the
+    training process in the fastest way possible. In [Chapter 1](ad6da519-0705-4db6-aa38-2b98b85892cc.xhtml), *The
+    Apache Spark Ecosystem*, we have learned about how Apache Spark can achieve high
+    performances when undertaking large-scale data processing. This makes it a perfect
+    candidate to perform training, by taking advantage of its parallelism features.
+    But Spark alone isn't enough—its performances are excellent, in particular for
+    ETL or streaming, but in terms of computation, in an MNN training context, some
+    data transformation or aggregation need to be moved down using a low-level language
+    (such as C++).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**多层神经网络**（**MNNs**）的训练计算量大—它涉及庞大的数据集，并且需要尽可能快速地完成训练过程。在[第1章](ad6da519-0705-4db6-aa38-2b98b85892cc.xhtml)《Apache
+    Spark生态系统》中，我们学习了Apache Spark如何在进行大规模数据处理时实现高性能。这使得Spark成为执行训练的完美选择，能够充分利用其并行特性。但仅有Spark是不够的—尽管Spark在ETL或流处理方面的性能表现优秀，但在MNN训练的计算背景下，一些数据转换或聚合需要使用低级语言（如C++）来完成。'
+- en: 'Here''s where the ND4J ([https://nd4j.org/index.html](https://nd4j.org/index.html))
+    module of DL4J comes into play. There''s no need to learn and program in C++,
+    as ND4J provides the Scala APIs, and those are what we need to use. The underlying
+    C++ library is transparent to Scala or Java developers using ND4J. Here is a simple
+    example of how a Scala application that uses the ND4J API appears (the inline
+    comments explain what the code does):'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这时，DL4J的ND4J模块（[https://nd4j.org/index.html](https://nd4j.org/index.html)）发挥了作用。无需学习和编程C++，因为ND4J提供了Scala
+    API，而这些正是我们需要使用的。底层的C++库对于使用ND4J的Scala或Java开发者是透明的。下面是一个使用ND4J API的Scala应用程序的简单示例（内联注释解释了代码的功能）：
+- en: '[PRE0]'
+  id: totrans-11
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: ND4J brings to the JVM an open source, distributed, GPU-enabled, intuitive scientific
+    library, filling the gap between JVM languages and Python programmers in terms
+    of availability of powerful data analysis tools. DL4J relies on Spark for training
+    models in parallel. Large datasets are partitioned, with each partition available
+    to separate neural networks, each one in its own core—DL4J iteratively averages
+    the parameters they produce in a central model.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ND4J为JVM带来了一个开源、分布式、支持GPU的直观科学库，填补了JVM语言与Python程序员之间在强大数据分析工具可用性方面的空白。DL4J依赖于Spark进行并行模型训练。大型数据集被分区，每个分区可供独立的神经网络使用，每个神经网络都在其自己的核心中运行—DL4J会反复平均它们在中央模型中生成的参数。
+- en: Just for completeness of information, whether training would be demanded to
+    DL4J only, running multiple models in the same server, `ParallelWrapper` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/parallelism/ParallelWrapper.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/parallelism/ParallelWrapper.html))
+    should be used. But please consider that this process is particularly expensive
+    and the server has to be equipped with a large number of CPUs (at least 64) or
+    multiple GPUs.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了完整信息，无论训练是否仅要求 DL4J，若在同一服务器上运行多个模型，则应使用 `ParallelWrapper` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/parallelism/ParallelWrapper.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/parallelism/ParallelWrapper.html))。但请注意，这个过程特别昂贵，服务器必须配备大量的
+    CPU（至少 64 个）或多个 GPU。
+- en: 'DL4J provides the following two classes for training neural networks on top
+    of Spark:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DL4J 提供了以下两个类，用于在 Spark 上训练神经网络：
+- en: '`SparkDl4jMultiLayer` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/multilayer/SparkDl4jMultiLayer.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/multilayer/SparkDl4jMultiLayer.html)),
+    a wrapper around `MultiLayerNetwork` (this is the class that has been used in
+    some examples presented in the previous chapters).'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SparkDl4jMultiLayer` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/multilayer/SparkDl4jMultiLayer.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/multilayer/SparkDl4jMultiLayer.html))，是
+    `MultiLayerNetwork` 的封装类（这是在前几章中一些示例中使用的类）。'
+- en: '`SparkComputationGraph` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/graph/SparkComputationGraph.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/graph/SparkComputationGraph.html)),
+    a wrapper around `ComputationGraph` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/nn/graph/ComputationGraph.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/nn/graph/ComputationGraph.html)),
+    a neural network with arbitrary connection structure (DAG) that can also have
+    an arbitrary number of inputs and outputs.'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SparkComputationGraph` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/graph/SparkComputationGraph.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/spark/impl/graph/SparkComputationGraph.html))，是
+    `ComputationGraph` ([https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/nn/graph/ComputationGraph.html](https://deeplearning4j.org/api/v1.0.0-beta2/org/deeplearning4j/nn/graph/ComputationGraph.html))
+    的封装类，`ComputationGraph` 是一种具有任意连接结构（DAG）的神经网络，且可以有任意数量的输入和输出。'
+- en: These two classes are wrappers around the standard single-machine classes, so
+    the network configuration process is identical in both standard and distributed
+    training.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两个类是标准单机类的封装类，因此网络配置过程在标准训练和分布式训练中是相同的。
+- en: 'In order to train a network through DL4J on a Spark cluster you have to follow
+    this standard workflow:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了通过 DL4J 在 Spark 集群上训练一个网络，你需要遵循这个标准的工作流程：
+- en: Specify the network configuration through the `MultiLayerConfiguration` ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/MultiLayerConfiguration.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/MultiLayerConfiguration.html))
+    class or the `ComputationGraphConfiguration` ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/ComputationGraphConfiguration.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/ComputationGraphConfiguration.html))
+    class
+  id: totrans-19
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过 `MultiLayerConfiguration` ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/MultiLayerConfiguration.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/MultiLayerConfiguration.html))
+    类或 `ComputationGraphConfiguration` ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/ComputationGraphConfiguration.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/nn/conf/ComputationGraphConfiguration.html))
+    类指定网络配置
+- en: Create an instance of `TrainingMaster` ([https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/TrainingMaster.html](https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/TrainingMaster.html))
+    to control how distributed training is executed in practice
+  id: totrans-20
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个 `TrainingMaster` 实例 ([https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/TrainingMaster.html](https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/TrainingMaster.html))，以控制分布式训练的执行方式
+- en: Create the `SparkDl4jMultiLayer` or `SparkComputationGraph` instance using the
+    network configuration and the `TrainingMaster` object previously created
+  id: totrans-21
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用网络配置和之前创建的 `TrainingMaster` 对象，创建 `SparkDl4jMultiLayer` 或 `SparkComputationGraph`
+    实例
+- en: Load the training data
+  id: totrans-22
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 加载训练数据
+- en: Call the appropriate fit method on the `SparkDl4jMultiLayer` (or `SparkComputationGraph`)
+    instance
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`SparkDl4jMultiLayer`（或`SparkComputationGraph`）实例上调用适当的fit方法
+- en: Save the trained network
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 保存训练好的网络
+- en: Build the JAR file for the Spark job
+  id: totrans-25
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为Spark任务构建JAR文件
+- en: Submit the JAR for execution
+  id: totrans-26
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提交JAR文件以执行
+- en: 'The code examples presented in [Chapter 5](fbec1d8a-a92f-4899-af0f-11f3d545e0eb.xhtml),
+    *Convolutional Neural Networks*, and [Chapter 6](f7a89101-15be-49e3-8bf5-8c74c655f6d7.xhtml),
+    *Recurrent Neural Networks*, have given you an idea of how to configure and build
+    an MNN; those in [Chapter 3](44fab060-12c9-4eec-9e15-103da589a510.xhtml), *Extract,
+    Transform, Load*, and [Chapter 4](198c1dc7-bc2a-47e8-9f97-8dbe37b7a2e3.xhtml),
+    *Streaming*, have presented insights about different ways to load the training
+    data and, from [Chapter 1](ad6da519-0705-4db6-aa38-2b98b85892cc.xhtml), *The Apache
+    Spark Ecosystem*, you have learned how to execute a Spark job. Let''s now focus
+    in the next sections on understanding how to implement the missing part: the network
+    training.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第5章](fbec1d8a-a92f-4899-af0f-11f3d545e0eb.xhtml)中展示的代码示例，*卷积神经网络*，和[第6章](f7a89101-15be-49e3-8bf5-8c74c655f6d7.xhtml)中展示的代码示例，*递归神经网络*，让你了解如何配置和构建MNN；[第3章](44fab060-12c9-4eec-9e15-103da589a510.xhtml)中展示的代码示例，*提取、转换、加载*，以及[第4章](198c1dc7-bc2a-47e8-9f97-8dbe37b7a2e3.xhtml)中展示的代码示例，*流处理*，让你了解不同方式加载训练数据的思路，而[第1章](ad6da519-0705-4db6-aa38-2b98b85892cc.xhtml)中介绍的内容，*Apache
+    Spark生态系统*，则让你了解如何执行Spark任务。接下来，让我们在接下来的章节中专注于理解如何实现缺失的部分：网络训练。'
+- en: 'At the present time, to train a network, DL4J provides a single approach—parameter
+    averaging ([https://arxiv.org/abs/1410.7455](https://arxiv.org/abs/1410.7455)).
+    Here''s how this process conceptually happens:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前，为了训练网络，DL4J提供了一种单一的方法——参数平均化（[https://arxiv.org/abs/1410.7455](https://arxiv.org/abs/1410.7455)）。以下是这一过程的概念性步骤：
+- en: The Spark master starts using the network configuration and parameters
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Spark主节点开始使用网络配置和参数
+- en: Depending on the configuration of the `TrainingMaster`, data is partitioned
+    into subsets
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据`TrainingMaster`的配置，数据被划分为多个子集
+- en: 'For each subset:'
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于每个子集：
+- en: Configuration and the parameters are distributed from the master across each
+    worker
+  id: totrans-32
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 配置和参数从主节点分发到每个工作节点
+- en: Each worker executes the fit on its own partition
+  id: totrans-33
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个工作节点在其自身的分区上执行fit操作
+- en: The average of the parameters is calculated and then the results are returned
+    back to the master
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 计算参数的平均值，然后将结果返回给主节点
+- en: The training completes and a copy of the trained network is available in the
+    master
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练完成后，已训练的网络副本会保存在主节点中
+- en: CNN distributed training with Spark and DL4J
+  id: totrans-36
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Spark和DL4J进行CNN分布式训练
+- en: 'Let''s get back to the example that has been presented in [Chapter 5](fbec1d8a-a92f-4899-af0f-11f3d545e0eb.xhtml),
+    *Convolutional Neural Networks*, *Hands-on CNN with Spark*, about handwritten
+    digits image classification on the `MNIST` dataset. For convenience, here''s a
+    reminder of the network configuration used there:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回到在[第5章](fbec1d8a-a92f-4899-af0f-11f3d545e0eb.xhtml)中介绍的例子，*卷积神经网络*，*Spark实战CNN*，关于手写数字图像分类的`MNIST`数据集。为了方便起见，下面是该处使用的网络配置的提醒：
+- en: '[PRE1]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We used that `MultiLayerConfiguration` object to initialize the model. Having
+    the model and the training data, the training can be set. As explained in the
+    previous section, the training happens with Spark. Therefore, the next steps would
+    be creating a Spark context, as follows:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用该`MultiLayerConfiguration`对象来初始化模型。拥有模型和训练数据后，可以开始训练。如前一节所述，训练通过Spark进行。因此，接下来的步骤是创建Spark上下文，如下所示：
+- en: '[PRE2]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We then parallelize the training data after loading it in memory, as follows:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将训练数据加载到内存中后进行并行化处理，如下所示：
+- en: '[PRE3]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Now it is time to create the `TrainingMaster` instance, as follows:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在是时候创建`TrainingMaster`实例，如下所示：
+- en: '[PRE4]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'We can use the only currently available implementation for the `TrainingMaster`
+    interface, the `ParameterAveragingTrainingMaster` ([https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/impl/paramavg/ParameterAveragingTrainingMaster.html](https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/impl/paramavg/ParameterAveragingTrainingMaster.html)).
+    In the preceding example we have used only three configuration options available
+    for this `TrainingMaster` implementation, but there are more:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用当前唯一可用的`TrainingMaster`接口实现——`ParameterAveragingTrainingMaster`（[https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/impl/paramavg/ParameterAveragingTrainingMaster.html](https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/impl/paramavg/ParameterAveragingTrainingMaster.html)）。在上述示例中，我们只使用了该`TrainingMaster`实现的三个配置选项，但还有更多选项：
+- en: '`dataSetObjectSize`: Specifies how many examples are in each `DataSet`.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`dataSetObjectSize`：指定每个`DataSet`中的示例数量。'
+- en: '`workerPrefetchNumBatches`: The Spark workers are capable of asynchronously
+    prefetching a number of `DataSet` objects, in order to avoid waiting for data
+    to be loaded. It is possible to disable prefetching by setting this property to
+    zero. Setting it to two (such as in our example) is a good compromise (a sensible
+    default with a non-excessive use of memory).'
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`workerPrefetchNumBatches`：Spark工作节点能够异步预取一定数量的`DataSet`对象，以避免等待数据加载。通过将此属性设置为零，可以禁用预取。如果将其设置为二（如我们的示例所示），则是一个很好的折衷方案（既不过度使用内存，又能保证合理的默认设置）。'
+- en: '`*rddTrainingApproach*`: DL4J provides two approaches when training from an
+    RDD—`RDDTrainingApproach.Export` and `RDDTrainingApproach.Direct` ([https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/RDDTrainingApproach.html](https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/RDDTrainingApproach.html)).
+    `Export` is the default approach; it first saves an `RDD<DataSet>` to disk in
+    batched and serialized form. Then, the executors load asynchronously all the `DataSet`
+    objects. The choice between the `Export` and the `Direct` method depends on the
+    size of the datasets. For large datasets that don''t fit into memory and multiple
+    epochs, the `Export` approach is preferable—in those cases the split and repartition
+    operations overhead typical of the `Direct` approach doesn''t apply and the memory
+    consumption is smaller.'
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`*rddTrainingApproach*`：DL4J在从RDD训练时提供了两种方法——`RDDTrainingApproach.Export`和`RDDTrainingApproach.Direct`（[https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/RDDTrainingApproach.html](https://static.javadoc.io/org.deeplearning4j/dl4j-spark_2.11/0.9.1_spark_2/org/deeplearning4j/spark/api/RDDTrainingApproach.html)）。`Export`是默认方法；它首先将`RDD<DataSet>`以批量序列化的形式保存到磁盘上。然后，执行器异步加载所有`DataSet`对象。选择`Export`方法还是`Direct`方法，取决于数据集的大小。对于不适合放入内存的大型数据集以及多轮训练，`Export`方法更为优选——在这种情况下，`Direct`方法的拆分和重分区操作开销并不适用，而且内存消耗较小。'
+- en: '`exportDirectory`: The location where the temporary data files are stored (`Export`
+    method only).'
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`exportDirectory`：临时数据文件存储的位置（仅限`Export`方法）。'
+- en: '`storageLevel`: Applies only when using a `Direct` approach and training from
+    a `RDD<DataSet>` or `RDD<MultiDataSet>`. The default storage level that DL4J persists
+    the *RDDs* at is `StorageLevel.MEMORY_ONLY_SER`.'
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`storageLevel`：仅在使用`Direct`方法并从`RDD<DataSet>`或`RDD<MultiDataSet>`进行训练时适用。DL4J持久化*RDD*时的默认存储级别是`StorageLevel.MEMORY_ONLY_SER`。'
+- en: '`storageLevelStreams`: Applies only when using the `fitPaths(RDD<String>)`
+    method. The default storage level that DL4J persists the `RDD<String>` at is `StorageLevel.MEMORY_ONLY`*.*'
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`storageLevelStreams`：仅在使用`fitPaths(RDD<String>)`方法时适用。DL4J持久化`RDD<String>`时的默认存储级别是`StorageLevel.MEMORY_ONLY`*。'
+- en: '`repartitionStrategy`: Specifies the strategy by which repartitioning should
+    be done. Possible values are `Balanced` (default, custom repartitioning strategy
+    defined by DL4J) and `SparkDefault` (standard repartitioning strategy used by
+    Spark).'
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`repartitionStrategy`：指定应如何进行重分区操作的策略。可能的值为`Balanced`（默认，DL4J定义的自定义重分区策略）和`SparkDefault`（Spark使用的标准重分区策略）。'
+- en: 'Here you can find the full list and their meaning:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里可以找到完整的列表及其含义：
+- en: '[https://deeplearning4j.org/docs/latest/deeplearning4j-spark-training](https://deeplearning4j.org/docs/latest/deeplearning4j-spark-training)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://deeplearning4j.org/docs/latest/deeplearning4j-spark-training](https://deeplearning4j.org/docs/latest/deeplearning4j-spark-training)'
+- en: 'Once the `TrainingMaster` configuration and strategy have been defined, an
+    instance of `SparkDl4jMultiLayer` can be created, as follows:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦定义了`TrainingMaster`配置和策略，就可以创建一个`SparkDl4jMultiLayer`实例，如下所示：
+- en: '[PRE5]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Then the training can happen, choosing the appropriate `fit` method, as follows:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后可以开始训练，选择适当的`fit`方法，如下所示：
+- en: '[PRE6]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '[Chapter 8](b30120ea-bd42-4cb7-95d9-5ecaa2b7c181.xhtml), *Monitoring and Debugging
+    Neural Network Training*, and [Chapter 9](869a9495-e759-4810-8623-d8b76ba61398.xhtml),
+    *Interpreting Neural Network Output*, will explain how to monitor, debug, and
+    evaluate the results of network training.'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第8章](b30120ea-bd42-4cb7-95d9-5ecaa2b7c181.xhtml)，*监控和调试神经网络训练*，以及[第9章](869a9495-e759-4810-8623-d8b76ba61398.xhtml)，*解释神经网络输出*，将解释如何监控、调试和评估网络训练的结果。'
+- en: RNN distributed training with Spark and DL4J
+  id: totrans-60
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Spark和DL4J进行RNN分布式训练
+- en: 'Let''s reconsider the example that has been presented in [Chapter 6](f7a89101-15be-49e3-8bf5-8c74c655f6d7.xhtml),
+    *Recurrent Neural Networks*, section *RNNs with DL4J and Spark*, about an LSTM
+    that would be trained to generate text, one character at a time. For convenience,
+    let''s remind ourselves of the network configuration used there (an LSTM RNN implementation
+    of the model proposed by Alex Graves):'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们重新考虑在[第6章](f7a89101-15be-49e3-8bf5-8c74c655f6d7.xhtml)中提出的例子，*递归神经网络*，*DL4J和Spark中的RNN*部分，关于一个LSTM模型的训练，该模型将逐个字符地生成文本。为了方便起见，让我们回顾一下那里使用的网络配置（这是Alex
+    Graves提出的模型的LSTM RNN实现）：
+- en: '[PRE7]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'All of the considerations made in *CNN distributed training with Spark and
+    DeepLearning4j*, about the creation and configuration of a `TrainingMaster` instance, apply
+    the same way for the creation and configuration of a `SparkDl4jMultiLayer` instance,
+    so they are not repeated. What is different for the `SparkDl4jMultiLayer` is that,
+    in this case, we have to specify the `IteratorListeners` ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/optimize/api/IterationListener.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/optimize/api/IterationListener.html))
+    for the model (which would be useful in particular for monitoring and debugging
+    purposes, as will be explained in next chapter). Specify the iterator listeners
+    as follows:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*使用Spark和DeepLearning4j进行CNN分布式训练*中提到的所有关于`TrainingMaster`实例创建和配置的考虑事项，同样适用于`SparkDl4jMultiLayer`实例的创建和配置，因此不再重复。`SparkDl4jMultiLayer`的不同之处在于，在这种情况下，我们必须为模型指定`IteratorListeners`（[https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/optimize/api/IterationListener.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/optimize/api/IterationListener.html)），这对于监控和调试尤其有用，正如在下一章中所解释的那样。按如下方式指定迭代器监听器：
+- en: '[PRE8]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'And here''s one way the training could happen in this case. Define the number
+    of epochs, as follows:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是此情况下训练的一种可能方式。定义训练的轮数，如下所示：
+- en: '[PRE9]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Then for each one, apply the appropriate fit method through the `sparkNetwork`
+    and sample some characters, as follows:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，对于每个，使用`sparkNetwork`应用适当的`fit`方法并采样一些字符，如下所示：
+- en: '[PRE10]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Finally, because we decided on an `Export` trained approach, we need to delete
+    the temporary files when done, as follows:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，由于我们选择了`Export`训练方式，完成后需要删除临时文件，如下所示：
+- en: '[PRE11]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[Chapter 8](b30120ea-bd42-4cb7-95d9-5ecaa2b7c181.xhtml), *Monitoring and Debugging
+    Neural Network Training*, and [Chapter 9](869a9495-e759-4810-8623-d8b76ba61398.xhtml),
+    *Interpreting Neural Network Output*, will explain how to monitor, debug, and
+    evaluate the results of this network training.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第8章](b30120ea-bd42-4cb7-95d9-5ecaa2b7c181.xhtml)，*监控和调试神经网络训练*，以及[第9章](869a9495-e759-4810-8623-d8b76ba61398.xhtml)，*解释神经网络输出*，将解释如何监控、调试和评估该网络训练的结果。'
+- en: Performance considerations
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能考虑
+- en: This section presents some recommendations to get the most from DL4J when training
+    on Spark. Let's start with some considerations about memory configuration. It
+    is important to understand how DL4J manages memory first. This framework is built
+    upon the ND4J scientific library (written in C++). ND4J utilizes off-heap memory
+    management—this means that the memory allocated for `INDArrays` isn't on the JVM
+    heap, as happens for Java objects, but it is allocated outside the JVM. This kind
+    of memory management allows for the efficient use of high-performance native code
+    for numerical operations and it is also necessary for efficient operations with
+    CUDA ([https://developer.nvidia.com/cuda-zone](https://developer.nvidia.com/cuda-zone))
+    when running on GPUs.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节将介绍一些建议，以便在 Spark 上训练时最大化 DL4J 的性能。我们从内存配置的一些考虑因素开始。首先，了解 DL4J 如何管理内存非常重要。该框架是基于
+    ND4J 科学库（用 C++ 编写）构建的。ND4J 使用堆外内存管理——这意味着为 `INDArrays` 分配的内存不在 JVM 堆上，如 Java 对象那样，而是分配在
+    JVM 外部。这种内存管理方式允许高效使用高性能本地代码进行数值操作，并且在运行于 GPU 时也对 CUDA 操作（[https://developer.nvidia.com/cuda-zone](https://developer.nvidia.com/cuda-zone)）至关重要。
+- en: 'This way, the outcome in terms of extra memory and time overhead is evident—allocating
+    memory on the JVM heap requires that any time there is the need to preliminary
+    copy the data from there, perform then the calculations, and finally copy the
+    result back. ND4J simply passes pointers around for numerical calculations. Heap
+    (JVM) and off-heap (ND4J through JavaCPP ([https://github.com/bytedeco/javacpp](https://github.com/bytedeco/javacpp)))
+    are two separate memory pools. In DL4J, the memory limits of both are controlled
+    via Java command-line arguments through the following system properties:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过这种方式，可以清楚地看到额外的内存和时间开销——在 JVM 堆上分配内存要求每次需要先将数据从那里复制出来，然后进行计算，最后将结果复制回去。ND4J
+    只是传递指针进行数值计算。堆内存（JVM）和堆外内存（通过 JavaCPP 的 ND4J ([https://github.com/bytedeco/javacpp](https://github.com/bytedeco/javacpp)))
+    是两个独立的内存池。在 DL4J 中，这两者的内存限制是通过 Java 命令行参数，通过以下系统属性进行控制的：
+- en: '`Xms`: The memory the JVM heap can use at application start'
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Xms`：JVM 堆在应用程序启动时可以使用的内存'
+- en: '`Xmx`: The maximum memory limit the JVM heap could use'
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Xmx`：JVM 堆可以使用的最大内存限制'
+- en: '`org.bytedeco.javacpp.maxbytes`: The off-heap maximum memory limit'
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`org.bytedeco.javacpp.maxbytes`：堆外最大内存限制'
+- en: '`org.bytedeco.javacpp.maxphysicalbytes`: To be set typically with the same
+    value as for the `maxbytes` property'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`org.bytedeco.javacpp.maxphysicalbytes`：通常设置为与 `maxbytes` 属性相同的值'
+- en: '[Chapter 10](1066b0d4-c2f3-44f9-9cc4-d38469d72c3f.xhtml), *Deploying on a Distributed
+    System*, (which focuses on the deployment of a distributed system to train or
+    run a neural network) will present more details about memory management.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第10章](1066b0d4-c2f3-44f9-9cc4-d38469d72c3f.xhtml)，*在分布式系统上的部署*，（该章节专注于训练或运行神经网络的分布式系统部署）将详细介绍内存管理。'
+- en: Another good practice to improve performance is to configure Spark locality
+    settings. This is an optional configuration, but can bring benefits on this front.
+    Locality refers to where data is, relative to where it can be processed. At execution
+    time, any time data has to be copied across the network to be processed by a free
+    executor; Spark has to decide between waiting for an executor that has local access
+    to the data to become free or executing the network transfer. The default behavior
+    for Spark is to wait a bit before transferring data across the network to a free
+    executor.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提高性能的另一个好方法是配置 Spark 的本地性设置。这是一个可选的配置，但可以在这方面带来好处。本地性指的是数据相对于可以处理它的位置。在执行时，每当数据必须通过网络复制到空闲执行器进行处理时，Spark
+    需要在等待具有本地访问数据的执行器变为空闲状态和执行网络传输之间做出选择。Spark 的默认行为是在通过网络将数据传输到空闲执行器之前稍作等待。
+- en: Training neural networks with DL4J is computationally intensive, so the amount
+    of computation per input `DataSet` is relatively high. For this reason, the Spark
+    default behavior isn’t an ideal fit for maximizing cluster utilization. During
+    Spark training, DL4J ensures there is exactly one task per executor—so it is always
+    better to immediately transfer data to a free executor, rather than waiting for
+    another one to become free. The computation time will become more important than
+    any network transfer time. The way to tell Spark that it hasn't to wait, but start
+    transferring data immediately is simple—when submitting the configuration we have
+    to set the value of the `spark.locality.wait` property to `0`.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 DL4J 训练神经网络计算量大，因此每个输入 `DataSet` 的计算量相对较高。因此，Spark 的默认行为并不适合最大化集群的利用率。在 Spark
+    训练过程中，DL4J 确保每个执行器只有一个任务——因此，最好是立即将数据传输到空闲的执行器，而不是等待另一个执行器变为空闲。计算时间会变得比任何网络传输时间都更为重要。告诉
+    Spark 不必等待，而是立即开始传输数据的方法很简单——提交配置时，我们需要将 `spark.locality.wait` 属性的值设置为 `0`。
+- en: Spark has problems handling Java objects with large off-heap components (this
+    could be the case with `DataSet` and `INDArray` objects in DL4J), in particular
+    in caching or persisting them. From [Chapter 1](ad6da519-0705-4db6-aa38-2b98b85892cc.xhtml),
+    *The Apache Spark Ecosystem*, you know that Spark provides different storage levels.
+    Among those, `MEMORY_ONLY` and `MEMORY_AND_DISK` persistence can cause problems
+    with off-heap memory, because Spark can't properly estimate the size of objects
+    in an RDD, leading to out of memory issues. It is then good practice using `MEMORY_ONLY_SER`
+    or `MEMORY_AND_DISK_SER` when persisting an `RDD<DataSet>` or an `RDD<INDArray>`.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Spark 在处理具有大堆外组件的 Java 对象时存在问题（例如，在 DL4J 中，`DataSet` 和 `INDArray` 对象可能会遇到此问题），特别是在缓存或持久化它们时。从[第1章](ad6da519-0705-4db6-aa38-2b98b85892cc.xhtml)《Apache
+    Spark 生态系统》一章中你了解到，Spark 提供了不同的存储级别。在这些存储级别中，`MEMORY_ONLY` 和 `MEMORY_AND_DISK`
+    持久化可能会导致堆外内存问题，因为 Spark 无法正确估算 RDD 中对象的大小，从而导致内存溢出问题。因此，持久化 `RDD<DataSet>` 或 `RDD<INDArray>`
+    时，采用 `MEMORY_ONLY_SER` 或 `MEMORY_AND_DISK_SER` 是一种好的做法。
+- en: Let's go into detail on this. Spark drops part of an RDD based on the estimated
+    size of that block. It estimates the size of a block depending on the selected
+    persistence level. In the case of `MEMORY_ONLY` or `MEMORY_AND_DISK`, the estimate
+    is done by walking the Java object graph. The problem is that this process doesn't
+    take into account the off-heap memory used by DL4J and ND4J, so Spark underestimates
+    the true size of objects, such as `DataSets` or `INDArrays`.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们详细探讨一下这个问题。Spark 根据估算的块大小来丢弃部分 RDD。它根据选择的持久化级别来估算块的大小。在 `MEMORY_ONLY` 或 `MEMORY_AND_DISK`
+    的情况下，估算是通过遍历 Java 对象图来完成的。问题在于，这个过程没有考虑到 DL4J 和 ND4J 使用的堆外内存，因此 Spark 低估了对象的真实大小，比如
+    `DataSets` 或 `INDArrays`。
+- en: Furthermore, when deciding whether to keep or drop blocks, Spark also only considers the
+    amount of heap memory used. `DataSet` and `INDArray` objects have a very small
+    on-heap size, then Spark will keep too many of them, causing out of memory issues
+    because off-heap memory becomes exhausted. In cases of `MEMORY_ONLY_SER` or `MEMORY_AND_DISK_SER`,
+    Spark stores blocks on the JVM heap in serialized form. Because there is no off-heap
+    memory for the serialized objects, their size can be estimated accurately by Spark—it
+    drops blocks when required, avoiding out of memory issues.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，在决定是否保留或丢弃块时，Spark 仅考虑了堆内存的使用情况。`DataSet` 和 `INDArray` 对象的堆内存占用非常小，因此 Spark
+    会保留太多此类对象，导致堆外内存耗尽，进而出现内存溢出问题。在 `MEMORY_ONLY_SER` 或 `MEMORY_AND_DISK_SER` 的情况下，Spark
+    将以序列化形式将块存储在 JVM 堆中。由于序列化的对象没有堆外内存，因此它们的大小可以被 Spark 准确估算——当需要时，Spark 会丢弃块，从而避免内存溢出问题。
+- en: Spark provides two serialization libraries—Java (default serialization) and
+    Kryo ([https://github.com/EsotericSoftware/kryo](https://github.com/EsotericSoftware/kryo)).
+    By default, it serializes objects using Java’s `ObjectOutputStream` ([https://docs.oracle.com/javase/8/docs/api/java/io/ObjectOutputStream.html](https://docs.oracle.com/javase/8/docs/api/java/io/ObjectOutputStream.html)),
+    and can work with any class that implements the serializable interface ([https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html](https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html)).
+    However, it can also use the Kryo library, which is significantly faster and more
+    compact than the Java serialization.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Spark 提供了两个序列化库——Java（默认序列化）和 Kryo（[https://github.com/EsotericSoftware/kryo](https://github.com/EsotericSoftware/kryo)）。默认情况下，它使用
+    Java 的 `ObjectOutputStream` 进行对象序列化（[https://docs.oracle.com/javase/8/docs/api/java/io/ObjectOutputStream.html](https://docs.oracle.com/javase/8/docs/api/java/io/ObjectOutputStream.html)），并且可以与任何实现了序列化接口的类一起工作（[https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html](https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html)）。然而，它也可以使用
+    Kryo 库，Kryo 的序列化速度显著快于 Java 序列化，而且更紧凑。
+- en: 'The cons are that Kryo doesn''t support all of the serializable types and it
+    doesn''t work well with the off-heap data structures by ND4J. So if you want to
+    use Kryo serialization with ND4J on Spark, it is necessary to set some extra configuration,
+    in order to skip potential `NullPointerExceptions` due to incorrect serialization
+    on some of the `INDArray` fields. To use Kryo you need to add the dependency to
+    your project (the following example is for Maven, but you can import the same
+    dependency with Gradle or sbt using the specific syntax for those build tools),
+    as follows:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缺点是 Kryo 并不支持所有的可序列化类型，并且与 ND4J 的堆外数据结构不兼容。因此，如果你希望在 Spark 上使用 Kryo 序列化与 ND4J
+    配合使用，就需要设置一些额外的配置，以跳过由于某些 `INDArray` 字段的序列化不正确而导致的潜在 `NullPointerExceptions`。要使用
+    Kryo，你需要将依赖项添加到项目中（以下示例是针对 Maven 的，但你也可以使用 Gradle 或 sbt 以这些构建工具特有的语法导入相同的依赖项），如下所示：
+- en: '[PRE12]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Then configure Spark to use the Nd4J Kryo registrator, as follows:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后配置 Spark 使用 Nd4J Kryo 注册器，如下所示：
+- en: '[PRE13]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Hyperparameter optimization
+  id: totrans-90
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 超参数优化
+- en: Before any training can begin, ML techniques in general, and so DL techniques,
+    have a set of parameters that have to be chosen. They are referred to as hyperparameters.
+    Keeping focus on DL, we can say that some of these (the number of layers and their
+    size) define the architecture of a neural network, while others define the learning
+    process (learning rate, regularization, and so on). Hyperparameter optimization
+    is an attempt to automate this process (that has a significant impact on the results
+    achieved by training a neural network) using a dedicated software that applies
+    some search strategies. DL4J provides a tool, Arbiter, for hyperparameter optimization
+    of neural nets. This tool doesn't fully automate the process—a manual intervention
+    from data scientists or developers is needed in order to specify the search spaces
+    (the ranges of valid values for hyperparameters). Please be aware that the current
+    Arbiter implementation doesn't prevent failures on finding good models in those
+    cases where the search spaces haven't been manually defined in a good way. The
+    rest of this section covers the details of how Arbiter can be used programmatically.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在任何训练开始之前，一般的机器学习技术，尤其是深度学习技术，都有一组必须选择的参数。这些被称为超参数。专注于深度学习时，我们可以说，其中一些（如层数及其大小）定义了神经网络的架构，而其他一些则定义了学习过程（如学习率、正则化等）。超参数优化尝试通过使用专用软件应用一些搜索策略来自动化这个过程（该过程对训练神经网络所取得的结果有显著影响）。DL4J
+    提供了一个名为 Arbiter 的工具，用于神经网络的超参数优化。这个工具并未完全自动化这个过程——数据科学家或开发人员需要手动介入，以指定搜索空间（超参数的有效值范围）。请注意，当前的
+    Arbiter 实现并不会在那些没有很好地手动定义搜索空间的情况下，阻止寻找好的模型失败。接下来的部分将介绍如何以编程方式使用 Arbiter 的详细信息。
+- en: 'The Arbiter dependency needs to be added to the DL4J Scala project for which
+    hyperparameter optimization need to be done, as follows:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要将 Arbiter 依赖项添加到需要进行超参数优化的 DL4J Scala 项目中，如下所示：
+- en: '[PRE14]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The sequence of steps to follow to set up and execute a hyperparameter optimization
+    through Arbiter is always the same, as follows:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置和执行超参数优化的步骤顺序始终是相同的，如下所示：
+- en: Define a hyperparameter search space
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义超参数搜索空间
+- en: Define a candidate generator for that hyperparameter search space
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义该超参数搜索空间的候选生成器
+- en: Define a data source
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义数据源
+- en: Define a model saver
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义模型保存器
+- en: Choose a score function
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择一个评分函数
+- en: Choose a termination condition
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择一个终止条件。
+- en: Use the previously defined data source, model saver, score function, and termination
+    condition to construct an optimization configuration
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用之前定义的数据源、模型保存器、评分函数和终止条件来构建优化配置。
+- en: Execute the process using the optimization runner
+  id: totrans-102
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用优化运行器执行该过程。
+- en: 'Let''s now see the details on how to programmatically implement these steps.
+    The setup of the hyperparameter configuration space is very similar to the configuration
+    of an MNN in DL4J. It happens through the `MultiLayerSpace` class ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/MultiLayerSpace.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/MultiLayerSpace.html)).
+    `ParameterSpace<P>` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/ParameterSpace.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/ParameterSpace.html))
+    is the arbiter class through which it is possible to define acceptable ranges
+    of values for a given hyperparameter. Here are some examples:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看看如何以编程方式实现这些步骤。超参数配置空间的设置与在DL4J中配置MNN非常相似。它通过`MultiLayerSpace`类（[https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/MultiLayerSpace.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/MultiLayerSpace.html)）实现。`ParameterSpace<P>`（[https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/ParameterSpace.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/ParameterSpace.html)）是Arbiter类，通过它可以定义给定超参数的可接受值范围。以下是一些示例：
+- en: '[PRE15]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The lower and upper bound values specified in the `ParameterSpace` constructors
+    are included in the interval. Interval values are generated uniformly at random
+    between the given boundary. The hyperparameters space can then be built, such
+    as in the following example:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`ParameterSpace`构造函数中指定的上下边界值包含在区间内。区间值将在给定边界之间均匀地随机生成。然后，可以构建超参数空间，如以下示例所示：
+- en: '[PRE16]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: In DL4J, two classes, `MultiLayerSpace` and `ComputationGraphSpace` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/ComputationGraphSpace.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/ComputationGraphSpace.html)),
+    are available for the hyperparameters search space setup (they represent what
+    `MultiLayerConfiguration` and `ComputationGraphConfiguration` are for MNNs configuration.)
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在DL4J中，有两个类，`MultiLayerSpace`和`ComputationGraphSpace`（[https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/ComputationGraphSpace.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/ComputationGraphSpace.html)），可用于设置超参数搜索空间（它们代表`MultiLayerConfiguration`和`ComputationGraphConfiguration`在MNN配置中的作用）。
+- en: 'The next step is the definition of candidate generator. It could be a random
+    search, such as in the following line of code:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一步是定义候选生成器。它可以是随机搜索，如以下代码行所示：
+- en: '[PRE17]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Alternatively, it could be a grid search.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，它可以是网格搜索。
+- en: In order to define the data source (the origin of the data to be used to train
+    and test the different candidates), the `DataSource` interface ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/data/DataSource.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/data/DataSource.html))
+    is available in Arbiter and needs to be implemented (it requires a no-argument
+    constructor) for a given origin.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了定义数据源（即用于训练和测试不同候选者的数据来源），Arbiter中提供了`DataSource`接口（[https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/data/DataSource.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/data/DataSource.html)），并且需要实现它（它需要一个无参构造函数）以适应给定的来源。
+- en: 'At this point we need to define where to save the model that would be generated
+    and tested. Arbiter supports saving models to disk or storing results in-memory.
+    Here is an example of usage of the `FileModelSaver` class ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/saver/local/FileModelSaver.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/saver/local/FileModelSaver.html))
+    to save to disk:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前我们需要定义保存将要生成和测试的模型的位置。Arbiter支持将模型保存到磁盘或将结果存储在内存中。以下是使用`FileModelSaver`类（[https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/saver/local/FileModelSaver.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/saver/local/FileModelSaver.html)）保存到磁盘的示例：
+- en: '[PRE18]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: We have to choose a score function. Arbiter provides three different choices—`EvaluationScoreFunction`
+    ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/EvaluationScoreFunction.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/EvaluationScoreFunction.html)),
+    `ROCScoreFunction` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/ROCScoreFunction.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/ROCScoreFunction.html)),
+    and `RegressionScoreFunction` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/RegressionScoreFunction.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/RegressionScoreFunction.html)).
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们必须选择一个评分函数。Arbiter 提供了三种不同的选择——`EvaluationScoreFunction` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/EvaluationScoreFunction.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/EvaluationScoreFunction.html))，`ROCScoreFunction`
+    ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/ROCScoreFunction.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/ROCScoreFunction.html))，和
+    `RegressionScoreFunction` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/RegressionScoreFunction.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/scoring/impl/RegressionScoreFunction.html))。
+- en: 'More details on evaluation, ROC, and regression will be discussed in [Chapter
+    9](869a9495-e759-4810-8623-d8b76ba61398.xhtml), *Interpreting Neural Network Output*.
+    Here''s an example with `EvaluationScoreFunction`:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关评估、ROC 和回归的更多细节将在 [第 9 章](869a9495-e759-4810-8623-d8b76ba61398.xhtml)，*解读神经网络输出*
+    中讨论。以下是使用 `EvaluationScoreFunction` 的示例：
+- en: '[PRE19]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Finally we specify a list of termination conditions. The current implementation
+    of Arbiter provides only two termination conditions, `MaxTimeCondition` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxTimeCondition.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxTimeCondition.html))
+    and `MaxCandidatesCondition` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxCandidatesCondition.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxCandidatesCondition.html)).
+    Searching stops when one of the specified termination conditions is satisfied
+    for a hyperparameters space. In the following example, the search stops after
+    15 minutes or after 20 candidates (depending on the one that
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们指定了一组终止条件。当前的 Arbiter 实现只提供了两个终止条件，`MaxTimeCondition` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxTimeCondition.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxTimeCondition.html))
+    和 `MaxCandidatesCondition` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxCandidatesCondition.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/api/termination/MaxCandidatesCondition.html))。当超参数空间满足其中一个指定的终止条件时，搜索会停止。在以下示例中，搜索会在
+    15 分钟后或在达到 20 个候选项后停止（具体取决于哪个条件先满足）。
+- en: 'happens first):'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 发生的第一个条件是：
+- en: '[PRE20]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Now that all of the options have been set, it is possible to build the `OptimizationConfiguration`
+    ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/config/OptimizationConfiguration.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/config/OptimizationConfiguration.html)),
+    as follows:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，所有选项都已设置完毕，可以构建 `OptimizationConfiguration` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/config/OptimizationConfiguration.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/config/OptimizationConfiguration.html))，如下所示：
+- en: '[PRE21]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Then run it through an `IOptimizationRunner` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/runner/IOptimizationRunner.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/runner/IOptimizationRunner.html)),
+    such as in the following example:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后通过 `IOptimizationRunner` ([https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/runner/IOptimizationRunner.html](https://deeplearning4j.org/api/latest/org/deeplearning4j/arbiter/optimize/runner/IOptimizationRunner.html))
+    运行它，如以下示例所示：
+- en: '[PRE22]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: At the end of the execution, the application stores the generated candidate
+    in separate directories inside the base save directory preliminary specified for
+    the model saver. Each subdirectory is named with a progressive number.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行结束时，应用程序会将生成的候选项存储在模型保存器初步指定的基础保存目录中的不同子目录里。每个子目录都以递增的数字命名。
+- en: 'With reference to this section''s examples, it would be `./arbiterOutput/0/`
+    for the first candidate, `./arbiterOutput/1/` for the second, and so on. A JSON
+    representation of the model is also generated (as shown in following screenshot)
+    and it could be stored as well for further re-use:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参考本节的示例，对于第一个候选者，它将是`./arbiterOutput/0/`，对于第二个候选者，将是`./arbiterOutput/1/`，以此类推。还会生成模型的JSON表示（如下图所示），并且可以将其存储以便进一步重复使用：
+- en: '![](img/c2142391-9ad0-454e-a76c-acba8691848b.png)'
+  id: totrans-126
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c2142391-9ad0-454e-a76c-acba8691848b.png)'
+- en: 'Figure 7.1: Candidate JSON serialization in Arbiter'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.1：Arbiter中的候选者JSON序列化
+- en: The Arbiter UI
+  id: totrans-128
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Arbiter UI
+- en: 'To get the results of a hyperparameter optimization, you have to wait for the
+    process execution to end and finally retrieve them using the Arbiter API, such
+    as in the following example:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取超参数优化的结果，必须等待过程执行结束，然后使用Arbiter API来检索它们，如以下示例所示：
+- en: '[PRE23]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'But, depending on the specific case, this process could be long and take hours
+    before it ends and the results become available. Luckily, Arbiter provides a web
+    UI to monitor it at runtime and get insights of potential issues and hints about
+    tuning the optimization configuration, with no need to wait in vain until it completes.
+    In order to begin using this web UI, a further dependency should be added to the
+    project, as follows:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，具体情况可能不同，这个过程可能会很长，甚至需要几个小时才能结束，并且结果才会变得可用。幸运的是，Arbiter提供了一个Web UI，可以在运行时监控它，并获取潜在问题的洞察和优化配置的调优提示，无需在等待过程中浪费时间。为了开始使用这个Web
+    UI，需要将以下依赖项添加到项目中：
+- en: '[PRE24]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'The server that manages the web UI needs to be configured before the `IOptimizationRunner`
+    starts, as follows:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`IOptimizationRunner`开始之前，需要配置管理Web UI的服务器，如下所示：
+- en: '[PRE25]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'In the preceding example we are persisting the Arbiter stats to file. Once
+    the optimization process has started, the web UI can be accessed at the following
+    URL, as follows:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，我们正在将Arbiter统计信息持久化到文件。一旦优化过程开始，Web UI可以通过以下URL访问，如下所示：
+- en: '[PRE26]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'It has a single view, which, at the top, shows a summary of the ongoing optimization
+    process, as seen in the following screenshot:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它有一个单一视图，在顶部显示正在进行的优化过程的摘要，如下图所示：
+- en: '![](img/2c93b853-c30a-4dce-8101-19146b24c07d.png)'
+  id: totrans-138
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/2c93b853-c30a-4dce-8101-19146b24c07d.png)'
+- en: 'Figure 7.2: Live summary of a hyperparameters optimization process'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.2：超参数优化过程的实时总结
+- en: 'In its central area, it shows a summary of the optimization settings, as seen
+    in the following screenshot:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在其中央区域，它展示了优化设置的总结，如下图所示：
+- en: '![](img/bf0a277d-9b06-47f7-96aa-23ff2719d7cb.png)'
+  id: totrans-141
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/bf0a277d-9b06-47f7-96aa-23ff2719d7cb.png)'
+- en: 'Figure 7.3: Summary of a hyperparameter optimization settings'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.3：超参数优化设置的摘要
+- en: 'And, at the bottom, it shows a list of the results, as seen in the following
+    screenshot:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在底部，它显示了结果列表，如下图所示：
+- en: '![](img/6e624d3c-e872-4596-9f77-cbf615288a10.png)'
+  id: totrans-144
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6e624d3c-e872-4596-9f77-cbf615288a10.png)'
+- en: 'Figure 7.4: Live summary of the results of a hyperparameter optimization process'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.4：超参数优化过程的实时结果总结
+- en: 'By clicking on a result id, extra details about that particular candidate,
+    extra charts, and the model configuration are shown in the following screenshot:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过点击一个结果ID，显示该特定候选者的额外细节、附加图表以及模型配置，如下图所示：
+- en: '![](img/b772b489-4bae-4388-ab84-741b23a8e246.png)'
+  id: totrans-147
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b772b489-4bae-4388-ab84-741b23a8e246.png)'
+- en: 'Figure 7.5: Candidate details in the Arbiter web UI'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.5：Arbiter Web UI中的候选者详情
+- en: The Arbiter UI uses the same implementation and persistence strategy of the
+    DL4J UI to monitor the training process. These details will be covered in the
+    next chapter.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Arbiter UI使用与DL4J UI相同的实现和持久化策略来监控训练过程。有关这些细节将在下一章中介绍。
+- en: Summary
+  id: totrans-150
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, you have learned how training happens for CNNs and RNNs with
+    DL4J, ND4J, and Apache Spark. You now also have insights into memory management,
+    a number of tips to improve performance for the training process, and details
+    of how to use Arbiter for hyperparameter optimization.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，你已了解了如何使用DL4J、ND4J和Apache Spark训练CNN和RNN。你现在也了解了内存管理，改进训练过程性能的若干技巧，以及如何使用Arbiter进行超参数优化的细节。
+- en: The next chapter will focus on how to monitor and debug CNNs and RNNs during
+    their training phases.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将重点讨论如何在CNN和RNN的训练阶段监控和调试它们。

@@ -1,0 +1,1121 @@
+- en: '7'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '7'
+- en: Exploring Controllable Neural Feature Fields
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 探索可控神经特征字段
+- en: In the previous chapter, you learned how to represent a 3D scene using **Neural
+    Radiance Fields** (**NeRF**). We trained a single neural network on posed multi-view
+    images of a 3D scene to learn an implicit representation of it. Then, we used
+    the NeRF model to render the 3D scene from various other viewpoints and viewing
+    angles. With this model, we assumed that the objects and the background are unchanging.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，你学习了如何使用**神经辐射场**（**NeRF**）表示3D场景。我们在一个3D场景的多视角图像上训练了一个单一的神经网络，来学习其隐式表示。然后，我们使用NeRF模型从不同的视点和视角渲染3D场景。在这个模型中，我们假设物体和背景是固定不变的。
+- en: But it is fair to wonder whether it is possible to generate variations of the
+    3D scene. Can we control the number of objects, their poses, and the scene background?
+    Can we learn about the 3D nature of things without posed images and without understanding
+    the camera parameters?
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但值得怀疑的是，是否可以生成3D场景的变化。我们能控制物体的数量、姿态和场景背景吗？我们能在没有摆姿势图像和不了解相机参数的情况下，学习事物的3D特性吗？
+- en: 'By the end of this chapter, you will learn that it is indeed possible to do
+    all these things. Concretely, you should have a better understanding of GIRAFFE,
+    a very novel method for controllable 3D image synthesis. This combines ideas from
+    the fields of image synthesis and implicit 3D representation learning using NeRF-like
+    models. This will become clear as we cover the following topics:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将了解到，确实可以做所有这些事情。具体来说，你应该能更好地理解GIRAFFE，这是一种非常新颖的可控3D图像合成方法。它结合了图像合成和使用类似NeRF模型的隐式3D表示学习领域的思想。随着我们讨论以下主题，这一点将变得清晰：
+- en: Understanding GAN-based image synthesis
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解基于GAN的图像合成
+- en: Introducing compositional 3D-aware image synthesis
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 引入组合式3D感知图像合成
+- en: Generating feature fields
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 生成特征字段
+- en: Mapping feature fields to images
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将特征字段映射到图像
+- en: Exploring controllable scene generation
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 探索可控场景生成
+- en: Training the GIRAFFE model
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练GIRAFFE模型
+- en: Technical requirements
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'In order to run the example code snippets in this book, ideally, you need to
+    have a computer with a GPU that has around 8 GB of GPU memory. Running code snippets
+    with only CPUs is not impossible but will be extremely slow. The recommended computer
+    configuration is as follows:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了运行本书中的示例代码片段，理想情况下，你需要一台配备大约8GB GPU内存的计算机。仅使用CPU运行代码片段虽然不是不可能，但会非常慢。推荐的计算机配置如下：
+- en: A GPU device – for example, the Nvidia GTX series or the RTX series with at
+    least 8 GB of memory
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一台GPU设备——例如，Nvidia GTX系列或RTX系列，至少8GB内存
+- en: Python 3.7+
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 3.7+
+- en: Anaconda3
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Anaconda3
+- en: The code snippets for this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python).
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的代码片段可以在[https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python)找到。
+- en: Understanding GAN-based image synthesis
+  id: totrans-17
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解基于GAN的图像合成
+- en: 'Deep generative models have been shown to produce photorealistic 2D images
+    when trained on a distribution from a particular domain. **Generative Adversarial
+    Networks** (**GANs**) are one of the most widely used frameworks for this purpose.
+    They can synthesize high-quality photorealistic images at resolutions of 1,024
+    x 1,024 and beyond. For example, they have been used to generate realistic faces:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深度生成模型已被证明在训练特定领域的数据分布时，可以生成照片级逼真的2D图像。**生成对抗网络**（**GANs**）是最广泛使用的框架之一。它们可以以1,024
+    x 1,024及更高的分辨率合成高质量的逼真图像。例如，它们已经被用来生成逼真的人脸：
+- en: '![Figure 7.1: Randomly generated faces as high-quality 2D images using StyleGAN2
+    ](img/B18217_07_1a.jpg)![Figure 7.1: Randomly generated faces as high-quality
+    2D images using StyleGAN2 ](img/B18217_07_1b.jpg)![Figure 7.1: Randomly generated
+    faces as high-quality 2D images using StyleGAN2 ](img/B18217_07_1c.jpg)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图7.1：使用StyleGAN2随机生成的高质量2D图像的面孔](img/B18217_07_1a.jpg)![图7.1：使用StyleGAN2随机生成的高质量2D图像的面孔](img/B18217_07_1b.jpg)![图7.1：使用StyleGAN2随机生成的高质量2D图像的面孔](img/B18217_07_1c.jpg)'
+- en: 'Figure 7.1: Randomly generated faces as high-quality 2D images using StyleGAN2'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.1：使用StyleGAN2随机生成的高质量2D图像的面孔
+- en: 'GANs can be trained to generate similar-looking images from any data distribution.
+    The same StyleGAN2 model, when trained on a car dataset, can generate high-resolution
+    images of cars:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GANs可以通过训练生成任何数据分布的相似图像。同样的StyleGAN2模型，当在汽车数据集上训练时，可以生成高分辨率的汽车图像：
+- en: '![Figure 7.2: Randomly generated cars as 2D images using StyleGAN2 ](img/B18217_07_2.jpg)'
+  id: totrans-22
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 7.2：使用 StyleGAN2 随机生成的汽车作为 2D 图像](img/B18217_07_2.jpg)'
+- en: 'Figure 7.2: Randomly generated cars as 2D images using StyleGAN2'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.2：使用 StyleGAN2 随机生成的汽车作为 2D 图像
+- en: 'GANs are based on a game-theoretic scenario where a generator neural network
+    generates an image. However, in order to be successful, it must fool the discriminator
+    into classifying it as a realistic image. This tug of war between the two neural
+    networks (that is, the generator and the discriminator) can lead to a generator
+    that produces photorealistic images. The generator network does this by creating
+    a probability distribution on a multi-dimensional latent space such that the points
+    on that distribution are realistic images from the domain of the training images.
+    In order to generate a novel image, we just need to sample a point on the latent
+    space and let the generator create an image from it:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GAN（生成对抗网络）基于博弈论场景，其中生成器神经网络生成图像。然而，为了成功，生成器必须欺骗判别器，使其将图像分类为真实的图像。生成器和判别器之间的这种博弈可以促使生成器生成逼真的图像。生成器通过在多维潜在空间上创建概率分布来实现这一点，使得该分布上的点是来自训练图像领域的真实图像。为了生成新的图像，我们只需要从潜在空间中采样一个点，让生成器从中创建图像：
+- en: '![Figure 7.3: A canonical GAN ](img/B18217_07_3.jpg)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 7.3：经典 GAN](img/B18217_07_3.jpg)'
+- en: 'Figure 7.3: A canonical GAN'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.3：经典 GAN
+- en: Synthesizing high-resolution photorealistic images is great, but it is not the
+    only desirable property of a generative model. More real-life applications open
+    if the generation process is disentangled and controllable in a simple and predictable
+    manner. More importantly, we need attributes such as object shape, size, and pose
+    to be as disentangled as possible so that we can vary them without changing other
+    attributes in the image.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 合成高分辨率的逼真图像固然重要，但这并不是生成模型唯一期望的特性。如果生成过程是可解耦且能够简单、可预测地进行控制，更多的现实应用就会打开。更重要的是，我们需要像物体形状、大小和姿势等属性尽可能解耦，这样我们就可以在不改变图像中其他属性的情况下改变这些属性。
+- en: Existing GAN-based image generation approaches generate 2D images without truly
+    understanding the underlying 3D nature of the image. Therefore, there are no built-in
+    explicit controls for varying attributes such as object position, shape, size,
+    and pose. This results in GANs that have entangled attributes. For simplicity,
+    think about an example of a GAN model that generates realistic faces, where changing
+    the head pose also changes the perceived gender of the generated face. This can
+    happen if the gender and head pose attributes become entangled. This is undesirable
+    for most practical use cases. We need to be able to vary one attribute without
+    affecting any of the others.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现有基于 GAN 的图像生成方法生成的是 2D 图像，并没有真正理解图像背后的 3D 特性。因此，缺少对物体位置、形状、大小和姿势等属性的明确控制。这导致了
+    GAN 模型生成的图像属性之间的纠缠。例如，考虑一个生成逼真面部图像的 GAN 模型，在这个模型中，改变头部姿势也会改变生成面部的性别。这种情况发生的原因是性别和头部姿势属性变得纠缠在一起。这对于大多数实际应用场景来说是不可取的。我们需要能够在不影响其他属性的情况下改变某个属性。
+- en: In the next section, we are going to look at a high-level overview of a model
+    that can generate 2D images with an implicit understanding of the 3D nature of
+    the underlying scene.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将概览一个可以生成 2D 图像，并隐含理解底层场景 3D 特性的模型。
+- en: Introducing compositional 3D-aware image synthesis
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 引入组合式的 3D 感知图像合成
+- en: Our goal is controllable image synthesis. We need control over the number of
+    objects in the image, their position, shape, size, and pose. The GIRAFFE model
+    is one of the first to achieve all these desirable properties while also generating
+    high-resolution photorealistic images. In order to have control over these attributes,
+    the model must have some awareness of the 3D nature of the scene.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的目标是可控的图像合成。我们需要对图像中的物体数量、位置、形状、大小和姿势进行控制。GIRAFFE 模型是首批实现这些理想特性之一，同时还能生成高分辨率的逼真图像。为了对这些属性进行控制，模型必须对场景的
+    3D 特性有一定的认知。
+- en: 'Now, let us look at how the GIRAFFE model builds on top of other established
+    ideas to achieve this. It makes use of the following high-level concepts:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们来看一下 GIRAFFE 模型是如何在其他已知理念的基础上构建的。它利用了以下几个高级概念：
+- en: '**Learning 3D representation**: A NeRF-like model for learning implicit 3D
+    representation and feature fields. Unlike the standard NeRF model, this model
+    outputs a feature field instead of the color intensity. This NeRF-like model is
+    used to enforce a 3D consistency in the images generated.'
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**学习3D表示**：一种类似NeRF的模型，用于学习隐式3D表示和特征场。与标准的NeRF模型不同，该模型输出的是特征场而不是颜色强度。这个类似NeRF的模型用于在生成的图像中强制执行3D一致性。'
+- en: '**Compositional operator**: A parameter-free compositional operator to compose
+    feature fields of multiple objects into a single feature field. This will help
+    in creating images with the desired number of objects in them.'
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**组合运算符**：一个无参数的组合运算符，用于将多个物体的特征场组合成一个单一的特征场。这有助于生成包含所需物体数量的图像。'
+- en: '**Neural rendering model**: This uses the composed feature field to create
+    an image. This is a 2D **Convolutional Neural Network** (**CNN**) that upsamples
+    the feature field to create a higher dimensional output image.'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**神经渲染模型**：该模型使用组合的特征场来创建图像。这是一个2D **卷积神经网络**（**CNN**），它将特征场上采样以生成更高维度的输出图像。'
+- en: '**GAN**: The GIRAFFE model uses the GAN model architecture to generate new
+    scenes. The preceding three components form the generator. The model also consists
+    of a discriminator neural network that distinguishes between fake images and real
+    images. Due to the presence of a NeRF model along with a composition operator,
+    this model will make the image generation process both compositional and 3D aware.'
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**生成对抗网络（GAN）**：GIRAFFE模型使用GAN架构来生成新场景。前面提到的三个组件组成了生成器。该模型还包括一个判别神经网络，用于区分假图像和真实图像。由于包含了NeRF模型以及组合运算符，这个模型使得图像生成过程既具组合性又具有3D感知能力。'
+- en: 'Generating an image is a two-step process:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成图像是一个两步过程：
+- en: Volume-render a feature field given the camera viewing angle along with some
+    information about the objects you want to render. This object information is some
+    abstract vectors that you will learn about in future sections.
+  id: totrans-38
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 基于相机视角和你想渲染的物体的一些信息来进行体积渲染。这个物体信息是一些抽象向量，你将在后续章节中了解。
+- en: Use a neural rendering model to map the feature field to a high-resolution image.
+  id: totrans-39
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用神经渲染模型将特征场映射到高分辨率图像。
+- en: This two-step approach was found to be better at generating high-resolution
+    images as compared to directly generating the RGB values from the NeRF model output.
+    From the previous chapter, we know that a NeRF model is trained on images from
+    the same scene. A trained model can only generate an image from the same scene.
+    This was one of the big limitations of the NeRF model.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种两步法被发现比直接从NeRF模型输出生成RGB值更适合生成高分辨率图像。从前一章我们知道，NeRF模型是通过同一场景的图像进行训练的。训练好的模型只能生成来自同一场景的图像。这是NeRF模型的一个大限制。
+- en: In contrast, the GIRAFFE model is trained on images of unposed images from different
+    scenes. A trained model can generate images from the same distribution as what
+    it was trained on. Typically, this model is trained on the same kind of data.
+    That is, the training data distribution comes from a single domain. For example,
+    if we train a model on the *Cars* dataset, we can expect the images generated
+    by this model to be some version of a car. It cannot generate images from a completely
+    unseen distribution such as faces. While this is still a limitation of what the
+    model can do, it is much less limited as compared to the standard NeRF model.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相比之下，GIRAFFE模型是在来自不同场景的无姿态图像上进行训练的。一个训练好的模型可以生成与其训练数据分布相同的图像。通常，该模型是在相同类型的数据上进行训练的。也就是说，训练数据分布来自单一领域。例如，如果我们在*汽车*数据集上训练模型，我们可以预期该模型生成的图像将是某种形式的汽车。它不能生成完全未见过的分布的图像，例如人脸。虽然这是该模型的一个局限性，但与标准的NeRF模型相比，它的限制要小得多。
+- en: 'The fundamental concepts implemented in the GIRAFFE model that we have discussed
+    so far are summarized in the following diagram:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们讨论过的GIRAFFE模型中实现的基本概念总结如下图所示：
+- en: '![Figure 7.4: The GIRAFFE model ](img/B18217_07_4.jpg)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图7.4：GIRAFFE模型](img/B18217_07_4.jpg)'
+- en: 'Figure 7.4: The GIRAFFE model'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图7.4：GIRAFFE模型
+- en: The generator model uses the chosen camera pose and *N*, the number of objects
+    (including the background), and the corresponding number of shape and appearance
+    codes along with affine transformations to first synthesize feature fields. The
+    individual feature fields corresponding to individual objects are then composed
+    together to form an aggregate feature field. It then volume renders the feature
+    field along the ray using the standard principles of volume rendering. Following
+    this, a neural rendering network transforms this feature field to a pixel value
+    in the image space.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成器模型使用选择的相机姿势和*N*（物体的数量，包括背景），以及相应数量的形状和外观编码与仿射变换，首先合成特征场。然后，将对应单个物体的各个特征场合成在一起，形成一个汇总特征场。接着，它使用体积渲染的标准原理沿光线对特征场进行体积渲染。随后，一个神经渲染网络将该特征场转换为图像空间中的像素值。
+- en: In this section, we gained a very broad understanding of the GIRAFFE model.
+    Now let us zoom into the individual components of it to get a more in-depth understanding.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分中，我们对GIRAFFE模型有了一个非常广泛的了解。现在让我们深入探讨它的各个组成部分，进一步理解它。
+- en: Generating feature fields
+  id: totrans-47
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 生成特征场
+- en: The first step of the scene generation process is generating a feature field.
+    This is analogous to generating an RGB image in the NeRF model. In the NeRF model,
+    the output of the model is a feature field that happens to be an image made up
+    of RGB values. However, a feature field can be any abstract notion of the image.
+    It is a generalization of an image matrix. The difference here is that instead
+    of generating a three-channel RGB image, the GIRAFFE model generates a more abstract
+    image that we refer to as the feature field with dimensions HV, WV, and Mf, where
+    HV is the height of the feature field, WV is its width, and Mf is the number of
+    channels in the feature field.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 场景生成过程的第一步是生成特征场。这类似于在NeRF模型中生成RGB图像。在NeRF模型中，模型的输出是一个特征场，恰好是由RGB值构成的图像。然而，特征场可以是图像的任何抽象概念。它是图像矩阵的一个推广。这里的区别在于，GIRAFFE模型不是生成一个三通道的RGB图像，而是生成一个更抽象的图像，我们称之为特征场，其维度为HV、WV和Mf，其中HV是特征场的高度，WV是其宽度，Mf是特征场中的通道数。
+- en: 'For this section, let us assume that we have a trained GIRAFFE model. It has
+    been trained on some predefined dataset that we are not going to think about now.
+    To generate a new image, we need to do the following three things:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这一部分，假设我们已经有一个训练好的GIRAFFE模型。它已经在某个预定义的数据集上进行了训练，当前我们不需要考虑这个数据集。要生成新图像，我们需要完成以下三件事：
+- en: 'Specify the camera pose: This defines the viewing angle of the camera. As a
+    preprocessing step, we use this camera pose to cast a ray into the scene and generate
+    a direction vector (dj) along with sampled points (xij). We will project many
+    such rays into the scene.'
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 指定相机姿势：这定义了相机的视角。作为预处理步骤，我们使用该相机姿势向场景投射一条光线，并生成一个方向向量(dj)以及采样点(xij)。我们将向场景投射许多这样的光线。
+- en: 'Sample 2N latent codes: We sample two latent codes corresponding to each object
+    we wish to see in the rendered output image. One latent code corresponds to the
+    shape of the object and the other latent code corresponds to its appearance. These
+    codes are sampled from a standard normal distribution.'
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 采样2N个潜在编码：我们为每个希望在渲染输出图像中看到的物体采样两个潜在编码。一个潜在编码对应物体的形状，另一个潜在编码对应其外观。这些编码是从标准正态分布中采样的。
+- en: 'Specify *N* affine transformations: This corresponds to the pose of the object
+    in the scene.'
+  id: totrans-52
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 指定*N*仿射变换：这对应于物体在场景中的姿势。
+- en: 'The generator part of the model does the following:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型的生成部分执行以下操作：
+- en: For each expected object in the scene, use the shape code, the appearance code,
+    the object’s pose information (that is, the affine transformation), the viewing
+    direction vector, and a point in the scene (xij) to generate a feature field (a
+    vector) and a volume density for that point. This is the NeRF model in action.
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于场景中每个预期的物体，使用形状编码、外观编码、物体的姿势信息（即仿射变换）、视角方向向量和场景中的一个点(xij)来生成该点的特征场（一个向量）和体积密度。这就是NeRF模型的工作原理。
+- en: 'Use the compositional operator to compose these feature fields and densities
+    into a single feature field and density value for that point. Here, the compositional
+    operator does the following:'
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用组合运算符将这些特征场和密度合成一个单一的特征场和密度值。这时，组合运算符执行以下操作：
+- en: '![](img/Formula_07_001.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_07_001.png)'
+- en: '![](img/Formula_07_002.png)'
+  id: totrans-57
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_07_002.png)'
+- en: The volume density at a point can be simply summed up. The feature field is
+    averaged by assigning importance proportional to the volume density of the object
+    at that point. One important benefit of such a simple operator is that it is differentiable.
+    Therefore, it can be introduced inside a neural network since the gradients can
+    flow through this operator during the model training phase.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 点处的体积密度可以简单地求和。特征场通过将重要性分配给该点上物体的体积密度来进行平均。这样简单的算子有一个重要的优点，那就是它是可微的。因此，它可以被引入到神经网络中，因为在模型训练阶段，梯度可以通过这个算子进行传播。
+- en: We use volume rendering to render a feature field for each ray generated for
+    the input camera pose by aggregating feature field values along the ray. We do
+    this for multiple rays to create a full feature field of dimension HV x WV. Here,
+    V is generally a small value. So, we are creating a low-resolution feature field.
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们使用体积渲染来渲染每条射线的特征场，这些射线是通过聚合沿射线方向的特征场值生成的，输入相机视角也会影响射线的生成。我们为多条射线执行此操作，生成一个维度为HV
+    x WV的完整特征场。在这里，V通常是一个较小的值。所以，我们实际上是在创建一个低分辨率的特征场。
+- en: Feature fields
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特征场
+- en: A feature field is an abstract notion of an image. They are not RGB values and
+    are typically in low spatial dimensions (such as 16 x 16 or 64 x 64) but high
+    channel dimensions. We need an image that is spatially high dimensional (for example,
+    512 x 512), but in three channels (RGB). Let us look at a way to do that with
+    a neural network.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特征场是图像的抽象概念。它们不是RGB值，通常具有较低的空间维度（例如16 x 16或64 x 64），但通道维度较高。我们需要一张空间维度较高的图像（例如512
+    x 512），但通道数为三（RGB）。让我们看看如何使用神经网络实现这一点。
+- en: Mapping feature fields to images
+  id: totrans-62
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将特征场映射到图像
+- en: After we generate a feature field of dimensions HV x WV x Mf, we need to map
+    this to an image of dimension H x W x 3\. Typically, HV < H, WV < W, and Mf >
+    3\. The GIRAFFE model uses the two-stage approach since an ablation analysis showed
+    it to be better than using a single-stage approach to generate the image directly.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们生成维度为HV x WV x Mf的特征场后，我们需要将其映射到维度为H x W x 3的图像。通常情况下，HV < H，WV < W，且Mf >
+    3。GIRAFFE模型使用两阶段方法，因为消融分析表明，这比直接使用单阶段方法生成图像更好。
+- en: 'The mapping operation is a parametric function that can be learned with data,
+    and using a 2D CNN is best suited for this task since it is a function in the
+    image domain. You can think of this function as an upsampling neural network like
+    a decoder in an auto-encoder. The output of this neural network is the rendered
+    image that we can see, understand, and evaluate. Mathematically, this can be defined
+    as follows:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 映射操作是一个可以通过数据学习的参数化函数，使用2D卷积神经网络（CNN）最适合完成此任务，因为它是图像域中的一个函数。你可以将这个函数视为一个上采样神经网络，类似于自编码器中的解码器。这个神经网络的输出是我们可以看到、理解和评估的渲染图像。从数学上讲，可以定义如下：
+- en: '![](img/Formula_07_03.jpg)'
+  id: totrans-65
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_07_03.jpg)'
+- en: This neural network consists of a series of upsampling layers done using *n*
+    blocks of nearest neighbor upsampling, followed by a 3 x 3 convolution and leaky
+    ReLU. This creates a series of *n* different spatial resolutions of the feature
+    field. However, in each spatial resolution, the feature field is mapped to a three-channel
+    image of the same spatial resolution via a 3 x 3 convolution. At the same time,
+    images from the previous spatial resolution are upsampled using a non-parametric
+    bilinear upsampling operator and added to the image of the new spatial resolution.
+    This is repeated until we reach the desired spatial resolution of H x W.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该神经网络由一系列上采样层组成，通过*n*个最近邻上采样块完成，之后是3 x 3卷积和泄漏ReLU。这样就创建了一系列*n*个不同空间分辨率的特征场。然而，在每个空间分辨率中，特征场会通过3
+    x 3卷积映射到一个三通道图像，该图像具有相同的空间分辨率。同时，来自前一空间分辨率的图像会使用一个非参数的双线性上采样算子进行上采样，并添加到新空间分辨率的图像中。这一过程会一直重复，直到达到所需的空间分辨率H
+    x W。
+- en: The skip connections from the feature field to a similar dimensional image help
+    with a strong gradient flow to the feature fields in each spatial resolution.
+    Intuitively, this ensures that the neural rendering model has a strong understanding
+    of the image in each spatial resolution. Additionally, the skip connections ensure
+    that the final image that is generated is a combination of the image understanding
+    at various resolutions.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从特征场到相似维度图像的跳跃连接有助于在每个空间分辨率中为特征场提供强的梯度流。直观地说，这确保了神经渲染模型在每个空间分辨率上都对图像有很强的理解。此外，跳跃连接确保生成的最终图像是各个分辨率下图像理解的组合。
+- en: 'This concept becomes very clear with the following diagram of the neural rendering
+    model:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个概念通过以下神经渲染模型的图示变得非常清晰：
+- en: '![Figure 7.5: Neural rendering model; this is a 2D CNN with a series of nearest
+    neighbor upsampling operators with a parallel mapping to the RGB image domain
+    ](img/B18217_07_5.jpg)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图7.5：神经渲染模型；这是一个2D CNN，具有一系列最近邻上采样操作符，并与RGB图像域进行并行映射](img/B18217_07_5.jpg)'
+- en: 'Figure 7.5: Neural rendering model; this is a 2D CNN with a series of nearest
+    neighbor upsampling operators with a parallel mapping to the RGB image domain'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图7.5：神经渲染模型；这是一个2D CNN，具有一系列最近邻上采样操作符，并与RGB图像域进行并行映射
+- en: The neural rendering model takes the feature field output from the previous
+    stage and generates a high-resolution RGB image. Since the feature field is generated
+    using a NeRF-based generator, it should understand the 3D nature of the scene,
+    the objects in them, and their position, pose, shape, and appearance. And since
+    we use a compositional operator, the feature field also encodes the number of
+    objects in the scene.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 神经渲染模型接收来自前一阶段的特征场输出，并生成高分辨率的RGB图像。由于特征场是使用基于NeRF的生成器生成的，它应该能够理解场景的三维特性、场景中的物体及其位置、姿势、形状和外观。并且由于我们使用了组合操作符，特征场还编码了场景中物体的数量。
+- en: In the next section, you will discover how we can control the scene generation
+    process and the control mechanisms we have to achieve it.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，您将了解我们如何控制场景生成过程，以及我们为实现这一目标所拥有的控制机制。
+- en: Exploring controllable scene generation
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 探索可控场景生成
+- en: To truly appreciate and learn what a computer vision model generates, we need
+    to visualize the outputs of the trained model. Since we are dealing with a generative
+    approach, it is easy to do this by simply visualizing the images generated by
+    the model. In this section, we will explore pre-trained GIRAFFE models and look
+    at how well they can generate controllable scenes. We will use pre-trained checkpoints
+    provided by the creators of the GIRAFFE model. The instructions provided in this
+    section are based on the open source GitHub repository at [https://github.com/autonomousvision/giraffe](https://github.com/autonomousvision/giraffe).
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要真正理解和学习计算机视觉模型生成的内容，我们需要可视化训练模型的输出。由于我们处理的是生成式方法，可以通过简单地可视化模型生成的图像来做到这一点。在本节中，我们将探索预训练的GIRAFFE模型，并查看它们生成可控场景的能力。我们将使用GIRAFFE模型创建者提供的预训练检查点。本节提供的指令基于开源的GitHub代码库，[https://github.com/autonomousvision/giraffe](https://github.com/autonomousvision/giraffe)。
+- en: 'Create the Anaconda environment called `giraffe` with the following commands:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用以下命令创建名为`giraffe`的Anaconda环境：
+- en: '[PRE0]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Once the `conda` environment has been activated, you can start rendering images
+    for various datasets using their corresponding pre-trained checkpoints. The creators
+    of the GIRAFFE model have shared pre-trained models from five different datasets:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦`conda`环境被激活，您就可以使用相应的预训练检查点开始为各种数据集渲染图像。GIRAFFE模型的创建者已共享来自五个不同数据集的预训练模型：
+- en: '**Cars dataset**: This consists of 136,726 images of 196 classes of cars.'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**汽车数据集**：该数据集包含136,726张196种车型的图片。'
+- en: '**CelebA-HQ dataset**: This consists of 30,000 high-resolution face images
+    selected from the original *CelebA* dataset.'
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**CelebA-HQ数据集**：该数据集包含从原始*CelebA*数据集中选择的30,000张高分辨率面部图像。'
+- en: '**LSUN Church dataset**: This consists of about 126,227 images of churches.'
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**LSUN教堂数据集**：该数据集包含约126,227张教堂的图片。'
+- en: '**CLEVR dataset**: This is a dataset primarily used for visual question-answering
+    research. It consists of 54,336 images of objects of different sizes, shapes,
+    and positions.'
+  id: totrans-81
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**CLEVR数据集**：这是一个主要用于视觉问答研究的数据集，包含54,336张不同大小、形状和位置的物体图片。'
+- en: '**Flickr-Faces-HQ dataset**: This consists of 70,000 high-quality images of
+    faces obtained from Flickr.'
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Flickr-Faces-HQ数据集**：该数据集包含从Flickr获取的70,000张高质量的面部图片。'
+- en: We will explore the model outputs on two different datasets just to get an understanding
+    of them.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将探索在两个不同数据集上的模型输出，以便更好地理解它们。
+- en: Exploring controllable car generation
+  id: totrans-84
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 探索可控的汽车生成
+- en: 'In this subsection, we are going to explore a model trained on the *Cars* dataset.
+    The appearance and shape code provided to the model will generate cars since that
+    is what the model is trained on. You can run the following command to generate
+    image samples:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本小节中，我们将探索一个在*Cars*数据集上训练的模型。提供给模型的外观和形状代码将生成汽车，因为该模型是基于汽车数据集进行训练的。您可以运行以下命令来生成图像样本：
+- en: '[PRE1]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Here, the `config` file specifies the path to the output folder where the generated
+    images are stored. The `render.py` script will automatically download the GIRAFFE
+    model checkpoints and use them to render images. The output images are stored
+    in `out/cars256_pretrained/rendering`. This folder will have the following subfolders:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`config` 文件指定了存储生成图像的输出文件夹路径。`render.py` 脚本将自动下载 GIRAFFE 模型的检查点并用它们渲染图像。输出图像存储在
+    `out/cars256_pretrained/rendering` 中。此文件夹将包含以下子文件夹：
+- en: '[PRE2]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Each of these folders contains images obtained when we change specific inputs
+    of the GIRAFFE model. For example, take a look at the following:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些文件夹中的每个文件夹包含了当我们改变 GIRAFFE 模型的特定输入时所获得的图像。例如，看看以下内容：
+- en: '`interpolate_app`: This is a set of images to demonstrate what happens when
+    we slowly vary the object appearance code.'
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`interpolate_app`：这是一组图像，用于展示当我们慢慢改变物体外观代码时会发生什么。'
+- en: '`interpolate_bg_app`: This demonstrates what happens when we vary the background
+    appearance code.'
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`interpolate_bg_app`：此示例展示了当我们改变背景外观代码时会发生什么。'
+- en: '`interpolate_shape`: This demonstrates what happens when we vary the shape
+    code of the object.'
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`interpolate_shape`：此示例展示了当我们改变物体的形状代码时会发生什么。'
+- en: '`translation_object_depth`: This demonstrates what happens when we change the
+    object depth. This is part of the affine transformation matrix code that is part
+    of the input.'
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`translation_object_depth`：此示例展示了当我们改变物体的深度时会发生什么。这是仿射变换矩阵代码的一部分，作为输入的一部分。'
+- en: '`translation_object_horizontal`: This demonstrates what happens when we want
+    to move the object sideways in the image. This is part of the affine transformation
+    matrix code that is part of the input.'
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`translation_object_horizontal`：此示例展示了当我们希望将物体在图像中横向移动时会发生什么。这是仿射变换矩阵代码的一部分，作为输入的一部分。'
+- en: '`rotation_object`: This demonstrates what happens when we want to change the
+    object pose. This is part of the affine transformation matrix code that is part
+    of the input.'
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`rotation_object`：此示例展示了当我们希望改变物体的姿态时会发生什么。这是仿射变换矩阵代码的一部分，作为输入的一部分。'
+- en: 'Let us look at the images inside the `rotation_object` folder and analyze them:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一下 `rotation_object` 文件夹中的图像并进行分析：
+- en: '![Figure 7.6: The Rotation object model images ](img/B18217_07_6a.jpg)![Figure
+    7.6: The Rotation object model images ](img/B18217_07_6b.jpg)![Figure 7.6: The
+    Rotation object model images ](img/B18217_07_6c.jpg)![Figure 7.6: The Rotation
+    object model images ](img/B18217_07_6d.jpg)'
+  id: totrans-97
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 7.6：物体旋转模型图像](img/B18217_07_6a.jpg)![图 7.6：物体旋转模型图像](img/B18217_07_6b.jpg)![图
+    7.6：物体旋转模型图像](img/B18217_07_6c.jpg)![图 7.6：物体旋转模型图像](img/B18217_07_6d.jpg)'
+- en: 'Figure 7.6: The Rotation object model images'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.6：物体旋转模型图像
+- en: 'Images in each row were obtained by, first, choosing an appearance and shape
+    code and varying the affine transformation matrix to just rotate the object. The
+    horizontal and depth translation parts of the affine transformation code were
+    kept fixed. The background object code, appearance, and shape code of the object
+    were also kept fixed. Different rows were obtained by using different appearance
+    and shape code. Here are some observations:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每一行的图像都是通过首先选择一个外观和形状代码，并改变仿射变换矩阵仅旋转物体来获得的。仿射变换代码中的横向和平移部分保持固定。物体的背景代码、外观和形状代码也保持不变。不同的行是通过使用不同的外观和形状代码获得的。以下是一些观察结果：
+- en: The background for all the images does not change across images for the same
+    object. This suggests that we have successfully disentangled the background for
+    the remaining parts of the image.
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 所有图像的背景在同一物体的不同图像中保持不变。这表明我们已成功将背景从图像的其他部分中分离出来。
+- en: 'Color, reflection, and shadows: As the object is rotated, the image color and
+    reflection are fairly consistent as expected of a physical object rotation. This
+    is typical because of the usage of NeRF-like model architecture.'
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 颜色、反射与阴影：随着物体的旋转，图像的颜色和反射保持一致，符合物理物体旋转的预期。这是典型的，因为使用了类似 NeRF 的模型架构。
+- en: 'Left-right consistency: The left and right views of a car are consistent.'
+  id: totrans-102
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 左右一致性：汽车的左右视角一致。
+- en: There are some unnatural artifacts such as blurry object edges and smudged backgrounds.
+    High-frequency variations in the image are not very well captured by the GIRAFFE
+    model.
+  id: totrans-103
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由于高频变化在图像中未能很好地被 GIRAFFE 模型捕捉到，因此出现了一些不自然的伪影，如模糊的物体边缘和涂抹的背景。
+- en: You can now explore other folders to understand the model’s consistency and
+    quality of the generated image when the object is translated or when the background
+    is varied.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你现在可以探索其他文件夹，以了解当对象平移或背景变化时，模型生成的图像的一致性和质量。
+- en: Exploring controllable face generation
+  id: totrans-105
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 探索可控面部生成
+- en: 'In this subsection, we are going to explore a model trained on the *CelebA-HQ*
+    dataset. The appearance and shape codes provided to the model will generate faces
+    since that is what the model is trained on. You can run the following command
+    to generate image samples:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一小节中，我们将探索一个基于*CelebA-HQ*数据集训练的模型。提供给模型的外观和形状代码将生成面部，因为该模型是根据这些数据训练的。你可以运行以下命令生成图像样本：
+- en: '[PRE3]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The `config` file specifies the path to the output folder where the generated
+    images are stored. The output images are stored in `out/celebahq_256_pretrained
+    /rendering`. This folder will have the following subfolders:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`config`文件指定了生成图像存储的输出文件夹路径。生成的图像存储在`out/celebahq_256_pretrained/rendering`中。该文件夹将包含以下子文件夹：'
+- en: '[PRE4]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Let us look at images inside the `interpolate_app` folder and analyze them:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看`interpolate_app`文件夹中的图像并分析它们：
+- en: '![Figure 7.7: The interpolate app images ](img/B18217_07_7a.jpg)![Figure 7.7:
+    The interpolate app images ](img/B18217_07_7b.jpg)![Figure 7.7: The interpolate
+    app images ](img/B18217_07_7c.jpg)![Figure 7.7: The interpolate app images ](img/B18217_07_7d.jpg)'
+  id: totrans-111
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 7.7：插值应用图像](img/B18217_07_7a.jpg)![图 7.7：插值应用图像](img/B18217_07_7b.jpg)![图
+    7.7：插值应用图像](img/B18217_07_7c.jpg)![图 7.7：插值应用图像](img/B18217_07_7d.jpg)'
+- en: 'Figure 7.7: The interpolate app images'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.7：插值应用图像
+- en: 'Images in each row were obtained by, first, choosing a shape code and varying
+    the appearance code to just change the appearance of the face. The affine transformation
+    matrix code was kept fixed too. Different rows were obtained by using different
+    shape code. Here are some observations:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每一行的图像是通过首先选择一个形状代码，并改变外观代码仅改变面部外观来获得的。仿射变换矩阵代码也保持固定。不同的行是通过使用不同的形状代码获得的。以下是一些观察结果：
+- en: The shape of the generated face is largely fixed across a single row of faces.
+    This suggests that the shape code is robust to changes in appearance code.
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 生成面部的形状在同一行的面部中基本保持不变。这表明形状代码对外观代码的变化具有鲁棒性。
+- en: The appearance of the face (features such as skin tone, skin shine, hair color,
+    eyebrow color, eye color, lip expression, and nose shape) changes as the appearance
+    code is changed. This suggests that the appearance code encodes facial appearance
+    features.
+  id: totrans-115
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 面部的外观（如肤色、肤光、发色、眉毛颜色、眼睛颜色、嘴唇表情和鼻子形状）会随着外观代码的变化而变化。这表明外观代码编码了面部外观特征。
+- en: The shape code encodes the perceived gender of the face. This largely makes
+    sense since there is a large perceived variation between the facial shape of male
+    and female images in the training dataset.
+  id: totrans-116
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 形状代码编码了面部的感知性别。这是有道理的，因为在训练数据集中，男性和女性面部图像之间的面部形状差异较大。
+- en: 'Let us look at images inside the `interpolate_shape` folder and analyze them:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看`interpolate_shape`文件夹中的图像并分析它们：
+- en: '![Figure 7.8: The interpolate shape images ](img/B18217_07_8a.jpg)![Figure
+    7.8: The interpolate shape images ](img/B18217_07_8b.jpg)![Figure 7.8: The interpolate
+    shape images ](img/B18217_07_8c.jpg)![Figure 7.8: The interpolate shape images
+    ](img/B18217_08_8d.jpg)'
+  id: totrans-118
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 7.8：插值形状图像](img/B18217_07_8a.jpg)![图 7.8：插值形状图像](img/B18217_07_8b.jpg)![图
+    7.8：插值形状图像](img/B18217_07_8c.jpg)![图 7.8：插值形状图像](img/B18217_08_8d.jpg)'
+- en: 'Figure 7.8: The interpolate shape images'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.8：插值形状图像
+- en: 'Images in each row were obtained by, first, choosing an appearance code and
+    varying the shape code to just change the shape of the face. The affine transformation
+    matrix code was kept fixed too. Different rows were obtained by using different
+    appearance code. Here are some observations:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每一行的图像是通过首先选择一个外观代码，并改变形状代码仅改变面部形状来获得的。仿射变换矩阵代码也保持固定。不同的行是通过使用不同的外观代码获得的。以下是一些观察结果：
+- en: The appearance of the face (features such as skin tone, skin shine, hair color,
+    eyebrow color, eye color, lip expression, and nose shape) is largely the same
+    as the shape code is changed. This suggests that the appearance code is robust
+    to changes in facial shape features.
+  id: totrans-121
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 面部的外观（如肤色、肤光、发色、眉毛颜色、眼睛颜色、嘴唇表情和鼻子形状）在形状代码改变时基本保持不变。这表明外观代码对面部形状特征的变化具有鲁棒性。
+- en: The shape of the generated face changes as the shape code is varied. This suggests
+    that the shape code is correctly encoding the shape features of the face.
+  id: totrans-122
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 生成的面部形状会随着形状编码的变化而变化。这表明形状编码正确地编码了面部的形状特征。
+- en: The shape code encodes the perceived gender of the face. This largely makes
+    sense since there is a large perceived variation between the facial shape of male
+    and female images in the training dataset.
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 形状编码表示面部的感知性别。这在很大程度上是合理的，因为在训练数据集中，男性和女性面部图像的形状差异较大。
+- en: In this section, we explored controllable 3D scene generation using the GIRAFFE
+    model. We generated cars using a model trained on the *Cars* dataset. Additionally,
+    we generated faces using a model trained on the *CelebA-HQ* dataset. In each of
+    these cases, we saw that the input parameters of the model are very well disentangled.
+    We used a pre-trained model provided by the creators of the GIRAFFE model. In
+    the next section, we will learn more about how to train such a model on a new
+    dataset.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们探讨了如何使用GIRAFFE模型进行可控的3D场景生成。我们使用在*Cars*数据集上训练的模型生成了汽车。此外，我们还使用在*CelebA-HQ*数据集上训练的模型生成了面部图像。在这些案例中，我们看到模型的输入参数非常清晰地被解耦。我们使用了GIRAFFE模型创建者提供的预训练模型。在下一部分，我们将学习如何在新数据集上训练这样的模型。
+- en: Training the GIRAFFE model
+  id: totrans-125
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练GIRAFFE模型
+- en: So far in this chapter, we have understood how a trained GIRAFFE model works.
+    We have understood the different components that make up the generator part of
+    the model.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，在本章中，我们已经理解了训练好的GIRAFFE模型是如何工作的。我们已经理解了构成模型生成器部分的不同组件。
+- en: But to train the model, there is another part that we have not looked at so
+    far, namely, the discriminator. Like in any other GAN model, this discriminator
+    part of the model is not used during image synthesis, but it is a vital component
+    for training the model. In this chapter, we will investigate it in more detail
+    and gain an understanding of the loss function used. We will train a new model
+    from scratch using the training module provided by the authors of GIRAFFE.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，为了训练模型，还有另一个部分是我们到目前为止没有涉及的，即判别器。和其他任何GAN模型一样，模型的判别器部分在图像合成时不会使用，但它是训练模型的重要组成部分。在本章中，我们将更详细地研究它，并了解使用的损失函数。我们将使用GIRAFFE的作者提供的训练模块从零开始训练一个新模型。
+- en: 'The generator takes as input the various latent code corresponding to object
+    rotation, background rotation, camera elevation, horizontal and depth translation,
+    and object size. This is used to first generate a feature field and then map it
+    to RGB pixels using a neural rendering module. This is the generator. The discriminator
+    is fed with two images: one is the real image from the training dataset and the
+    other is the image generated by the generator. The goal of the discriminator is
+    to classify the real image as real and the generated image as fake. This is the
+    GAN objective.'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成器输入的是与物体旋转、背景旋转、相机高度、水平和平移、物体大小相对应的各种潜在编码。这些信息首先用于生成特征场，然后通过神经渲染模块将其映射到RGB像素上。这就是生成器。判别器输入两张图像：一张是来自训练数据集的真实图像，另一张是生成器生成的图像。判别器的目标是将真实图像分类为真实，将生成图像分类为假。这就是GAN目标。
+- en: Important note
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要提示
+- en: The training dataset is unlabeled. There is no annotation for the object pose
+    parameters, depth, or position in the image. However, for each dataset, we roughly
+    know the parameters such as object rotation rate, background rotation range, camera
+    elevation range, horizontal translation, depth translation range, and the object
+    scale range. During training, the inputs are randomly sampled from the range of
+    values assuming a uniform distribution within the range.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练数据集没有标签。图像中没有关于物体姿态参数、深度或位置的注释。然而，对于每个数据集，我们大致知道一些参数，如物体旋转率、背景旋转范围、相机高度范围、水平平移、深度平移范围以及物体尺度范围。在训练过程中，输入数据会从这些范围内随机抽取，假设在该范围内均匀分布。
+- en: The discriminator is a 2D CNN that takes as input an image and outputs confidence
+    scores for real and fake images.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 判别器是一个二维卷积神经网络（CNN），它输入一张图像并输出关于真实图像和假图像的置信度分数。
+- en: Frechet Inception Distance
+  id: totrans-132
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Frechet Inception Distance
+- en: 'In order to evaluate the quality of generated images, we use the **Frechet
+    Inception Distance** (**FID**). This is a measure of the distance between features
+    extracted from real and generated images. This is not a metric on a single image.
+    Rather, it is a statistic on the entire population of the images. Here is how
+    we calculate the FID score:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了评估生成图像的质量，我们使用**Frechet Inception Distance**（**FID**）。这是一种衡量从真实图像和生成图像中提取的特征之间距离的方法。这不是对单个图像的度量，而是对整个图像集群的统计量。这是我们计算FID分数的方法：
+- en: First, we make use of the InceptionV3 model (a popular deep learning backbone
+    used in many real-world applications) to extract a feature vector from the image.
+    Typically, this is the last layer of the model before the classification layer.
+    This feature vector summarizes the image in a low-dimensional space.
+  id: totrans-134
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们利用InceptionV3模型（一种在许多实际应用中使用的流行的深度学习骨干）从图像中提取特征向量。通常，这是分类层之前模型的最后一层。这个特征向量将图像汇总在一个低维空间中。
+- en: We extract feature vectors for the entire collection of real and generated images.
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们提取了整个实际图像和生成图像集的特征向量。
+- en: We calculate the mean and the covariance of these feature vectors separately
+    for the collection of real and generated images.
+  id: totrans-136
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们分别计算实际图像和生成图像集的特征向量的均值和协方差。
+- en: The mean and covariance statistics are used in a distance formula to derive
+    a distance metric.
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 均值和协方差统计数据在距离公式中用于推导距离度量。
+- en: Training the model
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练模型
+- en: 'Let us look at how can initiate model training on the *Cars* dataset:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何在*Cars*数据集上启动模型训练：
+- en: '[PRE5]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The training parameters can be understood by looking at the configuration file,
+    `configs/256res/celebahq_256.yaml`:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过查看配置文件`configs/256res/celebahq_256.yaml`来理解训练参数：
+- en: '**Data**: This section of the config file specifies the path to the training
+    dataset to use:'
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**数据**：配置文件的此部分指定要使用的训练数据集的路径：'
+- en: '[PRE6]'
+  id: totrans-143
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '**Model**: This specifies the modeling parameters:'
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型**：这指定了建模参数：'
+- en: '[PRE7]'
+  id: totrans-145
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: '`d`'
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`d`'
+- en: 'Directory path and learning rate, among other things:'
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 目录路径和学习率等：
+- en: '[PRE8]'
+  id: totrans-148
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Important note
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要说明
+- en: Training the model is a computationally intensive task. It would most likely
+    take anywhere between 1 and 4 days to fully train the model on a single GPU, depending
+    on the GPU device used.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练该模型是一项计算密集型任务。在单个GPU上完全训练该模型可能需要1到4天不等，具体取决于使用的GPU设备。
+- en: Summary
+  id: totrans-151
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, you explored controllable 3D-aware image synthesis using the
+    GIRAFFE model. This model borrows concepts from NeRF, GANs, and 2D CNNs to create
+    3D scenes that are controllable. First, we had a refresher on GANs. Then, we dove
+    deeper into the GIRAFFE model, how feature fields are generated, and how those
+    feature fields are then transformed into RGB images. We then explored the outputs
+    of this model and understood its properties and limitations. Finally, we briefly
+    touched on how to train this model.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，您将使用GIRAFFE模型探索可控的3D感知图像合成。该模型借鉴了NeRF、GAN和2D CNN的概念，以创建可控的3D场景。首先，我们回顾了GANs。然后，我们深入探讨了GIRAFFE模型，生成特征场的生成方式，以及这些特征场如何转换为RGB图像。然后，我们探索了该模型的输出，并了解了其属性和局限性。最后，我们简要介绍了如何训练这个模型。
+- en: In the next chapter, we are going to explore a relatively new technique used
+    to generate realistic human bodies in three dimensions called the SMPL model.
+    Notably, the SMPL model is one of the small numbers of models that do not use
+    deep neural networks. Instead, it uses more classical statistical techniques such
+    as principal component analysis to achieve its objectives. You will learn the
+    importance of good mathematical problem formulation in building models that use
+    classical techniques.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨一种用于生成三维逼真人体的相对新技术，称为SMPL模型。值得注意的是，SMPL模型是少数几个不使用深度神经网络的模型之一。相反，它使用更经典的统计技术，如主成分分析，来实现其目标。您将了解到在构建使用经典技术的模型时，良好的数学问题表述的重要性。

@@ -1,0 +1,1944 @@
+- en: 'Chapter 6:'
+  id: totrans-0
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第6章：
+- en: Hyperparameter Tuning
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 超参数调优
+- en: In this chapter, we are going to start by looking at three different hyperparameter
+    tuning algorithms—Hyperband, Bayesian optimization, and random search. These algorithms
+    are implemented in the `tf.keras` API, which makes them relatively easy to understand.
+    With this API, you now have access to simplified APIs for these complex and advanced
+    algorithms that we will encounter in this chapter. We will learn how to implement
+    these algorithms and use the best hyperparameters we can find to build and train
+    an image classification model. We will also learn the details of its learning
+    process in order to know which hyperparameters to search and optimize. We will
+    start by getting and preparing the data, and then we'll apply our algorithm to
+    it. Along the way, we will also try to understand key principles and the logic
+    to implement user choices for these algorithms as user inputs, and we'll look
+    at a template to submit tuning and training jobs in GCP Cloud TPU.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章我们将首先介绍三种不同的超参数调优算法——Hyperband、贝叶斯优化和随机搜索。这些算法已在`tf.keras` API中实现，使它们相对容易理解。通过这个API，你现在可以使用简化的接口来调用这些我们在本章中会遇到的复杂和先进的算法。我们将学习如何实现这些算法，并使用我们能找到的最佳超参数来构建和训练图像分类模型。我们还将学习其学习过程的细节，以便知道需要搜索和优化哪些超参数。我们将从获取和准备数据开始，然后将算法应用于数据。在此过程中，我们还将尝试理解关键原理和逻辑，以便将用户选择的这些算法作为输入，同时我们将学习如何在GCP
+    Cloud TPU中提交调优和训练作业的模板。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章我们将涵盖以下主题：
+- en: Delineating hyperparameter types
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 划分超参数类型
+- en: Understanding the syntax and use of Keras Tuner
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解Keras Tuner的语法和使用方法
+- en: Delineating hyperparameter search algorithms
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 划分超参数搜索算法
+- en: Submitting tuning jobs in a local environment
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在本地环境中提交调优作业
+- en: Submitting tuning jobs in Google's AI Platform
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在Google的AI平台上提交调优作业
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'The entire code base for this chapter is in the following GitHub repository.
+    Please clone it to your environment:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的完整代码库可以在以下GitHub仓库中找到，请克隆到你的环境中：
+- en: '[https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/)'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/)'
+- en: 'This can be done through a command-line environment:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可以通过命令行环境来完成：
+- en: '[PRE0]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Delineating hyperparameter types
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 划分超参数类型
+- en: As we develop a model and its training process, we define variables and set
+    their values to determine the training workflow and the model's structure. These
+    values (such as the number of hidden nodes in a layer of a multilayer perceptron,
+    or the selection of an optimizer and a loss function) are known as hyperparameters.
+    These parameters are specified by the model creator. The performance of a machine
+    learning model often depends on the model architecture and the hyperparameters
+    selected during its training process. Finding a set of optimal hyperparameters
+    for the model is not a trivial task. The simplest method to this task is by grid
+    search, that is, building all possible combinations of hyperparameter values within
+    a search space and then comparing the evaluation metrics across these combinations.
+    While this is straightforward and thorough, it is a tedious process. We will see
+    how the new `tf.keras` API implements three different search algorithms.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们开发模型及其训练过程时，我们定义变量并设置其值，以决定训练流程和模型结构。这些值（例如多层感知器中某层的隐藏节点数，或者优化器和损失函数的选择）被称为超参数。这些参数由模型创建者指定。机器学习模型的性能通常依赖于模型架构和在训练过程中选择的超参数。为模型找到一组最优的超参数并非易事。完成这一任务的最简单方法是网格搜索，也就是在搜索空间内构建所有可能的超参数值组合，并比较这些组合的评估指标。虽然这种方法直接且全面，但它是一个繁琐的过程。我们将看到新版本的`tf.keras`
+    API是如何实现三种不同的搜索算法的。
+- en: 'There are two types of hyperparameters in the context of model training:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在模型训练的背景下，有两种类型的超参数：
+- en: '**Model hyperparameters**: These parameters are directly related to the structure
+    of a model layer, such as the number of nodes in a layer.'
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型超参数**：这些参数与模型层的结构直接相关，比如层中节点的数量。'
+- en: '**Algorithm hyperparameters**: These parameters are required to execute the
+    learning algorithm, such as the learning rate in the loss function used during
+    gradient descent, or the choice of loss function.'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**算法超参数**：这些参数是执行学习算法所必需的，例如在梯度下降过程中使用的损失函数中的学习率，或者损失函数的选择。'
+- en: The code modification required to scan through both types of hyperparameters
+    would be very complicated if you want to use the grid search technique. This is
+    where a more efficient and comprehensive framework would be very helpful for hyperparameter
+    tuning.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你想使用网格搜索技术，扫描两种类型的超参数所需的代码修改将非常复杂。在这种情况下，一个更高效、更全面的框架对于超参数调优非常有帮助。
+- en: 'In this chapter, we are going to see the latest addition in hyperparameter
+    tuning frameworks to the TensorFlow ecosystem. This framework is Keras Tuner.
+    As the name suggests, it is for models developed with the TensorFlow 2.x Keras
+    API. The minimum requirement for this framework is TensorFlow 2.0+ and Python
+    3.6\. It is released as a part of the TensorFlow 2.3 distribution. If you are
+    not yet using TensorFlow 2.3, then as long as you are using TensorFlow 2.x, Keras
+    Tuner can be installed with the help of the following command:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将看到 TensorFlow 生态系统中最新的超参数调优框架——Keras Tuner。顾名思义，它是为使用 TensorFlow 2.x
+    Keras API 开发的模型而设计的。此框架的最低要求是 TensorFlow 2.0+ 和 Python 3.6。它作为 TensorFlow 2.3
+    发行版的一部分发布。如果你还没有使用 TensorFlow 2.3，那么只要你使用的是 TensorFlow 2.x，Keras Tuner 就可以通过以下命令安装：
+- en: '[PRE1]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Once Keras Tuner is installed, you can load it in your Python code.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦安装了 Keras Tuner，你可以在你的 Python 代码中加载它。
+- en: Note
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'You need not put a dash `-` between `keras-tuner` while importing it. It will
+    be imported like this: `import kerastuner as kt`.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在导入 `keras-tuner` 时，你不需要在其中加上破折号 `-`。它将这样导入：`import kerastuner as kt`。
+- en: 'Keras Tuner is a distributable hyperparameter optimization framework that helps
+    to define the search space for collections of hyperparameters. It also includes
+    the following three built-in algorithms to help find the best hyperparameters:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras Tuner 是一个可分发的超参数优化框架，有助于定义超参数集合的搜索空间。它还包括以下三种内置算法，帮助找到最佳超参数：
+- en: Hyperband
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Hyperband
+- en: Bayesian optimization
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 贝叶斯优化
+- en: Random search
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 随机搜索
+- en: For Keras Tuner, whether it is model hyperparameters or algorithm hyperparameters,
+    it makes no difference to the syntax or definition style of these hyperparameters.
+    Therefore, you have great flexibility in choosing what hyperparameters to tune
+    without complicated coding patterns or loops.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 Keras Tuner，无论是模型超参数还是算法超参数，这些超参数的语法或定义方式没有区别。因此，你在选择调优哪些超参数时具有极大的灵活性，无需复杂的编码模式或循环。
+- en: The Keras Tuner framework makes it easy for us to modify our training script.
+    While there are changes and refactoring involved, the API format and logical flow
+    are very much consistent with Keras styles and implementations. Before we jump
+    into the examples, let's spend some time understanding this framework and seeing
+    how to extend our training code to accommodate it.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras Tuner 框架使我们可以轻松修改训练脚本。虽然涉及到一些更改和重构，但 API 格式和逻辑流程与 Keras 风格和实现保持高度一致。在进入示例之前，我们先花一些时间了解这个框架，并看看如何扩展我们的训练代码来适应它。
+- en: Understanding the syntax and use of Keras Tuner
+  id: totrans-31
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解 Keras Tuner 的语法和用法
+- en: 'For the most part, as far as Keras Tuner is concerned, hyperparameters can
+    be described by the following three data types: integers, floating points, and
+    choices from a list of discrete values or objects. In the following sub-sections,
+    we will take a closer look at how to use these data types to define hyperparameters
+    in different parts of the model architecture and training workflow.'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就 Keras Tuner 而言，超参数通常可以通过以下三种数据类型来描述：整数、浮动点和从离散值或对象列表中选择的选项。在接下来的子章节中，我们将更详细地了解如何在模型架构和训练工作流的不同部分中使用这些数据类型定义超参数。
+- en: Using hp.Int for hyperparameter definition
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 hp.Int 定义超参数
+- en: 'Keras Tuner defines a search space with a very simple and intuitive style.
+    To define a set of possible number of nodes in a given layer, you typically would
+    have a layer definition like the this:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Keras Tuner 以非常简单直观的方式定义了一个搜索空间。要定义给定层中可能的节点数量，通常你会像这样定义一个层：
+- en: '[PRE2]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'In the preceding line of code, `hp_units` is the number of nodes in this layer.
+    If you wish to subject `hp_units` to hyperparameter search, then you simply need
+    to define the definition for this hyperparameter''s search space. Here''s an example:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码行中，`hp_units` 是该层的节点数量。如果您希望将 `hp_units` 作为超参数进行搜索，那么您只需定义该超参数搜索空间的定义。下面是一个示例：
+- en: '[PRE3]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '[PRE4]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '`hp` is the object that represents an instance of `kerastuner`.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`hp` 是表示 `kerastuner` 实例的对象。'
+- en: This is simply an array of integers between `64` and `256` at an increment of
+    `16`. When applied to the `Dense` layer, it becomes an array of possible values
+    in the search space for `hp_units`.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这仅仅是一个在 `64` 和 `256` 之间以 `16` 为增量的整数数组。当应用于 `Dense` 层时，它变成了 `hp_units` 的搜索空间中的可能值数组。
+- en: Using hp.Choice for hyperparameter definition
+  id: totrans-41
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 `hp.Choice` 进行超参数定义
+- en: 'If you have a set of values in mind and these values do not fall into incremental
+    steps, you may specify a list of values as shown in the following line of code:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有一组预定值，并且这些值不是增量的，您可以像下面的代码行一样指定一个值列表：
+- en: '[PRE5]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '`hp_Choice` is a flexible type for hyperparameters. It can also be used to
+    define algorithmic hyperparameters such as activation functions. All it needs
+    is the name of possible activation functions. A search space for different activation
+    functions may look like this:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`hp_Choice` 是一种灵活的超参数类型。它也可以用来定义算法的超参数，如激活函数。所需的只是可能激活函数的名称。不同激活函数的搜索空间可能如下所示：'
+- en: '[PRE6]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Then the definition for the layer that uses this hyperparameter would be:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，使用该超参数的层的定义将是：
+- en: '[PRE7]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Another place where `hp.Choice` may be applied is when you want to try different
+    optimizers:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`hp.Choice` 可能应用的另一个地方是当您想尝试不同的优化器时：'
+- en: '[PRE8]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Then, in the model compilation step, where an optimizer is specified in the
+    training workflow, you would simply define `optimizer` as `hp_optimizer`:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在模型编译步骤中，指定优化器时，您只需将 `optimizer` 定义为 `hp_optimizer`：
+- en: '[PRE9]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: In the preceding example, we pass `hp_optimizer` into the model compilation
+    step as our selection for the optimizer to be used in the training process.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，我们将 `hp_optimizer` 传递到模型编译步骤中，作为我们在训练过程中使用的优化器的选择。
+- en: Using hp.Float for hyperparameter definition
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 `hp.Float` 进行超参数定义
+- en: 'Floating points frequently appear as parameters in the training workflow, such
+    as the learning rate for the optimizer. Here is an example that demonstrates how
+    it is defined in a case with the optimizer''s learning rate as a hyperparameter:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 浮动点数通常出现在训练工作流中的参数，例如优化器的学习率。这里是一个示例，展示了如何在优化器的学习率作为超参数的情况下进行定义：
+- en: '[PRE10]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '[PRE11]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: In the preceding code, we define a search space for our optimizer's learning
+    rate. We then pass the `hp_learning_rate` object into the optimizer definition.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们为优化器的学习率定义了一个搜索空间。然后，我们将 `hp_learning_rate` 对象传递到优化器定义中。
+- en: 'As an example, I created a `model_builder` function. This function accepts
+    `hp object`, which defines the hyperparameter search space, and then passes the
+    `hp object` into the model architecture. The function returns the completed model.
+    Here is the `model_builder` function:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为示例，我创建了一个 `model_builder` 函数。此函数接受定义超参数搜索空间的 `hp 对象`，然后将 `hp 对象` 传递到模型架构中。该函数返回完成的模型。下面是
+    `model_builder` 函数：
+- en: '[PRE12]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '[PRE13]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '[PRE15]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[PRE18]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '[PRE19]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '[PRE20]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '[PRE21]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '[PRE23]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '[PRE25]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: '[PRE27]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: '[PRE29]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: '[PRE30]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '[PRE31]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: '[PRE34]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: '[PRE35]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: With the Keras Tuner API, the search space format and the way in which the search
+    space is referenced inside the model layer or training algorithm are straightforward
+    and provide great flexibility. All that was done was defining a search space,
+    then passing the object holding the search space into the model definition. It
+    would be a daunting task to handle the conditional logic following the grid search
+    approach.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 Keras Tuner API，搜索空间格式和在模型层或训练算法中引用搜索空间的方式非常直观，并且提供了很大的灵活性。所做的只是定义一个搜索空间，然后将包含搜索空间的对象传递到模型定义中。如果按照网格搜索方法处理条件逻辑，将会是一项艰巨的任务。
+- en: 'Next, we will take a look at how to use Keras Tuner classes to specify the
+    following three different search algorithms:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将看看如何使用 Keras Tuner 类来指定以下三种不同的搜索算法：
+- en: Hyperband
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Hyperband
+- en: Bayesian optimization
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 贝叶斯优化
+- en: Random search
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 随机搜索
+- en: Delineating hyperparameter search algorithms
+  id: totrans-88
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 描述超参数搜索算法
+- en: In this section, we will take a closer look at three algorithms that traverse
+    the hyperparameter search space. These algorithms are implemented by the `tf.keras`
+    API.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们将更深入地了解三种遍历超参数搜索空间的算法。这些算法是通过 `tf.keras` API 实现的。
+- en: Hyperband
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Hyperband
+- en: Hyperparameter search is an inherently tedious process that requires a budget
+    `B` to test a finite set of possible hyperparameter configurations `n`. In this
+    context, budget simply means compute time as indicated by the epoch, and the training
+    data subsets. The hyperband algorithm takes advantage of early stopping and successive
+    halving so that it can evaluate more hyperparameter configurations in a given
+    time and with a given set of hardware resources. Early stopping helps eliminate
+    underperforming configurations before too much training time is invested in them.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 超参数搜索本身是一个繁琐的过程，需要一个预算 `B` 来测试有限数量的超参数配置 `n`。在这个过程中，预算只是表示计算时间（由 epoch 和训练数据子集大小来指示）。Hyperband
+    算法利用早停和连续减半的策略，使其能够在给定的时间和硬件资源下评估更多的超参数配置。早停有助于在投入过多训练时间之前，剔除那些性能差的配置。
+- en: 'The successive halving method is very intuitive: for a set of hyperparameter
+    configurations, run them through the same budget (that is, epoch, memory, and
+    training data subset size). Then we rank the performance of these configurations,
+    discarding the configurations in the worst half. This process is repeated until
+    only one configuration remains. This is similar to playoff brackets in that at
+    every bracket, half of the configurations are eliminated, until only one remains.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连续减半方法非常直观：对于一组超参数配置，将它们通过相同的预算（即：epoch、内存和训练数据子集大小）运行。然后我们对这些配置的性能进行排名，丢弃性能最差的一半配置。这个过程会一直重复，直到只剩下一个配置。这类似于淘汰赛制，在每一轮比赛中，半数配置被淘汰，直到只剩下一个。
+- en: 'There are two `for` loops in the Hyperband algorithm:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Hyperband 算法中有两个 `for` 循环：
+- en: The inner loop, which performs successive halving that discards a portion of
+    hyperparameter configurations, thereby reducing the search space
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 内部循环执行连续减半，丢弃一部分超参数配置，从而减少搜索空间。
+- en: An outer loop, which iterates over different combinations of `B` and `n`
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 外部循环，遍历不同的 `B` 和 `n` 的组合。
+- en: In early iterations, there are many candidate configurations. As each candidate
+    is given a portion of budget `B` to train, early stopping ensures that a fraction
+    (that is, half) of these configurations are discarded early before too much training
+    time is wasted. As brackets become smaller through successive halving, fewer candidate
+    configurations remain, and therefore each candidate is more likely to get a higher
+    portion of `B`. This continues until the last hyperparameter configuration remains.
+    Therefore, you may think of the Hyperband algorithm as an approach for selecting
+    the best hyperparameter configurations that cuts the losses early by discarding
+    low-performing configurations.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在早期迭代中，有许多候选配置。每个候选配置都会分配一定的预算 `B` 来进行训练，早停策略确保在浪费过多训练时间之前，提前丢弃这些配置中的一半（即，性能最差的一半）。随着连续减半，比赛轮次逐渐减少，剩下的候选配置越来越少，因此每个候选配置获得更多预算
+    `B` 的可能性更大。这个过程会一直持续，直到最后一个超参数配置剩下。因此，你可以将 Hyperband 算法看作是一种通过尽早丢弃低性能配置来选择最佳超参数配置的方法。
+- en: 'Here is a reference for more information on the Hyperband algorithm: [https://openreview.net/pdf?id=ry18Ww5ee](https://openreview.net/pdf?id=ry18Ww5ee).'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是 Hyperband 算法的更多信息参考：[https://openreview.net/pdf?id=ry18Ww5ee](https://openreview.net/pdf?id=ry18Ww5ee)。
+- en: 'Now let''s take a look at how to define a tuner instance that uses the Hyperband
+    algorithm (for a detailed description of the API and its parameters, see [https://keras-team.github.io/keras-tuner/documentation/tuners/](https://keras-team.github.io/keras-tuner/documentation/tuners/)).
+    Here is an example:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看一下如何定义一个使用 Hyperband 算法的调优器实例（有关 API 及其参数的详细说明，请参见 [https://keras-team.github.io/keras-tuner/documentation/tuners/](https://keras-team.github.io/keras-tuner/documentation/tuners/)）。下面是一个示例：
+- en: '[PRE36]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '[PRE42]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '[PRE43]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: '[PRE44]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '[PRE45]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '[PRE46]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: '[PRE48]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: '[PRE50]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'Here is a description of the parameters shown:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是参数描述：
+- en: '`hypermodel`: A function of the class that builds a model architecture.'
+  id: totrans-115
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`hypermodel`：构建模型架构的类函数。'
+- en: '`objective`: Performance metrics for evaluation.'
+  id: totrans-116
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`objective`：评估的性能指标。'
+- en: '`max_epoch`: The maximum number of epochs to train a model.'
+  id: totrans-117
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`max_epoch`：训练模型的最大 epoch 数。'
+- en: '`factor`: Reduction for the number of epochs and number of models for each
+    bracket. It selects configurations ranked in the top 1/`factor` of all configurations.
+    A higher `factor` means more pruning and therefore it''s quicker for the search
+    process to identify a top performer.'
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`factor`：每轮比赛中 epoch 数和模型数量的减少比例。它选择排名在所有配置中前 1/`factor` 的配置。`factor` 值越大，剪枝越多，因此搜索过程越快，可以识别出最佳表现的配置。'
+- en: '`distribution_strategy`: This is used if hardware is available for distributed
+    training.'
+  id: totrans-119
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`distribution_strategy`：如果硬件可用于分布式训练，则使用此选项。'
+- en: '`directory`: The target directory or path to write the search results.'
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`directory`：目标目录或路径，用于保存搜索结果。'
+- en: '`project_name`: The name used as a prefix for files saved by the tuner.'
+  id: totrans-121
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`project_name`：用于作为调优器保存文件的前缀名称。'
+- en: '`overwrite`: This is a Boolean. If `True`, then hyperparameter search will
+    start from scratch. Let''s explain a bit more about this API. In this case, `kt`
+    is the tuner object. In the hyperband definition, `hypermodel` designates a function
+    that builds the model architecture.'
+  id: totrans-122
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`overwrite`：这是一个布尔值。如果为 `True`，则超参数搜索将从头开始。让我们稍微详细解释一下这个 API。在此情况下，`kt` 是调优器对象。在
+    Hyperband 定义中，`hypermodel` 指定了构建模型架构的函数。'
+- en: In this example, we will define the search space for the number of nodes (`hp_units`)
+    in the middle `Dense` layer of the model architecture, as well as the search space
+    for the activation function (`hp_activation`) of that layer. After these definitions,
+    we construct the model architecture, pass these `hp` objects into the destined
+    layer, compile the model, and return the model.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将定义模型架构中间 `Dense` 层节点数（`hp_units`）的搜索空间，以及该层激活函数（`hp_activation`）的搜索空间。在这些定义之后，我们构建模型架构，将这些
+    `hp` 对象传入目标层，编译模型并返回模型。
+- en: 'Notice `hp` in the function signature. It indicates this is the entry function
+    for the model structure definition, where the hyperparameters are specified. In
+    this example, there are two hyperparameters:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意函数签名中的 `hp`。它表示这是模型结构定义的入口函数，其中指定了超参数。在此示例中，有两个超参数：
+- en: '[PRE51]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Inside the model''s sequential API definition, you will find these hyperparameters
+    in one of the `Dense` layers:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在模型的顺序 API 定义中，您将会在某个 `Dense` 层中找到这些超参数：
+- en: '[PRE53]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Before exiting this function, you would compile the model and return the model
+    to the tuner instance. Now let''s begin with the training of the Hyperband hyperparameter:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在退出此函数之前，您需要编译模型并将模型返回给调优器实例。现在让我们开始 Hyperband 超参数的训练：
+- en: 'Now that the tuner and its search algorithm are defined, this is how you would
+    set up the search:'
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在已经定义了调优器和其搜索算法，以下是您如何设置搜索的方法：
+- en: '[PRE54]'
+  id: totrans-131
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: In this example, `train_ds` is the training dataset, while `val_ds` is the cross-validation
+    dataset. The rest of the parameters are the same as seen in a typical training
+    routine.
+  id: totrans-132
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在此示例中，`train_ds` 是训练数据集，而 `val_ds` 是交叉验证数据集。其余参数与典型的训练流程相同。
+- en: 'After the search is done, you may retrieve the best hyperparameter configuration
+    through an object:'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 搜索完成后，您可以通过一个对象检索最佳的超参数配置：
+- en: '[PRE55]'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: By default, `num_trials = 1` indicates this will return the best model. Since
+    this is a list object, we retrieve it by the first index of a list, which is `0`.
+    The `print` statement shows how the item in `best_hps` may be referenced.
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 默认情况下，`num_trials = 1` 表示将返回最佳模型。由于这是一个列表对象，我们通过列表的第一个索引（即 `0`）来检索它。`print`
+    语句展示了如何引用 `best_hps` 中的项目。
+- en: 'It is recommended that once you have `best_hps`, you should retrain your model
+    with these parameters. We will start with the `tuner` object initialized with
+    `best_hps`:'
+  id: totrans-136
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 建议在获得 `best_hps` 后，您应使用这些参数重新训练您的模型。我们将从使用 `best_hps` 初始化的 `tuner` 对象开始：
+- en: '[PRE56]'
+  id: totrans-137
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'Then we may define checkpoints and callbacks for the formal training:'
+  id: totrans-138
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们可以为正式训练定义检查点和回调函数：
+- en: '[PRE57]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'Now let''s call the `fit` function to start training with the best hyperparameter
+    configuration:'
+  id: totrans-140
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在让我们调用 `fit` 函数，开始使用最佳超参数配置进行训练：
+- en: '[PRE58]'
+  id: totrans-141
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'Once training is completed, save the trained model:'
+  id: totrans-142
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦训练完成，保存训练好的模型：
+- en: '[PRE59]'
+  id: totrans-143
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'Now the model trained with the hyperband hyperparameter search is saved in
+    the file path designated by `model_save_dir`. Next, we are going to take a look
+    at another algorithm for hyperparameter search: Bayesian optimization.'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，通过 Hyperband 超参数搜索训练得到的模型已保存在 `model_save_dir` 指定的文件路径中。接下来，我们将介绍另一种超参数搜索算法：贝叶斯优化。
+- en: Bayesian optimization
+  id: totrans-145
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 贝叶斯优化
+- en: This method leverages what is learned from the initial training samples and
+    nudges changes in hyperparameter values towards the favorable direction of the
+    search space. Actually, what was learned from the initial training samples is
+    a probabilistic function that models the value of our objective function. This
+    **probabilistic** function, also known as a **surrogate** function, models the
+    distribution of our objective (that is, validation loss) as a Gaussian process.
+    With a surrogate function ready, the next hyperparameter configuration candidate
+    is selected such that it is most likely to improve (that is, minimize, if the
+    objective is validation loss) the surrogate function.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方法利用从初始训练样本中学到的知识，并推动超参数值朝着搜索空间的有利方向变化。实际上，从初始训练样本中学到的是一个概率函数，它模拟了我们目标函数的值。这个**概率**函数，也叫做**代理**函数，以高斯过程的形式模拟了我们目标（即验证损失）的分布。有了代理函数，接下来的超参数配置候选值将被选择，使其最有可能改善（即最小化，如果目标是验证损失）代理函数。
+- en: 'The `tuner` instance invokes this algorithm in a straightforward fashion. Here
+    is an example:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tuner`实例以直接的方式调用该算法。以下是一个示例：'
+- en: '[PRE60]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '[PRE61]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '[PRE64]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[PRE65]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: This line of code defines a `tuner` object that I set up to use the Bayesian
+    optimization algorithm as a means for hyperparameter optimization. Similar to
+    Hyperband, it requires a function definition for `hypermodel`. In this case, `model_builder`
+    from Hyperband is used again. The criterion for optimization is validation accuracy.
+    The maximum number of trials is set to `50`, and we will specify the directory
+    in which to save the model as user input during job submission. The user input
+    for `model_dir` is carried by `flags_obj.model_dir`.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一行代码定义了一个`tuner`对象，我设置它使用贝叶斯优化算法作为超参数优化的方法。与Hyperband类似，它需要一个`hypermodel`的函数定义。在这种情况下，再次使用Hyperband中的`model_builder`。优化标准是验证准确度。最大试验次数设置为`50`，我们将在作业提交过程中指定保存模型的目录。`model_dir`的用户输入通过`flags_obj.model_dir`传递。
+- en: As indicated by the `BayesianOptimization` API, there are not many differences
+    in the function signature compared to Hyperband. `max_trials` is the maximum number
+    of hyperparameter configurations to try. This value may be pre-empted or ignored
+    if the search space is exhausted.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如`BayesianOptimization` API所示，与Hyperband相比，函数签名没有太大差异。`max_trials`是要尝试的最大超参数配置数。如果搜索空间耗尽，此值可能会被预先占用或忽略。
+- en: 'The next step is the same as seen in the *Hyperband* section when launching
+    the search process:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一步与在*Hyperband*部分中看到的启动搜索过程相同：
+- en: '[PRE68]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '[PRE69]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: '[PRE72]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[PRE73]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '[PRE74]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: And the rest of it, such as retrieving the best hyperparameter configuration
+    and training the model with this configuration, is all the same as in the *Hyperband*
+    section.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其余部分，例如检索最佳超参数配置并使用此配置训练模型，与*Hyperband*部分完全相同。
+- en: Random search
+  id: totrans-167
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 随机搜索
+- en: 'Random search is simply a random selection of the hyperparameter configuration
+    search space. Here''s an example definition:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机搜索简单来说就是在超参数配置搜索空间中随机选择。以下是一个示例定义：
+- en: '[PRE75]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '[PRE76]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[PRE77]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '[PRE78]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: '[PRE79]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: '[PRE80]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: '[PRE81]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: In the `RandomSearch` API in the preceding code, we define the `model_builder`
+    function as `hypermodel`. This function contains our hyperparameter objects that
+    hold definitions for the hyperparameter name and search space. `hypermodel` specifies
+    the name of our function, which will accept the best hyperparameters found by
+    the search and use these values to build a model. Our objective is to find the
+    best set of hyperparameters that maximizes validation accuracy, and we set `max_trials`
+    to `5`. The directory to save the model is provided as user input. The user input
+    for `model_dir` is captured by the `flags_obj.model_dir` object.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中的`RandomSearch` API中，我们将`model_builder`函数定义为`hypermodel`。该函数包含我们的超参数对象，这些对象保存超参数名称和搜索空间的定义。`hypermodel`指定了我们的函数名称，该函数将接受搜索找到的最佳超参数，并使用这些值构建模型。我们的目标是找到最大化验证准确度的最佳超参数集合，并将`max_trials`设置为`5`。保存模型的目录由用户输入提供。`model_dir`的用户输入由`flags_obj.model_dir`对象捕获。
+- en: A few words about `directory`
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于`directory`的简短说明
+- en: The `directory` argument is required in all three types of algorithm. It is
+    the target where search results will be stored. This argument accepts a text string
+    and is very flexible. The text string may indicate text passed by the input flag
+    (as in the case of `flags_obj.model_dir`) when this code is run as a script. Alternatively,
+    if you are using a notebook environment, the text string may be a file path or
+    a cloud storage bucket path.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`directory`参数在所有三种算法类型中都是必需的。它是搜索结果存储的目标。这个参数接受一个文本字符串，使用非常灵活。这个文本字符串可以表示输入标志传递的文本（例如`flags_obj.model_dir`），当代码以脚本形式运行时。或者，如果你使用的是笔记本环境，这个字符串可能是一个文件路径或云存储桶路径。'
+- en: Submitting tuning jobs in a local environment
+  id: totrans-179
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在本地环境中提交调优任务
+- en: Since the hyperparameter tuning process is inherently time-consuming, it is
+    more practical to run it from a script rather than in a notebook environment.
+    Also, although in a sense, a hyperparameter tuning process consists of multiple
+    model training jobs, the tuner API and search workflow require a certain code
+    refactoring style. The most obvious point is that we must wrap the model structure
+    around a function (in our example, a function named `model_builder`), whose signature
+    indicates that hyperparameter arrays are expected to be referenced in the model
+    structure.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于超参数调优过程本质上是耗时的，最好从脚本中运行它，而不是在笔记本环境中运行。此外，虽然在某种意义上，超参数调优过程包括多个模型训练任务，但调优API和搜索工作流要求特定的代码重构风格。最明显的一点是，我们必须将模型结构包装成一个函数（在我们的示例中，命名为`model_builder`），其函数签名表明预计会在模型结构中引用超参数数组。
+- en: 'You may find the code and instructions in the GitHub repository: [https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/localtuningwork](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/localtuningwork)'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在GitHub仓库中找到代码和说明：[https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/localtuningwork](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/localtuningwork)
+- en: 'With the help of the following code, we will set up user inputs or flags and
+    perhaps assign default values to these flags when necessary. Let''s have a quick
+    review of how user inputs may be handled and defined in the Python `script.absl`
+    library, and the APIs that are commonly used for handling user input:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码的帮助下，我们将设置用户输入或标志，并在必要时为这些标志分配默认值。我们来快速回顾一下如何在Python `script.absl`库中处理和定义用户输入，以及常用的API来处理用户输入：
+- en: 'Import the `absl` library and the relevant APIs:'
+  id: totrans-183
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入`absl`库和相关的API：
+- en: '[PRE82]'
+  id: totrans-184
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: 'Next, we will use the following lines of code to indicate user inputs or flags:'
+  id: totrans-185
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将使用以下代码行来指示用户输入或标志：
+- en: '[PRE83]'
+  id: totrans-186
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: 'The first argument is the name of the input flag, followed by its default value,
+    then an explanation. The preceding examples demonstrate commonly used type casting
+    to these flags: `string`, `Boolean`, `integer`, and `float`.'
+  id: totrans-187
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 第一个参数是输入标志的名称，接着是其默认值，然后是说明。前面的示例展示了常用的类型转换：`string`、`Boolean`、`integer`和`float`。
+- en: 'In the code, how do we reference and make use of these flags? It turns out
+    we need to use a `flags.FLAGS` object in the function where the input flags are
+    used. This function could be `main()` or any function. In many cases, for convenience
+    and readability, we will assign this object to a variable:'
+  id: totrans-188
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在代码中，我们如何引用并使用这些标志呢？原来我们需要在使用输入标志的函数中使用一个`flags.FLAGS`对象。这个函数可以是`main()`或任何其他函数。为了方便和提高可读性，通常我们会将这个对象赋值给一个变量：
+- en: '[PRE84]'
+  id: totrans-189
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: 'Now, to refer to `model_dir`, we just need to do the following:'
+  id: totrans-190
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，为了引用`model_dir`，我们只需要执行以下操作：
+- en: '[PRE85]'
+  id: totrans-191
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: This effectively decodes the object the and `model_dir` attribute as a text
+    string.
+  id: totrans-192
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这实际上将`model_dir`属性解码为一个文本字符串。
+- en: 'Now let''s see an example script. We will start with the `import` statements
+    to bring all the libraries we will need into the scope:'
+  id: totrans-193
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在让我们看看一个示例脚本。我们将从`import`语句开始，将所有需要的库引入到作用域中：
+- en: '[PRE86]'
+  id: totrans-194
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'Define the user input argument names, default values, and short explanations:'
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义用户输入参数的名称、默认值和简短说明：
+- en: '[PRE87]'
+  id: totrans-196
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: 'Define a function for loading working data. In this case, we will load it directly
+    from TensorFlow for convenience:'
+  id: totrans-197
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义一个加载工作数据的函数。在这个例子中，为了方便，我们将直接从TensorFlow加载数据：
+- en: '[PRE88]'
+  id: totrans-198
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: This function invokes the `tf.keras` API to retrieve the built-in image data
+    that comes with TensorFlow. It is hosted in Google's public-facing storage. It
+    is compressed, so we need to set `untar` to `True`.
+  id: totrans-199
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这个函数调用`tf.keras` API来获取TensorFlow自带的图像数据。它托管在Google的公共存储中。由于它是压缩格式的，所以我们需要将`untar`设置为`True`。
+- en: 'We also create a function called `make_generators`. This is a function that
+    we will use to make data generators to stream the image data into the model training
+    process:'
+  id: totrans-200
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还创建了一个名为`make_generators`的函数。这是一个我们将用来制作数据生成器并将图像数据流入模型训练过程的函数：
+- en: '[PRE89]'
+  id: totrans-201
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: The function in the preceding code accepts a data path and user input. `train_batch_size`
+    is one of the user inputs. This value is used to define `BATCH_SIZE` in this function.
+    The validation generator is created first. We may have different preferences for
+    training data, such as the options for data augmentation.
+  id: totrans-202
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 上述代码中的函数接受数据路径和用户输入。`train_batch_size`是用户输入之一。这个值用于定义该函数中的`BATCH_SIZE`。首先创建验证生成器。我们可能有不同的训练数据偏好，比如数据增强的选项。
+- en: 'Let''s continue with the `make_generators` function. In this example, by default
+    we are not going to do data augmentation on the training data. At the end of this
+    function, `train_generator` is returned alongside `valid_generator`:'
+  id: totrans-203
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续进行`make_generators`函数。在这个例子中，默认情况下我们不会对训练数据进行数据增强。在该函数的最后，`train_generator`与`valid_generator`一起返回：
+- en: '[PRE90]'
+  id: totrans-204
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: 'This function will create two generators: one for training data, the other
+    one for cross-validation data. See [*Chapter 4*](B16070_04_Final_JM_ePub.xhtml#_idTextAnchor101),
+    *Reusable Models and Scalable Data Pipeline*, the *Creating a generator to feed
+    image data at scale* section, for more details.'
+  id: totrans-205
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该函数将创建两个生成器：一个用于训练数据，另一个用于交叉验证数据。有关更多详情，请参见[*第4章*](B16070_04_Final_JM_ePub.xhtml#_idTextAnchor101)，*可重用模型和可扩展数据管道*，以及*在大规模中创建图像数据生成器*部分。
+- en: 'Next, we define a function to retrieve the index to label mapping. As the model
+    outputs a prediction, the prediction is in the form of an integer between `0`
+    and `4`. Each integer corresponds to a class name of the flowers:'
+  id: totrans-206
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们定义一个函数来检索索引到标签的映射。由于模型输出的是预测，预测的形式是`0`到`4`之间的整数。每个整数对应花卉类别的名称：
+- en: '[PRE91]'
+  id: totrans-207
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: The function in the preceding code iterates through the flower type index and
+    the corresponding flower type name, and creates a dictionary as a lookup. Now
+    let's proceed towards building a model architecture.
+  id: totrans-208
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 上述代码中的函数遍历花卉类型索引和相应的花卉类型名称，并创建一个字典作为查找表。现在让我们继续构建模型架构。
+- en: 'The following function builds the model architecture, as described in the *Hyperband*
+    section:'
+  id: totrans-209
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以下函数构建了模型架构，如*Hyperband*部分所述：
+- en: '[PRE92]'
+  id: totrans-210
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'Define an object to clear the screen as the hyperparameter search moves around
+    the search space:'
+  id: totrans-211
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义一个对象来清除屏幕，以便在超参数搜索在搜索空间中移动时：
+- en: '[PRE93]'
+  id: totrans-212
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: This will help clear some of the printed output during the search process. This
+    is passed into a callback.
+  id: totrans-213
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将有助于在搜索过程中清除一些打印输出。它被传递到回调中。
+- en: 'This is the main driver for the training script:'
+  id: totrans-214
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这是训练脚本的主要驱动程序：
+- en: '[PRE94]'
+  id: totrans-215
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: In the preceding code, we set the distributed training strategy, defined the
+    data source, and created training and validation data generators. Also, label
+    mapping is retrieved.
+  id: totrans-216
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在上述代码中，我们设置了分布式训练策略，定义了数据源，并创建了训练和验证数据生成器。同时，获取了标签映射。
+- en: 'In the following logical block of conditional code, we handle the choice for
+    the hyperparameter search algorithm. All three choices are present: Bayesian optimization,
+    random search, and Hyperband. The default choice is Hyperband. Within each choice,
+    there is a `hypermodel` attribute. This attribute specifies the name of the function
+    that will take up the best hyperparameters to build the model:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下面的条件代码逻辑块中，我们处理超参数搜索算法的选择。所有三种选择都已列出：贝叶斯优化、随机搜索和Hyperband。默认选择是Hyperband。在每个选择中，都有一个`hypermodel`属性。该属性指定将采用最佳超参数来构建模型的函数名称：
+- en: '[PRE95]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '[PRE96]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '[PRE97]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: '[PRE98]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: '[PRE99]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: '[PRE100]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: '[PRE101]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: '[PRE102]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: '[PRE103]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: '[PRE104]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: '[PRE105]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: '[PRE106]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: '[PRE107]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: '[PRE108]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: '[PRE109]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: '[PRE110]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: '[PRE111]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: '[PRE112]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: '[PRE113]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: '[PRE114]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: '[PRE115]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: '[PRE116]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: 'Unless it''s specified via input to use either Bayesian optimization or random
+    search, the default choice is Hyperband. This is indicated in the `else` block
+    in the following code:'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非通过输入指定使用贝叶斯优化或随机搜索，否则默认选择是Hyperband。这在下面代码的`else`块中有所指示：
+- en: '[PRE117]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: '[PRE118]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: '[PRE119]'
+  id: totrans-243
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: '[PRE120]'
+  id: totrans-244
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: '[PRE121]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: '[PRE122]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: '[PRE123]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: '[PRE124]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: '[PRE125]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: '[PRE126]'
+  id: totrans-250
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: '[PRE127]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: 'Now the search algorithm is executed based on the logic of the preceding code;
+    we need to pass the best hyperparameters. For our own information, we may use
+    the `get_gest_hyperparameters` API to print out the best hyperparameters. We will
+    get the optimal hyperparameters with the help of the following code:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在根据前面的代码逻辑执行搜索算法；我们需要传递最佳超参数。为了自己的方便，我们可以使用`get_gest_hyperparameters` API来打印出最佳超参数。我们将通过以下代码获得最优超参数：
+- en: '[PRE128]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: '[PRE129]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: '[PRE130]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: '[PRE131]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: '[PRE132]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: '[PRE133]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: Now we can pass these best hyperparameters, `best_hp`, to the model and train
+    the model with these values. The `tuner.hypermodel.build` API handles the passing
+    of these values to the model.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以将这些最佳超参数`best_hp`传递给模型，并使用这些值训练模型。`tuner.hypermodel.build` API负责将这些值传递给模型。
+- en: 'In the following code, we will set up the training and validation data batches,
+    create a callback object, and start the training with the `fit` API:'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们将设置训练和验证数据批次，创建回调对象，并使用`fit` API开始训练：
+- en: '[PRE134]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: '[PRE135]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: '[PRE136]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: '[PRE137]'
+  id: totrans-264
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: '[PRE138]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: '[PRE139]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: '[PRE140]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE140]'
+- en: '[PRE141]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE141]'
+- en: '[PRE142]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE142]'
+- en: '[PRE143]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE143]'
+- en: '[PRE144]'
+  id: totrans-271
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE144]'
+- en: '[PRE145]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE145]'
+- en: '[PRE146]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE146]'
+- en: '[PRE147]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE147]'
+- en: 'Here, we log the output of the destination directory for the saved model on
+    screen:'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将目标目录中保存的模型的输出日志显示在屏幕上：
+- en: '[PRE148]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE148]'
+- en: '[PRE149]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE149]'
+- en: '[PRE150]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE150]'
+- en: '[PRE151]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE151]'
+- en: '[PRE152]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE152]'
+- en: '[PRE153]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE153]'
+- en: '[PRE154]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE154]'
+- en: 'To run this as a script (`hp_kt_resnet_local.py`), you could simply invoke
+    it with the following command:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将其作为脚本运行（`hp_kt_resnet_local.py`），你可以通过以下命令简单地调用它：
+- en: '[PRE155]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE155]'
+- en: '[PRE156]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE156]'
+- en: '[PRE157]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE157]'
+- en: '[PRE158]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE158]'
+- en: In the preceding command, we invoke the `python3` runtime to execute our training
+    script, `hp_kt_resnet_local.py`. `model_dir` is the place we wish to save the
+    model. `Tuner_type` designates the selection of the hyperparameter search algorithm.
+    Other algorithm choices you may try are *Bayesian optimization and random search*.
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的命令中，我们调用`python3`运行时来执行训练脚本`hp_kt_resnet_local.py`。`model_dir`是我们希望保存模型的地方。`Tuner_type`指定选择的超参数搜索算法。你可以尝试的其他算法选择包括*贝叶斯优化和随机搜索*。
+- en: Submitting tuning jobs in Google's AI Platform
+  id: totrans-289
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在Google的AI平台提交调优任务
+- en: Now we are ready to use Google's AI Platform to perform hyperparameter training.
+    You may download everything you need from the GitHub repository for this chapter.
+    For the AI Platform code in this section, you can refer to the `gcptuningwork`
+    file in this chapter's folder in the GitHub repository for the book.
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备使用Google的AI平台进行超参数训练。你可以从本章的GitHub仓库下载所有需要的内容。对于本节中的AI平台代码，你可以参考GitHub仓库中本章文件夹中的`gcptuningwork`文件。
+- en: In the cloud, we have access to powerful machines that can speed up our search
+    process. Overall, the approach we will leverage is very similar to what we saw
+    in the previous section about submitting a local Python script training job. We
+    will use the `tf.compat.v1.flag` method to handle user input or flags. The rest
+    of the script follows a similar structure, with the exception of data handling,
+    because we will use `TFRecord` instead of `ImageGenerator` and a conditional flag
+    for the distributed training strategy.
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在云端，我们可以访问强大的计算机，这些计算机能加速我们的搜索过程。总体而言，我们将采用的方法与前一节提交本地Python脚本训练任务时看到的方法非常相似。我们将使用`tf.compat.v1.flag`方法来处理用户输入或标志。其余的脚本结构类似，唯一不同的是数据处理部分，因为我们将使用`TFRecord`代替`ImageGenerator`，并使用条件标志来指定分布式训练策略。
+- en: 'Since the tuning job is submitted to AI Platform from a remote node (that is,
+    your local compute environment), some prerequisites need to be met (see [*Chapter
+    5*](B16070_05_Final_JM_ePub.xhtml#_idTextAnchor145), *Training at Scale*):'
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于调优任务是从远程节点（即你的本地计算环境）提交到AI平台的，因此需要满足一些先决条件（请参见[*第5章*](B16070_05_Final_JM_ePub.xhtml#_idTextAnchor145)，*大规模训练*）：
+- en: 'In the directory where the tuning job will be invoked, `setup.py` needs to
+    be updated to include `keras-tuner`. And while we are at it, let''s also add IPython.
+    So, edit the `setup.py` file as follows:'
+  id: totrans-293
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在将要调用调优任务的目录中，需要更新`setup.py`以包含`keras-tuner`。同时，我们也将添加IPython。所以，请按以下方式编辑`setup.py`文件：
+- en: '[PRE159]'
+  id: totrans-294
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE159]'
+- en: This is the entire content of `setup.py`. In this file, we specify the libraries
+    we need for our training job and instruct the runtime to find these libraries
+    with the `find_packages` function.
+  id: totrans-295
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这是`setup.py`的全部内容。在这个文件中，我们指定了训练任务所需的库，并通过`find_packages`函数指示运行时找到这些库。
+- en: 'You are now ready to submit a tuning job. In the following command, the job
+    is submitted to Cloud TPU to run in the distributed training strategy:'
+  id: totrans-296
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在你已经准备好提交调优任务。在以下命令中，任务被提交到Cloud TPU并在分布式训练策略下运行：
+- en: '[PRE160]'
+  id: totrans-297
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE160]'
+- en: Notice the separator `-- \` in the preceding code, before `-- \`, they are Google
+    Cloud-specific arguments. We submit a training script from our environment to
+    Cloud TPU. For the training script, we need to specify the package path and module
+    name. The Python version and TensorFlow runtime are also selected. We will use
+    `BASIC_TPU` in the `us-central1` region.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意前面的代码中`-- \`的分隔符，在`-- \`之前，它们是Google Cloud特有的参数。我们从我们的环境提交训练脚本到Cloud TPU。对于训练脚本，我们需要指定包路径和模块名称。Python版本和TensorFlow运行时也需要选择。我们将使用`BASIC_TPU`，并选择位于`us-central1`区域的Cloud
+    TPU。
+- en: After `-- \` are the custom arguments for training scripts. These arguments
+    are defined for and used in the training script. We designated the value `tpu`
+    for our choice of distribution training strategy. Further, the training data location
+    is designated by `data_dir`. And once the training job is done, the model will
+    be saved in `model_dir`. Finally, we select `HYPERBAND` as our `tuner_type` for
+    the hyperparameter tuning algorithm.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `-- \` 后面是训练脚本的自定义参数。这些参数是为训练脚本定义并使用的。我们为分布式训练策略选择了 `tpu` 作为值。此外，训练数据的位置由
+    `data_dir` 指定。一旦训练作业完成，模型将保存在 `model_dir` 中。最后，我们选择 `HYPERBAND` 作为超参数调优算法的 `tuner_type`。
+- en: And from the current directory, where the preceding command is invoked, the
+    training script is stored in the `/python/ScriptProject/hp_kt_resnet_tpu_act.py`
+    folder.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并且从当前目录（前述命令被调用的目录）中，训练脚本存储在 `/python/ScriptProject/hp_kt_resnet_tpu_act.py`
+    文件夹中。
+- en: 'This training script performs a hyperparameter search for two hyperparameters:
+    the number of units in a middle `Dense` layer of our image classification model,
+    and the activation function. The added `tuner_type` flag lets the user select
+    the algorithm: Hyperband, Bayesian optimization, or random search. Once the search
+    is completed, it then trains the model with the best hyperparameter configuration
+    and saves the model to a storage bucket.'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个训练脚本执行了两个超参数的搜索：我们图像分类模型中间 `Dense` 层的单元数量和激活函数。添加的 `tuner_type` 标志允许用户选择算法：Hyperband、贝叶斯优化或随机搜索。一旦搜索完成，它将使用最佳超参数配置训练模型，并将模型保存到存储桶中。
+- en: Note
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'The code is lengthy, so you can find the entire code and instructions in the
+    following GitHub repository: [https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_06/gcptuningwork](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_06/gcptuningwork).'
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码较长，因此你可以在以下 GitHub 仓库中找到完整的代码和说明：[https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_06/gcptuningwork](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_06/gcptuningwork)。
+- en: The main driver script for training is available at [https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/gcptuningwork/tfk/tuner/hp_kt_resnet_tpu_act.py](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/gcptuningwork/tfk/tuner/hp_kt_resnet_tpu_act.py).
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练的主驱动脚本可以在 [https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/gcptuningwork/tfk/tuner/hp_kt_resnet_tpu_act.py](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_06/gcptuningwork/tfk/tuner/hp_kt_resnet_tpu_act.py)
+    中找到。
+- en: 'Once the training is completed, you will see an output in the cloud storage
+    specified by `model_dir` as shown in Figure 6.1:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练完成后，你将在由 `model_dir` 指定的云存储中看到输出，如图 6.1 所示：
+- en: '![Figure 6.1 – Hyperparameter tuning and training job output'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.1 – 超参数调优和训练作业输出'
+- en: '](img/image0012.jpg)'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image0012.jpg)'
+- en: Figure 6.1 – Hyperparameter tuning and training job output
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.1 – 超参数调优和训练作业输出
+- en: In the storage bucket, there are the model assets saved from training using
+    the best hyperparameter configuration in the `best_save_model` folder. Further,
+    we can see that each trial of the hyperparameter tuning workflow is also saved
+    in the `hp_tune_hb` folder.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在存储桶中，有使用最佳超参数配置进行训练的模型资产，保存在 `best_save_model` 文件夹中。此外，我们还可以看到，超参数调优工作流的每次试验也保存在
+    `hp_tune_hb` 文件夹中。
+- en: Of all the search algorithms, Hyperband is the newest approach and offers an
+    effective and efficient search experience based on an exploitation-exploration
+    strategy. It is often the fastest algorithm to converge to a winning configuration.
+    From the hardware choice perspective, for this example, Cloud TPU offers the shortest
+    runtime. However, since hyperparameter search is inherently a time-consuming process,
+    data size and data I/O also are also important factors that impact the speed of
+    the search. Sometimes it is better to start with a smaller dataset or smaller
+    search space to eliminate some selections from further analysis.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在所有搜索算法中，Hyperband 是最新的方法，它基于一种开发-探索策略，提供了高效且有效的搜索体验。它通常是最快收敛到最佳配置的算法。从硬件选择的角度来看，对于这个例子，Cloud
+    TPU 提供了最短的运行时间。然而，由于超参数搜索本身是一个耗时的过程，数据规模和数据 I/O 也是影响搜索速度的重要因素。有时候，最好从较小的数据集或较小的搜索空间开始，以从进一步分析中排除一些选择。
+- en: Summary
+  id: totrans-311
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, we learned how to use Keras Tuner in Google Cloud AI Platform.
+    We learned how to run the hyperparameter search, and we learned how to train a
+    model with the best hyperparameter configuration. We have also seen that in a
+    typical Keras style, integrating Keras Tuner into our existing model training
+    workflow is very easy, especially with the simple treatment of hyperparameters
+    as just arrays of a certain data type. This really opens up the choices for hyperparameters,
+    and we do not need to implement the search logic or complicated conditional loops
+    to keep track of the results.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们学习了如何在 Google Cloud AI Platform 上使用 Keras Tuner。我们学习了如何运行超参数搜索，并了解了如何使用最佳超参数配置训练模型。我们还看到，采用典型的
+    Keras 风格，将 Keras Tuner 集成到我们现有的模型训练工作流中是非常简单的，特别是将超参数作为某种数据类型的数组来简单处理。这真正扩展了超参数的选择范围，而且我们不需要实现搜索逻辑或复杂的条件循环来跟踪结果。
+- en: In the next chapter, we will see the latest model optimization techniques that
+    reduce the model size. As a result, our model can be leaner and more compact.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将看到最新的模型优化技术，这些技术可以减小模型的体积。这样，我们的模型可以变得更加精简和紧凑。

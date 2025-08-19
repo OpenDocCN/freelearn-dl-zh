@@ -1,0 +1,1710 @@
+- en: '*Chapter 8*: Model-Based Methods'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第8章*：基于模型的方法'
+- en: All of the deep **reinforcement learning** (**RL**) algorithms we have covered
+    so far were **model-free**, which means they did not assume any knowledge about
+    the transition dynamics of the environment but learned from sampled experiences.
+    In fact, this was a quite deliberate departure from the dynamic programming methods
+    to save us from requiring a model of the environment. In this chapter, we swing
+    the pendulum back a little bit and discuss a class of methods that rely on a model,
+    called **model-based methods**. These methods can lead to improved sample efficiency
+    by several orders of magnitude in some problems, making it a very appealing approach,
+    especially when collecting experience is as costly as in robotics. Having said
+    this, we still will not assume that we have such a model readily available, but
+    we will discuss how to learn one. Once we have a model, it can be used for decision-time
+    planning and improving the performance of model-free methods.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们所讨论的所有深度**强化学习**（**RL**）算法都是**无模型**的，这意味着它们并不假设任何关于环境过渡动态的知识，而是从采样的经验中学习。事实上，这种做法是故意有意偏离了动态规划方法，从而避免了需要环境模型的要求。在本章中，我们稍微将方向调整，讨论一类依赖于模型的方法，称为**基于模型的方法**。这些方法在某些问题中能显著提高样本效率，效率提升幅度可能达到几个数量级，这使得它成为一种非常有吸引力的方法，特别是在像机器人技术这样收集经验代价高昂的情况下。话虽如此，我们仍然不会假设我们有一个现成的模型，而是会讨论如何学习一个模型。一旦我们拥有了模型，它可以用于决策时的规划，并改善无模型方法的性能。
+- en: 'This important chapter includes the following topics:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章重要内容包括以下主题：
+- en: Introducing model-based methods
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 介绍基于模型的方法
+- en: Planning through a model
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过模型进行规划
+- en: Learning a world model
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 学习世界模型
+- en: Unifying model-based and model-free approaches
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 统一基于模型和无模型的方法
+- en: Let's get started.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始吧。
+- en: Technical requirements
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: The code for this chapter can be found at the book's GitHub repository, at [https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python](https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的代码可以在本书的 GitHub 仓库找到，网址为[https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python](https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python)。
+- en: Introducing model-based methods
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 介绍基于模型的方法
+- en: 'Imagine a scene in which you are traveling in a car on an undivided road and
+    you face the following situation. Suddenly, another car in the opposing direction
+    approaches you fast in your lane as it is passing a truck. Chances are your mind
+    automatically simulates different scenarios about how the next scenes might unfold:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下，你正驾驶汽车在一条没有分隔带的道路上行驶，突然，另一辆汽车在与你对向而来的车道上快速行驶，并且它正在超车一辆卡车。你的大脑可能会自动模拟不同的情境，预测接下来可能发生的情景：
+- en: The other car might go back to its lane right away or drive even faster to pass
+    the truck as soon as possible.
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另一辆车可能会立刻回到它的车道上，或者加速尽快超车。
+- en: Another scenario could be the car steering toward your right, but this is an
+    unlikely scenario (in a right-hand traffic flow).
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另一种情境可能是汽车朝着右侧行驶，但这种情况不太可能发生（在右侧通行的交通流中）。
+- en: The driver (possibly you) then evaluates the likelihood and risk of each scenario,
+    together with their possible actions too, and makes the decision to safely continue
+    the journey.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 驾驶员（可能是你）接着评估每种情景的可能性和风险，以及他们可能采取的行动，并做出决定，安全地继续行驶。
+- en: In a less sensational example, consider a game of chess. Before making a move,
+    a player "simulates" many scenarios in their head and assesses the possible outcomes
+    of several moves down the road. In fact, being able to accurately evaluate more
+    possible scenarios after a move would increase the chances of winning.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一个不太夸张的例子中，考虑一场象棋比赛。在做出一步棋之前，棋手会在脑海中“模拟”多种场景，并评估几步之后可能的结果。事实上，能够准确评估更多的可能场景，会增加赢得比赛的机会。
+- en: In both of these examples, the decision-making process involves picturing multiple
+    "imaginary" rollouts of the environment, evaluating the alternatives, and taking
+    an appropriate action accordingly. But how do we do that? We are able to do so
+    because we have a mental model of the world that we live in. In the car driving
+    example, drivers have an idea about possible traffic behaviors, how other drivers
+    might move, and how physics works. In the chess example, players know the rules
+    of the game, which moves are good, and possibly what strategies a particular player
+    might use. This "model-based" thinking is almost the natural way to plan our actions,
+    and different than a model-free approach that would not leverage such priors on
+    how the world works.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两个例子中，决策过程涉及到想象多个“虚拟”的环境演化，评估不同的备选方案，并根据情况采取适当的行动。但我们是怎么做到这一点的呢？我们之所以能够这样做，是因为我们对生活的世界有一个心理模型。在驾驶汽车的例子中，驾驶员会对可能的交通行为、其他驾驶员的动作以及物理规律有一定了解。在国际象棋的例子中，玩家知道游戏的规则，哪些走法是好的，并且可能知道某个玩家可能使用的策略。这种“基于模型”的思维几乎是我们规划行动的自然方式，不同于不利用关于世界运作的先验知识的无模型方法。
+- en: 'Model-based methods, since they leverage more information and structure about
+    the environment, could be more sample-efficient than model-free methods. This
+    comes especially handy in applications where sample collection is expensive, such
+    as robotics. So, this is such an important topic that we cover in this chapter.
+    We will focus on two main aspects of model-based approaches:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于模型的方法由于利用了更多关于环境的信息和结构，可能比无模型方法更具样本效率。这在样本采集代价昂贵的应用场景中尤为有用，比如机器人技术。因此，这是我们在本章讨论的一个重要话题。我们将重点讨论基于模型方法的两个主要方面：
+- en: How a model of the environment (or *world model*, as we will refer to it) can
+    be used in the optimal planning of actions
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用环境模型（或我们所称的*世界模型*）来实现最优的行动规划
+- en: How such a model can be learned when one is not available
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当没有模型时，如何学习这样一个模型
+- en: In the next section, we start with the former and introduce some of the methods
+    to use for planning when a model is available. Once we are convinced that learning
+    a model of the environment is worth it and we can indeed obtain good actions with
+    the optimal planning methods, we will discuss how such models can be learned.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一部分，我们从前者开始，介绍在有模型时进行规划的一些方法。一旦我们确信学习环境模型是值得的，并且确实可以通过最优规划方法获得良好的行动，我们将讨论如何学习这些模型。
+- en: Planning through a model
+  id: totrans-21
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过模型进行规划
+- en: In this section, we first define what it means to plan through a model in the
+    sense of optimal control. Then, we will cover several planning methods, including
+    the cross-entropy method and covariance matrix adaptation evolution strategy.
+    You will also see how these methods can be parallelized using the Ray library.
+    Now, let's get started with the problem definition.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们首先定义通过模型进行规划在最优控制中的含义。然后，我们将介绍几种规划方法，包括交叉熵法和协方差矩阵自适应进化策略。你还将看到如何使用Ray库将这些方法并行化。现在，让我们开始定义问题。
+- en: Defining the optimal control problem
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义最优控制问题
+- en: 'In RL, or in control problems in general, we care about the actions an agent
+    takes because there is a task that we want to be achieved. We express this task
+    as a mathematical objective so that we can use mathematical tools to figure out
+    the actions toward the task – and in RL, this is the expected sum of cumulative
+    discounted rewards. You of course know all this, as this is what we have been
+    doing all along, but this is a good time to reiterate it: We are essentially solving
+    an optimization problem here.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在强化学习（RL）或一般的控制问题中，我们关心的是智能体所采取的行动，因为我们希望完成某个任务。我们将这个任务表达为一个数学目标，以便我们可以使用数学工具来找到实现任务的行动——在强化学习中，这就是预期的累积折扣奖励总和。你当然已经了解了这一点，因为这正是我们一直在做的事情，但现在是时候重申一下了：我们实际上是在解决一个优化问题。
+- en: 'Now, let''s assume that we are trying to figure out the best actions for a
+    problem with a horizon of ![](img/Formula_08_001.png) time steps. As examples,
+    you can think of the Atari games, Cartpole, a self-driving car, a robot in a grid
+    world, and more. We can define the optimization problem as follows (using the
+    notation in *Levine, 2019*):'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，假设我们试图为一个有![](img/Formula_08_001.png)时间步的任务找出最佳行动。作为例子，你可以想象Atari游戏、Cartpole、自动驾驶汽车、网格世界中的机器人等等。我们可以如下定义优化问题（使用*Levine,
+    2019*中的符号）：
+- en: '![](img/Formula_08_002.jpg)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_08_002.jpg)'
+- en: All this says is how to find a sequence of actions, where ![](img/Formula_08_003.png)
+    corresponds to the action at time step ![](img/Formula_08_004.png), that maximizes
+    the score over a ![](img/Formula_08_005.png) steps. Note here that ![](img/Formula_08_006.png)
+    could be multi-dimensional (say ![](img/Formula_08_007.png)) if there are multiple
+    actions taken in each step (steering and acceleration/brake decisions in a car).
+    Let's also denote a sequence of ![](img/Formula_08_008.png) actions using ![](img/Formula_08_009.png).
+    So, our concern is to find such an ![](img/Formula_08_010.png) that maximizes
+    ![](img/Formula_08_011.png).
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这所有的意思是如何找到一系列动作，其中 ![](img/Formula_08_003.png) 对应于时间步长 ![](img/Formula_08_004.png)
+    处的动作，能够在 ![](img/Formula_08_005.png) 步内最大化得分。这里需要注意的是，![](img/Formula_08_006.png)
+    可能是多维的（例如，![](img/Formula_08_007.png)），如果在每个步骤中有多个动作（比如汽车中的转向和加速/刹车决策）。我们还可以用
+    ![](img/Formula_08_009.png) 表示一系列 ![](img/Formula_08_008.png) 个动作。因此，我们关注的是找到一个
+    ![](img/Formula_08_010.png)，它能够最大化 ![](img/Formula_08_011.png)。
+- en: At this point, there are different optimization and control styles we may pick.
+    Let's look into those next.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一点上，我们可以选择不同的优化和控制方式。接下来我们将详细探讨这些。
+- en: Derivative-based and derivative-free optimization
+  id: totrans-29
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 基于导数和无导数优化
+- en: 'When we see an optimization problem, a natural reaction for solving it could
+    be "let''s take the first derivative, set it equal to zero," and so on. But don''t
+    forget that, most of the time, we don''t have ![](img/Formula_08_012.png) as a
+    closed-form mathematical expression that we can take the derivative of. Take playing
+    an Atari game, for example. We can evaluate what ![](img/Formula_08_013.png) is
+    for a given ![](img/Formula_08_014.png) by just playing it, but we would not be
+    able to calculate any derivatives. This matters when it comes to the type of optimization
+    approach we can use. In particular, note the following types:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们遇到一个优化问题时，解决它的自然反应可能是“我们取一阶导数，设其为零”，以此类推。但不要忘了，大多数时候，我们并没有像 ![](img/Formula_08_012.png)
+    这样的封闭式数学表达式可以求导。以玩 Atari 游戏为例。我们可以通过玩游戏来评估在给定的 ![](img/Formula_08_014.png) 下，![](img/Formula_08_013.png)
+    的值，但我们无法计算任何导数。这一点对于我们能采用的优化方法至关重要，特别需要注意以下几种类型：
+- en: '**Derivative-based methods** require taking the derivative of the objective
+    function to optimize it.'
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**基于导数的方法**需要对目标函数进行求导，以便优化它。'
+- en: '**Derivative-free methods** rely on systematically and repeatedly evaluating
+    the objective function in search of the best inputs.'
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**无导数方法**依赖于系统地反复评估目标函数，以寻找最佳输入。'
+- en: Therefore, we will rely on the latter here.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们将在这里依赖后者。
+- en: This was about what kind of optimization procedure we will use, which, at the
+    end, gives us some ![](img/Formula_08_015.png). Another important design choice
+    is about how to execute it, which we turn to next.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这部分讲的是我们将使用哪种优化过程，最终它给我们带来一些 ![](img/Formula_08_015.png)。另一个重要的设计选择是如何执行它，接下来我们将讨论这个问题。
+- en: Open-loop, closed-loop, and model predictive control
+  id: totrans-35
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 开环、闭环和模型预测控制
+- en: 'Let''s start explaining different types of control systems with an example:
+    Imagine that we have an agent that is a soccer player in a forward position. For
+    the sake of simplicity, let''s assume that the only goal of the agent is to score
+    a goal when it receives the ball. At the first moment of possessing the ball,
+    the agent can do either of the following:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从一个例子开始解释不同类型的控制系统：假设我们有一个代理，它是一个前锋位置的足球运动员。为了简单起见，我们假设该代理的唯一目标是在接到球时进球。在拥有球的第一时刻，代理可以执行以下任意操作：
+- en: Come up with a plan to score, close their eyes and ears (that is, any means
+    of perception), and then execute the plan until the end (either scoring or losing
+    the ball).
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 想出一个计划来得分，闭上眼睛和耳朵（也就是任何感知手段），然后执行计划直到结束（无论是得分还是失误）。
+- en: Or, the agent can keep their means of perception active and modify the plan
+    with the latest information available from the environment as it happens.
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 或者，代理可以保持感知手段活跃，并根据环境发生的最新信息修改计划。
+- en: The former would be an example of **open-loop control**, where no feedback from
+    the environment is used while taking the next action, whereas the latter would
+    be an example of **closed-loop control**, which uses environmental feedback. In
+    general, in RL, we have closed-loop control.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前者是**开环控制**的一个例子，在采取下一动作时不会使用来自环境的反馈，而后者则是**闭环控制**的例子，它使用环境反馈。一般来说，在强化学习中，我们使用的是闭环控制。
+- en: Tip
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Using closed-loop control has the advantage of taking the latest information
+    into account when planning. This is especially advantageous if the environment
+    and/or controller dynamics are not deterministic, so a perfect prediction is not
+    possible.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用闭环控制的优点是能够在规划时考虑最新的信息。这在环境和/或控制器动态不确定的情况下尤其有优势，因为在这种情况下，完美的预测是不可能的。
+- en: 'Now, the agent can use feedback, the most recent observation from the environment
+    at time ![](img/Formula_08_016.png), in different ways. Specifically, the agent
+    can do the following:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，智能体可以以不同的方式使用反馈，即在时间点 ![](img/Formula_08_016.png) 从环境中获得的最新观察结果。具体来说，智能体可以执行以下操作：
+- en: Choose the action from a policy ![](img/Formula_05_061.png) given ![](img/Formula_08_018.png),
+    that is, ![](img/Formula_08_019.png).
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从给定 ![](img/Formula_08_018.png) 的策略 ![](img/Formula_05_061.png) 中选择一个动作，即 ![](img/Formula_08_019.png)。
+- en: Resolve the optimization problem to find ![](img/Formula_08_020.png) for the
+    subsequent ![](img/Formula_08_021.png) time steps.
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 解决优化问题，找到后续 ![](img/Formula_08_021.png) 时间步的 ![](img/Formula_08_020.png)。
+- en: 'The latter is called **model predictive control** (**MPC**). To reiterate,
+    in MPC, the agent repeats the following loop:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 后者被称为**模型预测控制**（**MPC**）。重申一下，在 MPC 中，智能体重复执行以下循环：
+- en: Come up with an optimal control plan for the next ![](img/Formula_08_022.png)
+    steps.
+  id: totrans-46
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为接下来的 ![](img/Formula_08_022.png) 步骤制定一个最佳控制计划。
+- en: Execute the plan for the first step.
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行第一步的计划。
+- en: Proceed to the next step.
+  id: totrans-48
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续执行下一步。
+- en: Note that the way we posed the optimization problem so far does not give us
+    a policy ![](img/Formula_05_061.png) yet. Instead, we will search for a good ![](img/Formula_08_024.png)
+    using derivative-free optimization methods.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，到目前为止我们提出的优化问题尚未给出一个策略 ![](img/Formula_05_061.png)。相反，我们将使用无导数优化方法来搜索一个好的
+    ![](img/Formula_08_024.png)。
+- en: 'Next, let''s discuss a very simple derivative-free method: random shooting.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们讨论一种非常简单的无导数方法：随机射击。
+- en: Random shooting
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 随机射击
+- en: 'The random shooting procedure simply involves the following steps:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机射击程序仅涉及以下步骤：
+- en: Generating a bunch of candidate action sequences uniformly at random, say ![](img/Formula_08_025.png)
+    of them.
+  id: totrans-53
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 生成一堆候选动作序列，均匀地随机生成，例如生成 ![](img/Formula_08_025.png) 个。
+- en: Evaluate each of ![](img/Formula_08_026.png).
+  id: totrans-54
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 评估每一个 ![](img/Formula_08_026.png)。
+- en: Take the action ![](img/Formula_08_027.png) that gives the best ![](img/Formula_08_028.png),
+    that is, ![](img/Formula_08_029.png).
+  id: totrans-55
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 采取行动 ![](img/Formula_08_027.png)，它给出最佳的 ![](img/Formula_08_028.png)，即 ![](img/Formula_08_029.png)。
+- en: As you can tell, this is not a particularly sophisticated optimization procedure.
+    Yet, it can be used as a baseline to compare more sophisticated methods against.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，这不是一个特别复杂的优化过程。然而，它可以作为一个基准，供我们与更复杂的方法进行比较。
+- en: Tip
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Random search-based methods could be more effective than you might think. *Mania
+    et al.* outline such a method to optimize policy parameters in their paper "*Simple
+    random search provides a competitive approach to RL*," which, as is apparent from
+    its name, yields some surprisingly good results (*Mania et al., 2018*).
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于随机搜索的方法可能比你想象的更有效。*Mania 等人*在他们的论文《*简单随机搜索提供了一种竞争性的 RL 方法*》中概述了这种方法，用于优化策略参数，正如其名字所示，产生了一些令人惊讶的好结果（*Mania
+    等人, 2018*）。
+- en: To make our discussion more concrete, let's introduce a simple example. But
+    before doing so, we need to set up the Python virtual environment that we will
+    use in this chapter.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使我们的讨论更加具体，让我们引入一个简单的例子。在此之前，我们需要设置将在本章中使用的 Python 虚拟环境。
+- en: Setting up the Python virtual environment
+  id: totrans-60
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 设置 Python 虚拟环境
+- en: 'You can install the packages we will need inside a virtual environment as follows:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在虚拟环境中安装我们需要的包，方法如下：
+- en: '[PRE0]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Now, we can proceed to our example.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以继续我们的示例了。
+- en: Simple cannon shooting game
+  id: totrans-64
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 简单的加农炮射击游戏
+- en: 'Some of us are old enough to have enjoyed the old *Bang! Bang!* game on Windows
+    3.1 or 95\. The game simply involves adjusting the shooting angle and velocity
+    of a cannonball to hit the opponent. Here, we will play something even simpler:
+    We have a cannon for which we can adjust the shooting angle (![](img/Formula_08_030.png)).
+    Our goal is to maximize the distance, ![](img/Formula_08_031.png), that the ball
+    covers on a flat surface with a fixed initial velocity ![](img/Formula_08_032.png).
+    This is illustrated in *Figure 8.1*:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们中的一些人足够老，曾经在Windows 3.1或95上玩过经典的*Bang! Bang!*游戏。游戏的玩法非常简单，就是通过调整火炮弹的射击角度和速度来击中对手。在这里，我们将玩一个更简单的游戏：我们有一门火炮，可以调整射击角度（![](img/Formula_08_030.png)）。我们的目标是最大化距离![](img/Formula_08_031.png)，即弹丸在平面上行进的距离，初速度为固定值![](img/Formula_08_032.png)。如*图
+    8.1*所示：
+- en: '![Figure 8.1 – Simple cannon shooting game to maximize  by adjusting'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 8.1 – 通过调整射击角度来最大化的简单火炮射击游戏](img/Formula_08_046.png)'
+- en: '](img/B14160_08_001.jpg)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_08_001.jpg)'
+- en: Figure 8.1 – Simple cannon shooting game to maximize ![](img/Formula_08_033.png)
+    by adjusting ![](img/Formula_08_034.png)
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.1 – 通过调整![](img/Formula_08_034.png)来最大化![](img/Formula_08_033.png)的简单火炮射击游戏
+- en: 'Now, if you remember some high-school math, you will realize that there is
+    really no game here: The maximum distance can be reached by setting ![](img/Formula_08_035.png).
+    Well, let''s pretend that we don''t know it and use this example to illustrate
+    the concepts that we have introduced so far:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果你记得一些高中数学，你会意识到这实际上并不是一个游戏：最大距离可以通过设置![](img/Formula_08_035.png)来实现。好吧，假设我们不知道这一点，并用这个例子来说明我们目前已经介绍的概念：
+- en: The action is ![](img/Formula_06_036.png), the angle of the cannon, which is
+    a scalar.
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 动作是![](img/Formula_06_036.png)，即火炮的角度，这是一个标量。
+- en: This is a single-step problem, that is, we just take one action and the game
+    ends. Therefore ![](img/Formula_08_037.png), and ![](img/Formula_08_038.png).
+  id: totrans-71
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这是一个单步问题，也就是说，我们只采取一个动作，游戏就结束了。因此![](img/Formula_08_037.png)，和![](img/Formula_08_038.png)。
+- en: 'Let''s now code this up:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们来编写代码：
+- en: 'We have access to the environment that will *evaluate the actions we consider
+    before we actually take them*. We don''t assume to know what the math equations
+    and all the dynamics defined inside the environment are. In other words, we can
+    call the `black_box_projectile` function to get ![](img/Formula_08_039.png) for
+    a ![](img/Formula_08_040.png) we pick and for a fixed initial velocity and gravity:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以访问环境，它将*评估我们考虑的动作，在我们实际执行之前*。我们并不假设知道环境内所有数学方程式和动态的定义。换句话说，我们可以调用`black_box_projectile`函数来获取![](img/Formula_08_039.png)，对于我们选择的![](img/Formula_08_040.png)，以及固定的初速度和重力：
+- en: '[PRE1]'
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'For the random shooting procedure, we just need to generate ![](img/Formula_08_041.png)
+    actions uniformly randomly between ![](img/Formula_08_042.png) and ![](img/Formula_08_043.png),
+    for which we can use something like the following:'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于随机射击过程，我们只需在![](img/Formula_08_042.png)和![](img/Formula_08_043.png)之间均匀随机地生成![](img/Formula_08_041.png)个动作，像这样：
+- en: '[PRE2]'
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We also need a function to evaluate all the candidate actions and pick the
+    best one. For this, we will define a more general function that we will need later.
+    It will pick the best ![](img/Formula_08_044.png) **elites**, that is, the ![](img/Formula_08_045.png)
+    best actions:'
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还需要一个函数来评估所有候选动作并选择最好的一个。为此，我们将定义一个更通用的函数，稍后会用到。它将选择最好的![](img/Formula_08_044.png)
+    **精英**，即![](img/Formula_08_045.png)最佳动作：
+- en: '[PRE3]'
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The loop to find the best action is then simple:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 寻找最佳动作的循环就很简单：
+- en: '[PRE4]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: That's it. The action to take is then at `best_action[0]`. To reiterate, we
+    have not done anything super interesting so far. This was just to illustrate the
+    concepts, and to prepare you for a more interesting method that is coming up next.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样。要执行的动作就是`best_action[0]`。重申一遍，到目前为止，我们并没有做任何特别有趣的事。这里只是用来说明这些概念，并为即将到来的更有趣的方法做准备。
+- en: Cross-entropy method
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 交叉熵方法
+- en: 'In the cannon shooting example, we evaluated some number of actions we generated
+    in our search for the optimal action, which happens to be ![](img/Formula_08_046.png).
+    As you can imagine, we can be smarter in our search. For example, if we have a
+    budget to generate and evaluate ![](img/Formula_08_047.png) actions, why blindly
+    use them up with uniformly generated actions? Instead, we can do the following:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在火炮射击的例子中，我们评估了在寻找最佳动作过程中生成的一些动作，这个最佳动作恰好是![](img/Formula_08_046.png)。正如你可以想象的那样，我们可以在搜索中更加智能。例如，如果我们有预算生成并评估![](img/Formula_08_047.png)个动作，为什么要盲目地用均匀生成的动作呢？相反，我们可以采取以下方法：
+- en: Generate some number of actions to begin with (this could be done uniformly
+    at random).
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先生成一些动作（这可以通过均匀随机的方式完成）。
+- en: See which region in the action space seems to be giving better results (in the
+    cannon shooting example, the region is around ![](img/Formula_08_048.png)).
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查看动作空间中哪个区域似乎给出了更好的结果（在炮弹射击示例中，这个区域大约在 ![](img/Formula_08_048.png) 附近）。
+- en: Generate more actions in that part of the action space.
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在动作空间的该部分生成更多动作。
+- en: We can repeat this procedure to guide our search, which will lead to a more
+    efficient use of our search budget. In fact, this is what the **cross-entropy
+    method** (**CEM**) suggests!
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以重复这个过程来引导我们的搜索，这将更有效地使用我们的搜索预算。事实上，这正是**交叉熵方法**（**CEM**）所建议的！
+- en: 'Our previous description of the CEM was a bit vague. A more formal description
+    is as follows:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们之前对CEM的描述有些模糊。更正式的描述如下：
+- en: Initialize a probability distribution ![](img/Formula_08_049.png) with parameter
+    ![](img/Formula_08_050.png).
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化一个概率分布 ![](img/Formula_08_049.png)，参数为 ![](img/Formula_08_050.png)。
+- en: Generate ![](img/Formula_08_051.png) samples (solutions, actions) from ![](img/Formula_08_052.png),
+    ![](img/Formula_08_053.png).
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从 ![](img/Formula_08_052.png)， ![](img/Formula_08_053.png) 中生成 ![](img/Formula_08_051.png)
+    个样本（解，动作）。
+- en: Sort the solutions from the highest reward to the lowest, indexed as ![](img/Formula_08_054.png),
+    ![](img/Formula_08_055.png).
+  id: totrans-91
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按照奖励从高到低对解进行排序，索引为 ![](img/Formula_08_054.png)， ![](img/Formula_08_055.png)。
+- en: Pick the best ![](img/Formula_08_056.png) solutions, elites, ![](img/Formula_08_057.png)
+    and fit the distribution ![](img/Formula_08_058.png) to the elites.
+  id: totrans-92
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择最佳的 ![](img/Formula_08_056.png) 解，精英， ![](img/Formula_08_057.png)，并将分布 ![](img/Formula_08_058.png)
+    拟合到精英集合中。
+- en: Go back to *step 2* and repeat until a stopping criterion is satisfied.
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 返回到*第2步*并重复，直到满足停止准则。
+- en: The algorithm, in particular, identifies the best region of actions by fitting
+    a probability distribution to the best actions in the current iteration, from
+    which the next generation of actions is sampled. Due to this evolutionary nature,
+    it is considered an **evolution strategy** (**ES**).
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该算法特别通过将概率分布拟合到当前迭代中最佳的动作，来识别最佳的动作区域，并从中采样下一代动作。由于这种进化性质，它被视为**进化策略**（**ES**）。
+- en: Tip
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The CEM could prove promising when the dimension of the search, that is the
+    action dimension times ![](img/Formula_08_059.png), is relatively small, say less
+    than 50\. Also note that CEM does not use the actual rewards in any part of the
+    procedure, saving us from worrying about the scale of the rewards.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当搜索的维度，即动作维度乘以 ![](img/Formula_08_059.png)，相对较小时（比如小于50），CEM可能会显示出良好的前景。还要注意，CEM在过程的任何部分都不使用实际的奖励，这使我们不用担心奖励的尺度问题。
+- en: Next, let's implement the CEM for the cannon shooting example.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们实现CEM在炮弹射击示例中的应用。
+- en: Simple implementation of the cross-entropy method
+  id: totrans-98
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 交叉熵方法的简单实现
+- en: 'We can implement the CEM with some slight modifications to the random shooting
+    method. In our simple implementation here, we do the following:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过对随机射击方法进行一些轻微修改来实现CEM。在我们这里的简单实现中，我们执行以下操作：
+- en: Start with a uniformly generated set of actions.
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从一个均匀生成的动作集合开始。
+- en: Fit a normal distribution to the elites to generate the next set of samples.
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将一个正态分布拟合到精英集合中，以生成下一组样本。
+- en: Use a fixed number of iterations to stop the procedure.
+  id: totrans-102
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用固定的迭代次数来停止过程。
+- en: 'This can be implemented as follows:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可以通过以下方式实现：
+- en: '[PRE5]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'If you add some `print` statements to see the outcome from the execution of
+    this code, it will look like the following:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你添加一些`print`语句来查看执行该代码后的结果，它将看起来像下面这样：
+- en: '[PRE6]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: You might be wondering why we need to fit the distribution instead of picking
+    the best action we have identified. Well, it does not make much sense for the
+    cannon shooting example where the environment is deterministic. However, when
+    there is noise/stochasticity in the environment, picking the best action that
+    we encountered would mean overfitting to the noise. Instead, we fit the distribution
+    to a set of elite actions to overcome that. You can refer to `Chapter08/rs_cem_comparison.py`
+    in the GitHub repo for the full code.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会想，为什么我们需要拟合分布，而不是选择我们已经识别出的最佳动作。嗯，对于环境是确定性的炮弹射击示例，这样做没有太大意义。然而，当环境中存在噪声/随机性时，选择我们遇到的最佳动作意味着过拟合噪声。相反，我们将分布拟合到一组精英动作上，以克服这个问题。你可以参考GitHub仓库中的
+    `Chapter08/rs_cem_comparison.py` 来查看完整的代码。
+- en: The evaluation (and action generation) steps of the CEM can be parallelized,
+    which would reduce the wall-clock time to make a decision. Let's implement it
+    next and use the CEM in a more sophisticated example.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CEM的评估（和动作生成）步骤可以并行化，这将减少做出决策所需的墙钟时间。接下来我们将实现这一点，并在一个更复杂的示例中使用CEM。
+- en: Parallelized implementation of the cross-entropy method
+  id: totrans-109
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 交叉熵方法的并行化实现
+- en: 'In this section, we use the CEM to solve OpenAI Gym''s Cartpole-v0 environment.
+    This example will differ from the cannon shooting in the following ways:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们使用CEM来解决OpenAI Gym的Cartpole-v0环境。这个示例与大炮射击的不同之处如下：
+- en: The action space is binary, corresponding to left and right. So, we will use
+    a multivariate Bernoulli distribution as the probability distribution.
+  id: totrans-111
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 动作空间是二元的，对应于左和右。因此，我们将使用多变量伯努利分布作为概率分布。
+- en: The maximum problem horizon is 200 steps. However, we will use MPC to plan for
+    a 10-step lookahead in each step and execute the first action in the plan.
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最大问题时间范围为200步。然而，我们将使用MPC在每一步中规划10步前瞻，并执行计划中的第一步动作。
+- en: We use the Ray library for parallelization.
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们使用Ray库进行并行化。
+- en: Now, let's look into some of the key components of the implementation. The full
+    code is available in the GitHub repo.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们来看看实现中的一些关键组件。完整的代码可以在GitHub仓库中找到。
+- en: Chapter08/cem.py
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Chapter08/cem.py
+- en: 'Let''s start describing the code with the section that samples a sequence of
+    actions from a multivariate Bernoulli (for which we use NumPy''s `binomial` function),
+    ![](img/Formula_08_060.png), and executes it over the planning horizon to estimate
+    the reward:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从描述代码开始，首先是从多变量伯努利分布中采样动作序列（我们使用NumPy的`binomial`函数），![](img/Formula_08_060.png)，并在规划范围内执行该序列以估计奖励：
+- en: '[PRE7]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: The `ray.remote` decorator will allow us to easily kick off a bunch of these
+    workers in parallel.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ray.remote`装饰器将允许我们轻松地并行启动这些工作者。'
+- en: 'The CEM runs in the following method of the `CEM` class we create:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CEM以我们创建的`CEM`类的以下方法运行：
+- en: 'We initialize the parameters of the Bernoulli distribution for a horizon of
+    `look_ahead` steps as `0.5`. We also determine the number of elites based on a
+    specified fraction of the total samples:'
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们初始化伯努利分布的参数，设置时间范围为`look_ahead`步，初始值为`0.5`。我们还根据总样本的指定比例确定精英样本的数量：
+- en: '[PRE8]'
+  id: totrans-121
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'For a fixed number of iterations, we generate and evaluate actions on parallel
+    rollout workers. Note how we copy the existing environment to the rollout workers
+    to sample from that point on. We refit the distribution to the elite set:'
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于固定次数的迭代，我们在并行的展开工作中生成和评估动作。注意我们是如何将现有环境复制到展开工作者中，以便从该点开始采样。我们将分布重新拟合到精英集合中：
+- en: '[PRE9]'
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We finalize the plan based on the latest distribution parameters:'
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们基于最新的分布参数来最终确定计划：
+- en: '[PRE10]'
+  id: totrans-125
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Executing this code will solve the environment and you will see the cartpole
+    staying alive for the maximum horizon!
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行此代码将解决环境问题，你将看到摆杆在最大时间范围内保持存活！
+- en: That is how a parallelized CEM can be implemented using Ray. So far, so good!
+    Next, we will go a step further and use an advanced version of the CEM.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是如何使用Ray实现并行化CEM的方式。到目前为止，一切顺利！接下来，我们将更进一步，使用CEM的高级版本。
+- en: Covariance matrix adaptation evolution strategy
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 协方差矩阵自适应进化策略
+- en: The **covariance matrix adaptation evolution strategy** (**CMA-ES**) is one
+    of the state-of-the-art black-box optimization methods. Its working principles
+    are similar to that of the CEM. On the other hand, the CEM uses a constant variance
+    throughout the search. The CMA-ES dynamically adapts the covariance matrix.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**协方差矩阵自适应进化策略**（**CMA-ES**）是最先进的黑盒优化方法之一。其工作原理与CEM类似。另一方面，CEM在整个搜索过程中使用固定的方差，而CMA-ES则动态地调整协方差矩阵。'
+- en: We again use Ray to parallelize the search with the CMA-ES. But this time, we
+    defer the inner dynamics of the search to a Python library called `pycma`, which
+    is developed and maintained by Nikolaus Hansen, creator of the algorithm. You
+    already installed this package when you created the virtual environment for this
+    chapter.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们再次使用Ray来并行化CMA-ES的搜索。但这次，我们将搜索的内部动态交给一个名为`pycma`的Python库来处理，这个库是由CMA-ES算法的创造者Nikolaus
+    Hansen开发和维护的。当你为本章创建虚拟环境时，已经安装了这个包。
+- en: Info
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: The documentation and the details of the `pycma` library are available at [https://github.com/CMA-ES/pycma](https://github.com/CMA-ES/pycma).
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`pycma`库的文档和详细信息可以在[https://github.com/CMA-ES/pycma](https://github.com/CMA-ES/pycma)中找到。'
+- en: 'The main difference of the CMA-ES from the CEM implementation is its use of
+    the CMA library to optimize the actions:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CMA-ES与CEM实现的主要区别在于它使用CMA库来优化行动：
+- en: '[PRE11]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'You can find the full code in `Chapter08/cma_es.py` in our GitHub repo. It
+    solves the Bipedal Walker environment, and the output will look like the following
+    from the CMA library:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在我们的GitHub仓库中的`Chapter08/cma_es.py`找到完整的代码。它解决了双足行走器环境，输出将会是CMA库中的如下结果：
+- en: '[PRE12]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: You should see your bipedal walker taking 50 to 100 steps out of the box! Not
+    bad!
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该能看到你的双足行走器走出50到100步！不错！
+- en: Next, let's touch on another important class of search methods, known as **Monte
+    Carlo tree search** (**MCTS**).
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们讨论另一类重要的搜索方法，称为**蒙特卡罗树搜索**（**MCTS**）。
+- en: Monte Carlo tree search
+  id: totrans-139
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 蒙特卡罗树搜索
+- en: A natural way of planning future actions is for us to first think about the
+    first step, then condition the second decision on the first one, and so on. This
+    is essentially a search on a decision tree, which is what MCTS does. It is a strikingly
+    powerful method that has seen broad adaptation in the AI community.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种自然的规划未来行动的方式是，首先考虑第一步，然后将第二个决策基于第一步做出，依此类推。这本质上是在一个决策树上进行搜索，这正是MCTS所做的。它是一个非常强大的方法，已被AI社区广泛采纳。
+- en: Info
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: MCTS is a powerful method that played a key role in DeepMind's victory against
+    Lee Sedol, a world champion and legend in the game of Go. Therefore, MCTS deserves
+    a broad discussion; and rather than cramming some content into this chapter, we
+    defer its explanation and implementation to the blog post at [https://int8.io/monte-carlo-tree-search-beginners-guide/](https://int8.io/monte-carlo-tree-search-beginners-guide/).
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MCTS是一种强大的方法，在DeepMind战胜围棋世界冠军、传奇人物李世石的比赛中发挥了关键作用。因此，MCTS值得广泛讨论；而不是将一些内容塞进本章，我们将其解释和实现推迟到博客文章中，链接为：[https://int8.io/monte-carlo-tree-search-beginners-guide/](https://int8.io/monte-carlo-tree-search-beginners-guide/)。
+- en: In this section so far, we have discussed the different methods with which an
+    agent can plan through a model of an environment where we assumed such a model
+    exists. In the next section, we look into how the model of the world (that is,
+    the environment) that the agent is in can be learned.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们讨论了代理如何通过环境模型进行规划的不同方法，我们假设存在这样的模型。在接下来的部分，我们将探讨当代理所在的世界模型（即环境）无法获得时，如何学习该模型。
+- en: Learning a world model
+  id: totrans-144
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 学习世界模型
+- en: In the introduction to this chapter, we reminded you how we departed from dynamic
+    programming methods to avoid assuming that the model of the environment an agent
+    is in is available and accessible. Now, coming back to talking about models, we
+    need to also discuss how a world model can be learned when not available. In particular,
+    in this section, we discuss what we aim to learn as a model, when we may want
+    to learn it, a general procedure for learning a model, how to improve it by incorporating
+    the model uncertainty into the learning procedure, and what to do when we have
+    complex observations. Let's dive in!
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的介绍部分，我们提到过如何从动态规划方法中脱离，以避免假设代理所在的环境模型是可用且可以访问的。现在，回到模型的讨论，我们还需要探讨如何在模型不可用时学习世界模型。具体来说，在这一部分中，我们讨论当我们需要学习模型时，学习什么内容，何时学习，以及学习模型的一般程序，如何通过将模型的不确定性纳入学习过程中来改进模型，以及当我们面对复杂的观测时该怎么做。让我们深入探讨一下！
+- en: Understanding what model means
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 理解模型的含义
+- en: 'From what we have done so far, a model of the environment could be equivalent
+    to the simulation of the environment in your mind. On the other hand, model-based
+    methods don''t require the full fidelity of a simulation. Instead, what we expect
+    to get from a model is the next state given the current state and action. Namely,
+    when the environment is deterministic, a model is a function ![](img/Formula_08_061.png):'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从我们目前所做的来看，环境的模型可以等同于你脑海中对环境的模拟。另一方面，基于模型的方法并不要求完全还原模拟的精度。相反，我们从模型中期望获得的是在当前状态和动作下的下一状态。也就是说，当环境是确定性时，模型就是一个函数
+    ![](img/Formula_08_061.png)：
+- en: '![](img/Formula_08_062.jpg)'
+  id: totrans-148
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_08_062.jpg)'
+- en: 'If the environment is stochastic, we then need a probability distribution over
+    the next state, ![](img/Formula_08_063.png), to sample from:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果环境是随机的，那么我们需要一个概率分布来确定下一状态，![](img/Formula_08_063.png)，以便进行抽样：
+- en: '![](img/Formula_08_064.jpg)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_08_064.jpg)'
+- en: Contrast this to a simulation model that often has explicit representations
+    of all the underlying dynamics, such as motion physics, customer behavior, and
+    market dynamics, depending on the type of environment. The model we learn will
+    be a black box and is often represented as a neural network.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将其与模拟模型进行对比，后者通常对所有基础动态（如运动物理学、客户行为和市场动态等，具体取决于环境类型）有明确的表示。我们学习的模型将是一个“黑箱”，通常表示为神经网络。
+- en: Info
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: A world model that we learn is not a replacement for a full simulation model.
+    A simulation model often has a much greater capability of generalization; and
+    it is also of a greater fidelity as it is based on explicit representations of
+    environment dynamics. On the other hand, a simulation can act as a world model,
+    as in the previous section.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们学习的世界模型并不能替代完整的模拟模型。模拟模型通常具有更强的泛化能力；它的忠实度也更高，因为它基于对环境动态的明确表示。另一方面，模拟也可以充当世界模型，正如前一节所述。
+- en: Note that, for the rest of the section, we will use ![](img/Formula_08_065.png)
+    to represent the model. Now, let's discuss when we may want to learn a world model.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在本节剩余部分中，我们将使用 ![](img/Formula_08_065.png) 来表示该模型。现在，让我们讨论何时可能需要学习一个世界模型。
+- en: Identifying when to learn a model
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 确定何时学习一个模型
+- en: 'There could be various reasons for learning a world model:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有许多原因可能导致我们学习一个世界模型：
+- en: A model may not exist, even as a simulation. This means the agent is being trained
+    in the actual environment, which would not allow us to do imaginary rollouts for
+    planning.
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可能并不存在一个模型，即便是一个模拟模型。这意味着智能体正在实际环境中进行训练，这将不允许我们进行想象中的“展开”（rollouts）来进行规划。
+- en: A simulation model may exist, but it could be too slow or computationally demanding
+    to be used in planning. Training a neural network as a world model can allow exploring
+    a much wider range of scenarios during the planning phase.
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可能存在一个模拟模型，但它可能太慢或计算要求过高，无法用于规划。将神经网络作为世界模型进行训练可以在规划阶段探索更广泛的场景。
+- en: A simulation model may exist, but it may not allow rollouts from a particular
+    state onward. This could be because the simulation may not reveal the underlying
+    state and/or it may not allow the user to reset it to a desired state.
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可能存在一个模拟模型，但它可能不允许从某个特定状态开始进行“展开”。这可能是因为模拟可能无法揭示底层状态，或者它不允许用户将其重置为所需的状态。
+- en: We may want to explicitly have a representation of the state/observation that
+    has a predictive power for the future states, which then removes the need for
+    having complex policy representations or even rollout-based planning for the agent.
+    This approach has biological inspirations and has proved to be effective, as described
+    by *Ha et al., 2018*. You can access an interactive version of the paper at [https://worldmodels.github.io/](https://worldmodels.github.io/),
+    which is a very good read on this topic.
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们可能希望明确表示具有预测未来状态能力的状态/观察，这样就不再需要复杂的策略表示，甚至不需要基于“展开”的规划。该方法具有生物学启发，已被证明是有效的，如*Ha
+    等人，2018年*所述。你可以在[https://worldmodels.github.io/](https://worldmodels.github.io/)上访问这篇互动版论文，它是关于这一主题的非常好的阅读资料。
+- en: Now that we have identified several cases where learning a model might be necessary,
+    next, let's discuss how to actually do it.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经确定了几种学习模型可能是必要的情况，接下来，让我们讨论如何实际进行学习。
+- en: Introducing a general procedure to learn a model
+  id: totrans-162
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入一种学习模型的通用程序
+- en: 'Learning a model of ![](img/Formula_08_066.png) (or ![](img/Formula_08_067.png)
+    for stochastic environments) is essentially a supervised learning problem: we
+    want to predict the next state from the current state and action. However, note
+    the following key points:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习一个模型（![](img/Formula_08_066.png) 或对于随机环境的 ![](img/Formula_08_067.png)）本质上是一个监督学习问题：我们希望从当前状态和动作预测下一个状态。然而，请注意以下几个关键点：
+- en: We don't start the process with data on hand like in a traditional supervised
+    learning problem. Instead, we need to generate the data by interacting with the
+    environment.
+  id: totrans-164
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们不像传统的监督学习问题那样从手头有数据开始。相反，我们需要通过与环境的互动来生成数据。
+- en: We don't have a (good) policy to start interacting with the environment either.
+    After all, it is our goal to obtain one.
+  id: totrans-165
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们也没有一个（良好的）策略来开始与环境互动。毕竟，我们的目标就是获得一个策略。
+- en: 'So, what we need to do first is to initialize some policy. A natural choice
+    is to use a random policy so that we can explore the state-action space. On the
+    other hand, a pure random policy may not get us far in some hard exploration problems.
+    Consider training a humanoid robot for walking, for example. Random actions are
+    unlikely to make the robot walk, and we would not be able to obtain data to train
+    a world model for those states. This requires us to do planning and learning simultaneously,
+    so that the agent both explores and exploits. To that end, we can use the following
+    procedure (*Levine, 2019*):'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，我们首先需要做的是初始化一些策略。一个自然的选择是使用随机策略，这样我们可以探索状态-行动空间。另一方面，纯粹的随机策略在一些困难的探索问题中可能无法带来太多进展。举个例子，考虑训练一个类人机器人走路。随机的动作不太可能让机器人走起来，我们也无法获得足够的数据来训练这个状态下的世界模型。这需要我们同时进行规划和学习，使得智能体既能进行探索，也能进行利用。为此，我们可以使用以下过程（*Levine,
+    2019*）：
+- en: Initialize a soft policy ![](img/Formula_08_068.png) to collect data tuples
+    ![](img/Formula_08_069.png) into a dataset ![](img/Formula_08_070.png).
+  id: totrans-167
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化一个软策略 ![](img/Formula_08_068.png)，以将数据元组 ![](img/Formula_08_069.png) 收集到数据集
+    ![](img/Formula_08_070.png) 中。
+- en: Train ![](img/Formula_08_071.png) to minimize ![](img/Formula_08_072.png).
+  id: totrans-168
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练 ![](img/Formula_08_071.png) 来最小化 ![](img/Formula_08_072.png)。
+- en: Plan through ![](img/Formula_08_073.png) to choose actions.
+  id: totrans-169
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过 ![](img/Formula_08_073.png) 来规划以选择行动。
+- en: 'Follow an MPC: execute the first planned action and observe the resulting ![](img/Formula_08_074.png).'
+  id: totrans-170
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行MPC：执行第一个规划的动作并观察结果的 ![](img/Formula_08_074.png)。
+- en: Append the obtained ![](img/Formula_08_075.png) to ![](img/Formula_08_076.png).
+  id: totrans-171
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将获得的 ![](img/Formula_08_075.png) 附加到 ![](img/Formula_08_076.png)。
+- en: Every ![](img/Formula_08_077.png) steps, go to *step 3*; every ![](img/Formula_07_242.png)
+    steps, go to *step 2*.
+  id: totrans-172
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每隔 ![](img/Formula_08_077.png) 步骤，返回*第3步*；每隔 ![](img/Formula_07_242.png) 步骤，返回*第2步*。
+- en: This approach will eventually get you a trained ![](img/Formula_08_079.png),
+    which you can use with an MPC procedure at inference time. On the other hand,
+    as it turns out, the performance of an agent using this procedure is often worse
+    than what a model-free approach would do. In the next section, we look into why
+    this happens and how the problem can be mitigated.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法最终会得到一个训练好的 ![](img/Formula_08_079.png)，你可以在推理时与MPC程序一起使用。另一方面，事实证明，使用这种方法的智能体表现往往比无模型方法差。在下一节，我们将探讨为什么会发生这种情况，以及如何减轻这个问题。
+- en: Understanding and mitigating the impact of model uncertainty
+  id: totrans-174
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 理解并缓解模型不确定性的影响
+- en: When we train a world model as in the procedure we just described, we should
+    not expect to obtain a perfect one. This should not be surprising, but it turns
+    out that when we plan through such imperfect models using rather good optimizers
+    such as the CMA-ES, those imperfections hurt the agent performance badly. Especially
+    when we use high-capacity models such as neural networks, in the presence of limited
+    data, there will be lots of errors in the model, incorrectly predicting high-reward
+    states. To mitigate the impact of model errors, we need to take the uncertainty
+    in the model predictions into account.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们像之前描述的那样训练一个世界模型时，我们不应期望得到一个完美的模型。这应该不足为奇，但事实证明，当我们使用像CMA-ES这样的优秀优化器在不完美的模型上进行规划时，这些缺陷会严重影响智能体的表现。尤其是当我们使用高容量模型，如神经网络，并且数据有限时，模型会有大量错误，错误地预测高奖励状态。为了减轻模型误差的影响，我们需要考虑模型预测中的不确定性。
+- en: Speaking of uncertainty in model predictions, there are two types, and we need
+    to differentiate between them. Let's do that next.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 说到模型预测中的不确定性，实际上有两种类型，我们需要区分它们。接下来，我们就来做这个区分。
+- en: Statistical (aleatoric) uncertainty
+  id: totrans-177
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 统计性（随机性）不确定性
+- en: 'Consider a predictive model that predicts the outcome of the roll of a six-sided
+    fair die. A perfect model will be highly uncertain about the outcome: any side
+    can come up with equal likelihood. This might be disappointing, but it is not
+    the model''s "fault." The uncertainty is due to the process itself and not because
+    the model is not correctly explaining the data it observes. This type of uncertainty
+    is called **statistical** or **aleatoric uncertainty**.'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设有一个预测模型，它预测一个六面公平骰子的掷出结果。一个完美的模型对于结果会有很高的不确定性：任何一面都有相等的概率出现。这可能令人失望，但这并不是模型的“错”。这种不确定性来源于过程本身，而不是因为模型没有正确解释它观察到的数据。这种类型的不确定性被称为**统计性**或**随机性不确定性**。
+- en: Epistemic (model) uncertainty
+  id: totrans-179
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 认识论性（模型）不确定性
+- en: In another example, imagine training a predictive model to predict the outcome
+    of the roll of a six-sided die. We don't know whether the die is fair or not,
+    and in fact, this is what we are trying to learn from the data. Now, imagine that
+    we train the model just based on a single observation, which happens to be a 6\.
+    When we use the model to predict the next outcome, the model may predict a 6,
+    because it is all the model has seen. However, this would be based on very limited
+    data, so we would be highly uncertain about the model's prediction. This type
+    of uncertainty is called **epistemic** or **model uncertainty**. And it is this
+    type of uncertainty that is getting us into trouble in model-based RL.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在另一个例子中，假设训练一个预测模型来预测一个六面骰子的掷骰结果。我们不知道骰子是否公平，事实上，这正是我们试图从数据中学习的内容。现在，假设我们仅根据一个观察值进行模型训练，而这个观察值恰好是6。当我们用模型预测下一个结果时，模型可能会预测出6，因为它只见过这个值。然而，这仅基于非常有限的数据，因此我们对模型的预测会有很大的不确定性。这种不确定性被称为**知识性不确定性**（**epistemic**）或**模型不确定性**。正是这种类型的不确定性在基于模型的RL中给我们带来了麻烦。
+- en: Let's see some ways of dealing with model uncertainty in the next section.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来我们将介绍一些处理模型不确定性的方法。
+- en: Mitigating the impact of model uncertainty
+  id: totrans-182
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 缓解模型不确定性的影响
+- en: Two common ways of incorporating model uncertainty into model-based RL procedures
+    are to use Bayesian neural networks and ensemble models.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将模型不确定性融入基于模型的RL过程中的两种常见方法是使用贝叶斯神经网络和集成模型（ensemble models）。
+- en: Using Bayesian neural networks
+  id: totrans-184
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用贝叶斯神经网络
+- en: A Bayesian neural network assigns a distribution over each of the parameters
+    in ![](img/Formula_06_013.png) (the parameters of the network) rather than a single
+    number. This gives us a probability distribution, ![](img/Formula_08_081.png),
+    to sample a neural network from. With that, we can quantify the uncertainty over
+    the neural network parameters.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 贝叶斯神经网络为![](img/Formula_06_013.png)（网络参数）中的每个参数分配一个分布，而不是单一的数值。这为我们提供了一个概率分布![](img/Formula_08_081.png)，可以从中采样一个神经网络。通过这种方式，我们可以量化神经网络参数的不确定性。
+- en: Info
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: Note that we used Bayesian neural networks in [*Chapter 3*](B14160_03_Final_SK_ePub.xhtml#_idTextAnchor059),
+    *Contextual Bandits*. Revisiting that chapter might refresh your mind on the topic.
+    A full tutorial is available from *Jospin et al., 2020*, if you want to dive deeper.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，我们在[*第3章*](B14160_03_Final_SK_ePub.xhtml#_idTextAnchor059)《上下文赌博机（Contextual
+    Bandits）》中使用了贝叶斯神经网络。回顾那一章可能会帮助你复习这个话题。如果你想深入了解，可以参考*Jospin等人，2020*的完整教程。
+- en: With this approach, whenever we are at the planning step, we sample from ![](img/Formula_08_082.png)
+    multiple times to estimate the reward for an action sequence ![](img/Formula_08_015.png).
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这种方法，每当我们进入规划步骤时，我们会多次从![](img/Formula_08_082.png)中采样，以估算一个动作序列![](img/Formula_08_015.png)的奖励。
+- en: Using ensemble models with bootstrapping
+  id: totrans-189
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用集成模型与自助法
+- en: Another method to estimate uncertainty is to use bootstrapping, which is easier
+    to implement than a Bayesian neural network but also a less principled approach.
+    Bootstrapping simply involves training multiple (say 10) neural networks for ![](img/Formula_08_084.png),
+    each using data resampled from the original dataset with replacement.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 估算不确定性的另一种方法是使用自助法，它比贝叶斯神经网络更易于实现，但也是一种不那么严格的方法。自助法简单地通过训练多个（例如10个）神经网络，每个网络都使用从原始数据集中重新抽样的数据（带有替换）。
+- en: Info
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: 'If you need a quick refresher on bootstrapping in statistics, check out this
+    blog post by Trist''n Joseph: [https://bit.ly/3fQ37r1](https://bit.ly/3fQ37r1).'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你需要快速复习统计学中的自助法（bootstrapping），可以查看Trist'n Joseph的这篇博客文章：[https://bit.ly/3fQ37r1](https://bit.ly/3fQ37r1)。
+- en: Similar to the use of Bayesian networks, this time, we average the reward given
+    by these multiple neural networks to evaluate an action sequence ![](img/Formula_08_085.png)
+    during planning.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与使用贝叶斯网络类似，这时我们会对这些多个神经网络给出的奖励进行平均，以评估在规划过程中的一个动作序列![](img/Formula_08_085.png)。
+- en: With that, we conclude our discussion on incorporating model uncertainty into
+    model-based RL. Before we wrap up this section, let's touch on how to consume
+    complex observations to learn a world model.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，我们就结束了关于将模型不确定性融入基于模型的强化学习（RL）的讨论。在结束本节之前，简要讨论一下如何处理复杂的观察数据来学习世界模型。
+- en: Learning a model from complex observations
+  id: totrans-195
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 从复杂的观察数据中学习模型
+- en: 'Everything we have described so far can get a bit complicated to implement
+    when we have one or both of the following:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们所描述的内容，在以下情况之一或两者同时出现时，可能会变得有些复杂：
+- en: Partially observable environments, so the agent sees ![](img/Formula_08_086.png)
+    rather than ![](img/Formula_08_087.png).
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 部分可观察的环境，因此智能体看到的是![](img/Formula_08_086.png)而不是![](img/Formula_08_087.png)。
+- en: High-dimensional observations, such as images.
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高维度观察，如图像。
+- en: We have an entire chapter coming up on partial observability in [*Chapter 11*](B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239),
+    *Generalization and Partial Observability*. In that chapter, we will discuss how
+    keeping a memory of past observations helps us uncover the hidden state in the
+    environment. A common architecture to use is the **long short-term memory** (**LSTM**)
+    model, which is a particular class of **recurrent neural network** (**RNN**) architectures.
+    Therefore, representing ![](img/Formula_08_088.png) using an LSTM would be a common
+    choice in the face of partial observability.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在[*第11章*](B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239)，《泛化与部分可观察性》一章中详细讨论部分可观察性。在这一章中，我们将讨论如何通过保留过去的观察来帮助我们揭示环境中的隐藏状态。一个常用的架构是**长短期记忆**（**LSTM**）模型，这是一类特殊的**递归神经网络**（**RNN**）架构。因此，在部分可观察性下，使用LSTM来表示![](img/Formula_08_088.png)是常见的选择。
+- en: When it comes to dealing with high-dimensional observations, such as images,
+    a common approach is to encode them in compact vectors. **Variational autoencoders**
+    (**VAEs**) are the choice when it comes to obtaining such representations.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当面对高维度的观察时，例如图像，一个常见的方法是将它们编码成紧凑的向量。**变分自编码器**（**VAE**）是获取这种表示的首选方法。
+- en: Info
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: A nice tutorial on VAEs by Jeremy Jordan is available at [https://www.jeremyjordan.me/variational-autoencoders/](https://www.jeremyjordan.me/variational-autoencoders/).
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Jeremy Jordan的关于变分自编码器（VAE）的精彩教程可以在[https://www.jeremyjordan.me/variational-autoencoders/](https://www.jeremyjordan.me/variational-autoencoders/)找到。
+- en: When the environment is both partially observable and emitting image observations,
+    we would then have to first convert images to encodings, use an RNN for ![](img/Formula_08_089.png)
+    that predicts the encoding that corresponds to the next observation, and plan
+    through this ![](img/Formula_08_071.png). *Ha et al., 2018,* used a similar approach
+    to deal with images and partial observability in their "*World Models*" paper.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当环境既是部分可观察的，又产生图像观察时，我们需要首先将图像转换为编码，使用RNN来预测与下一个观察相对应的编码，并通过这个![](img/Formula_08_071.png)进行规划。*Ha等人，2018年*在他们的“*世界模型*”论文中使用了类似的方法来处理图像和部分可观察性。
+- en: This concludes our discussion on learning a world model. In the next and final
+    section of this chapter, let's discuss how we can use the approaches we have described
+    so far to obtain a policy for an RL agent.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这结束了我们关于学习世界模型的讨论。在本章的下一节，也是最后一节，我们来讨论如何使用到目前为止描述的方法，为强化学习智能体获得一个策略。
+- en: Unifying model-based and model-free approaches
+  id: totrans-205
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 统一基于模型和无模型的方法
+- en: When we went from dynamic programming-based approaches to Monte Carlo and temporal-difference
+    methods in [*Chapter 5*](B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106), *Solving
+    the Reinforcement Learning Problem*, our motivation was that it is limiting to
+    assume that the environment transition probabilities are known. Now that we know
+    how to learn the environment dynamics, we will leverage that to find a middle
+    ground. It turns out that with a learned model of the environment, the learning
+    with model-free methods can be accelerated. To that end, in this section, we first
+    refresh our minds on Q-learning, then introduce a class of methods called **Dyna**.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们从基于动态规划的方法转向蒙特卡罗和时序差分方法时，参见[*第5章*](B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106)，《解决强化学习问题》，我们的动机是：假设环境转移概率已知是有限制的。现在我们知道如何学习环境动态，我们将利用这一点找到一个折衷方案。事实证明，拥有一个已学习的环境模型后，使用无模型的方法进行学习可以加速。因此，在这一部分，我们首先回顾Q-learning，然后介绍一类叫做**Dyna**的方法。
+- en: Refresher on Q-learning
+  id: totrans-207
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Q-learning复习
+- en: 'Let''s start with remembering the definition of the action-value function:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从回顾动作值函数的定义开始：
+- en: '![](img/Formula_08_091.jpg)'
+  id: totrans-209
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_08_091.jpg)'
+- en: The expectation operator here is because the transition into the next state
+    is probabilistic, so ![](img/Formula_08_092.png) is a random variable along with
+    ![](img/Formula_08_093.png). On the other hand, if we know the probability distribution
+    of ![](img/Formula_08_094.png) and ![](img/Formula_08_095.png), we can calculate
+    this expectation analytically, which is what methods such as value iteration do.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的期望算子是因为向下一个状态的过渡是概率性的，因此 ![](img/Formula_08_092.png) 和 ![](img/Formula_08_093.png)
+    都是随机变量。另一方面，如果我们知道 ![](img/Formula_08_094.png) 和 ![](img/Formula_08_095.png) 的概率分布，我们可以通过解析方法计算这个期望值，这就是像价值迭代等方法所做的。
+- en: 'In the absence of information on the transition dynamics, methods such as Q-learning
+    estimate the expectation from a single sample of ![](img/Formula_08_096.png):'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在缺乏过渡动态信息的情况下，像 Q 学习这样的算法通过从单一样本 ![](img/Formula_08_096.png) 中估算期望值：
+- en: '![](img/Formula_08_097.jpg)'
+  id: totrans-212
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_08_097.jpg)'
+- en: Dyna algorithms are based on the idea that, rather than using a simple ![](img/Formula_08_098.png)
+    sampled from the environment, we can come up with a better estimation of the expectation
+    using a learned model of the environment by sampling many ![](img/Formula_08_099.png)
+    from it given ![](img/Formula_08_100.png).
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Dyna 算法基于这样的想法：与其使用从环境中采样的简单 ![](img/Formula_08_098.png)，我们可以通过从环境中采样多个 ![](img/Formula_08_099.png)，利用学习到的环境模型来更好地估计期望值，给定
+    ![](img/Formula_08_100.png)。
+- en: Tip
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提示
+- en: So far in our discussions, we have implicitly assumed that reward ![](img/Formula_06_142.png)
+    can be calculated once ![](img/Formula_08_102.png) is known. If that is not the
+    case, especially in the presence of partial observability, we may have to learn
+    a separate model for ![](img/Formula_08_103.png).
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们在讨论中隐含地假设一旦 ![](img/Formula_08_102.png) 已知，奖励 ![](img/Formula_06_142.png)
+    就可以计算。如果不是这样，尤其是在部分可观测的情况下，我们可能需要为 ![](img/Formula_08_103.png) 学习一个单独的模型。
+- en: Next, let's more formally outline this idea.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们更正式地概述这个想法。
+- en: Dyna-style acceleration of model-free methods using world models
+  id: totrans-217
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用世界模型加速无模型方法的 Dyna 风格
+- en: 'The Dyna approach is a rather old one (*Sutton, 1990*) that aims to "integrate
+    learning, planning, and reacting." This approach has the following general flow
+    (*Levine, 2019*):'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Dyna 方法是一个相当古老的算法（*Sutton, 1990*），旨在“集成学习、规划和反应”。这个方法有以下一般流程（*Levine, 2019*）：
+- en: While in state ![](img/Formula_05_060.png), sample ![](img/Formula_05_044.png)
+    using ![](img/Formula_08_106.png).
+  id: totrans-219
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 当处于状态 ![](img/Formula_05_060.png) 时，使用 ![](img/Formula_08_106.png) 采样 ![](img/Formula_05_044.png)。
+- en: Observe ![](img/Formula_08_107.png) and ![](img/Formula_08_108.png), and add
+    the tuple ![](img/Formula_08_109.png) to a replay buffer ![](img/Formula_08_110.png).
+  id: totrans-220
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 观察 ![](img/Formula_08_107.png) 和 ![](img/Formula_08_108.png)，并将元组 ![](img/Formula_08_109.png)
+    添加到回放缓冲区 ![](img/Formula_08_110.png)。
+- en: Update the world model ![](img/Formula_08_111.png) and optionally ![](img/Formula_08_112.png).
+  id: totrans-221
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更新世界模型 ![](img/Formula_08_111.png)，并可选地更新 ![](img/Formula_08_112.png)。
+- en: 'For ![](img/Formula_08_113.png) to ![](img/Formula_08_114.png):'
+  id: totrans-222
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于 ![](img/Formula_08_113.png) 到 ![](img/Formula_08_114.png)：
+- en: Sample ![](img/Formula_05_010.png) from ![](img/Formula_08_116.png).
+  id: totrans-223
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从 ![](img/Formula_08_116.png) 中采样 ![](img/Formula_05_010.png)。
+- en: Choose some ![](img/Formula_05_059.png), either from ![](img/Formula_05_035.png),
+    from ![](img/Formula_08_119.png), or at random.
+  id: totrans-224
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择某些 ![](img/Formula_05_059.png)，可以从 ![](img/Formula_05_035.png)、从 ![](img/Formula_08_119.png)
+    或随机选择。
+- en: Sample ![](img/Formula_08_120.png) and ![](img/Formula_08_121.png).
+  id: totrans-225
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 采样 ![](img/Formula_08_120.png) 和 ![](img/Formula_08_121.png)。
+- en: Train on ![](img/Formula_08_122.png) with a model-free RL method (deep Q-learning).
+  id: totrans-226
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用无模型强化学习方法（深度 Q 学习）在 ![](img/Formula_08_122.png) 上进行训练。
+- en: Optionally, take further steps after ![](img/Formula_08_123.png).
+  id: totrans-227
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 可选地，在 ![](img/Formula_08_123.png) 后执行进一步的步骤。
+- en: End For
+  id: totrans-228
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 结束 For
+- en: Go back to *step 1* (and ![](img/Formula_08_124.png)).
+  id: totrans-229
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 返回到 *步骤 1*（并且 ![](img/Formula_08_124.png)）。
+- en: That's it! Dyna is an important class of methods in RL, and now you know how
+    it works!
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样！Dyna 是强化学习中的一个重要方法类别，现在你知道它是如何工作的了！
+- en: Info
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: RLlib has an advanced Dyna-style method implementation called **Model-Based
+    RL via Meta-Policy Optimization** or **MBMPO**. You can check it out at [https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo](https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo).
+    As of Ray 1.0.1, it is implemented in PyTorch, so go ahead and install PyTorch
+    in your virtual environment if you would like to experiment with it.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RLlib 有一个先进的 Dyna 风格方法实现，称为 **基于模型的 RL 通过元策略优化**，或 **MBMPO**。你可以在 [https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo](https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo)
+    查看。自 Ray 1.0.1 以来，它已在 PyTorch 中实现，因此如果你想尝试它，请在你的虚拟环境中安装 PyTorch。
+- en: This concludes our chapter on model-based RL; and congratulations for reaching
+    this far! We only scratched the surface in this broad topic, but now you are equipped
+    with the knowledge to start using model-based methods for your problems! Let's
+    summarize what we have covered next.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是我们关于基于模型的强化学习（RL）章节的结尾，恭喜你走到了这一步！我们只是略微触及了这一广泛话题的表面，但现在你已经具备了使用基于模型的方法来解决问题的知识！接下来，让我们总结一下我们所覆盖的内容。
+- en: Summary
+  id: totrans-234
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we covered model-based methods. We started the chapter by describing
+    how we humans use the world models we have in our brains to plan our actions.
+    Then, we introduced several methods that can be used to plan an agent's actions
+    in an environment when a model is available. These were derivative-free search
+    methods, and for the CEM and CMA-ES methods, we implemented parallelized versions.
+    As a natural follow-up to this section, we then went into how a world model can
+    be learned to be used for planning or developing policies. This section contained
+    some important discussions about model uncertainty and how learned models can
+    suffer from it. At the end of the chapter, we unified the model-free and model-based
+    approaches in the Dyna framework.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章节中，我们介绍了基于模型的方法。我们从描述人类如何利用大脑中的世界模型来规划行为开始，然后介绍了几种在拥有模型的情况下，可以用来规划智能体在环境中行为的方法。这些方法是无导数的搜索方法，对于CEM和CMA-ES方法，我们实现了并行版本。作为本节的自然延伸，我们接着讲解了如何学习一个世界模型，用于规划或开发策略。本节内容包含了关于模型不确定性以及学习到的模型可能受到不确定性影响的重要讨论。章节的最后，我们将无模型和基于模型的方法统一在Dyna框架中。
+- en: 'As we conclude our discussion on model-based RL, we proceed to the next chapter
+    for yet another exciting topic: multi-agent RL. Take a break, and we will see
+    you soon!'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着我们结束关于基于模型的强化学习的讨论，我们将进入下一个章节，探讨另一个令人兴奋的话题：多智能体强化学习。休息一下，我们很快再见！
+- en: References
+  id: totrans-237
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 参考文献
+- en: 'Levine, Sergey. (2019). *Optimal Control and Planning*. CS285 Fa19 10/2/19\.
+    YouTube. URL: [https://youtu.be/pE0GUFs-EHI](https://youtu.be/pE0GUFs-EHI)'
+  id: totrans-238
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Levine, Sergey. (2019). *最优控制与规划*。CS285 Fa19 10/2/19。YouTube。网址：[https://youtu.be/pE0GUFs-EHI](https://youtu.be/pE0GUFs-EHI)
+- en: 'Levine, Sergey. (2019). *Model-Based Reinforcement Learning*. CS285 Fa19 10/7/19\.
+    YouTube. URL: [https://youtu.be/6JDfrPRhexQ](https://youtu.be/6JDfrPRhexQ)'
+  id: totrans-239
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Levine, Sergey. (2019). *基于模型的强化学习*。CS285 Fa19 10/7/19。YouTube。网址：[https://youtu.be/6JDfrPRhexQ](https://youtu.be/6JDfrPRhexQ)
+- en: 'Levine, Sergey. (2019). *Model-Based Policy Learning*. CS285 Fa19 10/14/19\.
+    YouTube. URL: [https://youtu.be/9AbBfIgTzoo](https://youtu.be/9AbBfIgTzoo).'
+  id: totrans-240
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Levine, Sergey. (2019). *基于模型的策略学习*。CS285 Fa19 10/14/19。YouTube。网址：[https://youtu.be/9AbBfIgTzoo](https://youtu.be/9AbBfIgTzoo)。
+- en: 'Ha, David, and Jürgen Schmidhuber. (2018). *World Models*. arXiv.org, URL:
+    [https://arxiv.org/abs/1803.10122](https://arxiv.org/abs/1803.10122).'
+  id: totrans-241
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Ha, David, 和 Jürgen Schmidhuber. (2018). *世界模型*。arXiv.org，网址：[https://arxiv.org/abs/1803.10122](https://arxiv.org/abs/1803.10122)。
+- en: 'Mania, Horia, et al. (2018). *Simple Random Search Provides a Competitive Approach
+    to Reinforcement Learning*. arXiv.org, URL: [http://arxiv.org/abs/1803.07055](http://arxiv.org/abs/1803.07055)'
+  id: totrans-242
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Mania, Horia 等人. (2018). *简单随机搜索提供了一种具有竞争力的强化学习方法*。arXiv.org，网址：[http://arxiv.org/abs/1803.07055](http://arxiv.org/abs/1803.07055)
+- en: Jospin, Laurent Valentin, et al. (2020). *Hands-on Bayesian Neural Networks
+    – a Tutorial for Deep Learning Users*. arXiv.org, [http://arxiv.org/abs/2007.06823](http://arxiv.org/abs/2007.06823).
+  id: totrans-243
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Jospin, Laurent Valentin 等人. (2020). *动手实践贝叶斯神经网络 - 深度学习用户教程*。arXiv.org，网址：[http://arxiv.org/abs/2007.06823](http://arxiv.org/abs/2007.06823)。
+- en: 'Joseph, Trist''n. (2020). *Bootstrapping Statistics. What It Is and Why It''s
+    Used.* Medium. URL: [https://bit.ly/3fOlvjK](https://bit.ly/3fOlvjK).'
+  id: totrans-244
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Joseph, Trist'n. (2020). *引导统计学：它是什么以及为什么使用它*。Medium。网址：[https://bit.ly/3fOlvjK](https://bit.ly/3fOlvjK)。
+- en: 'Richard S. Sutton. (1991). *Dyna, an integrated architecture for learning,
+    planning, and reacting*. SIGART Bull. 2, 4 (Aug. 1991), 160–163\. DOI: [https://doi.org/10.1145/122344.122377](https://doi.org/10.1145/122344.122377)'
+  id: totrans-245
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Richard S. Sutton. (1991). *Dyna，一种集成学习、规划和反应的架构*。SIGART Bull. 2, 4 (1991年8月)，160–163。DOI：[https://doi.org/10.1145/122344.122377](https://doi.org/10.1145/122344.122377)

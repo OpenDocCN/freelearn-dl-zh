@@ -1,0 +1,1180 @@
+- en: Generating a Deep Learning Image Classifier
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 生成深度学习图像分类器
+- en: 'Over the past decade, deep learning has made a name for itself by producing
+    state-of-the-heart results across computer vision, natural language processing,
+    speech recognition, and many more such applications. Some of the models that human
+    researchers have designed and engineered have also gained popularity, including
+    AlexNet, Inception, VGGNet, ResNet, and DenseNet; some of them are now the go-to
+    standard for their respective tasks. However, it seems that the better the model
+    gets, the more complex the architecture becomes, especially with the introduction
+    of residual connections between convolutional layers. The task of designing a
+    high-performance neural network has thus become a very arduous one. Hence the
+    question arises: is it possible for an algorithm to learn how to generate neural network
+    architectures?'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在过去的十年里，深度学习凭借在计算机视觉、自然语言处理、语音识别等多个应用领域取得的卓越成果，赢得了广泛的声誉。一些人类研究者设计并开发的模型也获得了广泛的关注，包括AlexNet、Inception、VGGNet、ResNet和DenseNet；其中一些模型现在已成为各自任务的标准。然而，似乎模型越优秀，其架构就越复杂，特别是在卷积层之间引入残差连接后。设计一个高性能神经网络的任务因此变得异常艰巨。因此，问题随之而来：是否有可能让一个算法学会生成神经网络架构？
+- en: As the title of this chapter suggests, it is indeed possible to train a neural
+    network to generate neural networks that perform well on a given task. In this
+    chapter, we will examine **Neural Architecture Search** (referred to as **NAS**
+    henceforth), a novel framework developed by Barret Zoph and Quoc V. Le from the
+    Google Brain team that uses deep reinforcement learning to train a Controller
+    to produce child networks that learn to accomplish tasks. We will learn how policy
+    gradient methods (REINFORCE in particular) can train such a Controller. We will
+    then implement a Controller that uses NAS to generate child networks that train
+    on `CIFAR-10` data.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如本章标题所示，确实有可能训练一个神经网络来生成在给定任务中表现良好的神经网络。在本章中，我们将介绍由Google Brain团队的Barret Zoph和Quoc
+    V. Le开发的一个新型框架——**神经架构搜索**（以下简称**NAS**），它利用深度强化学习训练一个控制器，生成子网络来学习完成任务。我们将学习策略梯度方法（特别是REINFORCE）如何训练这样的控制器。随后，我们将实现一个控制器，使用NAS生成在`CIFAR-10`数据集上进行训练的子网络。
+- en: 'In this chapter, we will cover the following:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下内容：
+- en: Understanding NAS and how it learns to generate other neural networks
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解NAS以及它如何学会生成其他神经网络
+- en: Implementing a simple NAS framework that generates neural networks for training
+    on `CIFAR-10` data
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现一个简单的NAS框架，用于生成神经网络并在`CIFAR-10`数据集上进行训练
+- en: 'You can find the original sources of the ensuing topics from the following
+    sources:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以从以下来源找到后续主题的原始资料：
+- en: Zoph, B., and Le, Q. V. (2016). *Neural Architecture Search with reinforcement
+    learning*. arXiv preprint arXiv:1611.01578.
+  id: totrans-7
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Zoph, B., 和 Le, Q. V. (2016). *通过强化学习的神经架构搜索*。arXiv预印本arXiv:1611.01578。
+- en: Pham, H., Guan, M. Y., Zoph, B., Le, Q. V., and Dean, J. (2018). *Efficient
+    Neural Architecture Search via Parameter Sharing*. arXiv preprint arXiv:1802.03268.
+  id: totrans-8
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Pham, H., Guan, M. Y., Zoph, B., Le, Q. V., 和 Dean, J. (2018). *通过参数共享的高效神经架构搜索*。arXiv预印本arXiv:1802.03268。
+- en: Neural Architecture Search
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 神经架构搜索
+- en: The next few sections will describe the NAS framework. You will learn about
+    how the framework learns to generate other neural networks to complete tasks using
+    a popular reinforcement learning scheme called **REINFORCE**, which is a type
+    of policy gradient algorithm.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来的几个部分将描述NAS框架。你将了解该框架如何使用一种叫做**REINFORCE**的强化学习方案来学习生成其他神经网络，完成任务。**REINFORCE**是一种策略梯度算法。
+- en: Generating and training child networks
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 生成并训练子网络
+- en: 'Research on algorithms that generate neural architectures has been around since
+    the 1970''s. What sets NAS apart from previous works is its ability to cater to
+    large-scale deep learning algorithms and its formulation of the task as a reinforcement
+    learning problem. More specifically, the agent, which we will refer to as the
+    Controller, is a recurrent neural network that generates a sequence of values.
+    You can think of these values as a sort of genetic code of the child network that defines
+    its architecture; it sets the sizes of each convolutional kernel, the length of
+    each kernel, the number of filters in each layer, and so on. In more advanced
+    frameworks, the values also determine the connections between layers to generate
+    residual layers:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成神经网络架构的算法研究自1970年代以来便存在。NAS与之前的研究不同之处在于，它能够应对大规模深度学习算法，并将任务表述为强化学习问题。更具体地说，代理，我们称之为控制器，是一个递归神经网络，它生成一系列值。你可以把这些值看作是子网络的某种遗传码，定义了子网络的架构；它设置了每个卷积核的大小、每个核的长度、每层的滤波器数量等等。在更先进的框架中，这些值还决定了各层之间的连接，从而生成残差层：
+- en: '![](img/4274f1d4-9a06-4333-a570-03141a930279.png)'
+  id: totrans-13
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4274f1d4-9a06-4333-a570-03141a930279.png)'
+- en: 'Figure 1: Overview of the NAS framework'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图1：NAS框架概览
+- en: 'Moreover, each value of the genetic code that the Controller outputs counts
+    as an action, *a*, that is sampled with probability, *p*. Because the Controller
+    is a recurrent neural network, we can represent the *t*^(th) action as ![](img/faa90a7b-db39-49c1-a47e-2c17ba041851.png). Once
+    we have a list of actions, ![](img/7239d03a-caa1-49ca-b868-d135bc3cc4e6.png)—where *T*
+    is some predefined parameter that sets the maximum size of the genetic code—we
+    can generate the child network with the specified architecture, *A*:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，控制器输出的每个遗传码值都算作一个动作，*a*，它是以概率*p*采样的。由于控制器是一个递归神经网络，我们可以将*t*^(th)动作表示为![](img/faa90a7b-db39-49c1-a47e-2c17ba041851.png)。一旦我们拥有了动作列表，![](img/7239d03a-caa1-49ca-b868-d135bc3cc4e6.png)—其中*T*是一个预定义的参数，用来设置遗传码的最大大小—我们就可以根据指定的架构生成子网络*A*：
+- en: '![](img/09c0b341-1338-4af2-86dd-6e5bda00cb79.png)'
+  id: totrans-16
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/09c0b341-1338-4af2-86dd-6e5bda00cb79.png)'
+- en: 'Figure 2: The architecture of the Controller'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图2：控制器架构
+- en: 'Once the Controller generates a child network, we train it on a given task
+    until either some termination criteria is met (for example, after a specified
+    number of epochs). We then evaluate the child network on the validation set to
+    produce some validation accuracy, *R*. The validation accuracy acts as the reward
+    signal for the Controller. So, the objective of the Controller is to maximize
+    the expected reward:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦控制器生成了一个子网络，我们就对其在给定任务上进行训练，直到满足某些终止标准（例如，在指定的轮次后）。然后我们在验证集上评估子网络，得到一个验证准确率*R*。验证准确率作为控制器的奖励信号。所以，控制器的目标是最大化期望奖励：
+- en: '![](img/d92c3151-95a1-42bc-902f-49620b4c81ac.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d92c3151-95a1-42bc-902f-49620b4c81ac.png)'
+- en: 'Here, *J* is the reward function (also referred to as the fit function), ![](img/16d467a8-67e3-48f5-a55b-930031763723.png) is
+    the parameters of the Controller, and the right-hand side of the equation is the
+    expectation of the reward given a child network architecture, *A*. In practice,
+    this expectation is calculated by averaging the rewards over *m* child network
+    models that the Controller produces in one batch:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*J*是奖励函数（也称为拟合函数），![](img/16d467a8-67e3-48f5-a55b-930031763723.png)是控制器的参数，方程右侧是给定子网络架构*A*时，奖励的期望值。在实际操作中，这个期望值是通过对控制器在一批次中生成的*m*个子网络模型的奖励进行平均来计算的：
+- en: '![](img/52c89b3d-40e1-46ad-93c5-e76d80ccf368.png)'
+  id: totrans-21
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/52c89b3d-40e1-46ad-93c5-e76d80ccf368.png)'
+- en: Training the Controller
+  id: totrans-22
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练控制器
+- en: 'How do we use this reward signal to update the Controller? Remember, this reward
+    signal is not differentiable like a loss function in supervised learning; we may
+    not backpropagate this through the Controller on its own. Instead, we employ a
+    policy gradient method called **REINFORCE** to iteratively update the Controller
+    parameters, ![](img/ea43e406-8138-401c-bdba-9a1432dd38eb.png). In REINFORCE, the
+    gradient of the reward function, *J*, with respect to the parameters of the Controller, ![](img/3ad033be-2d52-421a-9c2d-b6da56710c63.png),
+    is defined as follows:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们如何使用这个奖励信号来更新控制器？请记住，这个奖励信号不像监督学习中的损失函数那样可微；我们不能仅仅通过控制器进行反向传播。相反，我们使用一种叫做**REINFORCE**的策略梯度方法，迭代地更新控制器的参数，![](img/ea43e406-8138-401c-bdba-9a1432dd38eb.png)。在REINFORCE中，奖励函数的梯度，*J*，相对于控制器参数，![](img/3ad033be-2d52-421a-9c2d-b6da56710c63.png)，定义如下：
+- en: '![](img/6f285d1b-2866-481f-a3c8-fb2b5f803772.png)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6f285d1b-2866-481f-a3c8-fb2b5f803772.png)'
+- en: You may recall seeing a similar expression in [Chapter 6](857fa187-2524-4682-ae75-ab6b15e00a50.xhtml),
+    *Learning to Play Go*. Indeed, this is the policy gradient method that AlphaGo
+    and AlphaGo Zero use to update the weights of their reinforcement learning policy
+    networks. We briefly introduced the method then, but we will go a bit more in-depth
+    here.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能记得在[第六章](857fa187-2524-4682-ae75-ab6b15e00a50.xhtml)《学习下围棋》中看到过类似的表达式。确实，这是
+    AlphaGo 和 AlphaGo Zero 用于更新其强化学习策略网络权重的策略梯度方法。我们当时简单介绍了这种方法，今天我们将更深入地探讨它。
+- en: Let's break the preceding equation down. On the right-hand side, we would like
+    to represent the probability of choosing some architecture, *A*. In particular,
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们分解一下前面的方程。在右侧，我们希望表示选择某个架构 *A* 的概率。具体来说，
+- en: '![](img/394dfe7f-478c-47e2-a4d5-e51996fe112a.png) represents the probability
+    that the Controller takes action ![](img/5ed6092d-17db-4ea7-a4b5-1bd2fa971fa4.png) given
+    all the previous actions, ![](img/af6f66a3-0c6d-448d-a13d-0126e02d4ec3.png), and
+    the parameters of the Controller, ![](img/8a4e3cb6-38fe-423c-a588-3c6fb67dd95b.png).
+    Again, action ![](img/78832ef5-12c9-48db-9d8d-82b8853fc29a.png) corresponds to
+    the *t*^(th) value in the genetic sequence that represents the child network''s
+    architecture. The joint probability of choosing all actions, ![](img/50724bbb-cc31-45ee-9c44-2157a323b752.png),
+    can be formulated as follows:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/394dfe7f-478c-47e2-a4d5-e51996fe112a.png) 代表控制器在给定所有之前的动作、![](img/af6f66a3-0c6d-448d-a13d-0126e02d4ec3.png)
+    和控制器参数 ![](img/8a4e3cb6-38fe-423c-a588-3c6fb67dd95b.png) 后采取某个动作的概率。再次强调，动作 ![](img/78832ef5-12c9-48db-9d8d-82b8853fc29a.png)
+    对应于基因序列中代表子网络架构的 *t*^(th) 值。选择所有动作的联合概率，![](img/50724bbb-cc31-45ee-9c44-2157a323b752.png)，可以按照以下方式表示：'
+- en: '![](img/c15a89ea-f4d1-4c47-a9cf-316fdb643460.png)'
+  id: totrans-28
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c15a89ea-f4d1-4c47-a9cf-316fdb643460.png)'
+- en: 'By transforming this joint probability to the log space, we can turn the product
+    into a sum of probabilities:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过将这个联合概率转换到对数空间，我们可以将乘积转化为概率的和：
+- en: '![](img/457a0dfc-e99d-4030-a2cb-e5a9c7253058.png)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/457a0dfc-e99d-4030-a2cb-e5a9c7253058.png)'
+- en: 'In general, we want to maximize this log conditional probability for taking
+    some action. In other words, we want to increase the likelihood of the Controller
+    generating a particular sequence of genetic codes. Hence we perform gradient ascent
+    on this objective with respect to the Controller''s parameters by taking the derivative
+    of the log probability of sampling architecture *A*:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，我们希望最大化采取某个动作的对数条件概率。换句话说，我们希望提高控制器生成特定基因代码序列的可能性。因此，我们对这个目标执行梯度上升，求取关于控制器参数的对数概率的导数：
+- en: '![](img/7ca47ff5-b4b3-493d-8ece-9c37fb92dfb8.png)'
+  id: totrans-32
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7ca47ff5-b4b3-493d-8ece-9c37fb92dfb8.png)'
+- en: But how do we update the Controller parameters so that better architectures
+    are generated? This is where we make use of the reward signal, *R*. By multiplying
+    the preceding with the reward signal, we can control the size of the policy gradient.
+    In other words, if a particular architecture achieved high validation accuracy
+    (with the highest possible being 1.0), the gradients for that policy will be relatively
+    strong and the Controller will learn to produce similar architectures. On the
+    other hand, smaller validation accuracies will mean smaller gradients, which helps
+    the Controller ignore those architectures.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，我们如何更新控制器的参数，以便生成更好的架构呢？这时我们利用奖励信号 *R*。通过将前面的结果与奖励信号相乘，我们可以控制策略梯度的大小。换句话说，如果某个架构达到了较高的验证准确率（最高为
+    1.0），那么该策略的梯度将相对较强，控制器将学习生成类似的架构。相反，较小的验证准确率将意味着较小的梯度，这有助于控制器忽略这些架构。
+- en: 'One problem with the REINFORCE algorithm is that the reward signal *R* can
+    have high variance, which can lead to unstable training curves. To reduce the
+    variance, it is common to subtract the reward with some value, *b*, which we refer
+    to as the baseline function. In Zoph et al., the baseline function is defined
+    as the exponential moving average of the past rewards. Hence our REINFORCE policy
+    gradient is now defined as follows:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: REINFORCE 算法的一个问题是奖励信号 *R* 的方差可能很大，这会导致训练曲线的不稳定。为了减少方差，通常会从奖励中减去一个值 *b*，我们称之为基准函数。在
+    Zoph 等人的研究中，基准函数定义为过去奖励的指数移动平均。因此，我们的 REINFORCE 策略梯度现在定义为：
+- en: '![](img/1246a433-5328-47f6-9b1d-bce44939749d.png)'
+  id: totrans-35
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/1246a433-5328-47f6-9b1d-bce44939749d.png)'
+- en: Once we have this gradient, we apply the usual backpropagation algorithm to
+    update the Controller parameters, ![](img/c0938788-435b-4258-aed5-1c8beaf53289.png).
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦得到这个梯度，我们就应用常规的反向传播算法来更新控制器的参数， ![](img/c0938788-435b-4258-aed5-1c8beaf53289.png)。
+- en: Training algorithm
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 训练算法
+- en: 'The training steps for the Controller is as follows:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 控制器的训练步骤如下：
+- en: 'For each episode, do the following:'
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于每一轮，执行以下操作：
+- en: Generate *m* child network architectures
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 生成 *m* 个子网络架构
+- en: Train child networks on given task and obtain *m* validation accuracies
+  id: totrans-41
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在给定任务上训练子网络并获得 *m* 个验证准确度
+- en: Calculate ![](img/3a57d7b6-c858-459b-9343-a2ce6a8734c7.png)
+  id: totrans-42
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算 ![](img/3a57d7b6-c858-459b-9343-a2ce6a8734c7.png)
+- en: Update ![](img/e842e22d-55cd-44ef-97fe-4ab452664d09.png)
+  id: totrans-43
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更新 ![](img/e842e22d-55cd-44ef-97fe-4ab452664d09.png)
+- en: In Zoph et al., the training procedure is done with several copies of the Controller.
+    Each Controller is parameterized by ![](img/e842e22d-55cd-44ef-97fe-4ab452664d09.png), which
+    itself is stored in a distributed manner among multiple servers, which we call
+    parameter servers.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Zoph 等人的研究中，训练过程通过多个控制器副本完成。每个控制器通过 ![](img/e842e22d-55cd-44ef-97fe-4ab452664d09.png)
+    参数化，而该参数本身以分布式方式存储在多个服务器中，这些服务器我们称之为参数服务器。
+- en: 'In each episode of training, the Controller creates several child architectures
+    and trains them independently. The policy gradient calculated as a result is then
+    sent to the parameter servers to update the Controller''s parameters:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每一轮训练中，控制器创建若干个子架构并独立训练。计算出的策略梯度随后被发送到参数服务器，以更新控制器的参数：
+- en: '![](img/a144e3eb-57ca-4d76-a1da-e99221b0a29e.png)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a144e3eb-57ca-4d76-a1da-e99221b0a29e.png)'
+- en: 'Figure 3: The training architecture'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3：训练架构
+- en: The Controller's parameters are shared among a number of parameter servers.
+    Moreover, multiple copies of the Controller are trained in parallel, each one
+    calculating rewards and gradients for its respective batches of child network
+    architectures.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 控制器的参数在多个参数服务器之间共享。此外，多个控制器副本并行训练，每个副本为其各自的子网络架构批次计算奖励和梯度。
+- en: This architecture allows the Controller to be trained quickly given enough resources.
+    For our purposes, however, we will stick to one Controller that generates *m*
+    child network architectures. Once we have trained the Controller for a specified
+    number of episodes, we calculate the test accuracy by choosing the child network
+    architecture that had the best validation accuracy and measuring its performance
+    on the test set.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种架构使得控制器可以在资源充足的情况下快速训练。然而，对于我们的目的，我们将坚持使用一个控制器来生成 *m* 个子网络架构。一旦我们训练了控制器指定的轮数，我们通过选择验证精度最好的子网络架构来计算测试准确度，并在测试集上测量其性能。
+- en: Implementing NAS
+  id: totrans-50
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现 NAS
+- en: In this section, we will implement NAS. In particular, our Controller is tasked
+    with generating child network architectures that learn to classify images from
+    the `CIFAR-10` dataset. The architecture of the child network will be represented
+    by a list of numbers. Every four values in this list represent a convolutional
+    layer in the child network, each describing the kernel size, stride length, number
+    of filters, and the pooling window size in the subsequent pooling layer. Moreover,
+    we specify the number of layers in a child network as a hyper-parameters. For
+    example, if our child network has three layers, its architecture is represented
+    as a vector of length 12\. If we have an architecture represented as `[3, 1, 12,
+    2, 5, 1, 24, 2]`, then the child network is a two-layer network where the first
+    layer has kernel size of 3, stride length of 1, 12 filters, and a max-pooling
+    window size of 2, and the second layer has kernel size of 5, stride length of
+    1, 24 filters, and max-pooling window size of 2\. We set the activation function
+    between each layer as ReLU. The final layer involves flattening the last convolutional
+    layer output and applying a linear layer with the number of classes as its width,
+    followed by a Softmax activation. The following sections will walk you through
+    the implementation.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们将实现NAS。具体来说，我们的控制器负责生成子网络架构，用于学习从`CIFAR-10`数据集中分类图像。子网络的架构将由一个数字列表表示。这个列表中的每四个值代表子网络中的一个卷积层，每个值描述卷积核大小、步长、滤波器数量和随后的池化层的池化窗口大小。此外，我们将子网络中的层数作为超参数指定。例如，如果我们的子网络有三层，那么它的架构将表示为一个长度为12的向量。如果我们的架构表示为`[3,
+    1, 12, 2, 5, 1, 24, 2]`，那么这个子网络是一个两层网络，其中第一层的卷积核大小为3，步长为1，12个滤波器，最大池化窗口大小为2；第二层的卷积核大小为5，步长为1，24个滤波器，最大池化窗口大小为2。我们将每一层之间的激活函数设置为ReLU。最后一层将对最后一个卷积层的输出进行展平，并应用一个线性层，宽度为类别数，之后应用Softmax激活。以下部分将带你完成实现。
+- en: child_network.py
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: child_network.py
+- en: We will first implement our child network module. This module contains a class
+    called `ChildCNN`, which constructs a child network given some architecture configuration,
+    which we call `cnn_dna`. As mentioned previously, `cnn_dna` is simply a list of
+    numbers, with each value representing a parameter of its respective convolutional
+    layer. In our `config.py`, we specify the max number of layers a child network
+    can have. For our implementation, each convolutional layer is represented by four
+    parameters, where each corresponds to the kernel size, stride length, number of
+    filters, and subsequent max-pooling window size.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将首先实现我们的子网络模块。这个模块包含一个名为`ChildCNN`的类，它根据某些架构配置构建子网络，这些配置我们称之为`cnn_dna`。如前所述，`cnn_dna`只是一个数字列表，每个值代表其对应卷积层的参数。在我们的`config.py`中，我们指定了子网络最多可以有多少层。对于我们的实现，每个卷积层由四个参数表示，每个参数分别对应卷积核大小、步长、滤波器数量和随后的最大池化窗口大小。
+- en: 'Our `ChildCNN` is a class that takes the following parameters in its constructor:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的`ChildCNN`是一个类，它的构造函数接受以下参数：
+- en: '`cnn_dna`: The network architecture'
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`cnn_dna`：网络架构'
+- en: '`child_id`: A string that simply identifies the child network architecture'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`child_id`：一个字符串，用于标识子网络架构'
+- en: '`beta`: Weight parameter for L2 regularization'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`beta`：L2 正则化的权重参数'
+- en: '`drop_rate`: Dropout rate'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`drop_rate`：丢弃率'
+- en: '[PRE0]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We also implement a helper function called `proces_raw_controller_output()`,
+    which parses `cnn_dna` that the Controller outputs:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还实现了一个辅助函数`proces_raw_controller_output()`，它解析控制器输出的`cnn_dna`：
+- en: '[PRE1]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Finally, we include the `build` method, which builds our child network using
+    the given `cnn_dna`. You will notice that, although we are letting the Controller
+    decide the architecture of our child network, we are still hardcoding several
+    things, such as the activation function, `tf.nn.relu`, and the way we initialize
+    the kernels. The fact that we are adding a max-pooling layer after each convolutional
+    layer is also hardcoded. A more sophisticated NAS framework would also let the
+    Controller decide these components of the architecture as well, with the trade
+    off being longer training time:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们包含了`build`方法，它使用给定的`cnn_dna`构建我们的子网络。你会注意到，尽管我们让控制器决定我们子网络的架构，但我们仍然硬编码了几个部分，例如激活函数`tf.nn.relu`以及卷积核的初始化方式。我们在每个卷积层后添加最大池化层的做法也是硬编码的。一个更复杂的NAS框架还会让控制器决定这些架构组件，代价是更长的训练时间：
+- en: '[PRE2]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Each convolutional layer is followed by a max-pooling layer and a dropout layer:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个卷积层后面都跟着一个最大池化层和一个丢弃层：
+- en: '[PRE3]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Finally, after several blocks of convolutional, pooling, and dropout layers,
+    we flatten the output volume and a fully connected layer:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，在经过几个卷积层、池化层和丢弃层之后，我们将输出体积展平并连接到一个全连接层：
+- en: '[PRE4]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The argument to our `build` method is an input tensor, which has by default
+    a shape of (32, 32, 3), which is the `CIFAR-10` data shape. The reader is free
+    to tweak the architecture of this network, including adding a few more fully connected
+    layers or inserting batch normalization layers in between convolutions.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的`build`方法的参数是一个输入张量，默认形状为(32, 32, 3)，这是`CIFAR-10`数据的形状。读者可以自由调整此网络的架构，包括添加更多的全连接层或在卷积之间插入批量归一化层。
+- en: cifar10_processor.py
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: cifar10_processor.py
+- en: This module contains code for processing `CIFAR-10` data, which we use to train
+    our child networks. In particular, we construct an input data pipeline using TensorFlow's
+    native `tf.data.Dataset` API. Those who have used TensorFlow for some time may
+    be more familiar with creating `tf.placeholder` tensors and feeding data via `sess.run(...,
+    feed_dict={...})`. However, this is no longer the preferred way of feeding data
+    into the network; in fact, it is the slowest way to train a network, for the repetitive
+    conversions from data in `numpy` format to a native TensorFlow format cause significant
+    computational overhead. `tf.data.Dataset` alleviates this problem by turning the
+    input pipeline into TensorFlow operations that are part of the symbolic graph.
+    In other words, the data is converted into tensors right from the get-go. This
+    allows for a much smoother input pipeline that can speed up training.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该模块包含处理`CIFAR-10`数据的代码，我们使用这些数据来训练我们的子网络。特别地，我们使用TensorFlow的原生`tf.data.Dataset`
+    API构建输入数据管道。那些已经使用TensorFlow一段时间的人可能更熟悉创建`tf.placeholder`张量并通过`sess.run(..., feed_dict={...})`提供数据。然而，这已经不是将数据输入网络的首选方式；事实上，它是训练网络最慢的方式，因为从`numpy`格式的数据到原生TensorFlow格式的重复转换会导致显著的计算开销。`tf.data.Dataset`通过将输入管道转化为TensorFlow操作，这些操作是符号图的一部分，解决了这个问题。换句话说，数据从一开始就直接转换为张量。这使得输入管道更加流畅，并能加速训练。
+- en: Refer to this official tutorial ([https://www.tensorflow.org/guide/datasets_for_estimators](https://www.tensorflow.org/guide/datasets_for_estimators))
+    for more information on the `tf.data.Dataset` API.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关`tf.data.Dataset` API的更多信息，请参考这个官方教程（[https://www.tensorflow.org/guide/datasets_for_estimators](https://www.tensorflow.org/guide/datasets_for_estimators)）。
+- en: 'The `cifar10_processor.py` contains a single method to create `CIFAR-10` data
+    into tensors. We first implement a helper function for creating a `tf.data.Dataset`
+    object:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`cifar10_processor.py`包含一个方法，用于将`CIFAR-10`数据转换为张量。我们首先实现一个辅助函数来创建`tf.data.Dataset`对象：'
+- en: '[PRE5]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'In the main data processor function, we first load `CIFAR-10` data. We use
+    the `keras.datasets` API to do this (run `pip install keras` in your Terminal
+    if you don''t have Keras):'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在主数据处理函数中，我们首先加载`CIFAR-10`数据。我们使用`keras.datasets` API来完成这项工作（如果没有Keras，请在终端中运行`pip
+    install keras`）：
+- en: '[PRE6]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'We then turn these NumPy arrays into TensorFlow tensors, which we can feed
+    directly to our network. What actually happens in our `_create_tf_dataset `helper
+    function? We use the `tf.dataset.Dataset.from_tensor_slices()` function to turn
+    the data and the labels, both of which are NumPy arrays, into TensorFlow tensors.
+    We then create the native dataset by zipping these tensors. The `shuffle`, `repeat`,
+    and `batch` functions after zipping the data and labels define how we want the
+    input pipeline to work. In our case, we are shuffling the input data, repeating
+    the dataset once we reach the end, and batching the data with a given batch size.
+    We also calculate the number of batches that each dataset has and return them:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们将这些NumPy数组转换为TensorFlow张量，直接将其输入网络。实际上，我们的`_create_tf_dataset`辅助函数中发生了什么？我们使用`tf.dataset.Dataset.from_tensor_slices()`函数将数据和标签（它们都是NumPy数组）转换为TensorFlow张量。然后通过将这些张量打包创建原生数据集。打包后的`shuffle`、`repeat`和`batch`函数定义了我们希望输入管道如何工作。在我们的案例中，我们对输入数据进行随机洗牌，当达到数据集末尾时重复数据集，并以给定的批量大小进行分批。我们还计算每个数据集的批次数并返回它们：
+- en: '[PRE7]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: And with that, we have an optimized input data pipeline that is much faster
+    than using `feed_dict`.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就这样，我们得到了一个比使用`feed_dict`更快的优化输入数据管道。
+- en: controller.py
+  id: totrans-79
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: controller.py
+- en: 'The `controller.py` module is where everything comes together. We will implement
+    the Controller, which handles training each child network as well as its own parameter
+    updates. We first implement a helper function that calculates an exponential moving
+    average of a list of numbers. We use this as the baseline function for our REINFORCE
+    gradient calculation, as mentioned previously, to calculate the exponential moving
+    average of the past rewards:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`controller.py`模块是所有内容汇聚的地方。我们将实现控制器，负责训练每个子网络以及它自己的参数更新。首先，我们实现一个辅助函数，计算一组数字的指数移动平均值。我们使用这个作为REINFORCE梯度计算的基准函数，如前所述，用来计算过去奖励的指数移动平均值：'
+- en: '[PRE8]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Next, we define our `Controller` class:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们定义我们的`Controller`类：
+- en: '[PRE9]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: There are several attributes to note: `self.num_cell_outputs` refers to the
+    number of values that our **recurrent neural network** (**RNN**) should output
+    and corresponds to the length of the child network architecture configuration. `self.reward_history`
+    and `self.ar chitecture_history` are simply buffers that allow us to keep track
+    of rewards and child network architectures that the RNN generated.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个属性需要注意：`self.num_cell_outputs`表示我们**递归神经网络**（**RNN**）应该输出的值的数量，并对应子网络架构配置的长度。`self.reward_history`和`self.architecture_history`只是缓冲区，允许我们跟踪RNN生成的奖励和子网络架构。
+- en: Method for generating the Controller
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 生成控制器的方法
+- en: 'We next implement a method for generating the Controller, which we call `build_controller`.
+    The first step in constructing our Controller is defining the input placeholders.
+    We create two of these—one is for the child network DNA, which is fed as input
+    to the RNN for generating a new child network DNA, and the second is a list for
+    storing discounted rewards when calculating the gradients for REINFORCE:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们实现一个用于生成控制器的方法，称为`build_controller`。构建控制器的第一步是定义输入占位符。我们创建了两个占位符——一个用于子网络DNA，作为输入传递给RNN，以生成新的子网络DNA，另一个是用于存储折扣奖励的列表，以便在计算REINFORCE梯度时使用：
+- en: '[PRE10]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We then define the output tensors of our RNN (to be implemented here). Note
+    that the outputs of the RNN are small, in the range of (-1, 1). So, we multiply
+    the output by 10 in order to create the child network DNA:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们定义RNN的输出张量（将在此处实现）。注意，RNN的输出值较小，范围在(-1, 1)之间。所以，我们将输出乘以10，以便生成子网络的DNA：
+- en: '[PRE11]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'We then define the loss function and optimizer. We use `RMSPropOptimizer` as
+    our backpropagation algorithm, where the learning rate decays exponentially. Rather
+    than calling `optimizer.minimize(loss)` as is usually done with other neural network
+    models, we call the `compute_gradients` method to obtain gradients for calculating
+    REINFORCE gradients:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们定义损失函数和优化器。我们使用`RMSPropOptimizer`作为反向传播算法，其中学习率按指数衰减。与通常在其他神经网络模型中调用`optimizer.minimize(loss)`不同，我们调用`compute_gradients`方法来获得计算REINFORCE梯度所需的梯度：
+- en: '[PRE12]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Finally, we apply the REINFORCE gradients on the Controller parameters:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们在控制器参数上应用REINFORCE梯度：
+- en: '[PRE13]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'The actual Controller network is created via the `network_generator` function.
+    As mentioned, the Controller is a recurrent neural network with a special kind
+    of cell. However, we don''t have to implement this from scratch, as the developers
+    behind TensorFlow have already implemented a custom `tf.contrib.rnn.NASCell`.
+    We simply need to use this to construct our recurrent neural network and obtain
+    the outputs:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际的控制器网络是通过`network_generator`函数创建的。如前所述，控制器是一个具有特殊类型单元的递归神经网络。然而，我们不必从头实现这一点，因为TensorFlow的开发者已经实现了一个自定义的`tf.contrib.rnn.NASCell`。我们只需要使用这个来构建我们的递归神经网络并获得输出：
+- en: '[PRE14]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Generating a child network using the Controller
+  id: totrans-96
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用控制器生成子网络
+- en: 'Now, we implement a method that generates a child network using the Controller:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们实现一个方法，通过控制器生成一个子网络：
+- en: '[PRE15]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Once we generate our child network, we call the `train_child_network` function
+    to train it. This function takes `child_dna` and `child_id` and returns the validation
+    accuracy that the child network achieves. First, we instantiate a new `tf.Graph()`
+    and a new `tf.Session()` so that the child network is separated from the Controller''s
+    graph:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们生成了子网络，就调用`train_child_network`函数来训练它。该函数接受`child_dna`和`child_id`，并返回子网络达到的验证精度。首先，我们实例化一个新的`tf.Graph()`和一个新的`tf.Session()`，这样子网络就与控制器的图分开：
+- en: '[PRE16]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We then define the input data pipeline, which uses the `tf.data.Dataset` creator
+    we implemented here. In particular, we use `tf.data.Iterator` to create a generator
+    that yields a batch of input tensors every time we call `iterator.get_next()`.
+    We initialize an iterator for the training and validation datasets respectively.
+    The batch of input tensors contains the `CIFAR-10` images and the corresponding
+    labels, which we unpack at the end:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接着我们定义输入数据管道，使用我们在此实现的`tf.data.Dataset`创建器。具体来说，我们使用`tf.data.Iterator`创建一个生成器，每次调用`iterator.get_next()`时都会生成一批输入张量。我们分别为训练集和验证集初始化一个迭代器。这一批输入张量包含`CIFAR-10`图像及其对应的标签，我们会在最后解包它们：
+- en: '[PRE17]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The `input_tensor` becomes the argument to the child network''s `build` method.
+    We then define all the TensorFlow operations needed for training, including the
+    prediction, loss, optimizer, and accuracy operations:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`input_tensor`成为子网络`build`方法的参数。接着我们定义了训练所需的所有TensorFlow操作，包括预测、损失、优化器和精度操作：'
+- en: '[PRE18]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'We then train the child network. Notice that when calling `sess.run(...)`,
+    we are no longer passing an argument for the `feed_dict` parameter. Instead, we
+    are simply calling the operations we want to run (`loss_ops`, `train_ops`, and `accuracy_ops`). This
+    is because the inputs are already represented as tensors in the child network''s
+    graph:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接着我们训练子网络。请注意，在调用`sess.run(...)`时，我们不再传递`feed_dict`参数。相反，我们只是调用想要运行的操作（`loss_ops`、`train_ops`和`accuracy_ops`）。这是因为输入已经在子网络的计算图中以张量的形式表示：
+- en: '[PRE19]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Once training finishes, we calculate the validation accuracy and return it:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练完成后，我们计算验证精度并返回：
+- en: '[PRE20]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Finally, we implement a method for training the Controller. Due to computational
+    resource constraints, we will not parallelize the training procedure (that is, *m*
+    child networks trained in parallel per Controller epoch). Instead, we will sequentially
+    generate these child networks and keep track of the mean validation accuracy among
+    them.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们实现了一个用于训练Controller的方法。由于计算资源的限制，我们不会并行化训练过程（即每个Controller周期内并行训练*m*个子网络）。相反，我们会顺序生成这些子网络，并跟踪它们的均值验证精度。
+- en: train_controller method
+  id: totrans-110
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: train_controller方法
+- en: 'The `train_controller` method is called after we build the Controller. The
+    first step is thus to initialize all the variables and the first state:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`train_controller`方法在构建Controller之后被调用。因此，第一步是初始化所有变量和初始状态：'
+- en: '[PRE21]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: The first `child_network_architecture` is a list that resembles an architecture
+    configuration and will be the argument to `NASCell`, which would output the first
+    child DNA.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个`child_network_architecture`是一个类似架构配置的列表，将作为参数传递给`NASCell`，从而输出第一个子网络DNA。
+- en: 'The training procedure consists of two `for` loops: one for the number of epochs
+    for the Controller, and another for each child network the Controller generates
+    per epoch. In the inner `for` loop, we generate a new `child_network_architecture` using
+    `NASCell` and train a child network based on it to obtain a validation accuracy:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练过程由两个`for`循环组成：一个是Controller的周期数，另一个是每个Controller周期内生成的子网络数。在内层`for`循环中，我们使用`NASCell`生成新的`child_network_architecture`，并基于它训练一个子网络以获得验证精度：
+- en: '[PRE22]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'After we obtain *m* validation accuracies, we update our Controller using the
+    mean reward and the gradients computed with respect to the last child network''s
+    DNA. We also keep track of past mean rewards. Using the `ema` method implemented
+    previously, we calculate the baseline, which we then subtract from the latest
+    mean reward. We then call `self.sess.run([self.train_op, self.total_loss]...)`
+    to update the Controller and calculate the Controller''s loss:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在获得*m*次验证精度后，我们使用均值奖励和相对于上一个子网络DNA计算出的梯度来更新Controller。同时，我们还会记录过去的均值奖励。通过之前实现的`ema`方法，我们计算出基准值，并将其从最新的均值奖励中减去。然后我们调用`self.sess.run([self.train_op,
+    self.total_loss]...)`来更新Controller并计算Controller的损失：
+- en: '[PRE23]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: And that's it! You can find the full implementation of `controller.py` in the
+    main GitHub repository.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样！你可以在主GitHub仓库中找到`controller.py`的完整实现。
+- en: Testing ChildCNN
+  id: totrans-119
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 测试ChildCNN
+- en: Now that we have implemented both `child_network` and `controller`, it would
+    be great to test the training of `ChildCNN` via our `Controller` with custom child
+    network configurations. We would like to make sure that, with a sensible architecture,
+    `ChildCNN` can learn sufficiently.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 既然我们已经实现了`child_network`和`controller`，接下来就可以通过我们的`Controller`测试`ChildCNN`的训练，使用自定义的子网络配置。我们希望确保，在合理的架构下，`ChildCNN`能够充分学习。
+- en: 'To do this, first open up your favorite Terminal and start a Jupyter console:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要做到这一点，首先打开你最喜欢的终端，并启动一个Jupyter控制台：
+- en: '[PRE24]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'We first configure our logger so we can see the outputs on the Terminal:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先配置日志记录器，这样就能在终端上看到输出：
+- en: '[PRE25]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Next, we import the `Controller` class from `controller.py`:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们从`controller.py`导入`Controller`类：
+- en: '[PRE26]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'We then handcraft some child network architecture to be passed to the Controller''s `train_child_network`
+    function:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们手工设计一些子网络架构，并将其传递给Controller的`train_child_network`函数：
+- en: '[PRE27]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Finally, we instantiate our `Controller` and call the `train_child_network`
+    method:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们实例化我们的`Controller`并调用`train_child_network`方法：
+- en: '[PRE28]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'If successful, you should be seeing decent accuracy scores after several epochs
+    of training:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果成功，经过若干轮训练后，你应该会看到不错的准确度：
+- en: '[PRE29]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: config.py
+  id: totrans-133
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: config.py
+- en: 'The `config.py` module includes configurations used by the Controller and the
+    child networks. Here, you can adjust several training parameters, such as the
+    number of episodes, the learning rate, and the number of child networks generated
+    by the Controller per epoch. You can also experiment with child network sizes,
+    but do note that the larger the child network, the longer training takes for both
+    the Controller and the child network:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`config.py`模块包含了Controller和子网络使用的配置。在这里，你可以调整多个训练参数，比如训练轮数、学习率以及Controller每个epoch生成的子网络数量。你还可以尝试调整子网络的大小，但请注意，子网络越大，训练所需的时间就越长，包括Controller和子网络的训练时间：'
+- en: '[PRE30]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: Some of these numbers (such as `max_episodes`) are arbitrarily chosen. We encourage
+    the reader to tweak these numbers to understand how they affect the training of
+    both the Controller and the child networks.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些数字中的一些（例如`max_episodes`）是任意选择的。我们鼓励读者调整这些数字，以理解它们如何影响Controller和子网络的训练。
+- en: train.py
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: train.py
+- en: 'This `train.py` module acts as our top-level entry to training the Controller:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个`train.py`模块充当我们训练Controller的顶层入口：
+- en: '[PRE31]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'And there we have it; a neural network that generates other neural networks!
+    Make sure your implementation has the following directory structure:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就这样；一个生成其他神经网络的神经网络！确保你的实现有以下目录结构：
+- en: '[PRE32]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'To execute training, simply run the following command:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行训练，只需运行以下命令：
+- en: '[PRE33]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'If all works well, you should be seeing output like the following:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一切顺利，你应该会看到如下输出：
+- en: '[PRE34]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: You should see logging statements for each child network architecture its CIFAR-10
+    training logs. During CIFAR-10 training, we print the loss and accuracy for each
+    epoch as well as the validation accuracy which we return to the Controller.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该会看到每个子网络架构的CIFAR-10训练日志中的日志语句。在CIFAR-10训练过程中，我们会打印每一轮的损失和准确度，以及返回给Controller的验证准确度。
+- en: Additional exercises
+  id: totrans-147
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 额外的练习
+- en: 'In this section, we have implemented the NAS framework for `CIFAR-10` data.
+    While this is a great start, there are additional features one can implement,
+    which we will leave to the reader as exercises:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们实现了适用于`CIFAR-10`数据集的NAS框架。虽然这是一个很好的开始，但还有其他功能可以实现，我们将其留给读者作为练习：
+- en: How can we make the Controller create child networks that solve problems in
+    other domains, such as text and speech recognition?
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们如何让Controller创建能够解决其他领域问题的子网络，例如文本和语音识别？
+- en: How can we make the Controller train multiple child networks in parallel in
+    order to speed up the training process?
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们如何让Controller并行训练多个子网络，以加快训练过程？
+- en: How can we visualize the training process using TensorBoard?
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们如何使用TensorBoard可视化训练过程？
+- en: How can we make the Controller design child networks that include residual connections?
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们如何让Controller设计包含残差连接的子网络？
+- en: Some of these exercises may require significant changes in the code base but
+    are beneficial for deepening your understanding of NAS. We definitely recommend
+    giving these a try!
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中一些练习可能需要对代码库做出显著修改，但对加深你对NAS的理解是有帮助的。我们强烈推荐尝试这些练习！
+- en: Advantages of NAS
+  id: totrans-154
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: NAS的优势
+- en: 'The biggest advantage of NAS is that one does not need to spend copious amounts
+    of time designing a neural network for a particular problem. This also means that
+    those who are not data scientists can also create machine learning agents as long
+    as they can prepare data. In fact, Google has already productized this framework
+    as Cloud AutoML, which allows anyone to train customized machine learning models
+    with minimum effort. According to Google, Cloud AutoML provides the following
+    benefits:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NAS 最大的优势在于无需花费大量时间为特定问题设计神经网络。这也意味着即使不是数据科学家的人，只要能够准备数据，也能创建机器学习代理。事实上，谷歌已经将这个框架产品化为
+    Cloud AutoML，允许任何人以最小的努力训练定制化的机器学习模型。根据谷歌的说法，Cloud AutoML 提供了以下优势：
+- en: Users only need to interact with a simple GUI to create machine learning models.
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用户只需与简单的图形界面交互即可创建机器学习模型。
+- en: Users can have Cloud AutoML annotate their own datasets if they are not labeled
+    already. This is similar to Amazon's Mechanical Turk service.
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果用户的数据集尚未标注，他们可以让 Cloud AutoML 为其数据集添加标注。这与亚马逊的 Mechanical Turk 服务类似。
+- en: Models generated by Cloud AutoML are guaranteed to have high accuracy and fast
+    performance.
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由 Cloud AutoML 生成的模型保证具有高准确性和快速性能。
+- en: Easy end-to-end pipeline for uploading data, training and validating the model,
+    deploying the model, and creating a REST endpoint for fetching predictions.
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个简单的端到端管道，用于上传数据、训练和验证模型、部署模型以及创建用于获取预测的 REST 端点。
+- en: Currently, Cloud AutoML can be used for image classification/detection, natural
+    language processing (text classification), and translation.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前，Cloud AutoML 可用于图像分类/检测、自然语言处理（文本分类）和翻译。
+- en: For more information on Cloud AutoML, check out their official page here: [https://cloud.google.com/automl/](https://cloud.google.com/automl/)
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欲了解更多关于 Cloud AutoML 的信息，请访问他们的官方网站：[https://cloud.google.com/automl/](https://cloud.google.com/automl/)
+- en: Another advantage that NAS provides is the ability to generate more compact
+    models than those designed by humans. According to *Efficient Neural Architecture
+    Search via Parameter Sharing* by Hieu Pham et. al., whereas the most recent state-of-the-art
+    neural network for `CIFAR-10` classification had 26.2 million parameters, a NAS-generated
+    neural network that achieved comparable test accuracy (97.44% for human-designed
+    network versus 97.35% for the NAS-generated network) only had 3.3 million parameters.
+    Note that older, less-accurate models such as VGG16, ResNet50, and InceptionV3
+    have 138 million, 25 million, and 23 million parameters respectively. The vast
+    reduction in parameter size allows for more efficient inference time and model
+    storage, both of which are important aspects when deploying models into production.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NAS 的另一个优势是能够生成比人工设计的模型更紧凑的模型。根据 Hieu Pham 等人所著的《*通过参数共享实现高效的神经架构搜索*》一文，最新的最先进的`CIFAR-10`分类神经网络有
+    2620 万个参数，而一个 NAS 生成的神经网络，其测试准确率与人工设计的网络相当（人工设计网络为 97.44%，NAS 生成网络为 97.35%），但只有
+    330 万个参数。值得注意的是，像 VGG16、ResNet50 和 InceptionV3 这样的旧模型，分别有 1.38 亿、2500 万和 2300
+    万个参数。参数规模的大幅减少使得推理时间和模型存储更加高效，这两者在将模型部署到生产环境时都非常重要。
+- en: Summary
+  id: totrans-163
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we have implemented NAS, a framework where a reinforcement
+    learning agent (the Controller) generates child neural networks to complete a
+    certain task. We studied the theory behind how the Controller learns to generate
+    better child network architectures via policy gradient methods. We then implemented
+    a simplified version of NAS that generates child networks that learn to classify
+    `CIFAR-10` images.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们实现了 NAS，这是一个框架，其中强化学习代理（控制器）生成子神经网络来完成特定任务。我们研究了控制器如何通过策略梯度方法学习生成更好的子网络架构的理论。接着，我们实现了一个简化版本的
+    NAS，该版本生成能够学习分类`CIFAR-10`图像的子网络。
+- en: 'For more information on related topics, refer to the following list of links:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欲了解更多相关话题，请参考以下链接列表：
+- en: NAS with reinforcement learning: [https://arxiv.org/abs/1611.01578](https://arxiv.org/abs/1611.01578)
+  id: totrans-166
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过强化学习实现的 NAS：[https://arxiv.org/abs/1611.01578](https://arxiv.org/abs/1611.01578)
+- en: Efficient NAS via parameter sharing: [https://arxiv.org/pdf/1802.03268](https://arxiv.org/pdf/1802.03268)
+  id: totrans-167
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高效的 NAS 通过参数共享：[https://arxiv.org/pdf/1802.03268](https://arxiv.org/pdf/1802.03268)
+- en: Google Cloud AutoML: [https://cloud.google.com/automl/](https://cloud.google.com/automl/)
+  id: totrans-168
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Google Cloud AutoML：[https://cloud.google.com/automl/](https://cloud.google.com/automl/)
+- en: Awesome Architecture Search—a curated list of papers related to generating neural
+    networks: [https://github.com/markdtw/awesome-architecture-search](https://github.com/markdtw/awesome-architecture-search)
+  id: totrans-169
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 极棒的架构搜索——一个关于生成神经网络的论文精选列表：[https://github.com/markdtw/awesome-architecture-search](https://github.com/markdtw/awesome-architecture-search)
+- en: The NAS framework marks an exciting development in the deep learning field,
+    for we have figured out how to automatically design neural network architectures,
+    a decision previously made by humans. There are now improved versions of NAS and
+    other kinds of algorithms that generate neural networks automatically, which we
+    encourage the reader to look into as well.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NAS框架标志着深度学习领域的一个令人兴奋的发展，因为我们已经弄清楚了如何自动设计神经网络架构，这一决定以前是由人类做出的。现在已经有了改进版的NAS和其他能够自动生成神经网络的算法，我们鼓励读者也去了解这些内容。

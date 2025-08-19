@@ -1,0 +1,1079 @@
+- en: '4'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '4'
+- en: Learning Object Pose Detection and Tracking by Differentiable Rendering
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 通过可微分渲染学习物体姿势检测与跟踪
+- en: In this chapter, we are going to explore an object pose detection and tracking
+    project by using differentiable rendering. In object pose detection, we are interested
+    in detecting the orientation and location of a certain object. For example, we
+    may be given the camera model and object mesh model and need to estimate the object
+    orientation and position from one image of the object. In the approach in this
+    chapter, we are going to formulate such a pose estimation problem as an optimization
+    problem, where the object pose is fitted to the image observation.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨通过使用可微分渲染来进行物体姿势检测与跟踪的项目。在物体姿势检测中，我们关注的是检测某个物体的方向和位置。例如，我们可能会得到相机模型和物体网格模型，并需要根据物体的图像估计物体的方向和位置。在本章的方法中，我们将把这种姿势估计问题表述为一个优化问题，其中物体的姿势与图像观测值进行拟合。
+- en: The same approach as the aforementioned can also be used for object pose tracking,
+    where we have already estimated the object pose in the 1, 2,…, up to t-1 time
+    slots and want to estimate the object pose at the *t* time slot, based on one
+    image observation of the object at *t* time.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与上述相同的方法也可以用于物体姿势跟踪，其中我们已经在第1、2，……直到t-1时刻估计了物体的姿势，并希望基于物体在*t*时刻的图像观测值估计物体的姿势。
+- en: 'One important technique we will use in this chapter is called differentiable
+    rendering, a super-exciting topic currently explored in deep learning. For example,
+    the CVPR 2021 Best Paper Award winner *GIRAFFE: representing scenes as compositional
+    generative neural feature fields* uses differentiable rendering as one important
+    component in its pipeline.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '本章中我们将使用的一个重要技术叫做可微分渲染，这是当前深度学习中一个非常激动人心的主题。例如，CVPR 2021最佳论文奖得主*GIRAFFE: 通过生成神经特征场表示场景*就将可微分渲染作为其管道中的一个重要组成部分。'
+- en: Rendering is the process of projecting 3D physical models (a mesh model for
+    the object, or a camera model) into 2D images. It is an imitation of the physical
+    process of image formation. Many 3D computer vision tasks can be considered as
+    an inverse of the rendering process – that is, in many computer vision problems,
+    we want to start from 2D images to estimate the 3D physical models (meshes, point
+    cloud segmentation, object poses, or camera positions).
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 渲染是将三维物理模型（例如物体的网格模型或相机模型）投影到二维图像中的过程。它是对图像形成物理过程的模拟。许多三维计算机视觉任务可以视为渲染过程的逆过程——也就是说，在许多计算机视觉问题中，我们希望从二维图像开始，估计三维物理模型（网格、点云分割、物体姿势或相机位置）。
+- en: Thus, a very natural idea that has been discussed in the computer vision community
+    for several decades is that we can formulate many 3D computer vision problems
+    as optimization problems, where the optimization variables are the 3D models (meshes,
+    or point cloud voxels), and the objective functions are certain similarity measures
+    between the rendered images and the observed images.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，计算机视觉领域已经讨论了数十年的一个非常自然的思路是，我们可以将许多三维计算机视觉问题表述为优化问题，其中优化变量是三维模型（网格或点云体素），而目标函数则是渲染图像与观测图像之间的某种相似度度量。
+- en: To efficiently solve such an optimization problem as the aforementioned, the
+    rendering process should be differentiable. For example, if the rendering is differentiable,
+    we can use the end-to-end approach to train a deep learning model to solve the
+    problem. However, as will be discussed in more detail in the latter sections,
+    conventional rendering processes are not differentiable. Thus, we need to modify
+    the conventional approaches to make them differentiable. We will discuss how we
+    can do that at great length in the following section.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了高效地解决上述优化问题，渲染过程需要是可微分的。例如，如果渲染是可微分的，我们可以使用端到端的方法训练深度学习模型来解决该问题。然而，正如后续章节将详细讨论的那样，传统的渲染过程是不可微分的。因此，我们需要修改传统的方法使其变得可微分。我们将在接下来的章节中详细讨论如何做到这一点。
+- en: Thus, in this chapter, we will cover first the *why differentiable rendering*
+    problem and then the *how differentiable problems* problem. We will then talk
+    about what 3D computer vision problems can usually be solved by using differentiable
+    rendering. We will dedicate a significant part of the chapter to a concrete example
+    of using differentiable rendering to solve object pose estimation. We will present
+    coding examples in the process.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在本章中，我们将首先探讨 *为什么需要可微分渲染* 问题，然后讨论 *如何解决可微分渲染问题*。接着，我们将讨论哪些 3D 计算机视觉问题通常可以通过使用可微分渲染来解决。我们将为此章节安排大量篇幅，具体介绍如何使用可微分渲染来解决物体姿态估计问题。在过程中，我们会展示代码示例。
+- en: 'In this chapter, we’re going to cover the following main topics:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主要主题：
+- en: Why differentiable renderings are needed
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为什么需要可微分渲染
+- en: How to make rendering differentiable
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使渲染可微分
+- en: What problems can be solved by differentiable rendering
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可微分渲染能解决哪些问题
+- en: The object pose estimation problem
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 物体姿态估计问题
+- en: Technical requirements
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: In order to run the example code snippets in this book, you need to have a computer
+    ideally with a GPU. However, running the code snippets with only CPUs is not impossible.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了运行本书中的示例代码，你需要一台理想情况下配备 GPU 的计算机。然而，仅使用 CPU 运行代码片段也是可行的。
+- en: 'The recommended computer configuration includes the following:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 推荐的计算机配置包括以下内容：
+- en: A GPU such as the GTX series or RTX series with at least 8 GB of memory
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 至少配备 8 GB 内存的 GPU，例如 GTX 系列或 RTX 系列
+- en: Python 3
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 3
+- en: The PyTorch and PyTorch3D libraries
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyTorch 和 PyTorch3D 库
+- en: The code snippets with this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python).
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的代码片段可以在 [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python)
+    找到。
+- en: Why we want to have differentiable rendering
+  id: totrans-21
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为什么我们希望使用可微分渲染
+- en: The physical process of image formation is a mapping from 3D models to 2D images.
+    As shown in the example in *Figure 4**.1*, depending on the positions of the red
+    and blue spheres in 3D (two possible configurations are shown on the left-hand
+    side), we may get different 2D images (the images corresponding to the two configurations
+    are shown on the right-hand side).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像形成的物理过程是从 3D 模型到 2D 图像的映射。如 *图 4**.1* 所示，取决于红色和蓝色球体在 3D 空间中的位置（左侧展示了两种可能的配置），我们可能会得到不同的
+    2D 图像（右侧展示了对应两种配置的图像）。
+- en: '![Figure 4.1: The image formation process is a mapping from the 3D models to
+    2D images ](img/B18217_04_1.jpg)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.1：图像形成过程是从 3D 模型到 2D 图像的映射](img/B18217_04_1.jpg)'
+- en: 'Figure 4.1: The image formation process is a mapping from the 3D models to
+    2D images'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.1：图像形成过程是从 3D 模型到 2D 图像的映射
+- en: Many 3D computer vision problems are a reversal of image formation. In these
+    problems, we are usually given 2D images and need to estimate the 3D models from
+    the 2D images. For example, in *Figure 4**.2*, we are given the 2D image shown
+    on the right-hand side and the question is, *which 3D model is the one that corresponds
+    to the* *observed image?*
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多 3D 计算机视觉问题是图像形成的反向过程。在这些问题中，我们通常会获得 2D 图像，并需要从 2D 图像中估计出 3D 模型。例如，在 *图 4**.2*
+    中，我们给出了右侧的 2D 图像，问题是，*哪一个 3D 模型对应于* *观察到的图像？*
+- en: '![Figure 4.2: Many 3D computer vision problems are based on 2D images given
+    to estimate 3D models ](img/B18217_04_2.jpg)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.2：许多 3D 计算机视觉问题是基于给定的 2D 图像来估计 3D 模型](img/B18217_04_2.jpg)'
+- en: 'Figure 4.2: Many 3D computer vision problems are based on 2D images given to
+    estimate 3D models'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.2：许多 3D 计算机视觉问题是基于给定的 2D 图像来估计 3D 模型
+- en: According to some ideas that were first discussed in the computer vision community
+    decades ago, we can formulate the problem as an optimization problem. In this
+    case, the optimization variables here are the position of two 3D spheres. We want
+    to optimize the two centers, such that the rendered images are like the preceding
+    2D observed image. To measure similarity precisely, we need to use a cost function
+    – for example, we can use pixel-wise mean-square errors. We then need to compute
+    a gradient from the cost function to the two centers of spheres, so that we can
+    minimize the cost function iteratively by going toward the gradient descent direction.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据几十年前计算机视觉领域首次讨论的一些思想，我们可以将问题表述为优化问题。在这种情况下，这里的优化变量是两个三维球体的位置。我们希望优化这两个中心，使得渲染出的图像与前面的二维观察图像相似。为了精确衡量相似性，我们需要使用成本函数——例如，我们可以使用逐像素的均方误差。然后，我们需要计算从成本函数到两个球体中心的梯度，以便通过朝着梯度下降方向迭代地最小化成本函数。
+- en: However, we can calculate a gradient from the cost function to the optimization
+    variables only under the condition that the mapping from the optimization variables
+    to the cost functions is differentiable, which implies that the rendering process
+    is also differentiable.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，我们只能在优化变量到成本函数的映射是可微分的条件下，从成本函数计算梯度到优化变量，这意味着渲染过程也是可微分的。
+- en: How to make rendering differentiable
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何使渲染过程可微分
+- en: In this section, we are going to discuss why the conventional rendering algorithms
+    are not differentiable. We will discuss the approach used in PyTorch3D, which
+    makes the rendering differentiable.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将讨论为什么传统的渲染算法不可微分。我们将讨论 PyTorch3D 中的做法，它使得渲染过程变得可微分。
+- en: Rendering is an imitation of the physical process of image formation. This physical
+    process of image formation itself is differentiable in many cases. Suppose that
+    the surface is normal and the material properties of the object are all smooth.
+    Then, the pixel color in the example is a differentiable function of the positions
+    of the spheres.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 渲染是图像形成物理过程的模拟。图像形成的物理过程在许多情况下本身是可微分的。假设表面法线和物体的材料属性都是平滑的。那么，在这个例子中，像素颜色是球体位置的可微分函数。
+- en: However, there are cases where the pixel color is not a smooth function of the
+    position. This can happen at the occlusion boundaries, for example. This is shown
+    in *Figure 4**.3*, where the blue sphere is at a location that would occlude the
+    red sphere at that view if the blue sphere moved up a little bit. The pixel moved
+    at that view is thus not a differentiable function of the sphere center locations.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在某些情况下，像素颜色不是位置的平滑函数。例如，在遮挡边界处就可能发生这种情况。这在*图 4.3*中有所展示，其中蓝色球体位于一个位置，如果蓝色球体稍微向上移动一点，就会遮挡红色球体。此时该视图中的像素位置因此不是球体中心位置的可微分函数。
+- en: '![Figure 4.3: The image formation is not a smooth function at occlusion boundaries
+    ](img/B18217_04_3.jpg)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.3：在遮挡边界处，图像生成不是平滑的函数](img/B18217_04_3.jpg)'
+- en: 'Figure 4.3: The image formation is not a smooth function at occlusion boundaries'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.3：在遮挡边界处，图像生成不是平滑的函数
+- en: When we use conventional rendering algorithms, information about local gradients
+    is lost due to discretization. As we discussed in the previous chapters, rasterization
+    is a step of rendering where for each pixel on the imaging plane, we find the
+    most relevant mesh face (or decide that no relevant mesh face can be found).
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们使用传统的渲染算法时，由于离散化，局部梯度信息会丢失。正如我们在前几章中讨论的那样，光栅化是渲染的一个步骤，其中对于成像平面上的每个像素，我们找到最相关的网格面（或者决定找不到相关的网格面）。
+- en: In conventional rasterization, for each pixel, we generate a ray from the camera
+    center going through the pixel on the imaging plane. We will find all the mesh
+    faces that intersect with this ray. In the conventional approach, the rasterizer
+    will only return the mesh face that is nearest to the camera. The returned mesh
+    face will then be passed to the shader, which is the next step of the rendering
+    pipeline. The shader will then be applied to one of the shading algorithms (such
+    as the Lambertian model or Phong model) to determine the pixel color. This step
+    of choosing the mesh to render is a non-differentiable process, since it is mathematically
+    modeled as a step function.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在传统的光栅化中，对于每个像素，我们从相机中心生成一条射线穿过成像平面上的像素。我们将找到所有与这条射线相交的网格面。在传统方法中，光栅化器只会返回距离相机最近的网格面。然后将返回的网格面传递给着色器，这是渲染管线的下一步。着色器将应用于其中一种着色算法（如兰伯特模型或冯氏模型）来确定像素颜色。选择要渲染的网格的这一步骤是一个非可微过程，因为它在数学上被建模为一个阶跃函数。
+- en: There has been a large body of literature in the computer vision community on
+    how to make rendering differentiable. The differentiable rendering implemented
+    in the PyTorch3D library mainly used the approach in *Soft Rasterizer* by Liu,
+    Li, Chen, and Li (arXiv:1904.01786).
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在计算机视觉社区中已经有大量文献讨论如何使渲染可微化。PyTorch3D库中实现的可微渲染主要使用了Liu, Li, Chen和Li的《Soft Rasterizer》中的方法（arXiv:1904.01786）。
+- en: The main idea of differentiable rendering is illustrated in *Figure 4**.4*.
+    In the rasterization step, instead of returning only one relevant mesh face, we
+    will find all the mesh faces, such that the distance of the mesh face to the ray
+    is within a certain threshold. In PyTorch3D, this threshold can be set at `RasterizationSettings.blur_radius`.
+    We can also control the maximal number of faces to be returned by setting `RasterizationSettings.faces_per_pixel`.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不同可微渲染的主要思想在*图4**.4*中进行了说明。在光栅化步骤中，我们不再仅返回一个相关的网格面，而是找到所有与射线距离在一定阈值内的网格面。在PyTorch3D中，可以通过设置`RasterizationSettings.blur_radius`来设定此阈值。我们还可以通过设置`RasterizationSettings.faces_per_pixel`来控制返回的网格面的最大数量。
+- en: '![Figure 4.4: Differentiable rendering by weighted averaging of all the relevant
+    mesh faces ](img/B18217_04_4.jpg)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图4.4: 加权平均所有相关网格面的可微渲染](img/B18217_04_4.jpg)'
+- en: 'Figure 4.4: Differentiable rendering by weighted averaging of all the relevant
+    mesh faces'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '图4.4: 加权平均所有相关网格面的可微渲染'
+- en: Next, the renderer needs to calculate a probability map for each mesh face as
+    follows, where `dist` represents the distance between the mesh face and the ray,
+    and sigma is a hyperparameter. In Pytorch3D, the `sigma` parameter can be set
+    at `BlendParams.sigma`. Simply put, this probability map is a probability that
+    this mesh face covers this image pixel. The distance can be negative if the ray
+    intersects the mesh face.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，渲染器需要计算每个网格面的概率图，如下所示，其中`dist`表示网格面与射线之间的距离，sigma是一个超参数。在PyTorch3D中，可以通过设置`BlendParams.sigma`来设定`sigma`参数。简单来说，这个概率图表示了这个网格面覆盖该图像像素的概率。如果射线与网格面相交，距离可能为负。
+- en: '![](img/Formula_04_001.png)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_04_001.png)'
+- en: 'Next, the pixel color is determined by the weighted averages of the shading
+    results of all the mesh faces returned by the rasterizer. The weight for each
+    mesh face depends on its inverse depth value, *z*, and probability map, *D*, as
+    shown in the following equation. Because this *z* value is the inverse depth,
+    any mesh faces closer to the camera have larger *z* values than the mesh faces
+    far away from the camera. The weight, wb, is a small weight for the background
+    color. The parameter gamma here is a hyperparameter. In PyTorch3D, this parameter
+    can be set to `BlendParams.gamma`:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，像素颜色由光栅器返回的所有网格面的着色结果的加权平均确定。每个网格面的权重取决于其反深度值*z*和概率图*D*，如下方程所示。因为这个*z*值是反深度，任何离相机近的网格面比远离相机的网格面有更大的*z*值。wb是背景颜色的小权重。这里的参数gamma是一个超参数。在PyTorch3D中，可以将此参数设置为`BlendParams.gamma`：
+- en: '![](img/Formula_04_002.png)'
+  id: totrans-45
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_04_002.png)'
+- en: 'Thus, the final pixel color can be determined by the following equation:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，最终像素颜色可以通过以下方程确定：
+- en: '![](img/Formula_04_003.png)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_04_003.png)'
+- en: The PyTorch3D implementation of differential rendering also computes an alpha
+    value for each image pixel. This alpha value represents how likely the image pixel
+    is in the foreground, the ray intersects at least one mesh face, as shown in *Figure
+    4**.4*. We want to compute this alpha value and make it differentiable. In a soft
+    rasterizer, the alpha value is computed from the probability maps, as follows.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PyTorch3D实现的微分渲染也会为每个图像像素计算一个alpha值。这个alpha值表示该图像像素位于前景的可能性，射线至少与一个网格面相交，如*图4**.4*所示。我们希望计算这个alpha值并使其可微分。在软光栅化器中，alpha值是通过概率图计算的，具体如下。
+- en: '![](img/Formula_04_004.png)'
+  id: totrans-49
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_04_004.png)'
+- en: Now that we have learned how to make rendering differentiable, we will see how
+    to use it for various purposes.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经学会了如何使渲染可微分，接下来我们将展示如何将其用于各种目的。
+- en: What problems can be solved by using differentiable rendering
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用微分渲染可以解决哪些问题
+- en: As mentioned earlier, differentiable rendering has been discussed in the computer
+    vision community for decades. In the past, differentiable rendering was used for
+    single-view mesh reconstruction, image-based shape fitting, and more. In the following
+    sections of this chapter, we are going to show a concrete example of using differentiable
+    rendering for rigid object pose estimation and tracking.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，微分渲染在计算机视觉领域已被讨论数十年。在过去，微分渲染被用于单视角网格重建、基于图像的形状拟合等。在本章的以下部分，我们将展示一个使用微分渲染进行刚性物体姿态估计和跟踪的具体示例。
+- en: Differentiable rendering is a technique in that we can formulate the estimation
+    problems in 3D computer vision into optimization problems. It can be applied to
+    a wide range of problems. More interestingly, one exciting recent trend is to
+    combine differentiable rendering with deep learning. Usually, differentiable rendering
+    is used as the generator part of the deep learning models. The whole pipeline
+    can thus be trained end to end.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 微分渲染是一种技术，我们可以将3D计算机视觉中的估计问题转化为优化问题。它可以应用于广泛的问题。更有趣的是，最近的一个令人兴奋的趋势是将微分渲染与深度学习结合。通常，微分渲染作为深度学习模型的生成部分。整个流程可以端到端地进行训练。
+- en: The object pose estimation problem
+  id: totrans-54
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 物体姿态估计问题
+- en: In this section, we are going to show a concrete example of using differentiable
+    rendering for 3D computer vision problems. The problem is object pose estimation
+    from one single observed image. In addition, we assume that we have the 3D mesh
+    model of the object.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节我们将展示一个具体示例，说明如何使用微分渲染解决3D计算机视觉问题。问题是从一张单一观察图像中估计物体的姿态。此外，我们假设我们已经拥有该物体的3D网格模型。
+- en: For example, we assume we have the 3D mesh model for a toy cow and teapot, as
+    shown in *Figure 4**.5* and *Figure 4**.7* respectively. Now, suppose we have
+    taken one image of the toy cow and teapot. Thus, we have one RGB image of the
+    toy cow, as shown in *Figure 4**.6*, and one silhouette image of the teapot, as
+    shown in *Figure 4**.8*. The problem is then to estimate the orientation and location
+    of the toy cow and teapot at the moments when these images are taken.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设我们有一只玩具牛和茶壶的3D网格模型，如*图4**.5*和*图4**.7*所示。现在，假设我们拍摄了玩具牛和茶壶的一张图像。因此，我们有一张玩具牛的RGB图像，如*图4**.6*所示，以及一张茶壶的轮廓图像，如*图4**.8*所示。问题则是估计玩具牛和茶壶在拍摄这些图像时的方向和位置。
+- en: Because it is cumbersome to rotate and move the meshes, we choose instead to
+    fix the orientations and locations of the meshes and optimize the orientations
+    and locations of the cameras. By assuming that the camera orientations are always
+    pointing toward the meshes, we can further simplify the problem, such that all
+    we need to optimize is the camera locations.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于旋转和移动网格较为繁琐，我们选择固定网格的方向和位置，优化相机的方向和位置。假设相机的方向始终指向网格，我们可以进一步简化问题，从而只需优化相机的位置。
+- en: Thus, we formulate our optimization problem, such that the optimization variables
+    will be the camera locations. By using differentiable rendering, we can render
+    RGB images and silhouette images for the two meshes. The rendered images are compared
+    with the observed images and, thus, loss functions between the rendered images
+    and observed images can be calculated. Here, we use mean-square errors as the
+    loss function. Because everything is differentiable, we can then compute gradients
+    from the loss functions to the optimization variables. Gradient descent algorithms
+    can then be used to find the best camera positions, such that the rendered images
+    are matched to the observed images.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们提出了优化问题，优化变量将是相机的位置。通过使用可微分渲染，我们可以为这两个网格渲染RGB图像和轮廓图像。渲染的图像与观察图像进行比较，从而可以计算渲染图像和观察图像之间的损失函数。在这里，我们使用均方误差作为损失函数。因为一切都是可微的，所以我们可以计算损失函数到优化变量的梯度。然后可以使用梯度下降算法找到最佳的相机位置，使得渲染的图像与观察图像匹配。
+- en: '![Figure 4.5: Mesh model for a toy cow ](img/B18217_04_5.jpg)'
+  id: totrans-59
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图4.5：玩具牛的网格模型](img/B18217_04_5.jpg)'
+- en: 'Figure 4.5: Mesh model for a toy cow'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图4.5：玩具牛的网格模型
+- en: 'The following image shows the RGB output for the cow:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图显示了牛的RGB输出：
+- en: '![Figure 4.6: Observed RGB image for the toy cow ](img/B18217_04_6.jpg)'
+  id: totrans-62
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图4.6：玩具牛的观察RGB图像](img/B18217_04_6.jpg)'
+- en: 'Figure 4.6: Observed RGB image for the toy cow'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图4.6：玩具牛的观察RGB图像
+- en: 'The following figure shows the mesh for a teapot:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图显示了茶壶的网格：
+- en: '![Figure 4.7: Mesh model for a teapot ](img/B18217_04_7.jpg)'
+  id: totrans-65
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图4.7：茶壶的网格模型](img/B18217_04_7.jpg)'
+- en: 'Figure 4.7: Mesh model for a teapot'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图4.7：茶壶的网格模型
+- en: 'The following figure shows the silhouette of the teapot:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图显示了茶壶的轮廓：
+- en: '![Figure 4.8: Observed silhouette of the teapot ](img/B18217_04_8.jpg)'
+  id: totrans-68
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图4.8：茶壶的观察轮廓](img/B18217_04_8.jpg)'
+- en: 'Figure 4.8: Observed silhouette of the teapot'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图4.8：茶壶的观察轮廓
+- en: Now that we know the problem and how to work on it, let’s start coding in the
+    next section.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们知道了问题以及如何解决它，让我们在下一部分开始编码吧。
+- en: How it is coded
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 它是如何编码的
+- en: 'The code is provided in the repository in the `chap4` folder as `diff_render.py`.
+    The mesh model of the teapot is provided in the `data` subfolder as `teapot.obj`.
+    We will run through the code as follows:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码存储在`chap4`文件夹中的`diff_render.py`文件中。茶壶的网格模型存储在`data`子文件夹中的`teapot.obj`文件中。我们将按以下步骤运行代码：
+- en: 'The code in `diff_render.py` starts by importing the needed packages:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`diff_render.py`中的代码首先导入所需的包：'
+- en: '[PRE0]'
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'In the next step, we declare a PyTorch device. If you have GPUs, then the device
+    will be created to use GPUs. Otherwise, the device has to use CPUs:'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在下一步中，我们声明一个PyTorch设备。如果你有GPU，那么设备将被创建以使用GPU。如果没有GPU，设备则会使用CPU：
+- en: '[PRE1]'
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: We then define `output_dir` in the following line. When we run the codes in
+    `diff_render.py`, the codes will generate some rendered images for each optimization
+    iteration, so that we can see how the optimization works step by step. All the
+    generated rendered images by the code will be put in this `output_dir` folder.
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们在下一行定义`output_dir`。当我们运行`diff_render.py`中的代码时，代码将为每次优化迭代生成一些渲染图像，这样我们可以逐步查看优化是如何进行的。所有由代码生成的渲染图像将放在这个`output_dir`文件夹中。
+- en: '[PRE2]'
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We then load the mesh model from the `./data/teapot.obj` file. Because this
+    mesh model does not come with textures (material colors), we create an all-one
+    tensor and make the tensor the texture for the mesh model. Eventually, we obtain
+    a mesh model with textures as the `teapot_mesh` variable:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们从`./data/teapot.obj`文件加载网格模型。由于这个网格模型没有附带纹理（材质颜色），我们创建一个全为1的张量，并将其作为网格模型的纹理。最终，我们获得了一个带有纹理的网格模型，并将其存储为`teapot_mesh`变量：
+- en: '[PRE3]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Next, we define a camera model in the following line.
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们在下一行定义相机模型。
+- en: '[PRE4]'
+  id: totrans-82
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: In the next step, we are going to define a differentiable renderer called `silhouette_renderer`.
+    Each renderer has mainly two components, such as one rasterizer for finding relevant
+    mesh faces for each image pixel, one shader for determining the image pixel colors,
+    and so on. In this example, we actually use a soft silhouette shader, which outputs
+    an alpha value for each image pixel. The alpha value is a real number ranging
+    from 0 to 1, which indicates whether this image pixel is a part of the foreground
+    or background. Note that the hyperparameters for the shader are defined in the
+    `blend_params` variables, the `sigma` parameter is for computing the probability
+    maps, and gamma is for computing weights for mesh faces.
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在下一步中，我们将定义一个可微分渲染器，称为`silhouette_renderer`。每个渲染器主要有两个组件，例如一个光栅化器用于查找每个图像像素的相关网格面，一个着色器用于确定图像像素的颜色等。在这个例子中，我们实际上使用的是一个软轮廓着色器，它输出每个图像像素的alpha值。alpha值是一个实数，范围从0到1，表示该图像像素是前景还是背景的一部分。请注意，着色器的超参数在`blend_params`变量中定义，`sigma`参数用于计算概率图，gamma用于计算网格面的权重。
+- en: 'Here, we use `MeshRasterizer` for rasterization. Note that the parameter `blur_radius`
+    is the threshold for finding relevant mesh faces and `faces_per_pixel` is the
+    maximum number of mesh faces that will be returned for each image pixel:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们使用`MeshRasterizer`进行光栅化。请注意，参数`blur_radius`是用于查找相关网格面的阈值，`faces_per_pixel`是每个图像像素返回的最大网格面数：
+- en: '[PRE5]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'We then define `phong_renderer` as follows. This `phong_renderer` is mainly
+    used for visualization of the optimization process. Basically, at each optimization
+    iteration, we will render one RGB image according to the camera position at that
+    iteration. Note that this renderer is only used for visualization purposes, thus
+    it is not a differentiable renderer. You can actually tell that `phong_renderer`
+    is not a differentiable one by noticing the following:'
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们按如下方式定义`phong_renderer`。这个`phong_renderer`主要用于可视化优化过程。基本上，在每次优化迭代中，我们都会根据该迭代中的相机位置渲染一张RGB图像。请注意，这个渲染器仅用于可视化目的，因此它不是一个可微分的渲染器。你可以通过注意以下几点来判断`phong_renderer`不是一个可微分渲染器：
+- en: It uses `HardPhoneShader`, which takes only one mesh face as input for each
+    image pixel
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它使用`HardPhoneShader`，每个图像像素仅接受一个网格面作为输入。
+- en: It uses `MeshRenderer` with a `blur_radius` value of 0.0 and `faces_per_pixel`
+    is set to 1
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它使用`MeshRenderer`，`blur_radius`值为0.0，`faces_per_pixel`设置为1。
+- en: 'A light source, `lights`, is then defined with a location of 2.0, 2.0, and
+    -2.0:'
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们定义一个光源`lights`，其位置为2.0，2.0，-2.0：
+- en: '[PRE6]'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Next, we define a camera location and compute the corresponding rotation, `R`,
+    and displacement, `T`, of the camera. This rotation and displacement are the target
+    camera position – that is, we are going to generate an image from this camera
+    position and use the image as the observed image in our problem:'
+  id: totrans-91
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们定义一个相机位置，并计算相应的旋转`R`和位移`T`。这个旋转和位移就是目标相机位置——也就是说，我们将从这个相机位置生成一张图像，并将其作为我们问题中的观察图像：
+- en: '[PRE7]'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Now, we generate an image, `image_ref`, from this camera position. The `image_ref`
+    function has four channels, `image_ref` function is also saved as `target_rgb.png`
+    for our latter inspection:'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们从这个相机位置生成一张图像`image_ref`。`image_ref`函数有四个通道，`image_ref`函数还会保存为`target_rgb.png`，以便我们后续检查：
+- en: '[PRE8]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: In the next step, we are going to define a `Model` class. This `Model` class
+    is derived from `torch.nn.Module`; thus, as with many other PyTorch models, automatic
+    gradient computations can be enabled for `Model`.
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在下一步中，我们将定义一个`Model`类。这个`Model`类继承自`torch.nn.Module`；因此，与许多其他PyTorch模型一样，可以为`Model`启用自动梯度计算。
+- en: '`Model` has an initialization function, `__init__`, which takes the `meshes`
+    input for mesh models, `renderer` for the renderer, and `image_ref` as the target
+    image that the instance of `Model` will try to fit. The `__init__` function creates
+    an `image_ref` buffer by using the `torch.nn.Module.register_buffer` function.
+    Just a reminder for those who are not so familiar with this part of PyTorch –
+    a buffer is something that can be saved as a part of `state_dict` and moved to
+    different devices in `cuda()` and `cpu()`, with the rest of the model’s parameters.
+    However, the buffer is not updated by the optimizer.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Model`类有一个初始化函数`__init__`，该函数接受`meshes`作为网格模型输入，`renderer`作为渲染器，`image_ref`作为`Model`实例要拟合的目标图像。`__init__`函数通过使用`torch.nn.Module.register_buffer`函数创建一个`image_ref`缓冲区。对于那些不太熟悉这部分PyTorch的读者提醒一下——缓冲区是一种可以作为`state_dict`的一部分保存并在`cuda()`和`cpu()`设备间移动的东西，与模型的其他参数一起。然而，缓冲区不会被优化器更新。'
+- en: The `__init__` function also creates a model parameter, `camera_position`. As
+    a model parameter, the `camera_position` variable can be updated by the optimizer.
+    Note that the optimization variables now become the model parameters.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`__init__`函数还创建了一个模型参数`camera_position`。作为一个模型参数，`camera_position`变量可以被优化器更新。请注意，优化变量现在成为了模型参数。'
+- en: 'The `Model` class also has a `forward` member function, which can do the forward
+    computation and backward gradient propagation. The forward function renders a
+    silhouette image from the current camera position and computes a loss function
+    between the rendered image with `image_refer` – the observed image:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Model`类还有一个`forward`成员函数，它可以进行前向计算和反向梯度传播。前向函数根据当前相机位置渲染一个轮廓图像，并计算渲染图像与`image_ref`（观察图像）之间的损失函数：'
+- en: '[PRE9]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Now, we have already defined the `Model` class. We can then create an instance
+    of the class and define an optimizer. Before running any optimization, we want
+    to render an image to show the starting camera position. This silhouette image
+    for the starting camera position will be saved to `starting_silhouette.png`:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们已经定义了`Model`类。接下来，我们可以创建类的实例并定义优化器。在运行任何优化之前，我们希望渲染一张图像，展示起始的相机位置。这张起始相机位置的轮廓图像将被保存为`starting_silhouette.png`：
+- en: '[PRE10]'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Finally, we can run optimization iterations. During each optimization iteration,
+    we will save the rendered image from the camera position to a file under the `output_dir`
+    folder:'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们可以进行优化迭代。在每次优化迭代中，我们将从相机位置渲染图像并保存到`output_dir`文件夹中的一个文件：
+- en: '[PRE11]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '*Figure 4**.9* shows the observed silhouette of the object (in this case, a
+    teapot):'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*图 4.9*展示了物体的观察轮廓（在这个例子中是茶壶）：'
+- en: '![Figure 4.9: The silhouette of the teapot ](img/B18217_04_9.jpg)'
+  id: totrans-105
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.9：茶壶的轮廓](img/B18217_04_9.jpg)'
+- en: 'Figure 4.9: The silhouette of the teapot'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.9：茶壶的轮廓
+- en: We formulate the fitting problem as an optimization problem. The initial teapot
+    position is illustrated in *Figure 4**.10*.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将拟合问题公式化为一个优化问题。初始茶壶位置如*图 4.10*所示。
+- en: '![Figure 4.10: The initial position of the teapot ](img/B18217_04_10.jpg)'
+  id: totrans-108
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.10：茶壶的初始位置](img/B18217_04_10.jpg)'
+- en: 'Figure 4.10: The initial position of the teapot'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.10：茶壶的初始位置
+- en: The final optimized teapot position is illustrated in *Figure 4**.11*.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终优化后的茶壶位置如*图 4.11*所示。
+- en: '![Figure 4.11: The final position of the teapot ](img/B18217_04_11.jpg)'
+  id: totrans-111
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.11：茶壶的最终位置](img/B18217_04_11.jpg)'
+- en: 'Figure 4.11: The final position of the teapot'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.11：茶壶的最终位置
+- en: An example of object pose estimation for both silhouette fitting and texture
+    fitting
+  id: totrans-113
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 一个使用轮廓拟合和纹理拟合的物体姿态估计示例
+- en: 'In the previous example, we estimated the object pose by silhouette fitting.
+    In this section, we will present another example of object pose estimation by
+    using both silhouette fitting and texture fitting. In 3D computer vision, we usually
+    use texture to denote colors. Thus, in this example, we will use differentiable
+    rendering to render RGB images according to the camera positions and optimize
+    the camera position. The code is in `diff_render_texture.py`:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在之前的示例中，我们通过轮廓拟合估计了物体姿态。在本节中，我们将展示另一个使用轮廓拟合和纹理拟合相结合的物体姿态估计示例。在3D计算机视觉中，我们通常使用纹理来表示颜色。因此，在这个示例中，我们将使用可微分渲染根据相机位置渲染RGB图像并优化相机位置。代码在`diff_render_texture.py`中：
+- en: 'In this first step, we will import all the required packages:'
+  id: totrans-115
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在第一步中，我们将导入所有必需的包：
+- en: '[PRE12]'
+  id: totrans-116
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Next, we create the PyTorch device using either GPUs or CPUs:'
+  id: totrans-117
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们使用GPU或CPU创建PyTorch设备：
+- en: '[PRE13]'
+  id: totrans-118
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'We set `output_dir` as `result_cow`. This will be the folder where we save
+    the fitting results:'
+  id: totrans-119
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将`output_dir`设置为`result_cow`。这是保存拟合结果的文件夹：
+- en: '[PRE14]'
+  id: totrans-120
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'We load the mesh model of a toy cow from the `cow.obj` file:'
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们从`cow.obj`文件中加载一个玩具牛的网格模型：
+- en: '[PRE15]'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We define cameras and light sources as follows:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们按如下方式定义相机和光源：
+- en: '[PRE16]'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Next, we create a `renderer_silhouette` renderer. This is the differentiable
+    renderer for rendering silhouette images. Note the `blur_radius` and `faces_per_pixel`
+    numbers. This renderer is mainly used in silhouette fitting:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建一个`renderer_silhouette`渲染器。这是用于渲染轮廓图像的可微渲染器。注意`blur_radius`和`faces_per_pixel`的数值。这个渲染器主要用于轮廓拟合：
+- en: '[PRE17]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Next, we create a `renderer_textured` renderer. This renderer is another differentiable
+    renderer, mainly used for rendering RGB images:'
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建一个`renderer_textured`渲染器。该渲染器是另一个可微渲染器，主要用于渲染RGB图像：
+- en: '[PRE18]'
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Next, we create a `phong_renderer` renderer. This renderer is mainly used for
+    visualization. The preceding differentiable renders tend to create blurry images.
+    Therefore, it would be nice for us to have a renderer that can create sharp images:'
+  id: totrans-129
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建一个`phong_renderer`渲染器。该渲染器主要用于可视化。前面提到的可微渲染器倾向于生成模糊的图像。因此，拥有一个能够生成清晰图像的渲染器对我们来说非常重要：
+- en: '[PRE19]'
+  id: totrans-130
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Next, we will define a camera position and the corresponding camera rotation
+    and position. This will be the camera position where the observed image is taken.
+    As in the previous example, we optimize the camera orientation and position instead
+    of the object orientation and position. Also, we assume that the camera is always
+    pointing toward the object. Thus, we only need to optimize the camera position:'
+  id: totrans-131
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将定义一个相机位置及其对应的相机旋转和位置。这将是拍摄观察图像的相机位置。与之前的示例一样，我们优化的是相机的朝向和位置，而不是物体的朝向和位置。此外，我们假设相机始终指向物体。因此，我们只需要优化相机的位置：
+- en: '[PRE20]'
+  id: totrans-132
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Next, we create the observed images and save them to `target_silhouette.png`
+    and `target_rgb.png`. The images are also stored in the `silhouette` and `image_ref`
+    variables:'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建观察图像并将其保存到`target_silhouette.png`和`target_rgb.png`。这些图像也会存储在`silhouette`和`image_ref`变量中：
+- en: '[PRE21]'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We modify the definition for the `Model` class as follows. The most notable
+    changes from the previous example are that now we will render both the alpha channel
+    image and the RGB images and compare them with the observed images. The mean-square
+    losses at the alpha channel and RGB channels are weighted to give the final loss
+    value:'
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们按照以下方式修改`Model`类的定义。与之前示例的主要区别在于，现在我们将同时渲染alpha通道图像和RGB图像，并将它们与观察到的图像进行比较。alpha通道和RGB通道的均方误差损失值会加权以得到最终的损失值：
+- en: '[PRE22]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Next, we create an instance of the `Model` class and create an optimizer:'
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建`Model`类的实例并创建一个优化器：
+- en: '[PRE23]'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Finally, we run 200 optimization iterations. The rendered images are saved
+    at each iteration:'
+  id: totrans-139
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们进行200次优化迭代。每次迭代的渲染图像都会被保存：
+- en: '[PRE24]'
+  id: totrans-140
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'The observed silhouette image is shown in *Figure 4**.12*:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 观察到的轮廓图像显示在*图 4.12*中：
+- en: '![Figure 4.12: Observed silhouette image ](img/B18217_04_12.jpg)'
+  id: totrans-142
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.12：观察到的轮廓图像](img/B18217_04_12.jpg)'
+- en: 'Figure 4.12: Observed silhouette image'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.12：观察到的轮廓图像
+- en: 'The RGB image is shown in *Figure 4**.13*:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RGB图像显示在*图 4.13*中：
+- en: '![Figure 4.13: Observed RGB image ](img/B18217_04_13.jpg)'
+  id: totrans-145
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.13：观察到的RGB图像](img/B18217_04_13.jpg)'
+- en: 'Figure 4.13: Observed RGB image'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.13：观察到的RGB图像
+- en: The rendered RGB images corresponding to the initial camera position and final
+    fitted camera position are shown in *Figure 4**.14* and *Figure* *4**.15* respectively.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与初始相机位置和最终拟合相机位置对应的渲染RGB图像分别显示在*图 4.14*和*图 4.15*中。
+- en: '![Figure 4.14: Image corresponding to the initial camera position ](img/B18217_04_14.jpg)'
+  id: totrans-148
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.14：与初始相机位置对应的图像](img/B18217_04_14.jpg)'
+- en: 'Figure 4.14: Image corresponding to the initial camera position'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.14：与初始相机位置对应的图像
+- en: 'The image corresponding to the final position is as follows:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与最终位置对应的图像如下：
+- en: '![Figure 4.15: Image corresponding to the fitted camera position ](img/B18217_04_15.jpg)'
+  id: totrans-151
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.15：与拟合相机位置对应的图像](img/B18217_04_15.jpg)'
+- en: 'Figure 4.15: Image corresponding to the fitted camera position'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.15：与拟合相机位置对应的图像
+- en: Summary
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we started with the question of why differentiable rendering
+    is needed. The answers to this question lie in the fact that rendering can be
+    considered as a mapping from 3D scenes (meshes or point clouds) to 2D images.
+    If rendering is made differentiable, then we can optimize 3D models directly with
+    a properly chosen cost function between the rendered images and observed images.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们从为什么需要可微渲染的问题开始。这个问题的答案在于渲染可以被看作是从3D场景（网格或点云）到2D图像的映射。如果渲染是可微的，那么我们就可以直接优化3D模型，通过在渲染图像和观察图像之间选择适当的代价函数。
+- en: We then discussed an approach to make rendering differentiable, which is implemented
+    in the PyTorch3D library. We then discussed two concrete examples of object pose
+    estimation being formulated as an optimization problem, where the object pose
+    is directly optimized to minimize the mean-square errors between the rendered
+    images and observed images.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们讨论了一种使渲染可微的方法，这种方法在PyTorch3D库中得到了实现。接着，我们讨论了两个具体的示例，物体姿态估计被形式化为优化问题，在该问题中，物体姿态被直接优化，以最小化渲染图像和观察图像之间的均方误差。
+- en: We also went through the code examples, where PyTorch3D is used to solve optimization
+    problems. In the next chapter, we will explore more variations of differentiable
+    rendering and where we can use it.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还浏览了代码示例，其中PyTorch3D用于解决优化问题。在下一章，我们将探讨更多可微渲染的变体，以及我们可以在哪里使用它。

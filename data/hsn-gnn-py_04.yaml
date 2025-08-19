@@ -1,0 +1,1210 @@
+- en: '4'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '4'
+- en: Improving Embeddings with Biased Random Walks in Node2Vec
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在Node2Vec中通过偏向随机游走改善嵌入
+- en: '**Node2Vec** is an architecture largely based on DeepWalk. In the previous
+    chapter, we saw the two main components of this architecture: random walks and
+    Word2Vec. How can we improve the quality of our embeddings? Interestingly enough,
+    not with more machine learning. Instead, Node2Vec brings critical modifications
+    to the way random walks themselves are generated.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**Node2Vec**是一种主要基于DeepWalk的架构。在上一章中，我们了解了这个架构的两个主要组成部分：随机游走和Word2Vec。如何提高我们嵌入的质量呢？有趣的是，这并不是通过更多的机器学习来实现的。相反，Node2Vec对随机游走的生成方式进行了关键性的修改。'
+- en: 'In this chapter, we will talk about these modifications and how to find the
+    best parameters for a given graph. We will implement the Node2Vec architecture
+    and compare it to using DeepWalk on Zachary’s Karate Club. This will give you
+    a good understanding of the differences between the two architectures. Finally,
+    we will use this technology to build a real application: a movie **recommender
+    system** (**RecSys**) powered by Node2Vec.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论这些修改以及如何为给定图找到最佳参数。我们将实现Node2Vec架构，并与在Zachary的空手道俱乐部上使用DeepWalk进行比较。这将帮助你深入理解这两种架构之间的差异。最后，我们将使用这项技术构建一个真实的应用：一个由Node2Vec驱动的电影**推荐系统**（**RecSys**）。
+- en: By the end of this chapter, you will know how to implement Node2Vec on any graph
+    dataset and how to select good parameters. You will understand why this architecture
+    works better than DeepWalk in general, and how to apply it to build creative applications.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将知道如何在任何图数据集上实现Node2Vec，并且如何选择合适的参数。你将理解为什么这个架构通常比DeepWalk表现得更好，并且如何将其应用于构建创意应用。
+- en: 'In this chapter, we’ll cover the following topics:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下内容：
+- en: Introducing Node2Vec
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 介绍Node2Vec
+- en: Implementing Node2Vec
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现Node2Vec
+- en: Building a movie RecSys
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建电影推荐系统
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: All the code examples from this chapter can be found on GitHub at [https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter04](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter04).
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的所有代码示例都可以在GitHub上的[https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter04](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter04)找到。
+- en: Installation steps required to run the code on your local machine can be found
+    in the *Preface* of this book.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的*前言*中可以找到在本地机器上运行代码所需的安装步骤。
+- en: Introducing Node2Vec
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 介绍Node2Vec
+- en: 'Node2Vec was introduced in 2016 by Grover and Leskovec from Stanford University
+    [1]. It keeps the same two main components from DeepWalk: random walks and Word2Vec.
+    The difference is that instead of obtaining sequences of nodes with a uniform
+    distribution, the random walks are carefully biased in Node2Vec. We will see why
+    these **biased random walks** perform better and how to implement them in the
+    two following sections:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Node2Vec是由斯坦福大学的Grover和Leskovec于2016年提出的[1]。它保留了DeepWalk的两个主要组成部分：随机游走和Word2Vec。不同之处在于，在Node2Vec中，随机游走并不是均匀分布的，而是经过精心偏向的。我们将在接下来的两节中看到这些**偏向的随机游走**为什么表现更好，以及如何实现它们：
+- en: Defining a **neighborhood**
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义**邻域**
+- en: Introducing biases in random walks
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在随机游走中引入偏向
+- en: Let’s start by questioning our intuitive concept of neighborhoods.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从质疑我们直观的邻域概念开始。
+- en: Defining a neighborhood
+  id: totrans-17
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义邻域
+- en: 'How do you define the neighborhood of a node? The key concept introduced in
+    Node2Vec is the flexible notion of a neighborhood. Intuitively, we think of it
+    as something close to the initial node, but what does “close” mean in the context
+    of a graph? Let’s take the following graph as an example:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何定义节点的邻域？Node2Vec中引入的关键概念是邻域的灵活定义。直观上，我们认为邻域是离初始节点较近的某个区域，但在图的背景下，“近”到底意味着什么呢？我们以以下图为例：
+- en: '![Figure 4.1 – Example of a random graph](img/B19153_04_001.jpg)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.1 – 随机图示例](img/B19153_04_001.jpg)'
+- en: Figure 4.1 – Example of a random graph
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.1 – 随机图示例
+- en: 'We want to explore three nodes in the neighborhood of node **A**. This exploration
+    process is also called a **sampling strategy**:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们想要探索节点**A**邻域中的三个节点。这个探索过程也叫做**采样策略**：
+- en: 'A possible solution would be to consider the three closest nodes in terms of
+    connections. In this case, the neighborhood of ![](img/Formula_B19153_04_001.png),
+    noted ![](img/Formula_B19153_04_002.png), would be ![](img/Formula_B19153_04_003.png):'
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个可能的解决方案是考虑连接的三个最接近节点。在这种情况下，![](img/Formula_B19153_04_001.png) 的邻域，标为 ![](img/Formula_B19153_04_002.png)，将是
+    ![](img/Formula_B19153_04_003.png)：
+- en: 'Another possible sampling strategy consists of selecting nodes that are not
+    adjacent to previous nodes first. In our example, the neighborhood of ![](img/Formula_B19153_04_004.png)
+    would be ![](img/Formula_B19153_04_005.png):'
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另一种可能的抽样策略包括首先选择与先前节点不相邻的节点。在我们的例子中，![](img/Formula_B19153_04_004.png) 的邻域将是
+    ![](img/Formula_B19153_04_005.png)：
+- en: In other words, we want to implement a **Breadth-First Search** (**BFS**) in
+    the first case and a **Depth-First Search** (**DFS**) in the second one. You can
+    find more information about these algorithms and implementations in [*Chapter
+    2*](B19153_02.xhtml#_idTextAnchor023)*, Graph Theory for Graph* *Neural Networks.*
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，我们希望在第一个案例中实现**广度优先搜索**（**BFS**），在第二个案例中实现**深度优先搜索**（**DFS**）。关于这些算法和实现的更多信息，请参见[*第二章*](B19153_02.xhtml#_idTextAnchor023)*，用于图神经网络的图论*。
+- en: 'What is important to notice here is that these sampling strategies have opposite
+    behaviors: BFS focuses on the local network around a node while DFS establishes
+    a more macro view of the graph. Considering our intuitive definition of a neighborhood,
+    it is tempting to simply discard DFS. However, Node2Vec’s authors argue that this
+    would be a mistake: each approach captures a different but valuable representation
+    of the network.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里需要注意的重要一点是，这些抽样策略具有相反的行为：BFS 关注节点周围的局部网络，而 DFS 则建立了图的更宏观视图。考虑到我们对邻域的直觉定义，很容易就会简单地丢弃
+    DFS。然而，Node2Vec 的作者认为这将是一个错误：每种方法捕获到了网络的不同但有价值的表示。
+- en: 'They make a connection between these algorithms and two network properties:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 他们建立了这些算法与两个网络属性之间的联系：
+- en: '**Structural equivalence**, which means that nodes are structurally equivalent
+    if they share many of the same neighbors. So, if they share many neighbors, their
+    structural equivalence is higher.'
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**结构等价性**，即如果节点共享许多相同的邻居，则节点在结构上等价。因此，如果它们共享许多邻居，则它们的结构等价性更高。'
+- en: '**Homophily**, as seen previously, states that similar nodes are more likely
+    to be connected.'
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如前所述，**同质性**表示类似的节点更有可能相连。
+- en: 'They argue that BFS is ideal to emphasize structural equivalence since this
+    strategy only looks at neighboring nodes. In these random walks, nodes are often
+    repeated and stay close to each other. DFS, on the other hand, emphasizes the
+    opposite of homophily by creating sequences of distant nodes. These random walks
+    can sample nodes that are far from the source and thus become less representative.
+    This is why we’re looking for a trade-off between these two properties: homophily
+    may be more helpful for understanding certain graphs and vice versa.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 他们认为 BFS 是理想的选择，因为它强调结构等价性，这种策略只查看相邻节点。在这些随机游走中，节点经常重复出现并保持相近。相反，DFS 通过创建远程节点序列强调异质性。这些随机游走可以抽样远离源节点的节点，因此变得不太代表性。这就是为什么我们寻求在这两个属性之间取得平衡的原因：同质性可能对理解某些图更有帮助，反之亦然。
+- en: 'If you’re confused about this connection, you’re not alone: several papers
+    and blogs wrongly assume that BFS emphasizes homophily and DFS is connected to
+    structural equivalence. In any case, we consider graphs that combine homophily
+    and structural equivalence to be the desired solution. This is why, regardless
+    of these connections, we want to use both sampling strategies to create our dataset.'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您对这种连接感到困惑，您并不孤单：几篇论文和博客错误地认为 BFS 强调同质性，DFS 与结构等价性相关联。无论如何，我们考虑将同质性和结构等价性结合的图形为所需的解决方案。这就是为什么，无论这些连接如何，我们都希望使用两种抽样策略来创建我们的数据集。
+- en: Let’s see how we can implement them to generate random walks.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何实施它们来生成随机游走。
+- en: Introducing biases in random walks
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入随机游走中的偏差
+- en: 'As a reminder, random walks are sequences of nodes that are randomly selected
+    in a graph. They have a starting point, which can also be random, and a predefined
+    length. Nodes that often appear together in these walks are like words that appear
+    together in sentences: under the homophily hypothesis, they share a similar meaning,
+    hence a similar representation.'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为提醒，随机游走是在图中随机选择的节点序列。它们有一个起点，这也可以是随机的，并且有一个预定义的长度。在这些行走中经常一起出现的节点就像在句子中一起出现的单词：根据同质性假设，它们共享相似的含义，因此具有相似的表示。
+- en: 'In Node2Vec, our goal is to bias the randomness of these walks to either one
+    of the following:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Node2Vec中，我们的目标是使这些随机游走的偏差指向以下其中一个方向：
+- en: Promoting nodes that are not connected to the previous one (similar to DFS)
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 提升那些与前一个节点不连接的节点（类似于DFS）
+- en: Promoting nodes that are close to the previous one (similar to BFS)
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 提升那些与前一个节点接近的节点（类似于BFS）
+- en: Let’s take *Figure 4**.2* as an example. The current node is called ![](img/Formula_B19153_04_006.png),
+    the previous node is ![](img/Formula_B19153_04_007.png), and the future node is
+    ![](img/Formula_B19153_04_008.png). We note ![](img/Formula_B19153_04_009.png),
+    the unnormalized transition probability from node ![](img/Formula_B19153_04_006.png)
+    to node ![](img/Formula_B19153_04_011.png). This probability can be decomposed
+    as ![](img/Formula_B19153_04_012.png) , where ![](img/Formula_B19153_04_013.png)
+    is the **search bias** between nodes ![](img/Formula_B19153_04_0071.png) and ![](img/Formula_B19153_04_011.png)and
+    ![](img/Formula_B19153_04_016.png) is the weight of the edge from ![](img/Formula_B19153_04_006.png)
+    to ![](img/Formula_B19153_04_011.png).
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们以*图 4.2*为例。当前节点为![](img/Formula_B19153_04_006.png)，前一个节点为![](img/Formula_B19153_04_007.png)，未来节点为![](img/Formula_B19153_04_008.png)。我们注意到![](img/Formula_B19153_04_009.png)，这是从节点![](img/Formula_B19153_04_006.png)到节点![](img/Formula_B19153_04_011.png)的未归一化转移概率。这个概率可以分解为![](img/Formula_B19153_04_012.png)，其中![](img/Formula_B19153_04_013.png)是节点![](img/Formula_B19153_04_0071.png)和节点![](img/Formula_B19153_04_011.png)之间的**搜索偏差**，而![](img/Formula_B19153_04_016.png)是从节点![](img/Formula_B19153_04_006.png)到节点![](img/Formula_B19153_04_011.png)的边的权重。
+- en: '![Figure 4.2 – Example of a random graph](img/B19153_04_002.jpg)'
+  id: totrans-38
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.2 – 随机图示例](img/B19153_04_002.jpg)'
+- en: Figure 4.2 – Example of a random graph
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.2 – 随机图示例
+- en: 'In DeepWalk, we have ![](img/Formula_B19153_04_019.png) for any pair of nodes
+    ![](img/Formula_B19153_04_020.png) and ![](img/Formula_B19153_04_021.png). In
+    Node2Vec, the value of ![](img/Formula_B19153_04_022.png) is defined based on
+    the distance between the nodes and two additional parameters: ![](img/Formula_B19153_04_023.png),
+    the return parameter, and ![](img/Formula_B19153_04_024.png), the in-out parameter.
+    Their role is to approximate DFS and BFS, respectively.'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在DeepWalk中，对于任意一对节点![](img/Formula_B19153_04_020.png)和![](img/Formula_B19153_04_021.png)，我们有![](img/Formula_B19153_04_019.png)。而在Node2Vec中，![](img/Formula_B19153_04_022.png)的值是基于节点间的距离和两个额外参数定义的：![](img/Formula_B19153_04_023.png)，即返回参数，以及![](img/Formula_B19153_04_024.png)，即进出参数。它们的作用是分别近似DFS和BFS。
+- en: 'Here is how the value of ![](img/Formula_B19153_04_025.png) is defined:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是![](img/Formula_B19153_04_025.png)值的定义方式：
+- en: '![](img/Formula_B19153_04_026.jpg)'
+  id: totrans-42
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_04_026.jpg)'
+- en: 'Here, ![](img/Formula_B19153_04_027.png) is the shortest path distance between
+    nodes ![](img/Formula_B19153_04_028.png) and ![](img/Formula_B19153_04_021.png).
+    We can update the unnormalized transition probability from the previous graph
+    as follows:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_04_027.png)是节点![](img/Formula_B19153_04_028.png)和节点![](img/Formula_B19153_04_021.png)之间的最短路径距离。我们可以按照如下方式更新前图中的未归一化转移概率：
+- en: '![Figure 4.3 – Graph with transition probabilities](img/B19153_04_003.jpg)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.3 – 带有转移概率的图](img/B19153_04_003.jpg)'
+- en: Figure 4.3 – Graph with transition probabilities
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.3 – 带有转移概率的图
+- en: 'Let’s decrypt these probabilities:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们解密这些概率：
+- en: The walk starts from node ![](img/Formula_B19153_04_007.png) and now arrives
+    at node ![](img/Formula_B19153_04_006.png). The probability of going back to the
+    previous node ![](img/Formula_B19153_04_007.png) is controlled by the parameter
+    ![](img/Formula_B19153_04_023.png). The higher it is, the more the random walk
+    will explore new nodes instead of repeating the same ones and looking like DFS.
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 随机游走从节点![](img/Formula_B19153_04_007.png)开始，现在到达节点![](img/Formula_B19153_04_006.png)。回到前一个节点![](img/Formula_B19153_04_007.png)的概率由参数![](img/Formula_B19153_04_023.png)控制。它越高，随机游走越倾向于探索新节点，而不是重复相同的节点，看起来更像是DFS。
+- en: The unnormalized probability of going to ![](img/Formula_B19153_04_032.png)
+    is ![](img/Formula_B19153_04_033.png) because this node is in the immediate neighborhood
+    of our previous node, ![](img/Formula_B19153_04_0071.png).
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 去往![](img/Formula_B19153_04_032.png)的未归一化概率为![](img/Formula_B19153_04_033.png)，因为该节点位于我们前一个节点![](img/Formula_B19153_04_0071.png)的直接邻域中。
+- en: Finally, the probability of going to node ![](img/Formula_B19153_04_035.png)
+    is controlled by the parameter ![](img/Formula_B19153_04_036.png). The higher
+    it is, the more the random walk will focus on nodes that are close to the previous
+    one and look like BFS.
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最后，去往节点![](img/Formula_B19153_04_035.png)的概率由参数![](img/Formula_B19153_04_036.png)控制。它越高，随机游走越倾向于集中在靠近前一个节点的节点上，看起来更像是BFS。
+- en: 'The best way to understand this is to actually implement this architecture
+    and play with the parameters. Let’s do it step by step on Zachary’s Karate Club
+    (a graph from the previous chapter), as shown in *Figure 4**.4*:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解这一点的最佳方式是实际实现这个架构并调整参数。让我们一步一步地在 Zachary的空手道俱乐部（来自前一章的图）上实现，如 *图 4.4* 所示：
+- en: '![Figure 4.4 – Zachary’s Karate Club](img/B19153_04_004.jpg)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 4.4 – Zachary的空手道俱乐部](img/B19153_04_004.jpg)'
+- en: Figure 4.4 – Zachary’s Karate Club
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 4.4 – Zachary的空手道俱乐部
+- en: Note that it is an unweighted network, which is why the transition probability
+    is only determined by the search bias.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这是一个无权网络，这就是为什么转移概率仅由搜索偏置决定的原因。
+- en: First, we want to create a function that will randomly select the next node
+    in a graph based on the previous node, the current node, and the two parameters
+    ![](img/Formula_B19153_04_023.png) and ![](img/Formula_B19153_04_024.png).
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们希望创建一个函数，根据前一个节点、当前节点和两个参数 ![](img/Formula_B19153_04_023.png) 和 ![](img/Formula_B19153_04_024.png)，在图中随机选择下一个节点。
+- en: 'We start by importing the required libraries: `networkx`, `random`, and `numpy`:'
+  id: totrans-55
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们首先导入所需的库：`networkx`、`random` 和 `numpy`：
+- en: '[PRE0]'
+  id: totrans-56
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We defined the `next_node` function with the list of our parameters:'
+  id: totrans-57
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们用我们的参数列表定义了 `next_node` 函数：
+- en: '[PRE1]'
+  id: totrans-58
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We retrieve the list of neighboring nodes from the current node and initialize
+    a list of alpha values:'
+  id: totrans-59
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们从当前节点中获取邻居节点列表，并初始化 alpha 值列表：
+- en: '[PRE2]'
+  id: totrans-60
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'For each neighbor, we want to calculate the appropriate alpha value: ![](img/Formula_B19153_04_039.png)
+    if this neighbor is the previous node, ![](img/Formula_B19153_04_033.png) if this
+    neighbor is connected to the previous node, and ![](img/Formula_B19153_04_041.png)
+    otherwise:'
+  id: totrans-61
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于每个邻居，我们需要计算适当的 alpha 值：如果该邻居是前一个节点，使用 ![](img/Formula_B19153_04_039.png)；如果该邻居与前一个节点相连，使用
+    ![](img/Formula_B19153_04_033.png)；否则使用 ![](img/Formula_B19153_04_041.png)：
+- en: '[PRE3]'
+  id: totrans-62
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'We normalize these values to create probabilities:'
+  id: totrans-63
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将这些值标准化以创建概率：
+- en: '[PRE4]'
+  id: totrans-64
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'We randomly select the next node based on the transition probabilities calculated
+    in the previous step using `np.random.choice()` and return it:'
+  id: totrans-65
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们根据前一步计算出的转移概率，使用 `np.random.choice()` 随机选择下一个节点并返回：
+- en: '[PRE5]'
+  id: totrans-66
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Before this function can be tested, we need the code to generate the entire
+    random walk.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在测试该函数之前，我们需要生成整个随机游走的代码。
+- en: 'The way we generate these random walks is similar to what we saw in the previous
+    chapter. The difference is that the next node is chosen by the `next_node()` function,
+    which requires additional parameters: ![](img/Formula_B19153_04_023.png) and ![](img/Formula_B19153_04_0241.png),
+    but also the previous and current nodes. These nodes can easily be obtained by
+    looking at the two last elements added to the `walk` variable. We also return
+    strings instead of integers for compatibility reasons.'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们生成这些随机游走的方式与前一章看到的类似。不同之处在于，下一个节点是通过 `next_node()` 函数选择的，该函数需要额外的参数：![](img/Formula_B19153_04_023.png)
+    和 ![](img/Formula_B19153_04_0241.png)，以及前一个和当前节点。这些节点可以通过查看 `walk` 变量中添加的最后两个元素轻松获得。为了兼容性，我们还返回字符串而不是整数。
+- en: 'Here is the new version of the `random_walk()` function:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是 `random_walk()` 函数的新版本：
+- en: '[PRE6]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'We now have every element to generate our random walks. Let’s try one with
+    a length of 5, ![](img/Formula_B19153_04_044.png), and ![](img/Formula_B19153_04_045.png):'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在拥有了生成随机游走的所有元素。让我们尝试一次长度为 5 的随机游走，![](img/Formula_B19153_04_044.png)，以及
+    ![](img/Formula_B19153_04_045.png)：
+- en: '[PRE7]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'This function returns the following sequence:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数返回以下序列：
+- en: '[PRE8]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: This should be random since every neighboring node has the same transition probability.
+    With these parameters, we reproduce the exact DeepWalk algorithm.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于每个邻近节点具有相同的转移概率，因此这应该是随机的。使用这些参数，我们可以复现完全相同的 DeepWalk 算法。
+- en: 'Now, let’s bias them toward going back to the previous node with ![](img/Formula_B19153_04_046.png):'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们通过使用 ![](img/Formula_B19153_04_046.png) 来让它们更倾向于返回到前一个节点：
+- en: '[PRE9]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'This function returns the following sequence:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数返回以下序列：
+- en: '[PRE10]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'This time, the random walk explores more nodes in the graph. You can see that
+    it never goes back to the previous node because the probability is low with ![](img/Formula_B19153_04_047.png):'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这次，随机游走探索了图中的更多节点。你可以看到，它永远不会返回到前一个节点，因为使用 ![](img/Formula_B19153_04_047.png)
+    时其概率较低：
+- en: '[PRE11]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'This function returns the following sequence:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数返回以下序列：
+- en: '[PRE12]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Let’s see how to use these properties in a real example and compare it to DeepWalk.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何在实际示例中使用这些属性，并将其与 DeepWalk 进行比较。
+- en: Implementing Node2Vec
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现 Node2Vec
+- en: 'Now that we have the functions to generate biased random walks, the implementation
+    of Node2Vec is very similar to implementing DeepWalk. It is so similar that we
+    can reuse the same code and create sequences with ![](img/Formula_B19153_04_048.png)
+    and ![](img/Formula_B19153_04_049.png) to implement DeepWalk as a special case
+    of Node2Vec. Let’s reuse Zachary’s Karate Club for this task:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了生成偏置随机游走的函数，Node2Vec的实现与DeepWalk非常相似。它们如此相似，以至于我们可以重用相同的代码，并使用 ![](img/Formula_B19153_04_048.png)
+    和 ![](img/Formula_B19153_04_049.png) 创建序列，将DeepWalk作为Node2Vec的特例来实现。让我们用Zachary的空手道俱乐部来做这个任务：
+- en: As in the previous chapter, our goal is to correctly classify each member of
+    the club as part of one of the two groups (“Mr. Hi” and “Officer”). We will use
+    the node embeddings provided by Node2Vec as input to a machine learning classifier
+    (Random Forest in this case).
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与上一章一样，我们的目标是正确地将俱乐部的每个成员分类为两组之一（“Mr. Hi”和“Officer”）。我们将使用Node2Vec提供的节点嵌入作为机器学习分类器（此处为随机森林）的输入。
+- en: 'Let’s see how to implement it step by step:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们一步一步地看如何实现：
+- en: 'First, we want to install the `gensim` library to use Word2Vec. This time,
+    we will use version 3.8.0 for compatibility reasons:'
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们需要安装`gensim`库来使用Word2Vec。这次，我们将使用3.8.0版本以确保兼容性：
+- en: '[PRE13]'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'We import the required libraries:'
+  id: totrans-91
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们导入所需的库：
+- en: '[PRE14]'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'We load the dataset (Zachary’s Karate Club):'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们加载数据集（Zachary的空手道俱乐部）：
+- en: '[PRE15]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We transform the nodes’ labels into numerical values (`0` and `1`):'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将节点标签转换为数值（`0`和`1`）：
+- en: '[PRE16]'
+  id: totrans-96
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We generate a list of random walks as seen previously using our `random_walk()`
+    function 80 times for each node in the graph. The parameters ![](img/Formula_B19153_04_023.png)
+    and ![](img/Formula_B19153_04_0241.png) as specified here (2 and 1, respectively):'
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们生成了一个随机游走列表，如前所示，使用我们的`random_walk()`函数对图中的每个节点进行80次随机游走。参数 ![](img/Formula_B19153_04_023.png)
+    和 ![](img/Formula_B19153_04_0241.png) 如此处所指定（分别为2和1）：
+- en: '[PRE17]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'We create an instance of Word2Vec (a skip-gram model) with a hierarchical `softmax`
+    function:'
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建了一个Word2Vec实例（一个skip-gram模型），并使用了分层的`softmax`函数：
+- en: '[PRE18]'
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The skip-gram model is trained on the sequences we generated for `30` epochs:'
+  id: totrans-101
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: Skip-gram模型在我们生成的序列上训练了`30`个epoch：
+- en: '[PRE19]'
+  id: totrans-102
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'We create masks to train and test the classifier:'
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建了用于训练和测试分类器的掩码：
+- en: '[PRE20]'
+  id: totrans-104
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The Random Forest classifier is trained on the training data:'
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 随机森林分类器在训练数据上进行训练：
+- en: '[PRE21]'
+  id: totrans-106
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We evaluate it in terms of accuracy for the test data:'
+  id: totrans-107
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们根据测试数据的准确性来评估它：
+- en: '[PRE22]'
+  id: totrans-108
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: To implement DeepWalk, we can repeat the exact same process with ![](img/Formula_B19153_04_048.png)
+    and ![](img/Formula_B19153_04_049.png). However, to make a fair comparison, we
+    cannot use a single accuracy score. Indeed, there are a lot of stochastic processes
+    involved – we could be unlucky and get a better result from the worst model.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现DeepWalk，我们可以用 ![](img/Formula_B19153_04_048.png) 和 ![](img/Formula_B19153_04_049.png)
+    重复相同的过程。然而，为了公平比较，我们不能只使用单一的准确率评分。实际上，涉及到很多随机过程——我们可能会运气不好，得到来自最差模型的更好结果。
+- en: To limit the randomness of our results, we can repeat this process 100 times
+    and take the mean value. This result is a lot more stable and can even include
+    the standard deviation (using `np.std()`) to measure the variability in the accuracy
+    scores.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了限制结果的随机性，我们可以重复这一过程100次并取平均值。这个结果要稳定得多，甚至可以包括标准差（使用`np.std()`）来衡量准确率评分的变化性。
+- en: But just before we do that, let’s play a game. In the previous chapter, we talked
+    about Zachary’s Karate Club as a homophilic network. This property is emphasized
+    by DFS, which is encouraged by increasing the parameter ![](img/Formula_B19153_04_023.png).
+    If this statement and the connection between DFS and homophily are true, we should
+    get better results with higher values of ![](img/Formula_B19153_04_023.png).
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但在我们开始之前，让我们玩一个游戏。在前一章中，我们讨论了Zachary的空手道俱乐部作为一个同质网络。这个属性由DFS强调，DFS的鼓励是通过增大参数
+    ![](img/Formula_B19153_04_023.png) 来实现的。如果这一声明以及DFS与同质性之间的联系是正确的，我们应该会在较高的 ![](img/Formula_B19153_04_023.png)
+    值下得到更好的结果。
+- en: I repeated the same experiment for values of ![](img/Formula_B19153_04_023.png)
+    and ![](img/Formula_B19153_04_0241.png) between 1 and 7\. In a real machine learning
+    project, we would use validation data to perform this parameter search. In this
+    example, we use the test data because this study is already our final application.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我重复进行了相同的实验，参数 ![](img/Formula_B19153_04_023.png) 和 ![](img/Formula_B19153_04_0241.png)
+    在1到7之间变化。在一个真实的机器学习项目中，我们会使用验证数据来进行参数搜索。在这个例子中，我们使用测试数据，因为这个研究已经是我们的最终应用。
+- en: 'The following table summarizes the results:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下表总结了结果：
+- en: '![Figure 4.5 – Average accuracy score and standard deviation for different
+    values of p and q](img/B19153_04_005.jpg)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图4.5 – 不同p和q值下的平均准确度和标准差](img/B19153_04_005.jpg)'
+- en: Figure 4.5 – Average accuracy score and standard deviation for different values
+    of p and q
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图4.5 – 不同p和q值下的平均准确度和标准差
+- en: 'There are several noticeable results:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个值得注意的结果：
+- en: 'DeepWalk (![](img/Formula_B19153_04_048.png) and ![](img/Formula_B19153_04_049.png))
+    performs worse than any other combination of ![](img/Formula_B19153_04_023.png)
+    and ![](img/Formula_B19153_04_0241.png) that is covered here. This is true for
+    this dataset and shows how useful biased random walks can be. However, it is not
+    always the case: non-biased random walks can also perform better on other datasets.'
+  id: totrans-117
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: DeepWalk（![](img/Formula_B19153_04_048.png) 和 ![](img/Formula_B19153_04_049.png)）的表现比这里讨论的任何其他![](img/Formula_B19153_04_023.png)和![](img/Formula_B19153_04_0241.png)的组合都要差。这在这个数据集中是成立的，并且显示了有偏随机游走的有效性。然而，这并不总是如此：在其他数据集中，无偏的随机游走也可能表现得更好。
+- en: High values of ![](img/Formula_B19153_04_023.png) lead to better performance,
+    which validates our hypothesis. Knowing that this is a social network strongly
+    suggests that biasing our random walks toward homophily is a good strategy. This
+    is something to keep in mind when dealing with this kind of graph.
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高值的![](img/Formula_B19153_04_023.png)会带来更好的性能，这验证了我们的假设。知道这是一个社交网络，强烈暗示将我们的随机游走偏向同质性是一种不错的策略。在处理这种类型的图时，这是需要牢记的一点。
+- en: Feel free to play with the parameters and try to find other interesting results.
+    We could explore results with very high values of ![](img/Formula_B19153_04_023.png)
+    (![](img/Formula_B19153_04_064.png)) or, on the contrary, values of ![](img/Formula_B19153_04_023.png)
+    and ![](img/Formula_B19153_04_0242.png) between 0 and 1.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随意尝试调整参数，看看是否能找到其他有趣的结果。我们可以尝试使用非常高的![](img/Formula_B19153_04_023.png)（![](img/Formula_B19153_04_064.png)）值，或者相反，尝试在0到1之间调整![](img/Formula_B19153_04_023.png)和![](img/Formula_B19153_04_0242.png)的值。
+- en: Zachary’s Karate Club is a basic dataset, but we’ll see in the next section
+    how we can use this technology to build much more interesting applications.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Zachary的空手道俱乐部是一个基本的数据集，但在接下来的章节中，我们将看到如何利用这项技术构建更有趣的应用。
+- en: Building a movie RecSys
+  id: totrans-121
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建一个电影推荐系统
+- en: One of the most popular applications of GNNs is RecSys. If you think about the
+    foundation of Word2Vec (and, thus, DeepWalk and Node2Vec), the goal is to produce
+    vectors with the ability to measure their similarity. Encode movies instead of
+    words, and you can suddenly ask for movies that are the most similar to a given
+    input title. It sounds a lot like a RecSys, right?
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GNNs最受欢迎的应用之一是推荐系统（RecSys）。如果你想一下Word2Vec的基础（因此也包括DeepWalk和Node2Vec），目标是生成具有衡量相似性能力的向量。将电影编码代替单词，你就可以突然询问哪些电影最类似于给定的输入标题。这听起来很像一个推荐系统，不是吗？
+- en: But how to encode movies? We want to create (biased) random walks of movies,
+    but this requires a graph dataset where similar movies are connected to each other.
+    This is not easy to find.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是如何编码电影呢？我们想要创建（有偏的）电影随机游走，但这需要一个图形数据集，其中相似的电影相互连接。这并不容易找到。
+- en: 'Another approach is to look at user ratings. There are different techniques
+    to build a graph based on ratings: bipartite graphs, edges based on pointwise
+    mutual information, and so on. In this section, we’ll implement a simple and intuitive
+    approach: movies that are liked by the same users are connected. We’ll then use
+    this graph to learn movie embeddings using Node2Vec:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种方法是查看用户评分。构建基于评分的图的技术有很多种：双分图、基于点对点互信息的边等。在本节中，我们将实现一种简单直观的方法：喜欢相同电影的用户之间建立连接。然后，我们将使用这个图来学习电影嵌入，采用Node2Vec方法：
+- en: 'First, let’s download a dataset. `MovieLens` [2] is a popular choice, with
+    a small version of the latest dataset (09/2018) comprising 100,836 ratings, 9,742
+    movies, and 610 users. We can download it with the following Python code:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，让我们下载一个数据集。`MovieLens` [2]是一个流行的选择，它的小版本（2018年9月）包括100,836个评分，9,742部电影和610个用户。我们可以通过以下Python代码下载它：
+- en: '[PRE23]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'We are interested in two files: `ratings.csv` and `movies.csv`. The first one
+    stores all the ratings made by users, and the second one allows us to translate
+    movie identifiers into titles.'
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们感兴趣的有两个文件：`ratings.csv`和`movies.csv`。第一个文件存储了用户的所有评分，第二个文件则允许我们将电影标识符转换为标题。
+- en: 'Let’s see what they look like by importing them with `pandas` using `pd.read_csv()`:'
+  id: totrans-128
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们通过使用`pandas`和`pd.read_csv()`导入它们，看看它们是什么样的：
+- en: '[PRE24]'
+  id: totrans-129
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'This gives us the following output:'
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这将给我们以下输出：
+- en: '[PRE25]'
+  id: totrans-131
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Let’s import `movies.csv` now:'
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在让我们导入`movies.csv`：
+- en: '[PRE26]'
+  id: totrans-133
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'This dataset gives us this output:'
+  id: totrans-134
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这个数据集给我们带来了如下输出：
+- en: '[PRE27]'
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Here, we want to see movies that have been liked by the same users. This means
+    that ratings such as 1, 2, and 3 are not very relevant. We can discard those and
+    only keep scores of 4 and 5:'
+  id: totrans-136
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在这里，我们想查看那些被相同用户喜欢的电影。这意味着像1、2、3的评分并不太相关。我们可以丢弃这些，只保留评分为4和5的电影：
+- en: '[PRE28]'
+  id: totrans-137
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'This gives us the following output:'
+  id: totrans-138
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这将给我们以下输出：
+- en: '[PRE29]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: We now have 48,580 ratings made by 610 users. The next step is to count every
+    time that two movies are liked by the same user. We will repeat this process for
+    every user in the dataset.
+  id: totrans-140
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们有48,580个评分，来自610个用户。下一步是计算每当两部电影被同一个用户喜欢时的次数。我们会对数据集中的每个用户重复此过程。
+- en: 'To simplify things, we will use a `defaultdict` data structure, which automatically
+    creates missing entries instead of raising an error. We’ll use this structure
+    to count movies that are liked together:'
+  id: totrans-141
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为了简化，我们将使用一个`defaultdict`数据结构，它会自动创建缺失的条目，而不是抛出错误。我们将用这个结构来计算一同被喜欢的电影：
+- en: '[PRE30]'
+  id: totrans-142
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'We loop through the entire list of users in our dataset:'
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们遍历数据集中的所有用户：
+- en: '[PRE31]'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'We retrieve the list of movies that have been liked by the current user:'
+  id: totrans-145
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们检索当前用户喜欢的电影列表：
+- en: '[PRE32]'
+  id: totrans-146
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'We increment a counter specific to a pair of movies every time they are seen
+    together in the same list:'
+  id: totrans-147
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每当一对电影在同一列表中一起出现时，我们就会增加一个特定于该电影对的计数器：
+- en: '[PRE33]'
+  id: totrans-148
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: The `pairs` object now stores the number of times two movies have been liked
+    by the same user. We can use this information to build the edges of our graph
+    as follows.
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`pairs`对象现在存储了两部电影被同一用户喜欢的次数。我们可以利用这些信息按照以下方式构建图的边：'
+- en: 'We create a graph using the `networkx` library:'
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用`networkx`库创建一个图：
+- en: '[PRE34]'
+  id: totrans-151
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'For each pair of movies in our `pairs` structure, we unpack the two movies
+    and their corresponding score:'
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于我们`pairs`结构中的每一对电影，我们解包这两部电影及其对应的分数：
+- en: '[PRE35]'
+  id: totrans-153
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'If this score is higher than 10, we add a weighted link to the graph to connect
+    both movies based on this score. We don’t consider scores lower than 10 because
+    that would create a large graph in which connections were less meaningful:'
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果该分数大于10，我们会根据该分数向图中添加加权链接，将这两部电影连接起来。我们不考虑低于10的分数，因为这会生成一个大图，其中的连接意义不大：
+- en: '[PRE36]'
+  id: totrans-155
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: The graph we created has 410 nodes (movies) and 14,936 edges. We can now train
+    Node2Vec on it to learn the node embeddings!
+  id: totrans-156
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建的图包含410个节点（电影）和14,936条边。现在我们可以在上面训练Node2Vec，学习节点嵌入！
+- en: 'We could reuse our implementation from the previous section, but there is actually
+    an entire Python library dedicated to Node2Vec (also called `node2vec`). Let’s
+    try it in this example:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以重用上一节中的实现，但实际上有一个专门用于Node2Vec的Python库（也叫`node2vec`）。我们在这个示例中尝试使用它：
+- en: 'We install the `node2vec` library and import the `Node2Vec` class:'
+  id: totrans-158
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们安装`node2vec`库并导入`Node2Vec`类：
+- en: '[PRE37]'
+  id: totrans-159
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'We create an instance of `Node2Vec` that will automatically generate biased
+    random walks based on ![](img/Formula_B19153_04_023.png) and ![](img/Formula_B19153_04_0241.png)
+    parameters:'
+  id: totrans-160
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建了一个`Node2Vec`实例，它将根据![](img/Formula_B19153_04_023.png)和![](img/Formula_B19153_04_0241.png)参数自动生成带偏的随机游走：
+- en: '[PRE38]'
+  id: totrans-161
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'We train a model on these biased random walks with a window of 10 (5 nodes
+    before, 5 nodes after):'
+  id: totrans-162
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们在这些带偏的随机游走上训练一个模型，窗口大小为10（前后各5个节点）：
+- en: '[PRE39]'
+  id: totrans-163
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'The Node2Vec model is trained and we can now use it the same way we use the
+    Word2Vec object from the `gensim` library. Let’s create a function to recommend
+    movies based on a given title:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Node2Vec模型已经训练完成，我们现在可以像使用`gensim`库中的Word2Vec对象一样使用它。让我们创建一个函数，根据给定的标题推荐电影：
+- en: 'We create the `recommend()` function, which takes a movie title as input. It
+    starts by converting the title into a movie ID we can use to query our model:'
+  id: totrans-165
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建了`recommend()`函数，该函数接受电影标题作为输入。它首先将标题转换为我们可以用来查询模型的电影ID：
+- en: '[PRE40]'
+  id: totrans-166
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'We loop through the five most similar word vectors. We convert these IDs into
+    movie titles that we print with their corresponding similarity scores:'
+  id: totrans-167
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们遍历五个最相似的词向量，将这些ID转换为电影标题，并打印出它们对应的相似度分数：
+- en: '[PRE41]'
+  id: totrans-168
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'We call this function to obtain the five movies that are the most similar to
+    Star Wars in terms of cosine similarity:'
+  id: totrans-169
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们调用此函数，获取与《星际大战》在余弦相似度上最相似的五部电影：
+- en: '[PRE42]'
+  id: totrans-170
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'We receive the following output:'
+  id: totrans-171
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们得到以下输出：
+- en: '[PRE43]'
+  id: totrans-172
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: The model tells us that `Return of the Jedi` and `Raiders of the Lost Ark` are
+    the most similar to `Star Wars`, although with a relatively low score (< 0.7).
+    Nonetheless, this is a good result for our first step into the RecSys world! In
+    later chapters, we’ll see more powerful models and approaches to building state-of-the-art
+    RecSys.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型告诉我们，`Return of the Jedi` 和 `Raiders of the Lost Ark` 与 `Star Wars` 最为相似，尽管分数相对较低（<
+    0.7）。尽管如此，对于我们踏入推荐系统（RecSys）世界的第一步，这仍然是一个不错的结果！在后续章节中，我们将看到更强大的模型和构建最先进推荐系统的方法。
+- en: Summary
+  id: totrans-174
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we learned about Node2Vec, a second architecture based on
+    the popular Word2Vec. We implemented functions to generate biased random walks
+    and explained the connection between their parameters and two network properties:
+    homophily and structural equivalence. We showed their usefulness by comparing
+    Node2Vec’s results to DeepWalk’s for Zachary’s Karate Club. Finally, we built
+    our first RecSys using a custom graph dataset and another implementation of Node2Vec.
+    It gave us correct recommendations that we will improve even more in later chapters.'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中，我们了解了Node2Vec，这是一种基于流行的Word2Vec的第二种架构。我们实现了生成有偏随机游走的函数，并解释了它们的参数与两个网络属性之间的关系：同质性和结构等价性。通过将Node2Vec的结果与DeepWalk在Zachary的空手道俱乐部的数据上的表现进行比较，我们展示了其有效性。最后，我们使用自定义图数据集和另一个Node2Vec的实现构建了我们的第一个推荐系统（RecSys）。它给出了正确的推荐，我们将在后续章节中进一步改进。
+- en: 'In [*Chapter 5*](B19153_05.xhtml#_idTextAnchor064)*, Including Node Features
+    with Vanilla Neural Networks*, we will talk about one overlooked issue concerning
+    DeepWalk and Node2Vec: the lack of proper node features. We will try to address
+    this problem using traditional neural networks, which cannot understand the network
+    topology. This dilemma is important to understand before we finally introduce
+    the answer: graph neural networks.'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[*第5章*](B19153_05.xhtml#_idTextAnchor064)*，《使用普通神经网络包含节点特征》中*，我们将讨论一个被忽视的问题，涉及到DeepWalk和Node2Vec：缺乏适当的节点特征。我们将尝试通过使用传统神经网络来解决这个问题，而这些网络无法理解网络拓扑。在我们最终引入答案：图神经网络之前，理解这个困境非常重要。
+- en: Further reading
+  id: totrans-177
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '[1] A. Grover and J. Leskovec, *node2vec: Scalable Feature Learning for Networks*.
+    arXiv, 2016\. DOI: 10.48550/ARXIV.1607.00653\. Available: [https://arxiv.org/abs/1607.00653](https://arxiv.org/abs/1607.00653).'
+  id: totrans-178
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[1] A. Grover 和 J. Leskovec，*node2vec: 网络的可扩展特征学习*。arXiv，2016\. DOI: 10.48550/ARXIV.1607.00653\.
+    可用：[https://arxiv.org/abs/1607.00653](https://arxiv.org/abs/1607.00653)。'
+- en: '[2] F. Maxwell Harper and Joseph A. Konstan. 2015\. *The MovieLens Datasets:
+    History and Context. ACM Transactions on Interactive Intelligent Systems (TiiS)*
+    5, 4: 19:1–19:19\. [https://doi.org/10.1145/2827872](https://doi.org/10.1145/2827872).
+    Available: [https://dl.acm.org/doi/10.1145/2827872](https://dl.acm.org/doi/10.1145/2827872).'
+  id: totrans-179
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[2] F. Maxwell Harper 和 Joseph A. Konstan. 2015\. *MovieLens 数据集：历史与背景。ACM交互式智能系统（TiiS）交易*
+    5, 4: 19:1–19:19\. [https://doi.org/10.1145/2827872](https://doi.org/10.1145/2827872)。可用：[https://dl.acm.org/doi/10.1145/2827872](https://dl.acm.org/doi/10.1145/2827872)。'

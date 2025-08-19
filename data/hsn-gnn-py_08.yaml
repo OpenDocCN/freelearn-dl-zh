@@ -1,0 +1,1063 @@
+- en: '8'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '8'
+- en: Scaling Up Graph Neural Networks with GraphSAGE
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 GraphSAGE 扩展图神经网络
+- en: '**GraphSAGE** is a GNN architecture designed to handle large graphs. In the
+    tech industry, **scalability** is a key driver for growth. As a result, systems
+    are inherently designed to accommodate millions of users. This ability requires
+    a fundamental shift in how the GNN model works compared to GCNs and GATs. Thus,
+    it is no surprise that GraphSAGE is the architecture of choice for tech companies
+    such as Uber Eats and Pinterest.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**GraphSAGE** 是一种 GNN 架构，专为处理大规模图而设计。在技术行业中，**可扩展性**是推动增长的关键因素。因此，系统通常设计为能够容纳数百万用户。这一能力需要在
+    GNN 模型的工作方式上与 GCN 和 GAT 进行根本性的转变。因此，GraphSAGE 成为像 Uber Eats 和 Pinterest 这样的科技公司首选的架构也就不足为奇了。'
+- en: In this chapter, we will learn about the two main ideas behind GraphSAGE. First,
+    we will describe its **neighbor sampling** technique, which is at the core of
+    its performance in terms of scalability. We will then explore three aggregation
+    operators used to produce node embeddings. Besides the original approach, we will
+    also detail the variants proposed by Uber Eats and Pinterest.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将学习 GraphSAGE 背后的两个主要思想。首先，我们将描述其**邻居采样**技术，这是其在可扩展性方面表现优异的核心。然后，我们将探讨用于生成节点嵌入的三种聚合操作符。除了原始方法，我们还将详细介绍
+    Uber Eats 和 Pinterest 提出的变种。
+- en: Moreover, GraphSAGE offers new possibilities in terms of training. We will implement
+    two ways of training a GNN for two tasks – node classification with `PubMed` and
+    **multi-label classification** for **protein-protein interactions**. Finally,
+    we will discuss the benefits of a new **inductive** approach and how to use it.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，GraphSAGE 提供了新的训练可能性。我们将实现两种训练 GNN 的方法，分别用于两个任务——使用`PubMed`进行节点分类和**蛋白质-蛋白质相互作用**的**多标签分类**。最后，我们将讨论新**归纳**方法的优点及其应用。
+- en: By the end of this chapter, you will understand how and why the neighbor sampling
+    algorithm works. You will be able to implement it to create mini-batches and speed
+    up training on most GNN architectures using a GPU. Furthermore, you will master
+    inductive learning and multi-label classification on graphs.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将理解邻居采样算法如何以及为什么有效。你将能够实现它，以创建小批量并加速在大多数 GNN 架构上的训练，使用 GPU。更重要的是，你将掌握图上的归纳学习和多标签分类。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章我们将涵盖以下内容：
+- en: Introducing GraphSAGE
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 介绍 GraphSAGE
+- en: Classifying nodes on PubMed
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PubMed 上的节点分类
+- en: Inductive learning on protein-protein interactions
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 蛋白质-蛋白质相互作用中的归纳学习
+- en: Technical requirements
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: All the code examples from this chapter can be found on GitHub at https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter08.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的所有代码示例可以在 GitHub 上找到，网址为 https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter08。
+- en: The installation steps required to run the code on your local machine can be
+    found in the *Preface* chapter of this book.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的 *前言* 章节中，可以找到运行代码所需的安装步骤。
+- en: Introducing GraphSAGE
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 介绍 GraphSAGE
+- en: 'Hamilton et al. introduced GraphSAGE in 2017 (see item [1] of the *Further
+    reading* section) as a framework for inductive representation learning on large
+    graphs (with over 100,000 nodes). Its goal is to generate node embeddings for
+    downstream tasks, such as node classification. In addition, it solves two issues
+    with GCNs and GATs – scaling to large graphs and efficiently generalizing to unseen
+    data. In this section, we will explain how to implement it by describing the two
+    main components of GraphSAGE:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Hamilton 等人在 2017 年提出了 GraphSAGE（见 *进一步阅读* 部分的第 [1] 项），作为一种针对大规模图（节点超过 100,000）的归纳表示学习框架。其目标是为下游任务（如节点分类）生成节点嵌入。此外，它解决了
+    GCN 和 GAT 的两个问题——扩展到大规模图和高效地推广到未见过的数据。在本节中，我们将通过描述 GraphSAGE 的两个主要组件来解释如何实现它：
+- en: Neighbor sampling
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 邻居采样
+- en: Aggregation
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 聚合
+- en: Let’s take a look at them.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看看它们。
+- en: Neighbor sampling
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 邻居采样
+- en: 'So far, we haven’t discussed an essential concept in traditional neural networks
+    – **mini-batching**. It consists of dividing our dataset into smaller fragments,
+    called batches. They are used in **gradient descent**, the optimization algorithm
+    that finds the best weights and biases during training. There are three types
+    of gradient descent:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们还没有讨论传统神经网络中的一个重要概念——**小批量处理**。它的做法是将数据集分成更小的片段，称为批次。批次用于**梯度下降**，这是一种优化算法，在训练过程中寻找最佳的权重和偏置。梯度下降有三种类型：
+- en: '**Batch gradient descent**: Weights and biases are updated after a whole dataset
+    has been processed (every epoch). This is the technique we have implemented so
+    far. However, it is a slow process that requires the dataset to fit in memory.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**批量梯度下降**：在整个数据集处理完（每一轮迭代）后更新权重和偏置。这是我们到目前为止实现的技术。然而，它是一个比较慢的过程，需要数据集能够完全加载到内存中。'
+- en: '**Stochastic gradient descent**: Weights and biases are updated for each training
+    example in the dataset. This is a noisy process because the errors are not averaged.
+    However, it can be used to perform online training.'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**随机梯度下降**：对于数据集中的每一个训练样本，都会更新权重和偏置。这是一个有噪声的过程，因为误差没有被平均。然而，它可以用于执行在线训练。'
+- en: '**Mini-batch gradient descent**: Weights and biases are updated at the end
+    of every mini-batch of ![](img/Formula_B19153_08_001.png) training examples. This
+    technique is faster (mini-batches can be processed in parallel using a GPU) and
+    leads to more stable convergence. In addition, the dataset can exceed the available
+    memory, which is essential for handling large graphs.'
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**小批量梯度下降**：权重和偏置会在每个小批量的训练样本处理完毕后更新。这个技术速度更快（小批量可以使用 GPU 并行处理），并且导致更稳定的收敛。此外，数据集的大小可以超过可用内存，这对于处理大型图数据是至关重要的。'
+- en: In practice, we use more advanced optimizers such as `Adam`, which also implement
+    mini-batching.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实际应用中，我们使用更先进的优化器，如 `Adam`，它也实现了小批量处理。
+- en: Dividing a tabular dataset is straightforward; it simply consists of selecting
+    ![](img/Formula_B19153_08_002.png) samples (rows). However, this is an issue regarding
+    graph datasets – how do we choose ![](img/Formula_B19153_08_003.png) nodes without
+    breaking essential connections? If we’re not careful, we could end up with a collection
+    of isolated nodes where we cannot perform any aggregation.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于表格数据集，划分非常简单；它只需选择 ![](img/Formula_B19153_08_002.png) 样本（行）。然而，对于图数据集来说，这是一个问题——我们如何选择
+    ![](img/Formula_B19153_08_003.png) 节点而不破坏重要的连接？如果不小心，可能会导致一个孤立节点的集合，在这个集合中我们无法进行任何聚合。
+- en: We have to think about how GNNs use datasets. Every GNN layer computes node
+    embeddings based on their neighbors. This means that computing an embedding only
+    requires the direct neighbors of this node (**1 hop**). If our GNN has two GNN
+    layers, we need these neighbors and their own neighbors (**2 hops**), and so on
+    (see *Figure 8**.1*). The rest of the network is irrelevant to computing these
+    individual node embeddings.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们必须考虑 GNN 如何使用数据集。每一层 GNN 都是基于节点的邻居计算节点嵌入。这意味着计算一个嵌入只需要该节点的直接邻居（**1 hop**）。如果我们的
+    GNN 有两层，那么我们需要这些邻居及其自身的邻居（**2 hops**），依此类推（见 *图 8.1*）。网络的其余部分与计算这些单个节点的嵌入无关。
+- en: '![Figure 8.1 – A graph with node 0 as the target node and the 1-hop and 2-hop
+    neighbors](img/B19153_08_001.jpg)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 8.1 – 以节点 0 为目标节点，以及 1-hop 和 2-hop 邻居的图](img/B19153_08_001.jpg)'
+- en: Figure 8.1 – A graph with node 0 as the target node and the 1-hop and 2-hop
+    neighbors
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.1 – 以节点 0 为目标节点，以及 1-hop 和 2-hop 邻居的图
+- en: This technique allows us to fill batches with computation graphs, which describe
+    the entire sequence of operations for calculating a node embedding. *Figure 8**.2*
+    shows the computation graph of node `0` in a more intuitive representation.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该技术允许我们通过计算图来填充批量数据，计算图描述了计算节点嵌入的整个操作序列。*图 8.2* 展示了节点 `0` 的计算图，并提供了更直观的表示。
+- en: '![Figure 8.2 – A computation graph for node 0](img/B19153_08_002.jpg)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 8.2 – 节点 0 的计算图](img/B19153_08_002.jpg)'
+- en: Figure 8.2 – A computation graph for node 0
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.2 – 节点 0 的计算图
+- en: 'We need to aggregate 2-hop neighbors in order to compute the embedding of 1-hop
+    neighbors. These embeddings are then aggregated to obtain the embedding of node
+    0\. However, there are two problems with this design:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要聚合 2-hop 邻居，以便计算 1-hop 邻居的嵌入。然后，这些嵌入被聚合以获得节点 0 的嵌入。然而，这种设计存在两个问题：
+- en: The computation graph becomes exponentially large with respect to the number
+    of hops
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 计算图随着跳数的增加呈指数级增长。
+- en: Nodes with very high degrees of connectivity (such as celebrities on an online
+    social network a social network), also called **hub nodes**, create enormous computation
+    graphs
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 具有非常高连接度的节点（例如在线社交网络中的名人，也称为**枢纽节点**）会生成巨大的计算图。
+- en: To solve these issues, we have to limit the size of our computation graphs.
+    In GraphSAGE, the authors propose a technique called neighbor sampling. Instead
+    of adding every neighbor in the computation graph, we sample a predefined number
+    of them. For instance, we choose only to keep (at most) three neighbors during
+    the first hop and five neighbors during the second hop. Hence, the computation
+    graph cannot exceed ![](img/Formula_B19153_08_004.png) nodes in this case.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这些问题，我们必须限制计算图的大小。在GraphSAGE中，作者提出了一种名为邻居采样的技术。我们不再将每个邻居都添加到计算图中，而是从中随机选择一个预定义数量的邻居。例如，在第一次跳跃中，我们只选择最多三个邻居，而在第二次跳跃中，我们选择最多五个邻居。因此，在这种情况下，计算图的节点数不能超过![](img/Formula_B19153_08_004.png)。
+- en: '![Figure 8.3 – A computation graph with neighbor sampling to keep two 1-hop
+    neighbors and two 2-hop neighbors](img/B19153_08_003.jpg)'
+  id: totrans-35
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图8.3 – 一个计算图，通过邻居采样来保留两个1跳邻居和两个2跳邻居](img/B19153_08_003.jpg)'
+- en: Figure 8.3 – A computation graph with neighbor sampling to keep two 1-hop neighbors
+    and two 2-hop neighbors
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.3 – 一个计算图，通过邻居采样来保留两个1跳邻居和两个2跳邻居
+- en: A low sampling number is more efficient but makes the training more random (higher
+    variance). Additionally, the number of GNN layers (hops) must stay low to avoid
+    exponentially large computation graphs. Neighbor sampling can handle large graphs,
+    but it causes a trade-off by pruning important information, which can negatively
+    impact performance such as accuracy. Note that computation graphs involve a lot
+    of redundant calculations, which makes the entire process computationally less
+    efficient.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 较低的采样数更高效，但会使训练更加随机（方差较大）。此外，GNN层数（跳数）也必须保持较低，以避免计算图呈指数级增长。邻居采样可以处理大型图，但它通过修剪重要信息带来了权衡，这可能会对性能（如准确度）产生负面影响。请注意，计算图涉及大量冗余计算，这使得整个过程在计算上不那么高效。
+- en: Nonetheless, this random sampling is not the only technique we can use. Pinterest
+    has its own version of GraphSAGE, called PinSAGE, to power its recommender system
+    (see *Further reading* [2]). It implements another sampling solution using random
+    walks. PinSAGE keeps the idea of a fixed number of neighbors but implements random
+    walks to see which nodes are the most frequently encountered. This frequency determines
+    their relative importance. PinSAGE’s sampling strategy allows it to select the
+    most critical nodes and proves more efficient in practice.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这种随机采样并不是唯一可以使用的技术。Pinterest有自己的GraphSAGE版本，称为PinSAGE，用于支持其推荐系统（见*进一步阅读*
+    [2]）。它实现了另一种采样解决方案，使用随机游走。PinSAGE保持了固定数量邻居的想法，但通过随机游走来查看哪些节点是最常被遇到的。这种频率决定了它们的相对重要性。PinSAGE的采样策略使其能够选择最关键的节点，并在实际应用中证明了更高的效率。
+- en: Aggregation
+  id: totrans-39
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 聚合
+- en: 'Now that we’ve seen how to select the neighboring nodes, we still need to compute
+    embeddings. This is performed by the aggregation operator (or aggregator). In
+    GraphSAGE, the authors have proposed three solutions:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经了解了如何选择邻居节点，接下来我们需要计算嵌入。这个过程由聚合算子（或称聚合器）来执行。在GraphSAGE中，作者提出了三种解决方案：
+- en: A mean aggregator
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 均值聚合器
+- en: A **long short-term memory** (**LSTM**) aggregator
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**长短期记忆**（**LSTM**）聚合器'
+- en: A pooling aggregator
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个池化聚合器
+- en: 'We will focus on the mean aggregator, as it is the easiest to understand. First,
+    the mean aggregator takes the embeddings of target nodes and their sampled neighbors
+    to average them. Then, a linear transformation with a weight matrix, ![](img/Formula_B19153_08_005.png),
+    is applied to this result:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将重点介绍均值聚合器，因为它是最容易理解的。首先，均值聚合器会取目标节点及其采样邻居的嵌入，将它们进行平均。然后，对这个结果应用一个带有权重矩阵的线性变换，![](img/Formula_B19153_08_005.png)：
+- en: 'The mean aggregator can be summarized by the following formula, where ![](img/Formula_B19153_08_006.png)
+    is a non-linear function such as ReLU or tanh:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 均值聚合器可以通过以下公式来总结，其中![](img/Formula_B19153_08_006.png)是一个非线性函数，比如ReLU或tanh：
+- en: '![](img/Formula_B19153_08_007.jpg)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_08_007.jpg)'
+- en: 'In the case of PyG’s and Uber Eats’ implementation of GraphSAGE [3], we use
+    two weight matrices instead of one; the first one is dedicated to the target node,
+    and the second to the neighbors. This aggregator can be written as follows:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在PyG和Uber Eats实现GraphSAGE的情况下[3]，我们使用了两个权重矩阵而不是一个；第一个矩阵用于目标节点，第二个矩阵用于邻居节点。这个聚合器可以写作如下：
+- en: '![](img/Formula_B19153_08_008.jpg)'
+  id: totrans-48
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_08_008.jpg)'
+- en: The LSTM aggregator is based on LSTM architecture, a popular recurrent neural
+    network type. Compared to the mean aggregator, the LSTM aggregator can, in theory,
+    discriminate between more graph structures and, thus, produce better embeddings.
+    The issue is that recurrent neural networks only consider sequences of inputs,
+    such as a sentence with a beginning and an end. However, nodes do not have any
+    sequence. Therefore, we perform random permutations of the node’s neighbors to
+    address this problem. This solution allows us to use the LSTM architecture without
+    relying on any sequence of inputs.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSTM 聚合器基于 LSTM 架构，这是一种流行的递归神经网络类型。与均值聚合器相比，LSTM 聚合器理论上能够区分更多的图结构，从而生成更好的嵌入。问题在于，递归神经网络仅考虑输入序列，例如一个有起始和结束的句子。然而，节点没有任何顺序。因此，我们通过对节点的邻居进行随机排列来解决这个问题。这种解决方案允许我们使用
+    LSTM 架构，而不依赖于任何输入序列。
+- en: Finally, the pooling aggregator works in two steps. First, every neighbor’s
+    embedding is fed to an MLP to produce a new vector. Secondly, an elementwise max
+    operation is performed to only keep the highest value for each feature.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，池化聚合器分为两个步骤。首先，将每个邻居的嵌入传递给 MLP 以生成一个新的向量。其次，执行逐元素最大操作，仅保留每个特征的最大值。
+- en: We are not limited to these three options and could implement other aggregators
+    in the GraphSAGE framework. Indeed, the main idea behind GraphSAGE resides in
+    its efficient neighbor sampling. In the next section, we will use it to perform
+    node classification on a new dataset.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不仅限于这三种选择，还可以在 GraphSAGE 框架中实现其他聚合器。事实上，GraphSAGE 的核心思想就在于其高效的邻居采样。在下一节中，我们将使用它对一个新数据集进行节点分类。
+- en: Classifying nodes on PubMed
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在 PubMed 上对节点进行分类
+- en: In this section, we will implement a GraphSAGE architecture to perform node
+    classification on the `PubMed` dataset (available under the MIT license from [https://github.com/kimiyoung/planetoid](https://github.com/kimiyoung/planetoid))
+    [4].
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将实现一个 GraphSAGE 架构，对 `PubMed` 数据集进行节点分类（该数据集在 MIT 许可证下可从 [https://github.com/kimiyoung/planetoid](https://github.com/kimiyoung/planetoid)
+    获得）[4]。
+- en: Previously, we saw two other citation network datasets from the same Planetoid
+    family – `Cora` and `CiteSeer`. The `PubMed` dataset displays a similar but larger
+    graph, with 19,717 nodes and 88,648 edges. *Figure 8**.3* shows a visualization
+    of this dataset as created by Gephi ([https://gephi.org/](https://gephi.org/)).
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前，我们看到了来自同一个 Planetoid 系列的其他两个引文网络数据集——`Cora` 和 `CiteSeer`。`PubMed` 数据集展示了一个类似但更大的图，其中包含
+    19,717 个节点和 88,648 条边。*图 8.3* 显示了由 Gephi ([https://gephi.org/](https://gephi.org/))
+    创建的该数据集的可视化。
+- en: '![Figure 8.4 – A visualization of the PubMed dataset](img/B19153_08_004.jpg)'
+  id: totrans-55
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 8.4 – PubMed 数据集的可视化](img/B19153_08_004.jpg)'
+- en: Figure 8.4 – A visualization of the PubMed dataset
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.4 – PubMed 数据集的可视化
+- en: 'Node features are TF-IDF-weighted word vectors with 500 dimensions. The goal
+    is to correctly classify nodes into three categories – diabetes mellitus experimental,
+    diabetes mellitus type 1, and diabetes mellitus type 2\. Let’s implement it step
+    by step using PyG:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点特征是 TF-IDF 加权的 500 维词向量。目标是将节点正确分类为三类——糖尿病实验型、糖尿病 1 型和糖尿病 2 型。让我们使用 PyG 按步骤实现它：
+- en: 'We load the `PubMed` dataset from the `Planetoid` class and print some information
+    about the graph:'
+  id: totrans-58
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们从 `Planetoid` 类加载 `PubMed` 数据集，并打印一些关于图的信息：
+- en: '[PRE0]'
+  id: totrans-59
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'This produces the following output:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这将产生以下输出：
+- en: '[PRE1]'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: As you can see, there are only 60 training nodes for 1,000 test nodes, which
+    is quite challenging (a 6/94 split). Fortunately for us, with only 19,717 nodes,
+    `PubMed` will be extremely fast to process with GraphSAGE.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，训练节点仅有 60 个，而测试节点有 1,000 个，这相当具有挑战性（6/94 的分割）。幸运的是，对于仅有 19,717 个节点的 `PubMed`
+    数据集，使用 GraphSAGE 处理将会非常快速。
+- en: 'The first step in the GraphSAGE framework is neighbor sampling. PyG implements
+    the `NeighborLoader` class to perform it. Let’s keep 10 neighbors of our target
+    node and 10 of their own neighbors. We will group our 60 target nodes into batches
+    of 16 nodes, which should result in four batches:'
+  id: totrans-63
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: GraphSAGE 框架的第一步是邻居采样。PyG 实现了 `NeighborLoader` 类来执行这一操作。我们将保留目标节点的 10 个邻居以及它们自己的
+    10 个邻居。我们会将 60 个目标节点分为 16 个节点一组的批次，这样会得到四个批次：
+- en: '[PRE2]'
+  id: totrans-64
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'By printing their information, let’s verify that we obtained four subgraphs
+    (batches):'
+  id: totrans-65
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过打印其信息，让我们验证我们是否获得了四个子图（批次）：
+- en: '[PRE3]'
+  id: totrans-66
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'These subgraphs contain more than 60 nodes, which is normal, since any neighbor
+    can be sampled. We can even plot them like graphs using `matplotlib`’s subplots:'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这些子图包含超过 60 个节点，这是正常的，因为任何邻居都可以被采样。我们甚至可以像绘制图一样使用 `matplotlib` 的子图进行绘制：
+- en: '[PRE4]'
+  id: totrans-68
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'We obtain the following plot:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们得到如下图表：
+- en: '![Figure 8.5 – A plot of the subgraphs obtained with neighbor sampling](img/B19153_08_005.jpg)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图8.5 – 使用邻居采样获得的子图的图表](img/B19153_08_005.jpg)'
+- en: Figure 8.5 – A plot of the subgraphs obtained with neighbor sampling
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图8.5 – 使用邻居采样获得的子图的图表
+- en: Most of these nodes have a degree of 1 because of the way neighbor sampling
+    works. In this case, it’s not an issue, since their embeddings are only used once
+    in the computation graph to calculate the embeddings of the second layer.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于邻居采样的工作方式，大多数节点的度数为1。在这种情况下，这不是问题，因为它们的嵌入只在计算图中使用一次，以计算第二层的嵌入。
+- en: 'We implement the following function to evaluate the accuracy of our model:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们实现了以下函数来评估模型的准确性：
+- en: '[PRE5]'
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Let’s create a `GraphSAGE` class using two `SAGEConv` layers (the mean aggregator
+    is selected by default):'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们使用两个`SAGEConv`层创建一个`GraphSAGE`类（默认选择均值聚合器）：
+- en: '[PRE6]'
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Embeddings are computed using two mean aggregators. We also use a nonlinear
+    function (`ReLU`) and a dropout layer:'
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 嵌入是使用两个均值聚合器计算的。我们还使用了一个非线性函数（`ReLU`）和一个dropout层：
+- en: '[PRE7]'
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Now that we have to consider batches, the `fit()` function has to change to
+    loop through epochs and then through batches. The metrics we want to measure have
+    to be reinitialized at every epoch:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们需要考虑批量处理，`fit()`函数必须修改为循环遍历epoch，再遍历批量。我们想要衡量的指标必须在每个epoch重新初始化：
+- en: '[PRE8]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The second loop trains the model on every batch:'
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第二个循环对每个批量进行模型训练：
+- en: '[PRE9]'
+  id: totrans-82
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We also want to print our metrics. They must be divided by the number of batches
+    to represent an epoch:'
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还希望打印我们的指标。它们必须除以批量数量，以代表一个epoch：
+- en: '[PRE10]'
+  id: totrans-84
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'The `test()` function does not change, since we don’t use batches for the test
+    set:'
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`test()`函数没有变化，因为我们在测试集上不使用批量处理：'
+- en: '[PRE11]'
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Let’s create a model with a hidden dimension of 64 and train it for 200 epochs:'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们创建一个隐藏层维度为64的模型，并训练200个epoch：
+- en: '[PRE12]'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'This gives us the following output:'
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这给我们带来了以下输出：
+- en: '[PRE13]'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Note that the mean aggregator was automatically selected for both SAGEConv layers.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，均值聚合器被自动选择用于两个SAGEConv层。
+- en: 'Finally, let’s test it on the test set:'
+  id: totrans-92
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，让我们在测试集上测试它：
+- en: '[PRE14]'
+  id: totrans-93
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Considering this dataset’s unfavorable train/test split, we obtain a decent
+    test accuracy of 74.70%. However, GraphSAGE gets a lower average accuracy than
+    a GCN (-0.5%) or a GAT (-1.4%) on `PubMed`. So why should we use it?
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑到该数据集不利的训练/测试集划分，我们得到了74.70%的不错的测试准确率。然而，GraphSAGE在`PubMed`上获得的平均准确率低于GCN（-0.5%）和GAT（-1.4%）。那么，我们为什么还要使用它呢？
+- en: The answer is evident when you train the three models – GraphSAGE is extremely
+    fast. On a consumer GPU, it is 4 times faster than a GCN and 88 times faster than
+    a GAT. Even if GPU memory was not an issue, GraphSAGE could handle larger graphs,
+    producing better results than small networks.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 答案在训练三个模型时显而易见——GraphSAGE速度极快。在消费者级GPU上，它比GCN快4倍，比GAT快88倍。即使GPU内存不成问题，GraphSAGE也能处理更大的图，产生比小型网络更好的结果。
+- en: To complete this deep-dive into GraphSAGE’s architecture, we must discuss one
+    more feature – its inductive capabilities.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了完成对GraphSAGE架构的深入探讨，我们还必须讨论一个特性——它的归纳能力。
+- en: Inductive learning on protein-protein interactions
+  id: totrans-97
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在蛋白质-蛋白质相互作用中的归纳学习
+- en: 'In GNNs, we distinguish two types of learning – **transductive** and **inductive**.
+    They can be summarized as follows:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在GNN中，我们区分两种学习方式——**传递学习**和**归纳学习**。它们可以总结如下：
+- en: In inductive learning, the GNN only sees data from the training set during training.
+    This is the typical supervised learning setting in machine learning. In this situation,
+    labels are used to tune the GNN’s parameters.
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在归纳学习中，GNN在训练过程中只看到训练集的数据。这是机器学习中典型的监督学习设置。在这种情况下，标签用于调整GNN的参数。
+- en: In transductive learning, the GNN sees data from the training and test sets
+    during training. However, it only learns data from the training set. In this situation,
+    the labels are used for information diffusion.
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在传递学习中，GNN在训练过程中可以看到训练集和测试集的数据。然而，它只学习训练集的数据。在这种情况下，标签用于信息扩散。
+- en: The transductive situation should be familiar, since it is the only one we have
+    covered so far. Indeed, you can see in the previous example that GraphSAGE makes
+    predictions using the whole graph during training (`self(batch.x, batch.edge_index)`).
+    We then mask part of these predictions to calculate the loss and train the model
+    only using training data (`criterion(out[batch.train_mask], batch.y[batch.train_mask])`).
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 传递性学习的情况应该是熟悉的，因为这是我们迄今为止唯一涉及的情况。实际上，你可以从之前的示例中看到，GraphSAGE 在训练过程中使用整个图来进行预测（`self(batch.x,
+    batch.edge_index)`）。然后，我们将这些预测的一部分进行掩码操作来计算损失，并且仅使用训练数据训练模型（`criterion(out[batch.train_mask],
+    batch.y[batch.train_mask])`）。
+- en: Transductive learning can only generate embeddings for a fixed graph; it does
+    not generalize for unseen nodes or graphs. However, thanks to neighbor sampling,
+    GraphSAGE is designed to make predictions at a local level with pruned computation
+    graphs. It is considered an inductive framework, since it can be applied to any
+    computation graph with the same feature schema.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 传递性学习只能为固定图生成嵌入；它无法对未见过的节点或图进行泛化。然而，由于邻居采样，GraphSAGE 设计为在本地级别进行预测，并通过修剪的计算图来减少计算。它被认为是一个归纳框架，因为它可以应用于任何具有相同特征模式的计算图。
+- en: Let’s apply it to a new dataset – the protein-protein interaction (`PPI`) network,
+    described by Agrawal et al. [5]. This dataset is a collection of 24 graphs, where
+    nodes (21,557) are human proteins and edges (342,353) are physical interactions
+    between proteins in a human cell. *Figure 8**.6* shows a representation of `PPI`
+    made with Gephi.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们将其应用于一个新的数据集——蛋白质-蛋白质相互作用（`PPI`）网络，该网络由 Agrawal 等人 [5] 描述。这个数据集包含 24 个图，其中节点（21,557）代表人类蛋白质，边（342,353）表示人类细胞中蛋白质之间的物理相互作用。*图
+    8.6* 显示了使用 Gephi 创建的 `PPI` 表示图。
+- en: '![Figure 8.6 – A visualization of the protein-protein interaction network](img/B19153_08_006.jpg)'
+  id: totrans-104
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 8.6 – 蛋白质-蛋白质相互作用网络的可视化](img/B19153_08_006.jpg)'
+- en: Figure 8.6 – A visualization of the protein-protein interaction network
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 8.6 – 蛋白质-蛋白质相互作用网络的可视化
+- en: The goal of the dataset is to perform multi-label classification with 121 labels.
+    This means that every node can range from 0 to 121 labels. This differs from a
+    multi-class classification, where every node would only have one class.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该数据集的目标是执行多标签分类，共有 121 个标签。这意味着每个节点可以拥有从 0 到 121 的标签。这与多类分类不同，在多类分类中，每个节点只能有一个类别。
+- en: 'Let’s implement a new GraphSAGE model using PyG:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们使用 PyG 实现一个新的 GraphSAGE 模型：
+- en: 'We load the `PPI` dataset with three different splits – train, validation,
+    and test:'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们加载了具有三种不同划分的 `PPI` 数据集——训练集、验证集和测试集：
+- en: '[PRE15]'
+  id: totrans-109
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The training set comprises 20 graphs, while the validation and test sets only
+    have two. We want to apply neighbor sampling to the training set. For convenience,
+    let’s unify all the training graphs in a single set, using `Batch.from_data_list()`,
+    and then apply neighbor sampling:'
+  id: totrans-110
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练集包含 20 个图，而验证集和测试集只有 2 个。我们希望对训练集应用邻居采样。为了方便起见，让我们将所有训练图统一为一个集合，使用 `Batch.from_data_list()`，然后应用邻居采样：
+- en: '[PRE16]'
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'The training set is ready. We can create our batches using the `DataLoader`
+    class. We define a `batch_size` value of `2`, corresponding to the number of graphs
+    in each batch:'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练集已准备好。我们可以使用 `DataLoader` 类创建我们的批次。我们定义一个 `batch_size` 值为 `2`，对应每个批次中的图的数量：
+- en: '[PRE17]'
+  id: totrans-113
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'One of the main benefits of these batches is that they can be processed on
+    a GPU. We can get a GPU if one is available, or take a CPU otherwise:'
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这些批次的一个主要优势是它们可以在 GPU 上处理。如果有 GPU 可用，我们可以使用 GPU，否则则使用 CPU：
+- en: '[PRE18]'
+  id: totrans-115
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Instead of implementing GraphSAGE by ourselves, we can directly use PyTorch
+    Geometric’s implementation from `torch_geometric.nn`. We initialize it with two
+    layers and a hidden dimension of 512\. In addition, we need to place the model
+    on the same device as our data, using `to(device)`:'
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以直接使用 PyTorch Geometric 中 `torch_geometric.nn` 的实现，而不是自己实现 GraphSAGE。我们用两层和
+    512 的隐藏维度来初始化它。此外，我们需要使用 `to(device)` 将模型放置到与数据相同的设备上：
+- en: '[PRE19]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The `fit()` function is similar to the one we used in the previous section,
+    with two exceptions. First, we want to move the data to a GPU when possible. Secondly,
+    we have two graphs per batch, so we multiply the individual loss by two (`data.num_graphs`):'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`fit()` 函数与我们在前一节中使用的类似，有两个例外。首先，当可能时，我们希望将数据移动到 GPU 上。其次，我们每个批次有两个图，因此我们将单独的损失乘以
+    2（`data.num_graphs`）：'
+- en: '[PRE20]'
+  id: totrans-119
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: In the `test()` function, we take advantage of the fact that `val_loader` and
+    `test_loader` have two graphs and a `batch_size` value of 2\. That means that
+    the two graphs are in the same batch; we don’t need to loop through the loaders
+    like during training.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `test()` 函数中，我们利用 `val_loader` 和 `test_loader` 各自有两个图和一个 `batch_size` 为 2
+    的事实。这意味着这两个图在同一个批次中；我们不需要像训练时那样遍历加载器。
+- en: 'Instead of accuracy, let’s use another metric – the F1 score. It corresponds
+    to the harmonic mean of precision and recall. However, our predictions are 121-dim
+    vectors of real numbers. We need to transform them into binary vectors, using
+    `out > 0` to compare them to `data.y`:'
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们不使用准确率，而是使用另一种度量——F1 分数。它对应的是精确度和召回率的调和平均数。然而，我们的预测是 121 维的实数向量。我们需要将它们转换为二进制向量，使用
+    `out > 0` 将其与 `data.y` 进行比较：
+- en: '[PRE21]'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Let’s train our model for 300 epochs and print the validation F1 score during
+    training:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们训练模型 300 个周期，并在训练过程中打印验证 F1 分数：
+- en: '[PRE22]'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Finally, we calculate the F1 score on the test set:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们计算测试集上的 F1 得分：
+- en: '[PRE23]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: We obtain an excellent F1 score of 0.9360 in an inductive setting. This value
+    dramatically changes when you increase or decrease the size of the hidden channels.
+    You can try it for yourself with different values, such as 128 and 1,024 instead
+    of 512.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一个归纳设置下，我们获得了 0.9360 的优秀 F1 得分。当你增加或减少隐藏通道的大小时，这个值会发生显著变化。你可以尝试不同的值，比如 128
+    和 1,024，替代 512。
+- en: If you look carefully at the code, there is no masking involved. Indeed, inductive
+    learning is forced by the `PPI` dataset; the training, validation, and test data
+    are in different graphs and loaders. Naturally, we could merge them using `Batch.from_data_list()`
+    and fall back into a transductive situation.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果仔细观察代码，会发现没有涉及掩蔽（masking）。事实上，归纳学习是由 `PPI` 数据集强制的；训练、验证和测试数据分别位于不同的图和加载器中。当然，我们也可以通过
+    `Batch.from_data_list()` 将它们合并，从而回到一个传导学习（transductive）的情况。
+- en: 'We could also train GraphSAGE without labels using unsupervised learning. This
+    is particularly useful when labels are scarce or provided by downstream applications.
+    However, it requires a new loss function to encourage nearby nodes to have similar
+    representations while ensuring that distant nodes have distant embeddings:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以使用无监督学习训练 GraphSAGE，而无需标签。当标签稀缺或由下游应用程序提供时，这尤其有用。然而，这需要一个新的损失函数，以鼓励相邻节点具有相似的表示，同时确保远程节点有不同的嵌入：
+- en: '![](img/Formula_B19153_08_009.jpg)'
+  id: totrans-130
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_08_009.jpg)'
+- en: 'Here, ![](img/Formula_B19153_08_014.png) is a neighbor of ![](img/Formula_B19153_08_011.png)
+    in a random walk, ![](img/Formula_B19153_08_012.png) is the sigmoid function,
+    ![](img/Formula_B19153_08_013.png) is the negative sampling distribution for ![](img/Formula_B19153_08_014.png),
+    and ![](img/Formula_B19153_08_015.png) is the number of negative samples:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_08_014.png) 是在随机游走中与 ![](img/Formula_B19153_08_011.png)
+    的邻居，![](img/Formula_B19153_08_012.png) 是 Sigmoid 函数，![](img/Formula_B19153_08_013.png)
+    是 ![](img/Formula_B19153_08_014.png) 的负采样分布，而 ![](img/Formula_B19153_08_015.png)
+    是负样本的数量：
+- en: Finally, PinSAGE and Uber Eats’ versions of GraphSAGE are recommender systems.
+    They combine the unsupervised setting with a different loss because of this application.
+    Their objective is to rank the most relevant entities (food, restaurants, pins,
+    and so on) for each user, which is an entirely different task. To perform that,
+    they implement a max-margin ranking loss that considers pairs of embeddings.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，PinSAGE 和 Uber Eats 版本的 GraphSAGE 是推荐系统。由于应用场景的不同，它们将无监督设置与不同的损失函数结合使用。它们的目标是为每个用户排序最相关的实体（如食物、餐馆、地理位置等），这是一个完全不同的任务。为了实现这一点，它们实现了一种最大边际排名损失，考虑了嵌入对。
+- en: 'If you need to scale up GNNs, other solutions can be considered. Here are short
+    descriptions of two standard techniques:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要扩展 GNN，其他解决方案可以考虑。以下是两种标准技术的简短描述：
+- en: '**Cluster-GCN** [6] provides a different answer to the question of how to create
+    mini-batches. Instead of neighbor sampling, it divides the graph into isolated
+    communities. These communities are then processed as independent graphs, which
+    can negatively impact the quality of the resulting embeddings.'
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Cluster-GCN** [6] 提出了一个不同的关于如何创建小批量（mini-batches）的问题答案。它不是使用邻居采样，而是将图划分为独立的社区。然后，这些社区作为独立的图进行处理，这可能会对最终嵌入的质量产生负面影响。'
+- en: Simplifying GNNs can decrease training and inference times. In practice, simplification
+    consists of discarding nonlinear activation functions. Linear layers can then
+    be compressed into one matrix multiplication using linear algebra. Naturally,
+    these simplified versions are not as accurate as real GNNs on small datasets but
+    are efficient for large graphs, such as Twitter [7].
+  id: totrans-135
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 简化 GNN 可以减少训练和推理时间。在实际应用中，简化包括舍弃非线性激活函数。线性层可以通过线性代数压缩为一次矩阵乘法。自然地，这些简化版本在小型数据集上的准确性不如真正的
+    GNN，但对于大规模图形（如 Twitter [7]）来说，它们更加高效。
+- en: As you can see, GraphSAGE is a flexible framework that can be tweaked and fine-tuned
+    to suit your goals. Even if you don’t reuse its exact formulation, it introduces
+    key concepts that greatly influence GNN architectures in general.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，GraphSAGE 是一个灵活的框架，可以根据你的目标进行调整和微调。即使你不重用它的精确公式，它也引入了许多关键概念，这些概念对 GNN 架构有着深远的影响。
+- en: Summary
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: This chapter introduced the GraphSAGE framework and its two components – the
+    neighbor sampling algorithm and three aggregation operators. Neighbor sampling
+    is at the core of GraphSAGE’s ability to process large graphs in a short amount
+    of time. It is also responsible for its inductive setting, which allows it to
+    generalize predictions to unseen nodes and graphs. We tested a transductive situation
+    on `PubMed` and an inductive one to perform a new task on the `PPI` dataset –
+    multi-label classification. While not as accurate as a GCN or a GAT, GraphSAGE
+    is a popular and efficient framework for processing massive amounts of data.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了 GraphSAGE 框架及其两个组成部分——邻居采样算法和三种聚合操作符。邻居采样是 GraphSAGE 能够在短时间内处理大规模图形的核心。它也是其归纳设置的关键，使其能够将预测推广到未见过的节点和图形。我们在
+    `PubMed` 上测试了一个传递性情境，并在 `PPI` 数据集上执行了一个新任务——多标签分类。虽然它的准确性不如 GCN 或 GAT，但 GraphSAGE
+    仍然是一个受欢迎且高效的框架，用于处理海量数据。
+- en: In [*Chapter 9*](B19153_09.xhtml#_idTextAnchor106), *Defining Expressiveness
+    for Graph Classification*, we will try to define what makes a GNN powerful in
+    terms of representation. We will introduce a famous graph algorithm called the
+    Weisfeiler-Lehman isomorphism test. It will act as a benchmark to evaluate the
+    theoretical performance of numerous GNN architectures, including the graph isomorphism
+    network. We will apply this GNN to perform a new prevalent task – graph classification.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [*第 9 章*](B19153_09.xhtml#_idTextAnchor106)，*图分类的表达能力定义*，我们将尝试定义什么使得 GNN 在表示方面强大。我们将介绍一个著名的图算法，称为
+    Weisfeiler-Lehman 同构性测试。它将作为基准，评估多个 GNN 架构的理论表现，包括图同构网络。我们将应用这个 GNN 来执行一个新的流行任务——图分类。
+- en: Further reading
+  id: totrans-140
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '[1] W. L. Hamilton, R. Ying, and J. Leskovec. *Inductive Representation Learning
+    on Large Graphs*. arXiv, 2017\. DOI: 10.48550/ARXIV.1706.02216.'
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[1] W. L. Hamilton, R. Ying, 和 J. Leskovec. *大规模图形上的归纳表示学习*。arXiv，2017\. DOI:
+    10.48550/ARXIV.1706.02216。'
+- en: '[2] R. Ying, R. He, K. Chen, P. Eksombatchai, W. L. Hamilton, and J. Leskovec.
+    *Graph Convolutional Neural Networks for Web-Scale Recommender Systems*. Jul.
+    2018\. DOI: 10.1145/3219819.3219890.'
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[2] R. Ying, R. He, K. Chen, P. Eksombatchai, W. L. Hamilton 和 J. Leskovec.
+    *面向 Web 规模推荐系统的图卷积神经网络*。2018年7月\. DOI: 10.1145/3219819.3219890。'
+- en: '[3] Ankit Jain. *Food Discovery with Uber Eats: Using Graph Learning to Power*
+    *Recommendations*: [https://www.uber.com/en-US/blog/uber-eats-graph-learning/](https://www.uber.com/en-US/blog/uber-eats-graph-learning/).'
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[3] Ankit Jain. *使用 Uber Eats 进行食品发现：利用图学习推动* *推荐*：[https://www.uber.com/en-US/blog/uber-eats-graph-learning/](https://www.uber.com/en-US/blog/uber-eats-graph-learning/)。'
+- en: '[4] Galileo Mark Namata, Ben London, Lise Getoor, and Bert Huang. *Query-Driven
+    Active Surveying for Collective Classification*. International Workshop on Mining
+    and Learning with Graphs. 2012.'
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[4] Galileo Mark Namata, Ben London, Lise Getoor 和 Bert Huang. *面向集体分类的查询驱动主动调查*。国际图形挖掘与学习研讨会，2012。'
+- en: '[5] M. Agrawal, M. Zitnik, and J. Leskovec. *Large-scale analysis of disease
+    pathways in the human interactome*. Nov. 2017\. DOI: 10.1142/9789813235533_0011.'
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[5] M. Agrawal, M. Zitnik 和 J. Leskovec. *人类相互作用组中的疾病通路大规模分析*。2017年11月\. DOI:
+    10.1142/9789813235533_0011。'
+- en: '[6] W.-L. Chiang, X. Liu, S. Si, Y. Li, S. Bengio, and C.-J. Hsieh. *Cluster-GCN*.
+    Jul. 2019\. DOI: 10.1145/3292500.3330925.'
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[6] W.-L. Chiang, X. Liu, S. Si, Y. Li, S. Bengio 和 C.-J. Hsieh. *Cluster-GCN*。2019年7月\.
+    DOI: 10.1145/3292500.3330925。'
+- en: '[7] F. Frasca, E. Rossi, D. Eynard, B. Chamberlain, M. Bronstein, and F. Monti.
+    *SIGN: Scalable Inception Graph Neural Networks*. arXiv, 2020\. DOI: 10.48550/ARXIV.2004.11198.'
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[7] F. Frasca, E. Rossi, D. Eynard, B. Chamberlain, M. Bronstein 和 F. Monti.
+    *SIGN：可扩展的启动图神经网络*。arXiv，2020\. DOI: 10.48550/ARXIV.2004.11198。'

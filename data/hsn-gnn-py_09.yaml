@@ -1,0 +1,984 @@
+- en: '9'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '9'
+- en: Defining Expressiveness for Graph Classification
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 定义图分类的表达能力
+- en: In the previous chapter, we traded accuracy for scalability. We saw that it
+    was instrumental in applications such as recommender systems. However, it raises
+    several questions about what makes GNNs “accurate.” Where does this precision
+    come from? Can we use this knowledge to design better GNNs?
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们牺牲了准确性来换取可扩展性。我们看到这种方法在推荐系统等应用中起到了关键作用。然而，这引发了几个问题：究竟是什么使得 GNNs “准确”？这种精度来自哪里？我们能否利用这些知识来设计更好的
+    GNN？
+- en: This chapter will clarify what makes a GNN powerful by introducing the **Weisfeiler-Leman**
+    (**WL**) test. This test will give us the framework to understand an essential
+    concept in GNNs – **expressiveness**. We will use it to compare different GNN
+    layers and see which one is the most expressive. This result will then be used
+    to design a more powerful GNN than GCNs, GATs, and GraphSAGE.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将通过介绍 **Weisfeiler-Leman**（**WL**）测试来澄清是什么使得 GNN 强大。这个测试将为我们提供理解 GNN 中一个关键概念——**表达能力**的框架。我们将利用它来比较不同的
+    GNN 层，并找出哪一层最具表达能力。这个结果将帮助我们设计出比 GCN、GAT 和 GraphSAGE 更强大的 GNN。
+- en: Finally, we will implement it using PyTorch Geometric to perform a new task
+    – graph classification. We will implement a new GNN on the `PROTEINS` dataset,
+    comprising 1,113 graphs representing proteins. We will compare different methods
+    for graph classification and analyze our results.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们将使用 PyTorch Geometric 实现一个新任务——图分类。我们将在`PROTEINS`数据集上实现一个新的 GNN，该数据集包含
+    1,113 个表示蛋白质的图。我们将比较不同的图分类方法并分析我们的结果。
+- en: By the end of this chapter, you will understand what makes a GNN expressive
+    and how to measure it. You will be able to implement a new GNN architecture based
+    on the WL test and perform graph classification using various techniques.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将理解是什么使得 GNN 有表达能力，以及如何衡量它。你将能够实现基于 WL 测试的新 GNN 架构，并使用多种技术进行图分类。
+- en: 'In this chapter, we will cover the following main topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论以下主要内容：
+- en: Defining expressiveness
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定义表达能力
+- en: Introducing the GIN
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 介绍 GIN
+- en: Classifying graphs with GIN
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 GIN 进行图分类
+- en: Technical requirements
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: All the code examples from this chapter can be found on GitHub at [https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter09](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter09).
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的所有代码示例可以在 GitHub 上找到，地址是 [https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter09](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter09)。
+- en: Installation steps required to run the code on your local machine can be found
+    in the *Preface* section of this book.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的 *前言* 部分可以找到在本地机器上运行代码所需的安装步骤。
+- en: Defining expressiveness
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 定义表达能力
+- en: Neural networks are used to approximate functions. This is justified by the
+    **universal approximation theorem**, which states that a feedforward neural network
+    with only one layer can approximate any smooth function. But what about universal
+    function approximation on graphs? This is a more complex problem that requires
+    the ability to distinguish graph structures.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 神经网络被用来逼近函数。这一点得到了 **普适逼近定理** 的支持，该定理指出，具有一层的前馈神经网络可以逼近任何平滑函数。那么，图上的普适函数逼近问题呢？这是一个更复杂的问题，要求能够区分图的结构。
+- en: With GNNs, our goal is to produce the best node embeddings possible. This means
+    that different nodes must have different embeddings, and similar nodes must have
+    similar embeddings. But how do we know that two nodes are similar? Embeddings
+    are computed using node features and connections. Therefore, we have to compare
+    their features and neighbors to distinguish nodes.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 GNN 中，我们的目标是生成尽可能好的节点嵌入。这意味着不同的节点必须有不同的嵌入，相似的节点必须有相似的嵌入。那么，我们如何知道两个节点是否相似呢？嵌入是通过节点特征和连接来计算的。因此，我们需要比较它们的特征和邻居，以区分节点。
+- en: In graph theory, this is referred to as the graph **isomorphism** problem. Two
+    graphs are isomorphic (“the same”) if they have the same connections, and their
+    only difference is a permutation of their nodes (see *Figure 9**.1*). In 1968,
+    Weisfeiler and Lehman [1] proposed an efficient algorithm to solve this problem,
+    now known as the WL test.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在图论中，这被称为图的 **同构** 问题。如果两个图具有相同的连接，而它们的唯一区别是节点的排列方式，那么这两个图就是同构的（“相同”）（见 *图 9.1*）。1968
+    年，Weisfeiler 和 Lehman [1] 提出了一个高效的算法来解决这个问题，现在被称为 WL 测试。
+- en: '![Figure 9.1 – An example of two isomorphic graphs](img/B19153_09_001.jpg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.1 – 两个同构图的示例](img/B19153_09_001.jpg)'
+- en: Figure 9.1 – An example of two isomorphic graphs
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.1 – 两个同构图的示例
+- en: The WL test aims to build the **canonical form** of a graph. We can then compare
+    the canonical form of two graphs to check whether they are isomorphic or not.
+    However, this test is not perfect, and non-isomorphic graphs can share the same
+    canonical form. This can be surprising, but it is an intricate problem that is
+    still not completely understood; for instance, the complexity of the WL algorithm
+    is unknown.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WL 测试旨在构建图的**标准形式**。我们可以比较两个图的标准形式，以检查它们是否同构。然而，这个测试并不完美，非同构图也可能具有相同的标准形式。这可能令人惊讶，但这是一个复杂的问题，目前仍未完全理解；例如，WL
+    算法的复杂度尚不清楚。
+- en: 'The WL test works as follows:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WL 测试如下进行：
+- en: At the beginning, each node in the graph receives the same color.
+  id: totrans-21
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在开始时，图中的每个节点都会获得相同的颜色。
+- en: Each node aggregates its own color and the colors of its neighbors.
+  id: totrans-22
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每个节点都会聚合自身的颜色以及邻居节点的颜色。
+- en: The result is fed to a hash function that produces a new color.
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 结果会输入到一个哈希函数中，产生一个新的颜色。
+- en: Each node aggregates its new color and the new colors of its neighbors.
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每个节点聚合其新的颜色和邻居节点的新颜色。
+- en: The result is fed to a hash function that produces a new color.
+  id: totrans-25
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 结果会输入到一个哈希函数中，产生一个新的颜色。
+- en: These steps are repeated until no more nodes change color.
+  id: totrans-26
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这些步骤会重复进行，直到没有节点的颜色发生变化。
+- en: The following figure summarizes the WL algorithm.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图总结了 WL 算法。
+- en: '![Figure 9.2 – An application of the WL algorithm to get the canonical form
+    of a graph](img/B19153_09_002.jpg)'
+  id: totrans-28
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.2 – WL 算法应用于获取图的标准形式](img/B19153_09_002.jpg)'
+- en: Figure 9.2 – An application of the WL algorithm to get the canonical form of
+    a graph
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.2 – WL 算法应用于获取图的标准形式
+- en: The resulting colors give us the canonical form of the graph. If two graphs
+    do not share the same colors, they are not isomorphic. Conversely, we cannot be
+    sure they are isomorphic if they obtain the same colors.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果颜色为我们提供了图的标准形式。如果两个图的颜色不相同，它们就不是同构的。相反，如果它们获得了相同的颜色，我们不能确定它们是同构的。
+- en: The steps we described should be familiar; they are surprisingly close to what
+    GNNs perform. Colors are a form of embeddings, and the hash function is an aggregator.
+    But it is not just any aggregator; the hash function is particularly suited for
+    this task. Would it still be as efficient if we were to replace it with another
+    function, such as a mean or max aggregator (as seen in [*Chapter 8*](B19153_08.xhtml#_idTextAnchor096))?
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们描述的步骤应该是熟悉的；它们与 GNN 执行的操作非常相似。颜色是一种嵌入形式，而哈希函数则是一个聚合器。但它不仅仅是任何一个聚合器；哈希函数特别适合这个任务。如果我们将其替换为另一个函数，例如平均值或最大值聚合器（如在[*第8章*](B19153_08.xhtml#_idTextAnchor096)中所见），它仍然会高效吗？
+- en: 'Let’s see the result for each operator:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一下每个操作符的结果：
+- en: With the mean aggregator, having 1 blue node and 1 red node, or 10 blue nodes
+    and 10 red nodes, results in the same embedding (half blue and half red).
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用平均值聚合器时，1个蓝色节点和1个红色节点，或者10个蓝色节点和10个红色节点，会产生相同的嵌入（蓝色和红色各占一半）。
+- en: With the max aggregator, half of the nodes would be ignored in the previous
+    example; the embedding would only consider the blue or red color.
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用最大值聚合器时，上一示例中一半的节点将被忽略；嵌入只会考虑蓝色或红色。
+- en: With the sum aggregator, however, every node contributes to the final embedding;
+    having 1 red node and 1 blue node is different from having 10 blue nodes and 10
+    red nodes.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 然而，使用和法聚合器时，每个节点都参与最终嵌入的计算；拥有1个红色节点和1个蓝色节点与拥有10个蓝色节点和10个红色节点是不同的。
+- en: Indeed, the sum aggregator can discriminate more graph structures than the other
+    two. If we follow this logic, this can only mean one thing – the aggregators we
+    have been using so far are suboptimal, since they are strictly less expressive
+    than a sum. Can we use this knowledge to build better GNNs? In the next section,
+    we will introduce the **Graph Isomorphism Network** (**GIN**) based on this idea.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确实，和法聚合器能够区分比其他两种聚合器更多的图结构。如果我们遵循这一逻辑，这只能意味着一件事——我们迄今为止使用的聚合器是次优的，因为它们的表达能力严格低于和法。我们能否利用这一知识构建更好的
+    GNN？在下一节中，我们将基于这个想法介绍**图同构网络**（**GIN**）。
+- en: Introducing the GIN
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 引入 GIN
+- en: In the previous section, we saw that the GNNs introduced in the previous chapters
+    were less expressive than the WL test. This is an issue because the ability to
+    distinguish more graph structures seems to be connected to the quality of the
+    resulting embeddings. In this section, we will translate the theoretical framework
+    into a new GNN architecture – the GIN.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们看到前几章介绍的 GNN 比 WL 测试的表现差。这是一个问题，因为区分更多图结构的能力似乎与结果嵌入的质量密切相关。在本节中，我们将理论框架转化为一种新的
+    GNN 架构——GIN。
+- en: 'Introduced in 2018 by Xu et al. in a paper called “*How Powerful are Graph
+    Neural Networks?*” [2], the GIN is designed to be as expressive as the WL test.
+    The authors generalized our observations on aggregation by dividing it into two
+    functions:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方法由 Xu 等人于 2018 年在论文《*图神经网络有多强大？*》[2]中提出，GIN 的设计旨在具备与 WL 测试相同的表达能力。作者通过将聚合操作分为两个函数，概括了我们在聚合中的观察：
+- en: '**Aggregate**: This function, ![](img/Formula_B19153_09_001.png), selects the
+    neighboring nodes that the GNN considers'
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**聚合**：该函数，![](img/Formula_B19153_09_001.png)，选择 GNN 考虑的邻近节点'
+- en: '**Combine**: This function, ![](img/Formula_B19153_09_002.png), combines the
+    embeddings from the selected nodes to produce the new embedding of the target
+    node'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**合并**：该函数，![](img/Formula_B19153_09_002.png)，将选定节点的嵌入合并起来，生成目标节点的新嵌入'
+- en: 'The embedding of the ![](img/Formula_B19153_09_003.png) node can be written
+    as the following:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_B19153_09_003.png) 节点的嵌入可以写作如下：'
+- en: '![](img/Formula_B19153_09_004.jpg)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_09_004.jpg)'
+- en: In the case of a GCN, the ![](img/Formula_B19153_09_005.png) function aggregates
+    every neighbor of the ![](img/Formula_B19153_09_006.png) node, and ![](img/Formula_B19153_09_007.png)
+    applies a specific mean aggregator. In the case of GraphSAGE, the neighborhood
+    sampling is the ![](img/Formula_B19153_09_008.png) function, and we saw three
+    options for ![](img/Formula_B19153_09_009.png) – the mean, LSTM, and max aggregators.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 GCN 的情况下，![](img/Formula_B19153_09_005.png) 函数聚合了 ![](img/Formula_B19153_09_006.png)
+    节点的每个邻居，且 ![](img/Formula_B19153_09_007.png) 应用了特定的均值聚合器。在 GraphSAGE 的情况下，邻域采样是
+    ![](img/Formula_B19153_09_008.png) 函数，我们看到了 ![](img/Formula_B19153_09_009.png)
+    的三种选项——均值、LSTM 和最大值聚合器。
+- en: So, what are these functions in the GIN? Xu et al. argue that they have to be
+    **injective**. As shown in *Figure 9**.3*, injective functions map distinct inputs
+    to distinct outputs. This is precisely what we want to distinguish graph structures.
+    If the functions were not injective, we would end up with the same output for
+    different inputs. In this case, our embeddings would be less valuable because
+    they would contain less information.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，GIN 中的这些函数是什么呢？Xu 等人认为它们必须是 **单射**。如 *图 9.3* 所示，单射函数将不同的输入映射到不同的输出。这正是我们想要区分图结构的原因。如果这些函数不是单射的，我们将得到相同的输出对应不同的输入。在这种情况下，我们的嵌入表示的价值会降低，因为它们包含的信息较少。
+- en: '![Figure 9.3 – A mapping diagram of an injective function](img/B19153_09_003.jpg)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.3 – 一个单射函数的映射示意图](img/B19153_09_003.jpg)'
+- en: Figure 9.3 – A mapping diagram of an injective function
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.3 – 一个单射函数的映射示意图
+- en: 'The GIN’s authors use a clever trick to design these two functions – they simply
+    approximate them. In the GAT layer, we learned the self-attention weights. In
+    this example, we can learn both functions using a single MLP, thanks to the universal
+    approximation theorem:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GIN 的作者使用了一个巧妙的技巧来设计这两个函数——他们简单地对它们进行了逼近。在 GAT 层，我们学习了自注意力权重。在这个例子中，我们可以通过一个单一的
+    MLP 来学习这两个函数，得益于普适逼近定理：
+- en: '![](img/Formula_B19153_09_010.jpg)'
+  id: totrans-49
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_09_010.jpg)'
+- en: Here, ![](img/Formula_B19153_09_011.png) is a learnable parameter or a fixed
+    scalar, representing the importance of the target node’s embedding compared to
+    its neighbors’. The authors also emphasize that the MLP must have more than one
+    layer to distinguish specific graph structures.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_09_011.png) 是一个可学习的参数或一个固定的标量，表示目标节点的嵌入与其邻居节点嵌入的相对重要性。作者还强调，MLP
+    必须具有多层，以便区分特定的图结构。
+- en: We now have a GNN that is as expressive as the WL test. Can we do even better?
+    The answer is yes. The WL test can be generalized to a hierarchy of higher-level
+    tests known as **k-WL**. Instead of considering individual nodes, ![](img/Formula_B19153_09_012.png)-WL
+    tests look at ![](img/Formula_B19153_09_013.png)-tuples of nodes. It means that
+    they are non-local, since they can look at distant nodes. This is also why ![](img/Formula_B19153_09_014.png)-WL
+    tests can distinguish more graph structures than ![](img/Formula_B19153_09_015.png)-WL
+    tests for ![](img/Formula_B19153_09_016.png).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了一个与WL测试一样具有表现力的GNN。我们还能做得更好吗？答案是肯定的。WL测试可以推广到更高层次的测试层次，称为**k-WL**。与考虑单个节点不同，![](img/Formula_B19153_09_012.png)-WL测试查看的是![](img/Formula_B19153_09_013.png)-元组节点。这意味着它们是非局部的，因为它们可以查看远距离的节点。这也是为什么![](img/Formula_B19153_09_014.png)-WL测试能够区分比![](img/Formula_B19153_09_015.png)-WL测试更多的图结构的原因。
+- en: Several architectures based on ![](img/Formula_B19153_09_017.png)-WL tests have
+    been proposed, such as the **k-GNN** by Morris et al. [3]. While these architectures
+    help us better understand how GNNs work, they tend to underperform in practice
+    compared to less expressive models, such as GNNs or GATs [4]. But all hope is
+    not lost, as we will see in the next section in the particular context of graph
+    classification.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 已提出了多种基于![](img/Formula_B19153_09_017.png)-WL测试的架构，例如Morris等人提出的**k-GNN** [3]。虽然这些架构帮助我们更好地理解GNN的工作原理，但它们在实践中往往比不太具有表现力的模型（如GNN或GAT）表现差[4]。但希望并未完全破灭，我们将在下节中看到，在图分类的特定背景下，情况会有所不同。
+- en: Classifying graphs using GIN
+  id: totrans-53
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用GIN进行图分类
+- en: We could directly implement a GIN model for node classification, but this architecture
+    is more interesting for performing graph classification. In this section, we will
+    see how to transform node embeddings into graph embeddings using `PROTEINS` dataset
+    and compare our results using GIN and GCN models.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以直接实现一个GIN模型来进行节点分类，但该架构对于执行图分类更为有趣。在本节中，我们将看到如何使用`PROTEINS`数据集将节点嵌入转换为图嵌入，并比较我们使用GIN和GCN模型的结果。
+- en: Graph classification
+  id: totrans-55
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 图分类
+- en: 'Graph classification is based on the node embeddings that a GNN produces. This
+    operation is often called global pooling or **graph-level readout**. There are
+    three simple ways of implementing it:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图分类是基于GNN生成的节点嵌入。这一操作通常称为全局池化或**图级读出**。实现这一操作有三种简单的方法：
+- en: '**Mean global pooling**: The graph embedding ![](img/Formula_B19153_09_018.png)
+    is obtained by averaging the embeddings of every node in the graph:'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**均值全局池化**：图嵌入![](img/Formula_B19153_09_018.png)是通过对图中每个节点的嵌入取平均值获得的：'
+- en: '![](img/Formula_B19153_09_019.jpg)'
+  id: totrans-58
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_09_019.jpg)'
+- en: '**Max global pooling**: The graph embedding is obtained by selecting the highest
+    value for each node dimension:![](img/Formula_B19153_09_020.jpg)'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**最大全局池化**：图嵌入是通过为每个节点维度选择最高值来获得的：![](img/Formula_B19153_09_020.jpg)'
+- en: '**Sum global pooling**: The graph embedding is obtained by summing the embeddings
+    of every node in the graph:'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**求和全局池化**：图嵌入是通过对图中每个节点的嵌入求和来获得的：'
+- en: '![](img/Formula_B19153_09_021.jpg)'
+  id: totrans-61
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_09_021.jpg)'
+- en: 'According to what we saw in the first section, the sum global pooling is strictly
+    more expressive than the two other techniques. The GIN’s authors also note that
+    to consider all structural information, it is necessary to consider embeddings
+    produced by every layer of the GNN. In summary, we concatenate the sum of node
+    embeddings produced by each of the *k* layers of our GNN:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据我们在第一节中看到的，求和全局池化在表现力上严格优于其他两种技术。GIN的作者也指出，为了考虑所有结构信息，有必要考虑GNN每一层生成的嵌入。总之，我们将每一层的节点嵌入的和进行连接：
+- en: '![](img/Formula_B19153_09_022.jpg)'
+  id: totrans-63
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_09_022.jpg)'
+- en: This solution elegantly combines the expressive power of the sum operator with
+    the memory of each layer provided by the concatenation.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方案优雅地将求和运算符的表达能力与每层通过连接提供的记忆相结合。
+- en: Implementing the GIN
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现GIN
+- en: We will now implement a GIN model with the previous graph-level readout function
+    on the `PROTEINS [5, 6,` `7]` dataset.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将实现一个GIN模型，并在`PROTEINS [5, 6,` `7]`数据集上使用之前的图级读出函数。
+- en: This dataset comprises 1,113 graphs representing proteins, where every node
+    is an amino acid. An edge connects two nodes when their distance is lower than
+    0.6 nanometers. The goal of this dataset is to classify each protein as an **enzyme**.
+    Enzymes are a particular type of protein that act as catalysts to speed up chemical
+    reactions in a cell. For instance, enzymes called lipases aid in the digestion
+    of food. *Figure 9**.4* shows the 3D plot of a protein.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该数据集包含1,113个图，表示蛋白质，其中每个节点都是一个氨基酸。当两个节点之间的距离小于0.6纳米时，它们之间就有一条边。这个数据集的目标是将每个蛋白质分类为**酶**。酶是特定类型的蛋白质，作为催化剂加速细胞中的化学反应。例如，被称为脂肪酶的酶帮助消化食物。*图9.4*显示了一个蛋白质的3D图。
+- en: '![Figure 9.4 – An example of a protein in 3D](img/B19153_09_004.jpg)'
+  id: totrans-68
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图9.4 – 一个蛋白质的3D示例](img/B19153_09_004.jpg)'
+- en: Figure 9.4 – An example of a protein in 3D
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.4 – 一个蛋白质的3D示例
+- en: 'Let’s implement a GIN model on this dataset:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在这个数据集上实现一个GIN模型：
+- en: 'First, we import the `PROTEINS` dataset using the `TUDataset` class from PyTorch
+    Geometric and print the information:'
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们使用PyTorch Geometric中的`TUDataset`类导入`PROTEINS`数据集，并打印信息：
+- en: '[PRE0]'
+  id: totrans-72
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We split the data (graphs) into training, validation, and test sets with an
+    80/10/10 split respectively:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将数据（图）按照80/10/10的比例分为训练集、验证集和测试集：
+- en: '[PRE1]'
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'This gives us the following output:'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这将给我们以下输出：
+- en: '[PRE2]'
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We convert these splits into mini-batches using the `DataLoader` object with
+    a batch size of 64\. This means that each batch will contain up to 64 graphs:'
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用`DataLoader`对象将这些拆分转换为迷你批次，批量大小为64。这意味着每个批次将包含最多64个图：
+- en: '[PRE3]'
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'We can verify that by printing information about each batch, as follows:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以通过打印每个批次的信息来验证这一点，如下所示：
+- en: '[PRE4]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Let’s start implementing a GIN model. The first question we have to answer
+    is the composition of our GIN layer. We need an MLP with at least two layers.
+    Following the authors’ guidelines, we can also introduce batch normalization to
+    standardize the inputs of each hidden layer, which stabilizes and speeds up training.
+    In summary, our GIN layer has the following composition:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始实现一个GIN模型。我们首先需要回答的问题是GIN层的组成。我们需要一个至少有两层的MLP。根据作者的指导，我们还可以引入批量归一化来标准化每个隐藏层的输入，这样可以稳定并加速训练。总而言之，我们的GIN层具有以下组成：
+- en: '![](img/Formula_B19153_09_023.jpg)'
+  id: totrans-82
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_09_023.jpg)'
+- en: 'In code, it is defined as follows:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在代码中，它被定义如下：
+- en: '[PRE5]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Note
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: PyTorch Geometric also offers the GINE layer, a modified version of the GIN
+    layer. It was introduced in 2019 by Hu et al. in “*Strategies for Pre-training
+    Graph Neural Networks*” [8]. Its major improvement over the previous GIN version
+    is the ability to consider edge features during the aggregation process. The `PROTEINS`
+    dataset does not have edge features, which is why we will implement the classic
+    GIN model instead.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PyTorch Geometric还提供了GINE层，这是GIN层的修改版。它在2019年由Hu等人在《*图神经网络预训练策略*》[8]中提出。与之前的GIN版本相比，它的主要改进是能够在聚合过程中考虑边缘特征。`PROTEINS`数据集没有边缘特征，这就是为什么我们将实现经典的GIN模型。
+- en: 'Our model is not complete yet. We must not forget that we want to perform graph
+    classification. It requires the sum of every node embedding in the graph for each
+    layer. In other words, we will need to store one vector of `dim_h` size per layer
+    – three, in this example. This is why we add a linear layer with `3*dim_h` size
+    before the final linear layer for binary classification (`data.num_classes` =
+    2):'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们的模型还不完整。我们必须记住，我们的目标是进行图分类。图分类要求对每一层中的每个节点嵌入进行求和。换句话说，我们需要为每一层存储一个`dim_h`大小的向量——在这个例子中是三个。这就是为什么在最终的二分类线性层前，我们会添加一个`3*dim_h`大小的线性层（`data.num_classes`
+    = 2）：
+- en: '[PRE6]'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'We must implement the logic to connect our initialized layers. Each layer produces
+    a different embedding tensor – `h1`, `h2`, and `h3`. We sum them using the `global_add_pool()`
+    function and then concatenate them with `torch.cat()`. This gives us the input
+    to our classifier, which acts as a regular neural network with a dropout layer:'
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们必须实现逻辑来连接我们初始化的层。每一层都会生成不同的嵌入张量——`h1`、`h2`和`h3`。我们使用`global_add_pool()`函数将它们求和，然后使用`torch.cat()`将它们连接起来。这就为我们的分类器提供了输入，分类器作为一个普通的神经网络，带有一个dropout层：
+- en: '[PRE7]'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'We can now implement a regular training loop with mini-batching for 100 epochs:'
+  id: totrans-91
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们可以实现一个常规的训练循环，使用迷你批次进行100个epoch：
+- en: '[PRE8]'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'We print the training and validation accuracy every 20 epochs and return the
+    trained model:'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们每20个epoch打印一次训练和验证的准确率，并返回训练好的模型：
+- en: '[PRE9]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Unlike the `test` function from the previous chapter, this one must also include
+    mini-batching, since our validation and test loaders contain more than one batch:'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 与上一章中的 `test` 函数不同，这个函数还必须包括小批量处理，因为我们的验证和测试加载器包含多个批次：
+- en: '[PRE10]'
+  id: totrans-96
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We define the function we will use to calculate the accuracy score:'
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们定义将用于计算准确率得分的函数：
+- en: '[PRE11]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Let’s instantiate and train our GIN model:'
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们实例化并训练我们的 GIN 模型：
+- en: '[PRE12]'
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Finally, let’s test it using the test loader:'
+  id: totrans-101
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，让我们使用测试加载器进行测试：
+- en: '[PRE13]'
+  id: totrans-102
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: To better understand this final test score, we can implement a GCN that performs
+    graph classification with a simple global mean pooling (`global_mean_pool()` in
+    PyTorch Geometric). With the exact same setting, it achieves an average accuracy
+    score of 53.72% (± 0.73%) on 100 experiments. This is much lower than the average
+    76.56% (± 1.77%) obtained by the GIN model.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更好地理解这个最终测试得分，我们可以实现一个 GCN，该 GCN 使用简单的全局平均池化（在 PyTorch Geometric 中为 `global_mean_pool()`）执行图分类。在完全相同的设置下，它在
+    100 次实验中获得了平均准确率 53.72%（± 0.73%）。这远低于 GIN 模型的平均准确率 76.56%（± 1.77%）。
+- en: 'We can conclude that the entire GIN architecture is much more suited for this
+    graph classification task than GCNs. According to the theoretical framework we
+    used, this is explained by the fact that GCNs are strictly less expressive than
+    GINs. In other words, GINs can distinguish more graph structures than GCNs, which
+    is why they are more accurate. We can verify this assumption by visualizing the
+    mistakes made by both models:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以得出结论，整个 GIN 架构比 GCN 更适合这个图分类任务。根据我们使用的理论框架，这可以通过 GCN 在表达能力上严格低于 GIN 来解释。换句话说，GIN
+    可以区分比 GCN 更多的图结构，这就是为什么它们更准确的原因。我们可以通过可视化两个模型的错误来验证这个假设：
+- en: 'We import the `matplotlib` and `networkx` libraries to make a 4x4 plot of proteins:'
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们导入 `matplotlib` 和 `networkx` 库，以绘制一个 4x4 的蛋白质图：
+- en: '[PRE14]'
+  id: totrans-106
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'For each protein, we get the final classification from our GNN (the GIN in
+    this case). We give the prediction a green color if it is correct (red otherwise):'
+  id: totrans-107
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于每个蛋白质，我们从我们的 GNN（此处为 GIN）中获取最终分类。如果预测正确，我们给它绿色（否则为红色）：
+- en: '[PRE15]'
+  id: totrans-108
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'We convert our protein into a `networkx` graph for convenience. We can then
+    draw it using the `nx.draw_networkx()` function:'
+  id: totrans-109
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们为了方便将蛋白质转化为 `networkx` 图。然后，我们可以使用 `nx.draw_networkx()` 函数绘制它：
+- en: '[PRE16]'
+  id: totrans-110
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: We obtain the following plot for the GIN model.
+  id: totrans-111
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们为 GIN 模型获得了以下图示。
+- en: '![Figure 9.5 – Graph classifications produced by the GIN model](img/B19153_09_005.jpg)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.5 – GIN 模型生成的图分类](img/B19153_09_005.jpg)'
+- en: Figure 9.5 – Graph classifications produced by the GIN model
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.5 – GIN 模型生成的图分类
+- en: We repeat this process for the GCN and get the following visualization.
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们为 GCN 重复这个过程，并获得以下可视化结果。
+- en: '![Figure 9.6 – Graph classifications produced by the GCN model](img/B19153_09_006.jpg)'
+  id: totrans-115
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.6 – GCN 模型生成的图分类](img/B19153_09_006.jpg)'
+- en: Figure 9.6 – Graph classifications produced by the GCN model
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.6 – GCN 模型生成的图分类
+- en: As expected, the GCN model makes more mistakes. Understanding which graph structures
+    are not adequately captured would require extensive analysis for each protein
+    correctly classified by GIN. However, we can see that the GIN also makes different
+    mistakes. This is interesting because it shows that these models can be complementary.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如预期的那样，GCN 模型犯了更多的错误。要理解哪些图结构没有被充分捕捉，需要对每个被 GIN 正确分类的蛋白质进行广泛分析。然而，我们可以看到，GIN
+    也会犯不同的错误。这一点很有趣，因为它表明这些模型可以互为补充。
+- en: 'Creating ensembles from models that make different mistakes is a common technique
+    in machine learning. We could use different approaches, such as a third model
+    trained on our final classifications. As creating ensembles is not the goal of
+    this chapter, we will implement a simple model-averaging technique instead:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从犯不同错误的模型创建集成是机器学习中的常见技术。我们可以使用不同的方法，例如训练一个新的模型来处理我们的最终分类。由于本章的目标不是创建集成模型，因此我们将实现一个简单的模型平均技术：
+- en: 'First, we set the models in evaluation mode and define the variables to store
+    accuracy scores:'
+  id: totrans-119
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们将模型设置为评估模式，并定义用于存储准确率得分的变量：
+- en: '[PRE17]'
+  id: totrans-120
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'We get the final classifications for each model and combine them to get the
+    ensemble’s predictions:'
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们获取每个模型的最终分类，并将它们结合起来获得集成模型的预测结果：
+- en: '[PRE18]'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'We calculate the accuracy scores for the three sets of predictions:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们计算了三个预测集的准确率得分：
+- en: '[PRE19]'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Finally, let’s print the results:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，让我们打印结果：
+- en: '[PRE20]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: In this example, our ensemble outperforms both models with an accuracy score
+    of 81.25% (compared to 72.14% for the GCN and 80.99% for the GIN). This result
+    is significant, as it shows the possibilities offered by this kind of technique.
+    However, this is not necessarily the case in general; even with this example,
+    the ensemble model does not consistently outperform the GIN. We could enrich it
+    with embeddings from other architectures, such as `Node2Vec`, and see whether
+    it improves the final accuracy.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们的集成模型的准确率为 81.25%，超越了两个单独模型（GCN 为 72.14%，GIN 为 80.99%）。这个结果非常显著，因为它展示了这种技术所提供的可能性。然而，这并不一定适用于所有情况；即使在这个例子中，集成模型也未能始终超越
+    GIN。我们可以通过加入其他架构的嵌入，例如 `Node2Vec`，来丰富该模型，看看是否能提高最终准确率。
+- en: Summary
+  id: totrans-128
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we defined the expressive power of GNNs. This definition is
+    based on another algorithm, the WL method, which outputs the canonical form of
+    a graph. This algorithm is not perfect, but it can distinguish most graph structures.
+    It inspired the GIN architecture, designed to be as expressive as the WL test
+    and, therefore, strictly more expressive than GCNs, GATs, or GraphSAGE.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们定义了 GNNs 的表达能力。这个定义基于另一种算法——WL 方法，该算法输出图的规范形式。这个算法并不完美，但可以区分大多数图结构。它启发了
+    GIN 架构的设计，旨在具有与 WL 测试一样强的表达能力，因此，它比 GCN、GAT 或 GraphSAGE 更具表达能力。
+- en: We then implemented this architecture for graph classification. We saw different
+    methods to combine node embeddings into graph embeddings. GIN offers a new technique,
+    which incorporates a sum operator and the concatenation of graph embeddings produced
+    by every GIN layer. It significantly outperformed the classic global mean pooling
+    obtained with GCN layers. Finally, we combined predictions made by both models
+    into a simple ensemble, which increased the accuracy score even further.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们随后实现了这个架构用于图分类。我们看到了一些不同的方法来将节点嵌入合并成图嵌入。GIN 提供了一种新技术，结合了求和运算符和每个 GIN 层产生的图嵌入的拼接。它显著优于使用
+    GCN 层获得的经典全局均值池化方法。最后，我们将两种模型的预测结果组合成一个简单的集成模型，进一步提高了准确率。
+- en: In [*Chapter 10*](B19153_10.xhtml#_idTextAnchor116)*, Predicting Links with
+    Graph Neural Networks*, we will explore another popular task with GNNs – link
+    prediction. In fact, this is not entirely new, as previous techniques we saw such
+    as `DeepWalk` and `Node2Vec` were already based on this idea. We will explain
+    why and introduce two new GNN frameworks – the Graph (Variational) Autoencoder
+    and SEAL. Finally, we will implement and compare them on the `Cora` dataset on
+    a link prediction task.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [*第 10 章*](B19153_10.xhtml#_idTextAnchor116)《使用图神经网络预测链接》中，我们将探讨另一个与 GNNs
+    相关的流行任务——链接预测。事实上，这并不完全是新鲜的，因为我们之前看到的技术，如 `DeepWalk` 和 `Node2Vec`，已经基于这个思想。我们将解释原因，并介绍两个新的
+    GNN 框架——图（变分）自编码器和 SEAL。最后，我们将在 `Cora` 数据集上实现并比较它们在链接预测任务上的表现。
+- en: Further reading
+  id: totrans-132
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '[1] Weisfeiler and Lehman, A.A. (1968) A Reduction of a Graph to a Canonical
+    Form and an Algebra Arising during This Reduction. Nauchno-Technicheskaya Informatsia,
+    9.'
+  id: totrans-133
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[1] Weisfeiler 和 Lehman, A.A. (1968) 图的规范化形式及其在该规范化过程中出现的代数。Nauchno-Technicheskaya
+    Informatsia, 9.'
+- en: '[2] K. Xu, W. Hu, J. Leskovec, and S. Jegelka, *How Powerful are Graph Neural
+    Networks?* arXiv, 2018\. doi: 10.48550/ARXIV.1810.00826.'
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[2] K. Xu, W. Hu, J. Leskovec 和 S. Jegelka, *图神经网络有多强大？* arXiv, 2018\. doi:
+    10.48550/ARXIV.1810.00826.'
+- en: '[3] C. Morris et al., *Weisfeiler and Leman Go Neural: Higher-order Graph Neural
+    Networks*. arXiv, 2018\. doi: 10.48550/ARXIV.1810.02244.'
+  id: totrans-135
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[3] C. Morris 等, *Weisfeiler 和 Leman 走向神经：高阶图神经网络*。arXiv, 2018\. doi: 10.48550/ARXIV.1810.02244.'
+- en: '[4] V. P. Dwivedi et al. *Benchmarking graph neural networks*. arXiv, 2020\.
+    doi: 10.48550/ARXIV.2003.00982.'
+  id: totrans-136
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[4] V. P. Dwivedi 等. *图神经网络基准测试*。arXiv, 2020\. doi: 10.48550/ARXIV.2003.00982.'
+- en: '[5] K. M. Borgwardt, C. S. Ong, S. Schoenauer, S. V. N. Vishwanathan, A. J.
+    Smola, and H. P. Kriegel. *Protein function prediction via graph kernels*. Bioinformatics,
+    21(Suppl 1):i47–i56, Jun 2005.'
+  id: totrans-137
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[5] K. M. Borgwardt, C. S. Ong, S. Schoenauer, S. V. N. Vishwanathan, A. J.
+    Smola 和 H. P. Kriegel. *通过图核进行蛋白质功能预测*。Bioinformatics, 21(Suppl 1):i47–i56, 2005年6月。'
+- en: '[6] P. D. Dobson and A. J. Doig. *Distinguishing enzyme structures from non-enzymes
+    without alignments*. J. Mol. Biol., 330(4):771–783, Jul 2003.'
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[6] P. D. Dobson 和 A. J. Doig. *区分酶结构与非酶结构，无需对齐*。J. Mol. Biol., 330(4):771–783,
+    2003年7月。'
+- en: '[7] Christopher Morris and Nils M. Kriege and Franka Bause and Kristian Kersting
+    and Petra Mutzel and Marion Neumann. *TUDataset: A collection of benchmark datasets
+    for learning with graphs*. In ICML 2020 Workshop on Graph Representation Learning
+    and Beyond.'
+  id: totrans-139
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[7] Christopher Morris、Nils M. Kriege、Franka Bause、Kristian Kersting、Petra
+    Mutzel 和 Marion Neumann。*TUDataset：一个用于图学习的基准数据集集合*。发表于2020年ICML图表示学习及其扩展研讨会。'
+- en: '[8] W. Hu et al., *Strategies for Pre-training Graph Neural Networks*. arXiv,
+    2019\. doi: 10.48550/ARXIV.1905.12265.'
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[8] W. Hu 等人，*预训练图神经网络的策略*。arXiv，2019年。doi: 10.48550/ARXIV.1905.12265。'

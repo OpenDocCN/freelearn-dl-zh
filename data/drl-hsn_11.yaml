@@ -1,0 +1,1310 @@
+- en: '11'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '11'
+- en: Policy Gradients
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 策略梯度
+- en: In this first chapter of Part 3 of the book, we will consider an alternative
+    way to handle Markov decision process (MDP) problems, which form a full family
+    of methods called policy gradient methods. In some situations, these methods work
+    better than value-based methods, so it is really important to be familiar with
+    them.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书第三部分的第一章中，我们将考虑一种处理马尔可夫决策过程（MDP）问题的替代方法，这些方法形成了一个完整的策略梯度方法系列。在某些情况下，这些方法比基于值的方法效果更好，因此熟悉它们非常重要。
+- en: 'In this chapter, we will:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们将：
+- en: Cover an overview of the methods, their motivations, and their strengths and
+    weaknesses in comparison to the already familiar Q-learning
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 概述这些方法、它们的动机，以及与我们已知的Q学习方法相比，它们的优缺点。
+- en: Start with a simple policy gradient method called REINFORCE and try to apply
+    it to our CartPole environment, comparing it with the deep Q-network (DQN) approach
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从一个简单的策略梯度方法——REINFORCE开始，尝试将其应用到我们的CartPole环境中，并与深度Q网络（DQN）方法进行比较。
+- en: Discuss problems with the vanilla REINFORCE method and ways to address them
+    with the Policy Gradient (PG) method, which is a step toward a much more advanced
+    method, A3C, that we’ll take a look at in the next chapter
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 讨论原始REINFORCE方法的问题以及如何通过策略梯度（PG）方法来解决这些问题，这是一种向更高级方法A3C迈进的步骤，我们将在下一章详细讨论。
+- en: Values and policy
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 值与策略
+- en: 'Before getting to the main subject of this chapter, policy gradients, let’s
+    refresh our minds with the common characteristics of the methods covered in Part
+    2 of this book. The central topic in value iteration and Q-learning is the value
+    of the state (V [s]) or value of the state and action (Q[s,a]). Value is defined
+    as the discounted total reward that we can gather from this state or by issuing
+    this particular action from the state. If we know this quantity, our decision
+    on every step becomes simple and obvious: we just act greedily in terms of value,
+    and that guarantees us a good total reward at the end of the episode. So, the
+    values of states (in the case of the value iteration method) or state + action
+    (in the case of Q-learning) stand between us and the best reward. To obtain these
+    values, we have used the Bellman equation, which expresses the value in the current
+    step via the value in the next step.'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在进入本章的主要内容——策略梯度之前，让我们回顾一下本书第二部分涵盖的各种方法的共同特征。值迭代和Q学习的核心主题是状态的值（V[s]）或状态和动作的值（Q[s,a]）。值被定义为我们从这个状态中获得的折扣总奖励，或者从这个状态发出特定动作所获得的奖励。如果我们知道这个量，我们在每一步的决策就变得简单且显而易见：我们只需要在值的基础上贪婪地行动，这就能确保我们在整个回合结束时获得一个较好的总奖励。因此，状态的值（在值迭代方法中）或状态+动作的值（在Q学习中）在我们与最佳奖励之间架起了一座桥梁。为了得到这些值，我们使用了贝尔曼方程，它通过下一个步骤的值来表示当前步骤的值。
+- en: In Chapter [1](ch005.xhtml#x1-190001), we defined the entity that tells us what
+    to do in every state as the policy. As in Q-learning methods, when values are
+    dictating to us how to behave, they are actually defining our policy. Formally,
+    this can be written as π(s) = arg max[a]Q(s,a), which means that the result of
+    our policy π, at every state s, is the action with the largest Q.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第[1](ch005.xhtml#x1-190001)章中，我们定义了在每个状态下告诉我们该做什么的实体为策略。正如Q学习方法一样，当值告诉我们如何行动时，它们实际上是在定义我们的策略。正式来说，这可以写成π(s)
+    = arg max[a]Q(s,a)，这意味着在每个状态s下，我们的策略π的结果是具有最大Q值的动作。
+- en: This policy-values connection is obvious, so I haven’t placed emphasis on the
+    policy as a separate entity, and we have spent most of our time talking about
+    values and how to approximate them correctly. Now it’s time to focus on this connection
+    and the policy itself.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略与值的关系是显而易见的，所以我没有将策略单独作为一个实体进行强调，我们的大部分时间都在讨论值以及如何正确地近似它们。现在是时候关注这个关系以及策略本身了。
+- en: Why the policy?
+  id: totrans-11
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 为什么是策略？
+- en: There are several reasons why the policy is an interesting topic to explore.
+    First of all, the policy is what we are looking for when we are dealing with a
+    reinforcement learning problem. When the agent obtains the observation and needs
+    to make a decision about what to do next, it needs the policy, not the value of
+    the state or particular action. We do care about the total reward, but at every
+    state, we may have little interest in the exact value of the state.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略是一个值得深入探讨的有趣话题，原因有很多。首先，当我们处理强化学习问题时，策略正是我们需要寻找的内容。当智能体获得观察结果并需要决定下一步行动时，它需要的是策略，而不是状态或特定动作的值。我们确实关心总奖励，但在每个状态下，我们可能对状态的确切值并不感兴趣。
+- en: 'Imagine this situation: you’re walking in the jungle and you suddenly realize
+    that there is a hungry tiger hiding in the bushes. You have several alternatives,
+    such as running, hiding, or trying to throw your backpack at it, but asking, ”What’s
+    the exact value of the run action and is it larger than the value of the do nothing
+    action?” is a bit silly. You don’t care much about the value, because you need
+    to make the decision on what to do quickly and that’s it. Our Q-learning approach
+    tried to answer the policy question indirectly by approximating the values of
+    the states and trying to choose the best alternative, but if we are not interested
+    in values, why do extra work?'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下这种情况：你正在丛林中走路，突然意识到有一只饥饿的老虎藏在灌木丛中。你有几种选择，比如跑步、躲藏或者试图把背包扔向它，但问“跑步这个动作的确切值是多少？它大于什么都不做的动作值吗？”有点傻。你并不太关心这个值，因为你需要迅速做出决定，仅此而已。我们的Q学习方法通过近似状态的值并尝试选择最佳备选方案来间接回答策略问题，但如果我们对值不感兴趣，为什么要做多余的工作呢？
+- en: 'Another reason why policies may be preferred is related to situations when
+    an environment has lots of actions or, in the extreme case, with continuous action
+    space problems. To be able to decide on the best action to take with Q(s,a), we
+    need to solve a small optimization problem, finding a, which maximizes Q(s,a).
+    In the case of an Atari game with several discrete actions, this wasn’t a problem:
+    we just approximated the values of all actions and took the action with the largest
+    Q. If our action is not a small discrete set but has a scalar value attached to
+    it, such as a steering wheel angle or the speed at which we want to run from the
+    tiger, this optimization problem becomes hard because Q is usually represented
+    by a highly nonlinear neural network (NN), so finding the argument that maximizes
+    the function’s values can be tricky. In such cases, it’s much more feasible to
+    avoid values and work with the policy directly.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略可能更受欢迎的另一个原因是当环境有很多动作，或者在极端情况下，具有连续动作空间的问题。为了能够根据Q(s,a)决定最佳动作，我们需要解决一个小的优化问题，寻找能够最大化Q(s,a)的a。在一个具有多个离散动作的Atari游戏中，这不是问题：我们只是近似所有动作的值，并选择Q值最大的动作。如果我们的动作不是一个小的离散集合，而是附有标量值，如方向盘角度或我们希望从老虎那里逃跑的速度，那么这个优化问题变得非常困难，因为Q通常是由一个高度非线性的神经网络（NN）表示的，因此找到能最大化函数值的参数可能会很棘手。在这种情况下，避免使用值并直接处理策略要可行得多。
+- en: An extra benefit of policy learning is an environment with stochasticity. As
+    you saw in Chapter [8](ch012.xhtml#x1-1240008), in a categorical DQN, our agent
+    can benefit a lot from working with the distribution of Q-values, instead of expected
+    mean values, as our network can more precisely capture the underlying probability
+    distribution. As you will see in the next section, the policy is naturally represented
+    as the probability of actions, which is a step in the same direction as the categorical
+    DQN method.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略学习的额外好处之一是具有随机性的环境。正如你在第[8](ch012.xhtml#x1-1240008)章看到的，在一个分类DQN中，我们的智能体可以通过处理Q值的分布而非期望均值，获得很大的收益，因为我们的网络能够更精确地捕捉到潜在的概率分布。正如你在下一节将看到的，策略自然表示为行动的概率，这一步与分类DQN方法的方向一致。
+- en: Policy representation
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 策略表示
+- en: 'Now that you know the benefits of the policy, let’s give it a try. So, how
+    do we represent the policy? In the case of Q-values, they were parametrized by
+    the NN that returns values of actions as scalars. If we want our network to parametrize
+    the actions, we have several options. The first and the simplest way could be
+    just returning the identifier of the action (in the case of a discrete set of
+    actions). However, this is not the best way to deal with a discrete set. A much
+    more common solution, which is heavily used in classification tasks, is to return
+    the probability distribution of our actions. In other words, for N mutually exclusive
+    actions, we return N numbers representing the probability of taking each action
+    in the given state (which we pass as an input to the network). This representation
+    is shown in the following illustration:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经了解了策略的好处，让我们试试看。那么，我们如何表示策略呢？在Q值的情况下，它们是由返回动作值的标量的神经网络（NN）参数化的。如果我们希望我们的网络对动作进行参数化，我们有几种选择。最简单的方式可能就是直接返回动作的标识符（在离散动作集合的情况下）。然而，这并不是处理离散集合的最佳方式。一个更常见的解决方案，在分类任务中被广泛使用，是返回我们动作的概率分布。换句话说，对于N个互斥的动作，我们返回N个数字，表示在给定状态下采取每个动作的概率（我们将状态作为输入传递给网络）。这种表示方法在下图中展示：
+- en: '![PIC](img/B22150_11_01.png)'
+  id: totrans-18
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_11_01.png)'
+- en: 'Figure 11.1: Policy approximation with an NN for a discrete set of actions'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图11.1：离散动作集的神经网络策略近似
+- en: 'Such a representation of actions as probabilities has the additional advantage
+    of smooth representation: if we change our network weights a bit, the output of
+    the network will also change slightly. In the case of a discrete numbers output,
+    even a small adjustment of the weights can lead to a jump to a different action.
+    However, if our output is the probability distribution, a small change of weights
+    will usually lead to a small change in output distribution, such as slightly increasing
+    the probability of one action versus the others. This is a very nice property
+    to have, as gradient optimization methods are all about tweaking the parameters
+    of a model a bit to improve the results.'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将动作表示为概率的这种方式有一个额外的优势，就是平滑的表示：如果我们稍微改变网络的权重，网络的输出也会发生轻微变化。在离散数值输出的情况下，即使权重做了小幅调整，也可能导致跳跃到不同的动作。然而，如果我们的输出是概率分布，权重的微小变化通常会导致输出分布的轻微变化，例如稍微增加某个动作的概率，而其他动作的概率相应减少。这是一个非常好的特性，因为梯度优化方法的核心就是稍微调整模型的参数来改进结果。
+- en: Policy gradients
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 策略梯度
+- en: 'We have decided on our policy representation, but what we haven’t seen so far
+    is how we are going to change our network’s parameters to improve the policy.
+    If you remember Chapter [4](ch008.xhtml#x1-740004), we solved a very similar problem
+    using the cross-entropy method: our network took observations as inputs and returned
+    the probability distribution of the actions. In fact, the cross-entropy method
+    is a younger brother of the methods that we will discuss in this part of the book.
+    To start, we will get acquainted with the method called REINFORCE, which differs
+    only slightly from the cross-entropy method, but first, we need to look at some
+    mathematical notation that we will use in this and the following chapters.'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经决定了策略的表示方式，但到目前为止我们还没有看到的是如何改变网络的参数来改善策略。如果你还记得第[4](ch008.xhtml#x1-740004)章，我们通过交叉熵方法解决了一个非常相似的问题：我们的网络将观察值作为输入，并返回动作的概率分布。实际上，交叉熵方法是我们在本书这一部分将讨论的方法的“弟弟”。首先，我们将了解一种叫做REINFORCE的方法，它与交叉熵方法仅有细微的区别，但在此之前，我们需要了解一些我们将在本章及后续章节中使用的数学符号。
+- en: We define the policy gradient as ∇J ≈𝔼[Q(s,a)∇log π(a|s)]. Of course, there
+    is strong proof of this, but it’s not that important. What interests us much more
+    is the meaning of this expression.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将策略梯度定义为∇J ≈𝔼[Q(s,a)∇log π(a|s)]。当然，这有强有力的证明，但这并不是最重要的。我们更感兴趣的是这个表达式的含义。
+- en: The policy gradient defines the direction in which we need to change our network’s
+    parameters to improve the policy in terms of the accumulated total reward. The
+    scale of the gradient is proportional to the value of the action taken, which
+    is Q(s,a) in the formula, and the gradient is equal to the gradient of the log
+    probability of the action taken. This means that we are trying to increase the
+    probability of actions that have given us good total rewards and decrease the
+    probability of actions with bad final outcomes. Expectation, 𝔼 in the formula,
+    just means that we average the gradient of several steps that we have taken in
+    the environment.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略梯度定义了我们需要改变网络参数的方向，以根据累积的总奖励来改进策略。梯度的大小与所采取的动作的值成正比，这个值在公式中表示为Q(s,a)，梯度等于所采取动作的对数概率的梯度。这意味着我们试图增加那些给我们带来较好总奖励的动作的概率，并减少那些带来较差最终结果的动作的概率。公式中的期望符号𝔼只是表示我们对在环境中采取的几个步骤的梯度进行平均。
+- en: 'From a practical point of view, policy gradient methods could be implemented
+    by performing optimization of this loss function: ℒ = −Q(s,a)log π(a|s). The minus
+    sign is important, as the loss function is minimized during stochastic gradient
+    descent (SGD), but we want to maximize our policy gradient. You will see code
+    examples of policy gradient methods later in this and the following chapters.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从实际应用的角度来看，策略梯度方法可以通过优化这个损失函数来实现：ℒ = −Q(s,a)log π(a|s)。负号很重要，因为在随机梯度下降（SGD）过程中，损失函数是被最小化的，但我们希望最大化我们的策略梯度。你将在本章及后续章节中看到策略梯度方法的代码示例。
+- en: The REINFORCE method
+  id: totrans-26
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: REINFORCE方法
+- en: The formula of policy gradient that you have just seen is used by most policy-based
+    methods, but the details can vary. One very important point is how exactly gradient
+    scales, Q(s,a), are calculated. In the cross-entropy method from Chapter [4](ch008.xhtml#x1-740004),
+    we played several episodes, calculated the total reward for each of them, and
+    trained on transitions from episodes with a better-than-average reward. This training
+    procedure is a policy gradient method with Q(s,a) = 1 for state and action pairs
+    from good episodes (with a large total reward) and Q(s,a) = 0 for state and action
+    pairs from worse episodes.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你刚刚看到的策略梯度公式是大多数基于策略的方法所使用的，但具体细节可能会有所不同。一个非常重要的点是如何精确地计算梯度尺度，Q(s,a)。在第[4](ch008.xhtml#x1-740004)章的交叉熵方法中，我们播放了几个回合，计算了每个回合的总奖励，并训练来自奖励优于平均水平的回合的转移。这种训练过程是一个策略梯度方法，对于来自好回合（有较大总奖励）的状态-动作对，Q(s,a)
+    = 1，而对于来自差回合的状态-动作对，Q(s,a) = 0。
+- en: 'The cross-entropy method worked even with those simple assumptions, but the
+    obvious improvement will be to use Q(s,a) for training instead of just 0 and 1\.
+    Why should it help? The answer is a more fine-grained separation of episodes.
+    For example, transitions from the episode with a total reward of 10 should contribute
+    to the gradient more than transitions from the episode with the reward of 1\.
+    Another reason to use Q(s,a) instead of just 0 or 1 constants is to increase the
+    probabilities of good actions at the beginning of the episode and decrease the
+    probability of actions closer to the end of the episode. In the cross-entropy
+    method, we take ”elite” episodes and train on their actions regardless of the
+    actions’ offset in the episode. By using Q(s,a) (which includes discount factor
+    γ), we put more emphasis on good actions in the beginning of the episode than
+    on the actions at the end of the episode. That’s exactly the idea of the method
+    called REINFORCE. Its steps are as follows:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 交叉熵方法即使在那些简单的假设下也能起作用，但显而易见的改进是用Q(s,a)来进行训练，而不仅仅是0和1。为什么这样会有帮助？答案是可以更精细地区分回合。例如，来自总奖励为10的回合的转移应该比来自奖励为1的回合的转移对梯度贡献更大。另一个使用Q(s,a)而不仅仅是0或1常数的原因是，在回合的开始增加好动作的概率，并减少接近回合结束时的动作概率。在交叉熵方法中，我们选取“精英”回合，并训练其动作，而不管动作在回合中的偏移量。通过使用Q(s,a)（包括折扣因子γ），我们在回合开始时对好动作给予更多重视，而不是回合结束时的动作。这正是REINFORCE方法的思想。其步骤如下：
+- en: Initialize the network with random weights.
+  id: totrans-29
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用随机权重初始化网络。
+- en: Play N full episodes, saving their (s,a,r,s′) transitions.
+  id: totrans-30
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 播放N个完整的回合，保存它们的(s,a,r,s′)转移。
+- en: 'For every step, t, of every episode, k, calculate the discounted total reward
+    for the subsequent steps:'
+  id: totrans-31
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对每个回合k的每一步t，计算随后的步骤的折扣总奖励：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq40.png)'
+  id: totrans-32
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq40.png)'
+- en: 'Calculate the loss function for all transitions:'
+  id: totrans-33
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算所有转移的损失函数：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq41.png)'
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq41.png)'
+- en: Perform an SGD update of weights, minimizing the loss.
+  id: totrans-35
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行SGD更新权重，最小化损失。
+- en: Repeat from step 2 until convergence is achieved.
+  id: totrans-36
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从第2步开始重复，直到收敛为止。
+- en: 'This algorithm is different from Q-learning in several important ways:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该算法与Q学习有几个重要的不同之处：
+- en: 'No explicit exploration is needed: In Q-learning, we used an epsilon-greedy
+    strategy to explore the environment and prevent our agent from getting stuck with
+    a non-optimal policy. Now, with the probabilities returned by the network, the
+    exploration is performed automatically. At the beginning, the network is initialized
+    with random weights, and it returns a uniform probability distribution. This distribution
+    corresponds to random agent behavior.'
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不需要显式探索：在Q学习中，我们使用了ε-greedy策略来探索环境，并防止我们的智能体陷入一个非最优策略中。现在，使用网络返回的概率，探索过程会自动进行。最开始，网络以随机权重初始化，返回均匀概率分布。这种分布对应于智能体的随机行为。
+- en: 'No replay buffer is used: Policy gradient methods belong to the on-policy methods
+    class, which means that we can’t train on data obtained from the old policy. This
+    is both good and bad. The good part is that such methods usually converge faster.
+    The bad side is that they usually require much more interaction with the environment
+    than off-policy methods such as DQN.'
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不使用回放缓冲区：策略梯度方法属于在线方法类，这意味着我们不能使用旧策略获得的数据进行训练。这既有好的一面，也有坏的一面。好的一面是，这类方法通常收敛较快。坏的一面是，它们通常比离策略方法（如DQN）需要更多的环境交互。
+- en: 'No target network is needed: Here, we use Q-values, but they are obtained from
+    our experience in the environment. In DQN, we used the target network to break
+    the correlation in Q-value approximation, but we are not approximating anymore.
+    In the next chapter, you will see that the target network trick can still be useful
+    in policy gradient methods.'
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不需要目标网络：在这里，我们使用 Q 值，但它们是从我们在环境中的经验中获得的。在 DQN 中，我们使用目标网络来打破 Q 值逼近中的相关性，但我们不再进行逼近了。在下一章，你会看到目标网络技巧在策略梯度方法中仍然是有用的。
+- en: The CartPole example
+  id: totrans-41
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: CartPole 示例
+- en: To see the method in action, let’s check the implementation of the REINFORCE
+    method on the familiar CartPole environment. The full code of the example is in
+    Chapter11/02_cartpole_reinforce.py.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了看到这个方法的实际效果，我们来检查在熟悉的 CartPole 环境中实现 REINFORCE 方法的代码。该示例的完整代码位于 Chapter11/02_cartpole_reinforce.py。
+- en: 'In the beginning, we define hyperparameters (imports are omitted):'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一开始，我们定义了超参数（省略了导入部分）：
+- en: '[PRE0]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The EPISODES_TO_TRAIN value specifies how many complete episodes we will use
+    for training.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: EPISODES_TO_TRAIN 值指定了我们将用于训练的完整回合数。
+- en: 'The following network should also be familiar to you:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下网络也应该对你来说很熟悉：
+- en: '[PRE1]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Note that despite the fact our network returns probabilities, we are not applying
+    softmax nonlinearity to the output. The reason behind this is that we will use
+    the PyTorch log_softmax function to calculate the logarithm of the softmax output
+    at once. This method of calculation is much more numerically stable; however,
+    we need to remember that output from the network is not probability, but raw scores
+    (usually called logits).
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，尽管我们的网络返回的是概率，但我们并没有对输出应用 softmax 非线性激活函数。这样做的原因是，我们将使用 PyTorch 的 log_softmax
+    函数一次性计算 softmax 输出的对数。这样计算方法在数值上更稳定；但是，我们需要记住，网络的输出不是概率，而是原始得分（通常称为 logits）。
+- en: 'This next function is a bit tricky:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个函数有点棘手：
+- en: '[PRE2]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: It accepts a list of rewards for the whole episode and needs to calculate the
+    discounted total reward for every step. To do this efficiently, we calculate the
+    reward from the end of the local reward list. Indeed, the last step of the episode
+    will have a total reward equal to its local reward. The step before the last will
+    have the total reward of r[t−1] + γ ⋅r[t] (if t is an index of the last step).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它接受一个包含整个回合奖励的列表，并需要为每一步计算折扣后的总奖励。为了高效地做到这一点，我们从局部奖励列表的末尾计算奖励。实际上，回合的最后一步将具有与其局部奖励相等的总奖励。倒数第二步的总奖励将是
+    r[t−1] + γ ⋅r[t]（如果 t 是最后一步的索引）。
+- en: Our sum_r variable contains the total reward for the previous steps, so to get
+    the total reward for the current step, we need to multiply sum_r by γ and add
+    the local reward from that step.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的 sum_r 变量包含前一步的总奖励，因此要获取当前步骤的总奖励，我们需要将 sum_r 乘以 γ 并加上该步骤的局部奖励。
+- en: 'The preparation steps before the training loop should also be familiar to you:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练循环之前的准备步骤应该对你来说也很熟悉：
+- en: '[PRE3]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: The only new element is the agent class from the PTAN library. Here, we are
+    using ptan.agent.PolicyAgent, which needs to make a decision about actions for
+    every observation. As our network now returns the policy as the probabilities
+    of the actions, in order to select the action to take, we need to obtain the probabilities
+    from the network and then perform random sampling from this probability distribution.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 唯一的新元素是来自 PTAN 库的 agent 类。在这里，我们使用 ptan.agent.PolicyAgent，它需要为每个观测做出动作决策。由于我们的网络现在返回的是动作的概率分布，为了选择要执行的动作，我们需要从网络中获取概率，然后从该概率分布中进行随机采样。
+- en: When we worked with DQN, the output of the network was Q-values, so if one action
+    had a value of 0.4 and another action had a value of 0.5, the second action was
+    preferred 100% of the time. In the case of the probability distribution, if the
+    first action has a probability of 0.4 and the second 0.5, our agent should take
+    the first action with a 40% chance and the second with a 50% chance. Of course,
+    our network can decide to take the second action 100% of the time, and in this
+    case, it returns a probability of 0 for the first action and a probability of
+    1 for the second action.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们使用 DQN 时，网络的输出是 Q 值，因此如果某个动作的值为 0.4，另一个动作的值为 0.5，那么第二个动作就会被 100% 的概率优先选择。在概率分布的情况下，如果第一个动作的概率为
+    0.4，第二个动作的概率为 0.5，我们的智能体应该以 40% 的概率选择第一个动作，以 50% 的概率选择第二个动作。当然，我们的网络也可以决定 100%
+    选择第二个动作，在这种情况下，第一个动作的概率为 0，第二个动作的概率为 1。
+- en: This difference is important to understand, but the change in the implementation
+    is not large. Our PolicyAgent internally calls the NumPy random.choice() function
+    with probabilities from the network. The apply_softmax argument instructs it to
+    convert the network output to probabilities by calling softmax first. The third
+    argument, preprocessor, is a way to get around the fact that the CartPole environment
+    in Gymnasium returns the observation as a float64 instead of the float32 required
+    by PyTorch.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个差异很重要，需要理解，但实现上的变化不大。我们的PolicyAgent内部调用NumPy的random.choice()函数，并使用网络的概率。apply_softmax参数指示它首先通过调用softmax将网络输出转换为概率。第三个参数preprocessor是为了绕过Gymnasium中的CartPole环境返回的观察值是float64类型，而PyTorch需要float32类型的问题。
+- en: 'Before we can start the training loop, we need several variables:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始训练循环之前，我们需要一些变量：
+- en: '[PRE4]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The first two variables, total_rewards and done_episodes, are used for reporting
+    and contain the total rewards for the episodes and the count of completed episodes.
+    The next few variables are used to gather the training data. The cur_rewards list
+    contains local rewards for the episode being currently played. As this episode
+    reaches the end, we calculate the discounted total rewards from local rewards
+    using the calc_qvals() function and append them to the batch_qvals list. The batch_states
+    and batch_actions lists contain states and actions that we saw in the last training.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前两个变量total_rewards和done_episodes用于报告，包含回合的总奖励和已完成回合的计数。接下来的几个变量用于收集训练数据。cur_rewards列表包含当前正在进行的回合的局部奖励。当该回合结束时，我们使用calc_qvals()函数从局部奖励计算折扣后的总奖励，并将其添加到batch_qvals列表中。batch_states和batch_actions列表包含我们在上次训练中看到的状态和动作。
+- en: 'The following code snippet is the beginning of the training loop:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下代码片段是训练循环的开始：
+- en: '[PRE5]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Every experience that we get from the experience source contains the state,
+    action, local reward, and next state. If the end of the episode has been reached,
+    the next state will be None. For non-terminal experience entries, we just save
+    the state, action, and local reward in our lists. At the end of the episode, we
+    convert the local rewards into Q-values and increment the episodes counter.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从经验源中获得的每个经验包含状态、动作、局部奖励和下一个状态。如果回合已结束，下一个状态将为None。对于非终止的经验条目，我们只需将状态、动作和局部奖励保存在列表中。在回合结束时，我们将局部奖励转换为Q值，并增加回合计数器。
+- en: 'This part of the training loop is performed at the end of the episode and is
+    responsible for reporting the current progress and writing metrics to TensorBoard:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练循环的这一部分在回合结束时执行，负责报告当前进展并将指标写入TensorBoard：
+- en: '[PRE6]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'When enough episodes have passed since the last training step, we can optimize
+    the gathered examples. As a first step, we convert states, actions, and Q-values
+    into the appropriate PyTorch form:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当自上次训练步骤以来经过足够的回合时，我们可以优化收集到的示例。第一步，我们将状态、动作和Q值转换为适当的PyTorch格式：
+- en: '[PRE7]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Then, we calculate the loss from the steps:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们根据步骤计算损失：
+- en: '[PRE8]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Here, we ask our network to calculate states into logits and calculate the logarithm
+    and softmax of them. On the third line, we select log probabilities from the actions
+    taken and scale them with Q-values. On the last line, we average those scaled
+    values and do negation to obtain the loss to minimize. To reiterate, this minus
+    sign is very important because our policy gradient needs to be maximized to improve
+    the policy. As the optimizer in PyTorch minimizes the loss function, we need to
+    negate the policy gradient.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们要求网络将状态计算为logits，并计算其对数和softmax。在第三行，我们从所采取的动作中选择对数概率，并用Q值进行缩放。在最后一行，我们平均这些缩放后的值并取负数，以获得需要最小化的损失。再强调一下，这个负号非常重要，因为我们的策略梯度需要最大化，以改善策略。由于PyTorch中的优化器是最小化损失函数的，因此我们需要取策略梯度的负值。
+- en: 'The rest of the code is clear:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 剩余的代码很清晰：
+- en: '[PRE9]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Here, we perform backpropagation to gather gradients in our variables and ask
+    the optimizer to perform an SGD update. At the end of the training loop, we reset
+    the episodes counter and clear our lists for fresh data to gather.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们执行反向传播来收集变量中的梯度，并要求优化器执行SGD更新。在训练循环结束时，我们重置回合计数器并清空列表，以便收集新的数据。
+- en: Results
+  id: totrans-74
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'For reference, I’ve implemented DQN in the CartPole environment with almost
+    the same hyperparameters as our REINFORCE example. You’ll find it in Chapter11/01_cartpole_dqn.py.
+    Neither example requires any command-line arguments, and they should converge
+    in less than a minute:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为参考，我在CartPole环境中实现了DQN，使用的超参数几乎与我们的REINFORCE示例相同。你可以在Chapter11/01_cartpole_dqn.py中找到它。两个示例都不需要任何命令行参数，并且它们应该在不到一分钟的时间内收敛：
+- en: '[PRE10]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: The convergence dynamics for both DQN and REINFORCE are shown in the following
+    charts. Your training dynamics may vary due to the randomness of the training.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DQN和REINFORCE的收敛动态如下图所示。你的训练动态可能会因训练的随机性而有所不同。
+- en: '![PIC](img/B22150_11_02.png)'
+  id: totrans-78
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_02.png)'
+- en: 'Figure 11.2: Count of episodes played over time (left) and training steps (right)'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图11.2：随着时间推移的回合数（左）和训练步骤（右）
+- en: These two charts compare the count of episodes played over time and over the
+    training steps.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两张图表比较了随时间推移和训练步骤的回合数。
+- en: 'The next chart compares the smoothed reward for episodes played:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一张图表比较了平滑的回合奖励：
+- en: '![PIC](img/B22150_11_03.png)'
+  id: totrans-82
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_03.png)'
+- en: 'Figure 11.3: Reward dynamics for two methods'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图11.3：两种方法的奖励动态
+- en: As you can see, the methods converged almost identically (with REINFORCE being
+    slightly faster), but then DQN had problems when the mean reward climbed above
+    400 and had to start almost from scratch.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，方法几乎以相同的速度收敛（REINFORCE略快），但当平均奖励超过400时，DQN出现了问题，必须几乎从头开始。
+- en: If you remember from Chapter [4](ch008.xhtml#x1-740004), the cross-entropy method
+    required about 40 batches of 16 episodes each to solve the CartPole environment,
+    which is 640 episodes in total. The REINFORCE method was able to do the same in
+    fewer than 400 episodes, which is a nice improvement.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你还记得第[4](ch008.xhtml#x1-740004)章，交叉熵方法需要大约40个批次，每个批次16个回合来解决CartPole环境，总共是640个回合。REINFORCE方法能够在不到400个回合内完成同样的任务，这是一个很好的改进。
+- en: Policy-based versus value-based methods
+  id: totrans-86
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基于策略与基于价值的方法
+- en: 'Let’s now step back from the code that we have just seen and check the differences
+    between these families of methods:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们暂时回顾一下我们刚才看到的代码，并检查这些方法家族之间的差异：
+- en: 'Policy methods directly optimize what we care about: our behavior. Value methods,
+    such as DQN, do the same indirectly, learning the value first and providing us
+    with the policy based on this value.'
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 策略方法直接优化我们关心的内容：我们的行为。价值方法，如DQN，通过间接的方式来做同样的事情，先学习价值，然后根据这个价值提供策略。
+- en: Policy methods are on-policy and require fresh samples from the environment.
+    Value methods can benefit from old data, obtained from the old policy, human demonstration,
+    and other sources.
+  id: totrans-89
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 策略方法是在线的，需要来自环境的新样本。价值方法可以从旧的数据中受益，这些数据来自于旧的策略、人类示范以及其他来源。
+- en: Policy methods are usually less sample-efficient, which means they require more
+    interaction with the environment. Value methods can benefit from large replay
+    buffers. However, sample efficiency doesn’t mean that value methods are more computationally
+    efficient, and very often, it’s the opposite.
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 策略方法通常较为低效，意味着它们需要更多与环境的交互。价值方法可以从大规模的回放缓冲区中受益。然而，样本效率并不意味着价值方法在计算效率上更高，实际上，往往是相反的。
+- en: 'In the preceding example, during the training, we needed to access our NN only
+    once, to get the probabilities of actions. In DQN, we need to process two batches
+    of states: one for the current state and another for the next state in the Bellman
+    update.'
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，在训练过程中，我们只需要访问一次神经网络，以获得行动的概率。在DQN中，我们需要处理两批状态：一批是当前状态，另一批是贝尔曼更新中的下一个状态。
+- en: As you can see, there is no strong preference for one family or another. In
+    some situations, policy methods will be the more natural choice, like in continuous
+    control problems or cases when access to the environment is cheap and fast. However,
+    there are many situations when value methods will shine, for example, the recent
+    state-of-the-art results on Atari games achieved by DQN variants. Ideally, you
+    should be familiar with both families and understand the strong and weak sides
+    of both camps.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，似乎没有强烈的倾向偏向某个方法家族。在某些情况下，策略方法会是更自然的选择，比如在连续控制问题中，或者在环境访问便宜且快速的情况下。然而，也有许多情况是价值方法会大放异彩，比如最近DQN变体在Atari游戏上的最新成果。理想情况下，你应该熟悉这两种方法家族，并理解它们的优缺点。
+- en: In the next section, we will talk about the REINFORCE method’s limitations,
+    ways to improve it, and how to apply a policy gradient method to our favorite
+    Pong game.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一节中，我们将讨论 REINFORCE 方法的局限性、改进方法，以及如何将政策梯度方法应用到我们最喜欢的 Pong 游戏中。
+- en: REINFORCE issues
+  id: totrans-94
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: REINFORCE 问题
+- en: In the previous section, we discussed the REINFORCE method, which is a natural
+    extension of the cross-entropy method. Unfortunately, both REINFORCE and the cross-entropy
+    method still suffer from several problems, which make both of them limited to
+    simple environments.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节中，我们讨论了 REINFORCE 方法，它是交叉熵方法的自然扩展。不幸的是，REINFORCE 和交叉熵方法仍然存在一些问题，这使得它们都仅限于简单的环境中。
+- en: Full episodes are required
+  id: totrans-96
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 需要完整的回合
+- en: 'First of all, we still need to wait for the full episode to complete before
+    we can start training. Even worse, both REINFORCE and the cross-entropy method
+    behave better with more episodes used for training (just because more episodes
+    means more training data, which means more accurate policy gradients). This situation
+    is fine for short episodes in the CartPole, when in the beginning, we can barely
+    handle the bar for more than 10 steps; but in Pong, it is completely different:
+    every episode can last for hundreds or even thousands of frames. It’s equally
+    bad from the training perspective, as our training batch becomes very large, and
+    from the sample efficiency perspective, as we need to communicate with the environment
+    a lot just to perform a single training step.'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们仍然需要等待完整的回合结束才能开始训练。更糟糕的是，REINFORCE 和交叉熵方法在使用更多回合进行训练时表现更好（只是因为更多的回合意味着更多的训练数据，这意味着更准确的政策梯度）。这种情况在
+    CartPole 的短回合中是可以接受的，因为一开始我们几乎无法保持杆子超过 10 步；但在 Pong 中，情况完全不同：每个回合可能持续数百甚至数千帧。从训练的角度来看，这同样糟糕，因为我们的训练批次变得非常大；从样本效率的角度来看，我们需要与环境进行大量的交互才能执行一次训练步骤。
+- en: 'The purpose of the complete episode requirement is to get as accurate a Q-estimation
+    as possible. When we talked about DQN, you saw that, in practice, it’s fine to
+    replace the exact value for a discounted reward with our estimation using the
+    one-step Bellman equation: Q(s,a) = r[a] + γV (s′). To estimate V (s), we used
+    our own Q-estimation, but in the case of the policy gradient, we don’t have V
+    (s) or Q(s,a) anymore.'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整回合要求的目的是尽可能准确地获得 Q 估计。当我们讨论 DQN 时，你会看到，实际上，用一阶贝尔曼方程替换折扣奖励的精确值与我们的估计是可以的：Q(s,a)
+    = r[a] + γV (s′)。为了估计 V(s)，我们使用了自己的 Q 估计，但在政策梯度的情况下，我们不再有 V(s) 或 Q(s,a)。
+- en: 'To overcome this, two approaches exist:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，存在两种方法：
+- en: We can ask our network to estimate V (s) and use this estimation to obtain Q.
+    This approach will be discussed in the next chapter and is called the actor-critic
+    method, which is the most popular method from the policy gradient family.
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们可以要求我们的网络估计 V(s)，并使用这个估计来获得 Q。这种方法将在下一章讨论，它被称为演员-评论员方法，是政策梯度家族中最流行的方法。
+- en: Alternatively, we can do the Bellman equation, unrolling N steps ahead, which
+    will effectively exploit the fact that the value contribution decreases when gamma
+    is less than 1\. Indeed, with γ = 0.9, the value coefficient at the 10th step
+    will be 0.9^(10) ≈ 0.35\. At step 50, this coefficient will be 0.9^(50) ≈ 0.00515,
+    which is a really small contribution to the total reward. With γ = 0.99, the required
+    count of steps will become larger, but we can still do this.
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另外，我们可以执行贝尔曼方程，展开 N 步，这将有效利用当 γ 小于 1 时，价值贡献递减的事实。事实上，当 γ = 0.9 时，第 10 步的价值系数将是
+    0.9^(10) ≈ 0.35。在第 50 步时，这个系数将是 0.9^(50) ≈ 0.00515，这对总奖励的贡献非常小。当 γ = 0.99 时，所需的步数会变大，但我们仍然可以这样做。
+- en: High gradient variance
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 高梯度方差
+- en: In the policy gradient formula, ∇J ≈𝔼[Q(s,a)∇log π(a|s)], we have a gradient
+    proportional to the discounted reward from the given state. However, the range
+    of this reward is heavily environment-dependent. For example, in the CartPole
+    environment, we get a reward of 1 for every timestamp that we are holding the
+    pole vertically. If we can do this for five steps, we get a total (undiscounted)
+    reward of 5\. If our agent is smart and can hold the pole for, say, 100 steps,
+    the total reward will be 100\. The difference in value between those two scenarios
+    is 20 times, which means that the scale between the gradients of unsuccessful
+    samples will be 20 times lower than for more successful ones. Such a large difference
+    can seriously affect our training dynamics, as one lucky episode will dominate
+    in the final gradient.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在策略梯度公式中，∇J ≈𝔼[Q(s,a)∇log π(a|s)]，我们得到了与给定状态下的折扣奖励成正比的梯度。然而，这个奖励的范围受到环境的高度依赖。例如，在CartPole环境中，我们每当保持杆子垂直时，就会得到1的奖励。如果我们能保持五步，我们将获得总的（未折扣的）奖励为5。如果我们的智能体非常聪明，能够保持杆子，例如100步，总奖励将是100。两者之间的价值差异是20倍，这意味着失败样本的梯度尺度将比成功样本低20倍。如此巨大的差异会严重影响我们的训练动态，因为一次幸运的经历会在最终梯度中占主导地位。
+- en: 'In mathematical terms, the policy gradient has high variance, and we need to
+    do something about this in complex environments; otherwise, the training process
+    can become unstable. The usual approach to handling this is subtracting a value
+    called the baseline from the Q. The possible choices for the baseline are as follows:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从数学角度来看，策略梯度具有较高的方差，在复杂环境中我们需要采取措施来解决这个问题；否则，训练过程可能会变得不稳定。通常处理这种情况的方法是从Q中减去一个称为基准值的值。基准值的可能选择如下：
+- en: Some constant value, which is normally the mean of the discounted rewards
+  id: totrans-105
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个常数值，通常是折扣奖励的平均值
+- en: The moving average of the discounted rewards
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 折扣奖励的移动平均值
+- en: The value of the state, V (s)
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 状态的价值，V (s)
+- en: To illustrate the baseline effect on the training, in Chapter11/03_cartpole_reinforce_baseline.py
+    I implemented the second way of calculating the baseline (the average of rewards).
+    The only difference with the version you’ve already seen is in the calc_qvals()
+    function. I’m not going to discuss the results here; you can experiment yourself.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明基准值对训练的影响，在Chapter11/03_cartpole_reinforce_baseline.py中，我实现了第二种计算基准值的方法（奖励的平均值）。与您已经看到的版本唯一不同的是在calc_qvals()函数中。我这里不打算讨论结果；您可以自己进行实验。
+- en: Exploration problems
+  id: totrans-109
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 探索问题
+- en: 'Even with the policy represented as the probability distribution, there is
+    a high chance that the agent will converge to some locally optimal policy and
+    stop exploring the environment. In DQN, we solved this using epsilon-greedy action
+    selection: with the probability epsilon, the agent took a random action instead
+    of the action dictated by the current policy. We can use the same approach, of
+    course, but policy gradient methods allow us to follow a better path, called the
+    entropy bonus.'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使策略表示为概率分布，智能体仍然有很大概率会收敛到某个局部最优策略，并停止探索环境。在DQN中，我们通过epsilon-greedy行动选择来解决这个问题：以epsilon的概率，智能体采取一个随机行动，而不是由当前策略决定的行动。当然，我们也可以使用相同的方法，但策略梯度方法允许我们走一条更好的路径，称为熵奖励。
+- en: In information theory, entropy is a measure of uncertainty in a system. Being
+    applied to the agent’s policy, entropy shows how uncertain the agent is about
+    which action to take. In math notation, the entropy of the policy is defined as
+    H(π) = −∑ π(a|s)log π(a|s). The value of entropy is always greater than zero and
+    has a single maximum when the policy is uniform; in other words, all actions have
+    the same probability. Entropy becomes minimal when our policy has 1 for one action
+    and 0 for all others, which means that the agent is absolutely sure what to do.
+    To prevent our agent from being stuck in the local minimum, we subtract the entropy
+    from the loss function, punishing the agent for being too certain about the action
+    to take.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在信息论中，熵是衡量系统不确定性的一个指标。应用到智能体的策略中，熵显示了智能体在选择行动时的不确定性。用数学符号表示，策略的熵定义为H(π) = −∑
+    π(a|s)log π(a|s)。熵的值总是大于零，当策略均匀时，熵有一个单一的最大值；换句话说，所有动作的概率相同。当我们的策略对于某一动作的概率为1，其他动作的概率为0时，熵最小，这意味着智能体完全确定该做什么。为了防止智能体陷入局部最小值，我们从损失函数中减去熵，惩罚智能体对采取的行动过于确定。
+- en: High correlation of samples
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 样本的高度相关性
+- en: 'As we discussed in Chapter [6](#), training samples in a single episode are
+    usually heavily correlated, which is bad for SGD training. In the case of DQN,
+    we solved this issue by having a large replay buffer with a size from 100,000
+    to several million observations. This solution is not applicable to the policy
+    gradient family anymore because those methods belong to the on-policy class. The
+    implication is simple: using old samples generated by the old policy, we will
+    get policy gradients for that old policy, not for our current one.'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在第[6](#)章中讨论的那样，单个回合中的训练样本通常高度相关，这对于SGD训练来说是不好的一点。在DQN的情况下，我们通过拥有一个大小从100,000到几百万个观察值的大型重放缓冲区来解决这个问题。这个解决方案对于策略梯度类方法就不适用了，因为这些方法属于在策略类。其含义很简单：使用旧策略生成的旧样本，我们会得到该旧策略的策略梯度，而不是当前策略的。
+- en: 'The obvious, but unfortunately wrong, solution would be to reduce the replay
+    buffer size. It might work in some simple cases but, in general, we need fresh
+    training data generated by our current policy. To solve this, parallel environments
+    are normally used. The idea is simple: instead of communicating with one environment,
+    we use several and use their transitions as training data.'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显而易见，但不幸的是错误的解决方案是减少重放缓冲区的大小。这在一些简单的案例中可能有效，但一般来说，我们需要由当前策略生成的新鲜训练数据。为了解决这个问题，通常使用并行环境。其想法很简单：我们不与一个环境进行通信，而是使用多个环境，并利用它们的过渡作为训练数据。
+- en: Policy gradient methods on CartPole
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: CartPole上的策略梯度方法
+- en: Nowadays, almost nobody uses the vanilla policy gradient method, as the much
+    more stable actor-critic method exists. However, I still want to show the policy
+    gradient implementation, as it establishes very important concepts and metrics
+    to check the policy gradient method’s performance.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如今，几乎没有人再使用原始的策略梯度方法，因为更稳定的演员-评论家方法已经存在。然而，我仍然想展示策略梯度的实现，因为它建立了非常重要的概念和衡量标准，用于检查策略梯度方法的性能。
+- en: Implementation
+  id: totrans-117
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: We will start with a much simpler environment of CartPole, and in the next section,
+    we will check its performance in our favorite Pong environment. The complete code
+    for the following example is available in Chapter11/04_cartpole_pg.py.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从一个简单得多的CartPole环境开始，在接下来的部分中，我们将检查其在我们最喜欢的Pong环境中的表现。以下示例的完整代码可在Chapter11/04_cartpole_pg.py中找到。
+- en: 'Besides the already familiar hyperparameters, we have two new ones:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了已经熟悉的超参数外，我们还有两个新的超参数：
+- en: '[PRE11]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The ENTROPY_BETA value is the scale of the entropy bonus and the REWARD_STEPS
+    value specifies how many steps ahead the Bellman equation is unrolled to estimate
+    the discounted total reward of every transition.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ENTROPY_BETA值是熵奖励的规模，REWARD_STEPS值指定了展开Bellman方程的步数，用以估算每个过渡的折扣总奖励。
+- en: 'The following is the network architecture:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是网络架构：
+- en: '[PRE12]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'This is exactly the same as in the previous examples for CartPole: a two-layer
+    network with 128 neurons in the hidden layer. The preparation code is also the
+    same as before, except the experience source is asked to unroll the Bellman equation
+    for 10 steps.'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这与之前CartPole示例中的完全相同：一个隐藏层有128个神经元的两层网络。准备代码也与之前相同，除了经验源需要展开Bellman方程10步。
+- en: 'The following is the part that differs from 04_cartpole_pg.py:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是与04_cartpole_pg.py不同的部分：
+- en: '[PRE13]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'In the training loop, we maintain the sum of the discounted reward for every
+    transition and use it to calculate the baseline for the policy scale:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练循环中，我们维护每个过渡的折扣奖励之和，并用它来计算策略尺度的基准：
+- en: '[PRE14]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'In the loss calculation, we use the same code as before to calculate the policy
+    loss (which is the negated policy gradient):'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在损失计算中，我们使用与之前相同的代码来计算策略损失（即负的策略梯度）：
+- en: '[PRE15]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Then we add the entropy bonus to the loss by calculating the entropy of the
+    batch and subtracting it from the loss. As entropy has a maximum for uniform probability
+    distribution and we want to push the training toward this maximum, we need to
+    subtract from the loss.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们通过计算批次的熵并从损失中减去它，来向损失中添加熵奖励。由于熵对于均匀概率分布有最大值，而我们希望将训练推动到这个最大值，所以我们需要从损失中减去熵。
+- en: '[PRE16]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Then, we calculate the Kullback-Leibler (KL) divergence between the new policy
+    and the old policy. KL divergence in information theory measures how one probability
+    distribution diverges from another expected probability distribution, as we saw
+    in Chapter [4](ch008.xhtml#x1-740004). In our example, it is being used to compare
+    the policy returned by the model before and after the optimization step:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们计算新策略与旧策略之间的 Kullback-Leibler (KL) 散度。KL 散度是信息论中的一个概念，用来衡量一个概率分布与另一个预期概率分布的差异，就像我们在第[4](ch008.xhtml#x1-740004)章中所看到的那样。在我们的例子中，它被用来比较优化步骤前后模型返回的策略：
+- en: '[PRE17]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: High spikes in KL are usually a bad sign since it means that our policy was
+    pushed too far from the previous policy, which is a bad idea most of the time
+    (as our NN is a very nonlinear function in a high-dimensional space, such large
+    changes in the model weight could have a very strong influence on the policy).
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: KL 的高峰通常是一个不好的信号，因为这意味着我们的策略与之前的策略相差太远，这在大多数情况下都是不好的做法（因为我们的神经网络是一个高维空间中的非常非线性函数，模型权重的如此大变化可能会对策略产生非常强的影响）。
+- en: Finally, we calculate the statistics about the gradients on this training step.
+    It’s usually good practice to show the graph of the maximum and L2 norm (which
+    is the length of the vector) of gradients to get an idea about the training dynamics.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们计算这一步训练中的梯度统计数据。通常，展示梯度的最大值和 L2 范数（即向量的长度）图表是一种好的实践，这可以帮助我们了解训练动态。
+- en: '[PRE18]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'At the end of the training loop, we dump all the values that we want to monitor
+    in TensorBoard:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练循环结束时，我们将所有希望在 TensorBoard 中监视的值进行转储：
+- en: '[PRE19]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Results
+  id: totrans-140
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'In this example, we will plot a lot of charts in TensorBoard. Let’s start with
+    the familiar one: reward. As you can see in the following chart, the dynamics
+    and performance are not very different from the REINFORCE method:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，我们将在 TensorBoard 中绘制许多图表。让我们从熟悉的图表开始：奖励。如以下图所示，动态和表现与 REINFORCE 方法没有太大不同：
+- en: '![PIC](img/B22150_11_04.png)'
+  id: totrans-142
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_04.png)'
+- en: 'Figure 11.4: The reward dynamics of the policy gradient method'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 11.4：策略梯度法的奖励动态
+- en: 'The next two charts are related to our baseline and scales of policy gradients.
+    We expect the baseline to converge to 1 + 0.99 + 0.99² + … + 0.99⁹, which is approximately
+    9.56\. Scales of policy gradients should oscillate around zero. That’s exactly
+    what we can see in the following graph:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来的两个图表与我们的基线和策略梯度的尺度相关。我们预计基线将收敛到 1 + 0.99 + 0.99² + … + 0.99⁹，大约为 9.56。策略梯度的尺度应围绕零波动。这正是我们在下图中看到的：
+- en: '![PIC](img/B22150_11_05.png)'
+  id: totrans-145
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_05.png)'
+- en: 'Figure 11.5: Baseline value (left) and batch scales (right)'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 11.5：基线值（左）与批次尺度（右）
+- en: 'The entropy is decreasing over time from 0.69 to 0.52 (Figure [11.6](#x1-198005r6)).
+    The starting value corresponds to the maximum entropy with two actions, which
+    is approximately 0.69:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 熵随着时间的推移从 0.69 降到 0.52（图[11.6](#x1-198005r6)）。起始值对应于具有两个动作的最大熵，大约为 0.69：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq42.png) ![π (a |s) = P[At = a|St = s]
+    ](img/eq43.png)'
+  id: totrans-148
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq42.png) ![π (a |s) = P[At = a|St = s]
+    ](img/eq43.png)'
+- en: 'The fact that the entropy is decreasing during the training, as indicated by
+    the following chart, shows that our policy is moving from uniform distribution
+    to more deterministic actions:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 熵在训练过程中减少，如下图所示，这表明我们的策略正在从均匀分布转向更确定性的动作：
+- en: '![PIC](img/B22150_11_06.png)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_06.png)'
+- en: 'Figure 11.6: Entropy during the training'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 11.6：训练过程中的熵
+- en: The next group of plots (Figure [11.7](#x1-198007r7) and Figure [11.8](#x1-198008r8))
+    is related to loss, which includes policy loss, entropy loss, and their sum. The
+    entropy loss is scaled and is a mirrored version of the preceding entropy chart.
+    The policy loss shows the mean scale and direction of the policy gradient computed
+    on the batch. Here, we should check the relative size of both of them to prevent
+    entropy loss from dominating too much.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一组图表（图[11.7](#x1-198007r7)和图[11.8](#x1-198008r8)）与损失相关，包括策略损失、熵损失及其总和。熵损失经过缩放，是前面熵图的镜像版本。策略损失显示了在批次上计算的策略梯度的均值、尺度和方向。在这里，我们应检查两者的相对大小，以防熵损失过度主导。
+- en: '![PIC](img/B22150_11_07.png)'
+  id: totrans-153
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_07.png)'
+- en: 'Figure 11.7: Entropy loss (left) and policy loss (right)'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 11.7：熵损失（左）与策略损失（右）
+- en: '![PIC](img/B22150_11_08.png)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_11_08.png)'
+- en: 'Figure 11.8: Total loss'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 11.8：总损失
+- en: 'The final set of charts (Figure [11.9](#x1-198010r9) and Figure [11.10](#x1-198011r10))
+    shows the gradient’s L2 values, the maximum of L2, and KL. Our gradients look
+    healthy during the whole training: they are not too large and not too small, and
+    there are no huge spikes. The KL charts also look normal as there are some spikes,
+    but they are not very large and don’t exceed 10^(−3):'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一组图表（图[11.9](#x1-198010r9)和图[11.10](#x1-198011r10)）显示了梯度的L2值、L2的最大值和KL值。我们的梯度在整个训练过程中看起来很健康：它们不太大也不太小，没有出现巨大的波动。KL图表也看起来正常，虽然有一些波动，但它们并不大，并且没有超过10^(-3)：
+- en: '![PIC](img/B22150_11_09.png)'
+  id: totrans-158
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_11_09.png)'
+- en: 'Figure 11.9: Gradients L2 (left) and maximum value (right)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图11.9：梯度L2（左）和最大值（右）
+- en: '![PIC](img/B22150_11_10.png)'
+  id: totrans-160
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_11_10.png)'
+- en: 'Figure 11.10: KL divergence'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图11.10：KL散度
+- en: Policy gradient methods on Pong
+  id: totrans-162
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Pong上的策略梯度方法
+- en: As we’ve seen in the previous section, the vanilla policy gradient method works
+    well on a simple CartPole environment, but it works surprisingly badly in more
+    complicated environments.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在前一节中看到的，标准的策略梯度方法在简单的CartPole环境中表现良好，但在更复杂的环境中却表现得出奇的差。
+- en: For the relatively simple Atari game Pong, our DQN was able to completely solve
+    it in 1 million frames and showed positive reward dynamics in just 100,000 frames,
+    whereas the policy gradient method failed to converge. Due to the instability
+    of policy gradient training, it became very hard to find good hyperparameters
+    and was still very sensitive to initialization. This doesn’t mean that the policy
+    gradient method is bad, because, as you will see in the next chapter, just one
+    tweak of the network architecture to get a better baseline in the gradients will
+    turn the policy gradient method into one of the best methods (the asynchronous
+    advantage actor-critic method). Of course, there is a good chance that my hyperparameters
+    are completely wrong or the code has some hidden bugs, or there could be other
+    unforeseen problems. Regardless, unsuccessful results still have value, at least
+    as a demonstration of bad convergence dynamics.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于相对简单的Atari游戏《Pong》，我们的DQN能够在100万帧内完全解决它，并且在仅仅10万帧内就显示出了正向奖励动态，而策略梯度方法则未能收敛。由于策略梯度训练的不稳定性，很难找到合适的超参数，并且对初始化非常敏感。这并不意味着策略梯度方法不好，因为正如你在下一章将看到的，只需稍微调整网络架构以获得更好的基线梯度，策略梯度方法就会变成最好的方法之一（异步优势演员评论员方法）。当然，也有很大的可能性我的超参数完全错误，或者代码中存在一些隐藏的BUG，或者可能有其他未预见的问题。无论如何，失败的结果仍然有价值，至少它能展示不良收敛动态。
+- en: Implementation
+  id: totrans-165
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: You can find the complete code for the example in Chapter11/05_pong_pg.py.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在Chapter11/05_pong_pg.py中找到完整的示例代码。
+- en: 'The three main differences from the previous example’s code are as follows:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与前一个示例代码相比，主要有三个区别：
+- en: 'The baseline is estimated with a moving average for 1 million past transitions,
+    instead of all examples. To make moving average calculations faster, a deque-backed
+    buffer is created:'
+  id: totrans-168
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基线是通过对过去100万个过渡进行移动平均来估算的，而不是对所有示例进行估算。为了加速移动平均的计算，创建了一个由deque支持的缓冲区：
+- en: '[PRE20]'
+  id: totrans-169
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Several concurrent environments are used. The second difference in this example
+    is working with multiple environments, and this functionality is supported by
+    the PTAN library. The only action we have to take is to pass the array of Env
+    objects to the ExperienceSource class. All the rest is done automatically. In
+    the case of several environments, the experience source asks them for transitions
+    in round-robin fashion, providing us with less-correlated training samples.
+  id: totrans-170
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用了多个并发环境。这个示例中的第二个区别是使用多个环境，这一功能由PTAN库提供支持。我们唯一需要做的就是将Env对象数组传递给ExperienceSource类，其他的都由系统自动完成。在多个环境的情况下，经验源会以轮询的方式请求它们的过渡，从而为我们提供更少相关的训练样本。
+- en: Gradients are clipped to improve training stability. The last difference from
+    the CartPole example is gradient clipping, which is performed using the PyTorch
+    clip_grad_norm function from the torch.nn.utils package.
+  id: totrans-171
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 梯度被裁剪以提高训练的稳定性。与CartPole示例的最后一个区别是梯度裁剪，它是使用PyTorch的clip_grad_norm函数（来自torch.nn.utils包）进行的。
+- en: 'The hyperparameters for the best variant are the following:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最佳变体的超参数如下：
+- en: '[PRE21]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Results
+  id: totrans-174
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: Despite all my efforts to make the example converge, it wasn’t very successful.
+    Even after hyperparameter tuning (≈ 400 samples of hyperparameters), the best
+    result has the average reward around −19.7 after 1 million training steps.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我付出了很多努力使示例收敛，但结果并不理想。即使经过超参数调优（约400个超参数样本），最佳结果在训练1百万步后，平均奖励仍然约为−19.7。
+- en: You can try it yourself, the code is in Chapter11/05_pong_pg.py and Chapter11/05_pong_pg_tune.py.
+    But I can only conclude that Pong turned out to be too complex for the vanilla
+    PG method.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以自己尝试，代码位于Chapter11/05_pong_pg.py和Chapter11/05_pong_pg_tune.py中。但我只能得出结论，Pong对于原始的PG方法来说过于复杂。
+- en: Summary
+  id: totrans-177
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, you saw an alternative way of solving RL problems: policy
+    gradient methods, which are different in many ways from the familiar DQN method.
+    We explored a basic method called REINFORCE, which is a generalization of our
+    first method in RL-domain cross-entropy. This policy gradient method is simple,
+    but when applied to the Pong environment, it didn’t produce good results.'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，你看到了另一种解决强化学习问题的方法：策略梯度方法，它与我们熟悉的DQN方法有许多不同之处。我们探索了一种名为REINFORCE的基本方法，它是我们在RL领域交叉熵方法的一个推广。这个策略梯度方法很简单，但在应用到Pong环境时，未能产生良好的结果。
+- en: In the next chapter, we will consider ways to improve the stability of policy
+    gradient methods by combining the families of value-based and policy-based methods.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将考虑通过结合基于值的方法和基于策略的方法，来提高策略梯度方法的稳定性。

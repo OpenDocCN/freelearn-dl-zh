@@ -1,0 +1,3461 @@
+- en: '*Chapter 6*: Deep Q-Learning at Scale'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第六章*：大规模深度 Q 学习'
+- en: 'In the previous chapter, we covered **dynamic programming** (**DP**) methods
+    to solve **Markov decision processes** (**MDPs**), and then mentioned that they
+    suffer from two important limitations: DP firstly assumes complete knowledge of
+    the environment''s reward and transition dynamics, and secondly uses tabular representations
+    of state and actions, which is not scalable as the number of possible state-action
+    combinations is too big in many realistic applications. We addressed the former
+    by introducing the **Monte Carlo** (**MC**) and **temporal difference** (**TD**)
+    methods, which learn from their interactions with the environment (often in simulation)
+    without needing to know the environment dynamics. On the other hand, the latter
+    is yet to be addressed, and this is where deep learning comes in. **Deep reinforcement
+    learning** (**deep RL or DRL**) is about utilizing neural networks'' representational
+    power to learn policies for a wide variety of situations.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们介绍了用 **动态规划**（**DP**）方法解决 **马尔可夫决策过程**（**MDP**），并提到它们存在两个重要的局限性：首先，DP
+    假设我们完全了解环境的奖励和转移动态；其次，DP 使用表格化的状态和动作表示，而在许多实际应用中，由于可能的状态-动作组合太多，这种方式无法扩展。我们通过引入
+    **蒙特卡洛**（**MC**）和 **时间差分**（**TD**）方法解决了前者问题，这些方法通过与环境的交互（通常是在模拟环境中）来学习，而无需了解环境的动态。另一方面，后者问题尚未解决，这正是深度学习发挥作用的地方。**深度强化学习**（**深度
+    RL 或 DRL**）是利用神经网络的表示能力来学习适应各种情况的策略。
+- en: As great as it sounds, though, it is quite tricky to make function approximators
+    work well in the context of **reinforcement learning** (**RL**) since many of
+    the theoretical guarantees that we had in tabular Q-learning are lost. Therefore,
+    the story of deep Q-learning, to a great extent, is about the tricks that make
+    neural networks work well for RL. This chapter takes you on a tour of what fails
+    with function approximators and how to address these failures.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管听起来很棒，但在 **强化学习**（**RL**）的背景下，让函数逼近器（function approximators）有效工作是相当棘手的，因为我们在表格化
+    Q 学习中所拥有的许多理论保证在深度 Q 学习中都丧失了。因此，深度 Q 学习的故事在很大程度上是关于使神经网络在 RL 中有效工作的技巧。本章将带你了解函数逼近器为何失败以及如何解决这些失败。
+- en: 'Once we make neural networks get along with RL, we then face another challenge:
+    the great hunger for data in deep RL that is even more severe than that of supervised
+    learning. This requires us to develop highly scalable deep RL algorithms, which
+    we will also do in this chapter for deep Q-learning using the modern Ray library.
+    Finally, we will introduce you to RLlib, a production-grade RL library based on
+    Ray. So, the focus throughout the chapter will be to deepen your understanding
+    of the connections between various deep Q-learning approaches, what works, and
+    why; and rather than implementing every single algorithm in Python, you will use
+    Ray and RLlib to build and use scalable methods.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们让神经网络与 RL 配合好，就会面临另一个挑战：深度 RL 对数据的巨大需求，这一需求甚至比监督学习更为严重。这要求我们开发高度可扩展的深度 RL
+    算法，本章将使用现代 Ray 库实现深度 Q 学习的可扩展性。最后，我们将向你介绍 RLlib，这是一个基于 Ray 的生产级 RL 库。因此，本章的重点将是加深你对各种深度
+    Q 学习方法之间联系的理解，什么有效，为什么有效；而不是在 Python 中实现每一个算法，你将使用 Ray 和 RLlib 来构建和使用可扩展的方法。
+- en: 'This will be an exciting journey, so let''s dive in! Specifically, here is
+    what this chapter covers:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将是一次激动人心的旅程，让我们一起深入探索！具体来说，本章将涵盖以下内容：
+- en: From tabular Q-learning to deep Q-learning
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从表格化 Q 学习到深度 Q 学习
+- en: Deep Q-networks
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 深度 Q 网络
+- en: Extensions to DQN – Rainbow
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: DQN 的扩展 – Rainbow
+- en: Distributed deep Q-learning
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分布式深度 Q 学习
+- en: Implementing scalable deep Q-learning algorithms using Ray
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 Ray 实现可扩展的深度 Q 学习算法
+- en: Using RLlib for production-grade deep RL
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 RLlib 进行生产级深度 RL
+- en: From tabular Q-learning to deep Q-learning
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从表格化 Q 学习到深度 Q 学习
+- en: When we covered the tabular Q-learning method in [*Chapter 5*](B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106),
+    *Solving the Reinforcement Learning Problem*, it should have been obvious that
+    we cannot really extend those methods to most real-life scenarios. Think about
+    an RL problem that uses images as input. A ![](img/Formula_06_001.png) image with
+    three 8-bit color channels would lead to ![](img/Formula_06_002.png) possible
+    images, a number that your calculator won't be able to calculate. For this very
+    reason, we need to use function approximators to represent the value function.
+    Given their success in supervised and unsupervised learning, neural networks/deep
+    learning emerges as the clear choice here. On the other hand, as we mentioned
+    in the introduction, the theoretical guarantees of tabular Q-learning fall apart
+    when function approximators come in. This section introduces two deep Q-learning
+    algorithms, **neural-fitted Q-iteration** (**NFQ**) and online Q-learning, and
+    then discusses what does not go so well with them. With that, we will have set
+    the stage for the modern deep Q-learning methods that we will discuss in the following
+    sections.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们在[*第5章*](B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106)《解决强化学习问题》中讨论表格Q-learning方法时，应该已经很明显，我们无法将这些方法真正扩展到大多数实际场景中。想象一下一个使用图像作为输入的强化学习问题。一个包含三个8位色彩通道的![](img/Formula_06_001.png)图像将会导致![](img/Formula_06_002.png)种可能的图像，这是你的计算器无法计算的数字。正因为如此，我们需要使用函数逼近器来表示值函数。鉴于它们在监督学习和无监督学习中的成功，神经网络/深度学习成为了这里的明显选择。另一方面，正如我们在引言中提到的，当函数逼近器介入时，表格Q-learning的理论保证就不再成立。本节介绍了两种深度Q-learning算法——**神经拟合Q迭代**（**NFQ**）和在线Q-learning，并讨论了它们的一些不足之处。通过这些内容，我们为接下来讨论现代深度Q-learning方法奠定了基础。
+- en: Neural-fitted Q-iteration
+  id: totrans-13
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 神经拟合Q迭代
+- en: The NFQ algorithm aims to fit a neural network that represents the action values,
+    the Q-function, to target Q-values sampled from the environment and bootstrapped
+    by the previously available Q-values (Riedmiller, 2015). Let's first go into how
+    NFQ works, then discuss some practical considerations of NFQ and its limitations.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NFQ算法旨在拟合一个神经网络，表示行动值，即Q函数，将目标Q值与从环境中采样并通过先前可用的Q值自举的值进行匹配（Riedmiller，2015）。让我们首先了解NFQ如何工作，然后讨论一些实际考虑事项以及NFQ的局限性。
+- en: The algorithm
+  id: totrans-15
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 算法
+- en: 'Recall that in tabular Q-learning, action values are learned from samples collected
+    from the environment, which are ![](img/Formula_06_003.png) tuples, by repeatedly
+    applying the following update rule:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回想一下在表格Q-learning中，行动值是从环境中收集的样本中学习的，这些样本是![](img/Formula_06_003.png)元组，通过反复应用以下更新规则：
+- en: '![](img/Formula_06_004.jpg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_004.jpg)'
+- en: 'Here, ![](img/Formula_06_005.png) represents an estimate of the action values
+    of the optimal policy, ![](img/Formula_06_006.png) (and note that we started using
+    a capital ![](img/Formula_06_005.png), which is the convention in the deep RL
+    literature). The goal is to update the existing estimate, ![](img/Formula_06_008.png),
+    toward a "target" value, ![](img/Formula_06_009.png), by applying the sampled
+    Bellman optimality operator to the ![](img/Formula_06_010.png) sample. NFQ has
+    a similar logic with the following differences:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_06_005.png)表示最优策略的行动值估计，![](img/Formula_06_006.png)（注意我们开始使用大写字母![](img/Formula_06_005.png)，这是深度强化学习文献中的惯例）。目标是通过将采样的贝尔曼最优性操作符应用到![](img/Formula_06_010.png)样本上，更新现有估计值![](img/Formula_06_008.png)，使其接近一个“目标”值![](img/Formula_06_009.png)。NFQ有类似的逻辑，以下是不同之处：
+- en: Q-values are represented by a neural network parameterized by ![](img/Formula_06_011.png),
+    instead of a table, which we denote by ![](img/Formula_06_012.png).
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Q值由一个由![](img/Formula_06_011.png)参数化的神经网络表示，而不是一个表格，我们用![](img/Formula_06_012.png)表示它。
+- en: Instead of updating Q-values with each sample incrementally, NFQ collects a
+    batch of samples from the environment and fits the neural network to the target
+    values at once.
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与通过每个样本逐步更新Q值不同，NFQ一次性从环境中收集一批样本，并将神经网络拟合到目标值上。
+- en: There are multiple rounds of calculating the target values and fitting the parameters
+    to be able to obtain new target values with the latest Q function.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 有多轮计算目标值并拟合参数的过程，以便能够通过最新的Q函数获得新的目标值。
+- en: 'After this overall description, here is the NFQ algorithm in detail:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在整体描述之后，下面是NFQ算法的详细步骤：
+- en: Initialize ![](img/Formula_06_013.png) and a policy, ![](img/Formula_05_035.png).
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化![](img/Formula_06_013.png)和策略![](img/Formula_05_035.png)。
+- en: Collect a set of ![](img/Formula_06_015.png) samples, ![](img/Formula_06_016.png),
+    using the ![](img/Formula_05_046.png) policy.
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用 ![](img/Formula_05_046.png) 策略收集一组 ![](img/Formula_06_015.png) 样本，![](img/Formula_06_016.png)。
+- en: Apply the sampled Bellman optimality operator to obtain the target values, ![](img/Formula_06_018.png),
+    to all samples, ![](img/Formula_06_019.png), but if ![](img/Formula_06_020.png)
+    is a terminal state, set ![](img/Formula_06_021.png).
+  id: totrans-25
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将采样的贝尔曼最优算子应用于所有样本，以获得目标值，![](img/Formula_06_018.png)，![](img/Formula_06_019.png)，但如果
+    ![](img/Formula_06_020.png) 是终止状态，则设置 ![](img/Formula_06_021.png)。
+- en: Obtain ![](img/Formula_06_022.png) by minimizing the gap between ![](img/Formula_06_023.png)
+    and the target values. More formally,
+  id: totrans-26
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过最小化 ![](img/Formula_06_023.png) 和目标值之间的差距，获得 ![](img/Formula_06_022.png)。更正式地说，
+- en: '![](img/Formula_06_024.png), where ![](img/Formula_06_025.png) is a loss function,
+    such as squared error, ![](img/Formula_06_026.png).'
+  id: totrans-27
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_06_024.png)，其中 ![](img/Formula_06_025.png) 是一个损失函数，例如平方误差，![](img/Formula_06_026.png)。'
+- en: Update ![](img/Formula_05_035.png) with respect to the new ![](img/Formula_06_028.png)
+    value.
+  id: totrans-28
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 根据新的 ![](img/Formula_06_028.png) 值更新 ![](img/Formula_05_035.png)。
+- en: There are numerous improvements that can be done on fitted Q-iteration, but
+    that is not our focus here. Instead, next, we will mention a couple of essential
+    considerations when implementing the algorithm.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对拟合 Q 迭代可以进行许多改进，但这不是我们在此讨论的重点。相反，接下来我们将提到在实现该算法时需要考虑的几个关键要点。
+- en: Practical considerations for fitted Q-iteration
+  id: totrans-30
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 拟合 Q 迭代的实际考虑
+- en: 'To make fitted Q-iteration work in practice, there are several important points
+    to pay attention to, which we have noted here:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使拟合 Q 迭代在实践中有效，有几个重要的注意事项，我们在此列出：
+- en: The ![](img/Formula_05_221.png) policy should be a soft policy, allowing enough
+    exploration of different state-action pairs during sample collection, such as
+    an ![](img/Formula_06_030.png)-greedy policy. The rate of exploration, therefore,
+    is a hyperparameter.
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_05_221.png) 策略应该是软策略，在样本收集过程中允许足够的探索不同的状态-动作对，例如 ![](img/Formula_06_030.png)-贪心策略。因此，探索率是一个超参数。'
+- en: Setting ![](img/Formula_06_031.png) too large could be problematic as some states
+    can only be reached after sticking with a good policy (once it starts to improve)
+    for a number of steps. An example is that in a video game, later levels are reached
+    only after finishing the earlier steps successfully, which a highly random policy
+    is unlikely to achieve.
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 设置 ![](img/Formula_06_031.png) 太大可能会导致问题，因为某些状态只有在坚持使用良好的策略（它开始改善后）若干步之后才能到达。一个例子是在视频游戏中，只有在成功完成早期步骤后才能到达后续关卡，而高度随机的策略不太可能做到这一点。
+- en: When the target values are obtained, chances are these values use inaccurate
+    estimates for the action values because we bootstrap with inaccurate ![](img/Formula_06_032.png)
+    values. Therefore, we need to repeat *steps 2* and *3* ![](img/Formula_06_033.png)
+    times to hopefully obtain more accurate target values in the next round. This
+    gives us another hyperparameter, ![](img/Formula_06_034.png).
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当目标值被获取时，这些值很可能使用了不准确的动作值估计，因为我们使用不准确的 ![](img/Formula_06_032.png) 值进行自举。因此，我们需要重复
+    *步骤 2* 和 *步骤 3*，![](img/Formula_06_033.png) 次，期望在下一轮中获得更准确的目标值。这为我们提供了另一个超参数，![](img/Formula_06_034.png)。
+- en: The policy that we initially used to collect samples is probably not good enough
+    to lead the agent to some parts of the state space, similar to the case with high
+    ![](img/Formula_05_272.png). Therefore, it is usually a good idea to collect more
+    samples after updating the policy, add them to the sample set, and repeat the
+    procedure.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们最初用于收集样本的策略可能不足以将智能体引导到状态空间的某些部分，这类似于高 ![](img/Formula_05_272.png) 的情况。因此，通常在更新策略后收集更多的样本，将它们添加到样本集，并重复该过程是个好主意。
+- en: Note that this is an off-policy algorithm, so the samples could come from the
+    chosen policy or somewhere else, such as an existing non-RL controller deployed
+    in the environment.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 请注意，这是一个离策略算法，因此样本可以来自所选策略，也可以来自其他地方，比如环境中已部署的非强化学习控制器。
+- en: Even with these improvements, in practice, it may be difficult to solve MDPs
+    using NFQ. Let's look into the whys in the next section.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使有这些改进，在实践中，使用 NFQ 求解 MDP 可能会很困难。接下来我们将在下一节中探讨原因。
+- en: Challenges with fitted Q-iteration
+  id: totrans-38
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 拟合 Q 迭代的挑战
+- en: 'Although there are some successful applications with fitted Q-iteration, it
+    suffers from several major drawbacks:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管拟合 Q 迭代有一些成功的应用，但它存在几个主要缺点：
+- en: It requires learning ![](img/Formula_06_036.png) from scratch every time we
+    repeat *step 3* using the target batch at hand. In other words, *step 3* involves
+    an ![](img/Formula_06_037.png) operator, as opposed to a gradual update of ![](img/Formula_06_036.png)
+    with new data like we have in gradient descent. In some applications, RL models
+    are trained over billions of samples. Training a neural network over billions
+    of samples again and again with updated target values is impractical.
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它需要每次重复使用手头的目标批次来从头学习 ![](img/Formula_06_036.png)，换句话说，*步骤 3* 涉及到一个 ![](img/Formula_06_037.png)
+    运算符，而不是像梯度下降中那样逐步更新 ![](img/Formula_06_036.png) 以适应新数据。在一些应用中，强化学习模型需要在数十亿个样本上训练。一次又一次地在数十亿个样本上训练神经网络，并且使用更新后的目标值进行训练是不切实际的。
+- en: SARSA and Q-learning-like methods have convergence guarantees in the tabular
+    case. However, these theoretical guarantees are lost when function approximations
+    are used.
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SARSA 和类似 Q-learning 的方法在表格情形下有收敛性保证。然而，当使用函数逼近时，这些理论保证会丧失。
+- en: Using function approximations with Q-learning, an off-policy method using bootstrapping,
+    is especially unstable, which is called **the deadly triad**.
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用带有函数逼近的 Q-learning，这是一个使用自举的脱策略方法，特别不稳定，这被称为 **致命三重奏**。
+- en: Before going into how to address these, let's dive into the latter two points
+    in a bit more detail. Now, this will involve a bit of theory, which if you understand
+    it is going to help you gain a deeper intuition about the challenges of deep RL.
+    On the other hand, if you don't want to know the theory, feel free to skip ahead
+    to the *Online Q-learning* section.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入探讨如何解决这些问题之前，我们先来详细分析后两个点。现在，这将涉及一些理论，如果你理解这些理论，将帮助你对深度强化学习中的挑战有更深入的直觉。另一方面，如果你不想了解理论，可以跳过直接进入
+    *在线 Q-learning* 部分。
+- en: Convergence issues with function approximators
+  id: totrans-44
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用函数逼近器的收敛性问题
+- en: 'To explain why the convergence guarantees with Q-learning are lost when function
+    approximators are used, let''s remember why tabular Q-learning converges in the
+    first place:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明为什么当使用函数逼近器时，Q-learning 的收敛性保证会丧失，我们先回顾一下为什么表格 Q-learning 一开始是收敛的：
+- en: 'The definition of ![](img/Formula_06_039.png) is the expected discounted return
+    if we deviate from policy ![](img/Formula_05_046.png) only once at the beginning
+    while in state ![](img/Formula_06_041.png) by choosing action ![](img/Formula_05_059.png),
+    but then follow the policy for the rest of the horizon:'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_06_039.png) 的定义是，如果我们在状态 ![](img/Formula_06_041.png) 下选择动作
+    ![](img/Formula_05_059.png)，仅在一开始偏离策略 ![](img/Formula_05_046.png)，然后在剩余时间内遵循该策略，期望的折扣回报：'
+- en: '![](img/Formula_06_043.jpg)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_043.jpg)'
+- en: 'The Bellman optimality operator, denoted by ![](img/Formula_06_044.png) takes
+    an action-value function of ![](img/Formula_06_045.png), ![](img/Formula_06_046.png),
+    and ![](img/Formula_06_047.png), and maps to the following quantity:'
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Bellman 最优性算子，用符号 ![](img/Formula_06_044.png) 表示，接收一个动作-价值函数 ![](img/Formula_06_045.png)、![](img/Formula_06_046.png)
+    和 ![](img/Formula_06_047.png)，并映射到以下量：
+- en: '![](img/Formula_06_048.jpg)'
+  id: totrans-49
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_048.jpg)'
+- en: Note the use of ![](img/Formula_06_049.png) inside the expectation, rather than
+    following some other policy, ![](img/Formula_05_035.png). ![](img/Formula_06_051.png)
+    is an operator, a function, *different from the definition of the action-value
+    function*.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意期望值中的 ![](img/Formula_06_049.png) 的使用，而不是遵循其他策略 ![](img/Formula_05_035.png)。![](img/Formula_06_051.png)
+    是一个算子，一个函数，*不同于动作-价值函数的定义*。
+- en: 'If, and only if, the action-value function is optimal, ![](img/Formula_06_052.png)
+    maps ![](img/Formula_06_053.png) back to ![](img/Formula_06_054.png) for all instances
+    of ![](img/Formula_06_055.png) and ![](img/Formula_05_059.png):'
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果且仅当动作-价值函数是最优时，![](img/Formula_06_052.png) 会将 ![](img/Formula_06_053.png)
+    映射回 ![](img/Formula_06_054.png)，对于所有 ![](img/Formula_06_055.png) 和 ![](img/Formula_05_059.png)
+    的实例：
+- en: '![](img/Formula_06_057.jpg)![](img/Formula_06_058.jpg)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_057.jpg)![](img/Formula_06_058.jpg)'
+- en: More formally, the unique fixed point of operator ![](img/Formula_06_059.png)
+    is the optimal ![](img/Formula_06_060.png), denoted by ![](img/Formula_06_061.png).
+    This is what the Bellman optimality equation is about.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更正式地说，算子 ![](img/Formula_06_059.png) 的唯一固定点是最优的 ![](img/Formula_06_060.png)，用
+    ![](img/Formula_06_061.png) 表示。这就是 Bellman 最优性方程的内容。
+- en: '![](img/Formula_06_062.png) is a **contraction**, which means that every time
+    we apply it to any two different action-value functions, such as ![](img/Formula_06_054.png)
+    and ![](img/Formula_06_064.png) vectors, whose entries are some action-value estimates
+    for all instances of ![](img/Formula_05_010.png) and ![](img/Formula_05_059.png),
+    they get close to each other. This is with respect to the ![](img/Formula_06_067.png)
+    norm, which is the maximum of the absolute differences between the ![](img/Formula_06_068.png)
+    tuples of ![](img/Formula_06_069.png) and ![](img/Formula_06_070.png): ![](img/Formula_06_071.png)
+    Here, ![](img/Formula_06_072.png).'
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '![](img/Formula_06_062.png) 是一个**收缩**，这意味着每次我们将其应用于任何两个不同的动作值函数，例如 ![](img/Formula_06_054.png)
+    和 ![](img/Formula_06_064.png) 向量，这些向量的条目是所有 ![](img/Formula_05_010.png) 和 ![](img/Formula_05_059.png)
+    实例的某些动作值估计，它们会变得越来越接近。这是相对于 ![](img/Formula_06_067.png) 范数，即 ![](img/Formula_06_068.png)
+    和 ![](img/Formula_06_069.png) 以及 ![](img/Formula_06_070.png) 的元组之间绝对差值的最大值：![](img/Formula_06_071.png)，这里是
+    ![](img/Formula_06_072.png)。'
+- en: 'If we pick one of these action-value vectors to be the optimal one, we obtain
+    the following relation:'
+  id: totrans-55
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果我们选择其中一个动作值向量作为最优向量，我们将得到以下关系：
+- en: '![](img/Formula_06_073.jpg)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_073.jpg)'
+- en: This means that we can get closer and closer to ![](img/Formula_06_074.png)
+    by starting with some arbitrary ![](img/Formula_06_075.png) value, repeatedly
+    applying the Bellman operator, and updating the ![](img/Formula_06_076.png) values.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着我们可以通过从某个任意的 ![](img/Formula_06_075.png) 值开始，反复应用 Bellman 操作符，并更新 ![](img/Formula_06_076.png)
+    值，逐渐接近 ![](img/Formula_06_074.png)。
+- en: With these, ![](img/Formula_06_077.png) turns into an update rule to obtain
+    ![](img/Formula_06_078.png) from an arbitrary ![](img/Formula_06_079.png) value,
+    very similar to how the value iteration method works.
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 有了这些，![](img/Formula_06_077.png) 就变成了一个更新规则，通过任意的 ![](img/Formula_06_079.png)
+    值来获得 ![](img/Formula_06_078.png)，这与值迭代方法的工作原理非常相似。
+- en: Now, notice that fitting a neural network to a batch of sampled targets does
+    not actually guarantee to make the action-value estimates closer to the optimal
+    value for *each* ![](img/Formula_06_080.png) tuple, because the fitting operation
+    does not care about the individual errors – nor does it necessarily have the ability
+    to do so because it assumes a certain structure in the action-value function due
+    to parametrization – but it minimizes the average error. As a result, we lose
+    the contraction property of the Bellman operation with respect to the ![](img/Formula_06_081.png)
+    norm. Instead, NFQ fits ![](img/Formula_06_082.png) to the target values with
+    respect to an ![](img/Formula_06_083.png) norm, which does not have the same convergence
+    properties.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在请注意，将神经网络拟合到一批采样的目标值并不保证能使动作值估计接近每个 ![](img/Formula_06_080.png) 元组的最优值，因为拟合操作并不关心个别误差——而且它不一定有能力做到这一点，因为它假设由于参数化，动作值函数具有某种结构——但它最小化了平均误差。因此，我们失去了
+    Bellman 操作在 ![](img/Formula_06_081.png) 范数下的收缩性质。相反，NFQ 将 ![](img/Formula_06_082.png)
+    拟合到目标值，以 ![](img/Formula_06_083.png) 范数为基础，但它并不具备相同的收敛性属性。
+- en: Info
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: For a detailed and more visual explanation of why the value function theory
+    fails with function approximations, check out Professor Sergey Levine's lecture
+    at [https://youtu.be/doR5bMe-Wic?t=3957](https://youtu.be/doR5bMe-Wic?t=3957),
+    which also inspired this section. The entire course is available online, and it
+    is a great resource for you to go deeper into the theory of RL.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你想更详细和直观地了解为什么值函数理论在函数逼近中失败，可以查看 Sergey Levine 教授的讲座：[https://youtu.be/doR5bMe-Wic?t=3957](https://youtu.be/doR5bMe-Wic?t=3957)，这也启发了本节内容。整个课程可以在线访问，是你深入了解强化学习理论的一个很好的资源。
+- en: With that, let's now look into the famous deadly triad, which gives another
+    perspective into why it is problematic to use function approximators with bootstrapping
+    in off-policy algorithms such as Q-learning.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看看著名的致命三元组，它提供了一个新的视角，说明为什么在诸如 Q-learning 等脱机策略算法中使用带有自举的函数逼近器会有问题。
+- en: The deadly triad
+  id: totrans-63
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 致命三元组
+- en: 'Sutton and Barto coined the term **the deadly triad**, which suggests that
+    an RL algorithm is likely to diverge if it involves using all of the following:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Sutton 和 Barto 提出了“致命三元组”这一术语，表示如果一个强化学习算法涉及以下所有操作，它很可能会发散：
+- en: Function approximators
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 函数逼近器
+- en: Bootstrapping
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 自举
+- en: Off-policy sample collection
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 脱机策略样本收集
+- en: 'They provided this simple example to explain the problem. Consider a part of
+    an MDP that consists of two states, left and right. There is only one action on
+    the left, which is to go right with a reward of 0\. The observation in the left
+    state is 1, and it is 2 in the right state. A simple linear function approximator
+    is used to represent the action values with one parameter, ![](img/Formula_06_084.png).
+    This is represented in the following figure:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 他们提供了这个简单的例子来解释问题。考虑一个由两个状态（左和右）组成的MDP的一部分。左边只有一个动作，就是右移，奖励为0。左状态的观察值为1，右状态的观察值为2。一个简单的线性函数近似器用于表示动作值，只有一个参数，![](img/Formula_06_084.png)。这是在下图中表示的：
+- en: '![Figure 6.1 – A diverging MDP fragment (source: Sutton & Barto, 2018)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图6.1 – 一段发散的MDP片段（来源：Sutton & Barto，2018）'
+- en: '](img/B14160_06_1.jpg)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_1.jpg)'
+- en: 'Figure 6.1 – A diverging MDP fragment (source: Sutton & Barto, 2018)'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.1 – 一段发散的MDP片段（来源：Sutton & Barto，2018）
+- en: 'Now, imagine that a behavior policy only samples from the state on the left.
+    Also, imagine that the initial value of ![](img/Formula_06_085.png) is 10 and
+    ![](img/Formula_06_086.png). The TD error is then calculated as follows:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，想象一下一个行为策略只从左边的状态中采样。同时，假设初始值为 ![](img/Formula_06_085.png) 为 10 和 ![](img/Formula_06_086.png)。然后，TD误差计算如下：
+- en: '![](img/Formula_06_087.jpg)![](img/Formula_06_088.jpg)![](img/Formula_06_089.jpg)![](img/Formula_06_090.jpg)'
+  id: totrans-73
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_087.jpg)![](img/Formula_06_088.jpg)![](img/Formula_06_089.jpg)![](img/Formula_06_090.jpg)'
+- en: 'Now, if the linear function approximation is updated with the only data on
+    hand, the transition from left to right, say, using ![](img/Formula_06_091.png),
+    then the new ![](img/Formula_06_092.png) value becomes ![](img/Formula_06_093.png)
+    Note that this updates the action-value estimate of the right state as well. In
+    the next round, the behavior policy again only samples from the left, and the
+    new TD error becomes the following:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果使用唯一的现有数据（即从左到右的转换，假设使用 ![](img/Formula_06_091.png)），更新线性函数近似，那么新的 ![](img/Formula_06_092.png)
+    值变为 ![](img/Formula_06_093.png)。请注意，这也更新了右状态的动作值估计。在下一轮中，行为策略再次只从左侧采样，而新的TD误差变为如下：
+- en: '![](img/Formula_06_094.jpg)'
+  id: totrans-75
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_094.jpg)'
+- en: 'It is even greater than the first TD error! You can see how this will diverge
+    eventually. The problem occurs due to the following:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它甚至大于第一个TD误差！你可以看到它最终如何发散。问题发生的原因如下：
+- en: This is an off-policy method and the behavior policy happens to visit only one
+    part of the state-action space.
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这是一种离策略方法，行为策略恰好只访问状态-动作空间的一个部分。
+- en: A function approximator is used, whose parameters are updated based on the limited
+    sample we have, but the value estimates for the unvisited state actions also get
+    updated with that.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用一个函数近似器，其参数基于我们有限的样本进行更新，但未访问的状态动作的价值估计也会随之更新。
+- en: We bootstrap and use the bad value estimates from the state actions we never
+    actually visited to calculate the target values.
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们进行引导式估计，并使用我们从未实际访问过的状态动作所得到的错误价值估计来计算目标值。
+- en: This simple example illustrates how it can destabilize the RL methods when these
+    three components come together. For other examples and a more detailed explanation
+    of the topic, we recommend you read the related sections in Sutton & Barto, 2018.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个简单的例子说明了当这三种组件结合在一起时，它如何可能会破坏强化学习方法。有关其他例子和更详细的解释，我们建议您阅读Sutton & Barto，2018中的相关章节。
+- en: As we have only talked about the challenges, we will now finally start addressing
+    them. Remember that NFQ required us to completely fit the entire neural network
+    to the target values on hand and how we looked for a more gradual update. This
+    is what online Q-learning gives us, which we will introduce next. On the other
+    hand, online Q-learning introduces other challenges, which we will address with
+    **deep** **Q-networks** (**DQNs**) in the following section.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们只讨论了挑战，现在我们终于开始解决它们。记住，NFQ要求我们完全将整个神经网络拟合到现有的目标值，并且我们如何寻找更渐进的更新。这就是在线Q学习给我们的结果，我们将在下一节介绍它。另一方面，在线Q学习也引入了其他挑战，我们将在下一节使用**深度**
+    **Q网络**（**DQNs**）来解决这些问题。
+- en: Online Q-learning
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在线Q学习
+- en: 'As we mentioned previously, one of the disadvantages of fitted Q-iteration
+    is that it requires finding the ![](img/Formula_06_095.png) value with each batch
+    of samples, which is impractical when the problem is complex and requires a lot
+    of data for training. Online Q-learning goes to the other extreme: it takes a
+    gradient step to update ![](img/Formula_06_096.png) after observing every single
+    sample, ![](img/Formula_06_097.png). Next, let''s go into the details of the online
+    Q-learning algorithm.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，拟合 Q 迭代法的一个缺点是每次处理一批样本时都需要计算 ![](img/Formula_06_095.png) 值，这在问题复杂且需要大量数据训练时显得不切实际。在线
+    Q 学习则走到了另一个极端：在观察到每一个样本后，它通过梯度更新 ![](img/Formula_06_096.png)，即 ![](img/Formula_06_097.png)。接下来，我们将深入探讨在线
+    Q 学习算法的细节。
+- en: The algorithm
+  id: totrans-84
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 算法
+- en: 'The online Q-learning algorithm works as follows:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在线 Q 学习算法的工作方式如下：
+- en: Initialize ![](img/Formula_06_098.png) and a policy, ![](img/Formula_06_099.png),
+    then initialize the environment and observe ![](img/Formula_06_100.png).
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化 ![](img/Formula_06_098.png) 和一个策略，![](img/Formula_06_099.png)，然后初始化环境并观察
+    ![](img/Formula_06_100.png)。
+- en: For ![](img/Formula_06_101.png) to ![](img/Formula_06_102.png), continue with
+    the following steps.
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于 ![](img/Formula_06_101.png) 到 ![](img/Formula_06_102.png)，继续进行以下步骤。
+- en: Take some action, ![](img/Formula_06_103.png), using a policy, ![](img/Formula_06_104.png),
+    given the state, ![](img/Formula_06_105.png), then observe ![](img/Formula_06_106.png)
+    and ![](img/Formula_06_107.png), which form the ![](img/Formula_06_108.png) tuple.
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在给定状态 ![](img/Formula_06_105.png) 的情况下，执行某些操作 ![](img/Formula_06_103.png)，使用策略
+    ![](img/Formula_06_104.png)，然后观察 ![](img/Formula_06_106.png) 和 ![](img/Formula_06_107.png)，它们构成了
+    ![](img/Formula_06_108.png) 元组。
+- en: Obtain the target value, ![](img/Formula_06_109.png), but if ![](img/Formula_06_110.png)
+    is a terminal state, set ![](img/Formula_06_111.png).
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 获取目标值 ![](img/Formula_06_109.png)，但如果 ![](img/Formula_06_110.png) 是终止状态，则设置
+    ![](img/Formula_06_111.png)。
+- en: Take a gradient step to update ![](img/Formula_06_112.png), where ![](img/Formula_06_113.png)
+    is the step size.
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行梯度步骤以更新 ![](img/Formula_06_112.png)，其中 ![](img/Formula_06_113.png) 是步长。
+- en: Update the policy to ![](img/Formula_06_114.png) with respect to the new ![](img/Formula_06_115.png)
+    value.
+  id: totrans-91
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更新策略以 ![](img/Formula_06_114.png) 为新 ![](img/Formula_06_115.png) 值。
+- en: '**End for**'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '**结束**'
+- en: 'As you can see, the key difference compared to NFQ is to update the neural
+    network parameters after each ![](img/Formula_06_116.png) tuple is sampled from
+    the environment. Here are some additional considerations about online Q-learning:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，与 NFQ 的关键区别是，每当从环境中抽取一个 ![](img/Formula_06_116.png) 元组时，才更新神经网络参数。以下是关于在线
+    Q 学习的额外考虑：
+- en: Similar to the NFQ algorithm, we need a policy that continuously explores the
+    state-action space. Again, this can be achieved by using an ![](img/Formula_06_117.png)-greedy
+    policy or another soft policy.
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 类似于 NFQ 算法，我们需要一个不断探索状态-动作空间的策略。同样，这可以通过使用 ![](img/Formula_06_117.png)-贪婪策略或其他软策略来实现。
+- en: Also similar to fitted Q-iteration, the samples may come from a policy that
+    is not relevant to what the Q-network is suggesting, as this is an off-policy
+    method.
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与拟合 Q 迭代法相似，样本可能来自与 Q 网络所建议的策略无关的政策，因为这是一种离策略方法。
+- en: Other than these, there can be numerous other improvements to the online Q-learning
+    method. We will momentarily focus on DQNs, a breakthrough improvement over Q-learning,
+    rather than discussing somewhat less important tweaks to online Q-learning. But
+    before doing so, let's look into why it is difficult to train online Q-learning
+    in its current form.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了这些之外，在线 Q 学习方法还可以进行许多其他改进。我们将暂时聚焦于 DQN，它是 Q 学习的突破性改进，而不是讨论一些相对次要的在线 Q 学习调整。但在此之前，我们先来看一下为何目前形式的在线
+    Q 学习难以训练。
+- en: Challenges with online Q-learning
+  id: totrans-97
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在线 Q 学习的挑战
+- en: 'The online Q-learning algorithm suffers from the following issues:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在线 Q 学习算法面临以下问题：
+- en: '**The gradient estimates are noisy**: Similar to the other gradient descent
+    methods in machine learning, online Q-learning aims to estimate the gradient using
+    samples. On the other hand, it uses a single sample while doing so, which results
+    in noisy estimates that make it hard to optimize the loss function. Ideally, we
+    should use a minibatch with more than one sample to estimate the gradient.'
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**梯度估计有噪声**：类似于机器学习中的其他梯度下降方法，在线 Q 学习的目标是通过样本估计梯度。另一方面，它在执行时仅使用一个样本，这导致了噪声较大的估计，使得优化损失函数变得困难。理想情况下，我们应使用一个包含多个样本的小批量来估计梯度。'
+- en: '**The gradient step is not truly gradient descent**: This is because ![](img/Formula_06_118.png)
+    includes ![](img/Formula_06_119.png), which we treat as a constant even though
+    it is not. ![](img/Formula_06_120.png) itself depends on ![](img/Formula_06_011.png),
+    yet we ignore this fact by not taking its derivative with respect to ![](img/Formula_06_122.png).'
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**梯度步伐并不是真正的梯度下降**：这是因为 ![](img/Formula_06_118.png) 包含了 ![](img/Formula_06_119.png)，我们将其视为常量，尽管它并非如此。
+    ![](img/Formula_06_120.png) 本身依赖于 ![](img/Formula_06_011.png)，然而我们忽略了这一事实，因为我们没有对
+    ![](img/Formula_06_122.png) 求其导数。'
+- en: '**Target values are updated after each gradient step, which becomes a moving
+    target that the network is trying to learn from**: This is unlike supervised learning
+    where the labels (of images, let''s say) don''t change based on what the model
+    predicts, and it makes the learning very difficult.'
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**目标值在每次梯度步骤后更新，这变成了一个网络试图从中学习的动态目标**：这与监督学习不同，在监督学习中，标签（例如图像标签）不会根据模型预测的结果而变化，这使得学习变得非常困难。'
+- en: '**The samples are not independent and identically distributed (i.i.d.)**: In
+    fact, they are usually highly correlated since an MDP is a sequential decision
+    setting, and what we observe next highly depends on the actions we have taken
+    earlier. This is another deviation from the classical gradient descent, which
+    breaks its convergence properties.'
+  id: totrans-102
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**样本并非独立同分布（i.i.d.）**：事实上，它们通常高度相关，因为马尔可夫决策过程（MDP）是一个顺序决策问题，接下来的观察高度依赖于我们之前采取的行动。这是与经典梯度下降的另一种偏离，打破了其收敛性。'
+- en: Because of all these challenges, and what we mentioned in general in the NFQ
+    section regarding the deadly triad, the online Q-learning algorithm is not quite
+    a viable method to solve complex RL problems. This changed with the revolutionary
+    work of DQNs, which addressed the latter two challenges we mentioned previously.
+    In fact, it is with the DQN that we started talking about deep RL. So, without
+    further ado, let's dive into discussing DQNs.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于所有这些挑战，以及我们在NFQ部分中提到的致命三联体，在线Q学习算法并不是解决复杂强化学习问题的可行方法。随着DQNs的革命性工作，这改变了我们之前提到的后两个挑战。事实上，正是通过DQN，我们才开始讨论深度强化学习。所以，不再赘述，让我们直接进入讨论DQNs。
+- en: Deep Q-networks
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 深度Q网络
+- en: The DQN is a seminal work by Mnih et al. (2015) that made deep RL a viable approach
+    to complex sequential control problems. The authors demonstrated that a single
+    DQN architecture can achieve super-human-level performance in many Atari games
+    without any feature engineering, which created a lot of excitement regarding the
+    progress of AI. Let's look into what makes DQNs so effective compared to the algorithms
+    we mentioned earlier.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DQN是Mnih等人（2015）的一项开创性工作，它使得深度强化学习成为解决复杂顺序控制问题的可行方法。作者证明了一个单一的DQN架构能够在许多雅达利游戏中达到超人水平的表现，且不需要任何特征工程，这为人工智能的进展带来了巨大的兴奋。让我们看看是什么使得DQN比我们之前提到的算法更为有效。
+- en: Key concepts in DQNs
+  id: totrans-106
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: DQN中的关键概念
+- en: The DQN modifies online Q-learning with two important concepts by using experience
+    replay and a target network, which greatly stabilizes the learning. We will describe
+    these concepts next.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DQN通过使用经验重放和目标网络这两个重要概念，修改了在线Q学习，从而极大地稳定了学习过程。接下来我们将描述这些概念。
+- en: Experience replay
+  id: totrans-108
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 经验重放
+- en: As mentioned earlier, simply using the experience sampled sequentially from
+    the environment leads to highly correlated gradient steps. The DQN, on the other
+    hand, stores those experience tuples, ![](img/Formula_06_123.png), in a replay
+    buffer (memory), an idea that was introduced back in 1993 (Lin, 1993). During
+    learning, the samples are drawn from this buffer uniformly at random, which eliminates
+    the correlations between the samples used to train the neural network and gives
+    i.i.d.-like samples.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，单纯地使用从环境中顺序采样的经验会导致梯度步骤高度相关。而DQN则将这些经验元组 ![](img/Formula_06_123.png) 存储在重放缓冲区（记忆）中，这一概念早在1993年就由Lin提出（1993年）。在学习过程中，样本是从该缓冲区中均匀随机抽取的，这消除了用于训练神经网络的样本之间的相关性，提供了类似独立同分布（i.i.d.）的样本。
+- en: Another benefit of using experience replay over online Q-learning is that experience
+    is reused rather than discarded, which reduces the amount of interaction necessary
+    with the environment – an important benefit given the need for vast amounts of
+    data in RL.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用经验重放而非在线Q学习的另一个好处是，经验被重用而不是丢弃，这减少了与环境交互所需的次数——鉴于强化学习中需要大量数据，这是一项重要的优势。
+- en: An interesting note about experience replay is that there is evidence that a
+    similar process takes place in animal brains. Animals appear to replay their past
+    experiences in their hippocampus, which contributes to their learning (McClelland,
+    1995).
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于经验回放的一个有趣注解是，有证据表明，动物的大脑中也有类似的过程发生。动物似乎会在其海马体中回放过去的经验，这有助于它们的学习（McClelland，1995）。
+- en: Target networks
+  id: totrans-112
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 目标网络
+- en: 'Another problem with using bootstrapping with function approximations is that
+    it creates a moving target to learn from. This makes an already-challenging undertaking,
+    such as training a neural network from noisy samples, a task that is destined
+    for failure. A key insight presented by the authors is to create a copy of the
+    neural network that is only used to generate the Q-value estimates used in sampled
+    Bellman updates. Namely, the target value for sample ![](img/Formula_06_124.png)
+    is obtained as follows:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用引导法（bootstrapping）与函数逼近的另一个问题是它会创建一个不断变化的目标供学习。这使得本已具有挑战性的任务，如从噪声样本中训练神经网络，变成了一项注定失败的任务。作者提出的一个关键见解是创建一个神经网络的副本，该副本仅用于生成用于采样Bellman更新的Q值估计。即，样本的目标值
+    ![](img/Formula_06_124.png) 如下所示：
+- en: '![](img/Formula_06_125.jpg)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_125.jpg)'
+- en: Here, ![](img/Formula_06_126.png) is the parameter of a target network, which
+    is updated every ![](img/Formula_06_127.png) time steps by setting ![](img/Formula_06_128.png).
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_06_126.png) 是目标网络的参数，它会每隔 ![](img/Formula_06_127.png) 个时间步更新一次，通过设置
+    ![](img/Formula_06_128.png) 来更新。
+- en: Creating a lag in updating the target network potentially makes its action-value
+    estimations slightly stale compared to the original network. On the other hand,
+    in return, the target values become stable, and the original network can be trained.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建更新目标网络的滞后可能会使其动作价值估计与原始网络相比略显过时。另一方面，作为回报，目标值变得稳定，原始网络可以进行训练。
+- en: Before giving you the full DQN algorithm, let's also discuss the loss function
+    it uses.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在给出完整的DQN算法之前，我们先来讨论一下它所使用的损失函数。
+- en: The loss function
+  id: totrans-118
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 损失函数
+- en: 'With experience replay and the target network introduced, the DQN minimizes
+    the following loss function:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 引入经验回放和目标网络后，DQN最小化以下损失函数：
+- en: '![](img/Formula_06_129.jpg)'
+  id: totrans-120
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_129.jpg)'
+- en: Here, ![](img/Formula_06_130.png) is the replay buffer, from which a minibatch
+    of ![](img/Formula_06_131.png) tuples are drawn uniformly at random to update
+    the neural network.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_06_130.png) 是重放缓冲区，从中均匀随机抽取一个最小批量的 ![](img/Formula_06_131.png)
+    元组以更新神经网络。
+- en: Now, it's finally time to give the complete algorithm.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，终于到了给出完整算法的时候。
+- en: The DQN algorithm
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: DQN算法
+- en: 'The DQN algorithm consists of the following steps:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DQN算法包含以下步骤：
+- en: Initialize ![](img/Formula_06_132.png) and a replay buffer, ![](img/Formula_06_133.png),
+    with a fixed capacity, ![](img/Formula_06_134.png). Set the target network parameters
+    as ![](img/Formula_06_135.png).
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化 ![](img/Formula_06_132.png) 和一个具有固定容量 ![](img/Formula_06_134.png) 的重放缓冲区
+    ![](img/Formula_06_133.png)。将目标网络参数设置为 ![](img/Formula_06_135.png)。
+- en: Set the policy, ![](img/Formula_05_035.png), to be ![](img/Formula_06_117.png)-greedy
+    with respect to ![](img/Formula_06_138.png).
+  id: totrans-126
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 设置策略 ![](img/Formula_05_035.png)，使其对 ![](img/Formula_06_138.png) 采用 ![](img/Formula_06_117.png)-贪心策略。
+- en: Given the state, ![](img/Formula_05_165.png), and the policy, ![](img/Formula_05_011.png),
+    take an action, ![](img/Formula_05_044.png), and observe ![](img/Formula_06_142.png)
+    and ![](img/Formula_06_143.png). Add the transition, ![](img/Formula_06_144.png),
+    to the replay buffer, ![](img/Formula_06_145.png). If ![](img/Formula_06_146.png),
+    eject the oldest transition from the buffer.
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 给定状态 ![](img/Formula_05_165.png) 和策略 ![](img/Formula_05_011.png)，采取动作 ![](img/Formula_05_044.png)，并观察
+    ![](img/Formula_06_142.png) 和 ![](img/Formula_06_143.png)。将过渡 ![](img/Formula_06_144.png)
+    添加到重放缓冲区 ![](img/Formula_06_145.png)。如果 ![](img/Formula_06_146.png)，则从缓冲区中弹出最旧的过渡。
+- en: If ![](img/Formula_06_147.png), uniformly sample a random minibatch of ![](img/Formula_06_148.png)
+    transitions from ![](img/Formula_06_149.png), else return to *step 2*.
+  id: totrans-128
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果 ![](img/Formula_06_147.png)，则均匀采样一个来自 ![](img/Formula_06_149.png) 的随机最小批量的
+    ![](img/Formula_06_148.png) 过渡，否则返回 *第2步*。
+- en: Obtain the target values, ![](img/Formula_06_150.png), ![](img/Formula_06_151.png)
+    except if ![](img/Formula_06_152.png) is a terminal state, set ![](img/Formula_06_153.png).
+  id: totrans-129
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 获取目标值，![](img/Formula_06_150.png)，![](img/Formula_06_151.png)，除非 ![](img/Formula_06_152.png)
+    是终止状态，此时设置 ![](img/Formula_06_153.png)。
+- en: Take a gradient step to update ![](img/Formula_06_154.png), which is ![](img/Formula_06_155.png).
+    Here,![](img/Formula_06_156.jpg)
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 进行一次梯度更新步骤来更新 ![](img/Formula_06_154.png)，它是 ![](img/Formula_06_155.png)。这里，![](img/Formula_06_156.jpg)
+- en: Every ![](img/Formula_06_157.png) steps, update the target network parameters,
+    ![](img/Formula_06_158.png).
+  id: totrans-131
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每次![](img/Formula_06_157.png)步骤，更新目标网络参数，![](img/Formula_06_158.png)。
+- en: Return to *step 1*.
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 返回到*步骤 1*。
+- en: 'The DQN algorithm can be illustrated as in the diagram in *Figure 6.2*:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DQN 算法可以通过*图 6.2*中的示意图来说明：
+- en: '![Figure 6.2 – DQN algorithm overview (source: Nair et al., 2015)'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.2 – DQN 算法概述（来源：Nair 等人，2015）'
+- en: '](img/B14160_06_2.jpg)'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_2.jpg)'
+- en: 'Figure 6.2 – DQN algorithm overview (source: Nair et al., 2015)'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.2 – DQN 算法概述（来源：Nair 等人，2015）
+- en: After the seminal work on DQNs, there have been many extensions proposed to
+    improve them in various papers. Hessel et al. (2018) combined some of the most
+    important of those and called them Rainbow, which we will turn to next.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 DQN 开创性工作之后，许多论文提出了多种扩展方法来改进它们。Hessel 等人（2018）将其中一些最重要的扩展结合起来，命名为 Rainbow，接下来我们将讨论这些扩展。
+- en: Extensions to the DQN – Rainbow
+  id: totrans-138
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: DQN 的扩展 – Rainbow
+- en: The Rainbow improvements bring in a significant performance boost over the vanilla
+    DQN and they have become standard in most Q-learning implementations. In this
+    section, we will discuss what those improvements are, how they help, and what
+    their relative importance is. At the end, we will talk about how the DQN and these
+    extensions collectively overcome the deadly triad.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Rainbow 的改进相较于原始的 DQN 提供了显著的性能提升，并且已成为大多数 Q 学习实现中的标准方法。在本节中，我们将讨论这些改进的内容，它们如何提供帮助，以及它们相对的重要性。最后，我们将讨论
+    DQN 及这些扩展如何共同克服致命三重困境。
+- en: The extensions
+  id: totrans-140
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 这些扩展
+- en: There are six extensions to the DQN included in the Rainbow algorithm. These
+    are double Q-learning, prioritized replay, dueling networks, multi-step learning,
+    distributional RL, and noisy nets. Let's start describing them, starting with
+    double Q-learning.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Rainbow 算法包含了对 DQN 的六种扩展。这些扩展包括双重 Q 学习、优先重放、对抗网络、多步学习、分布式强化学习和噪声网络。我们将从双重 Q
+    学习开始描述这些扩展。
+- en: Double Q-learning
+  id: totrans-142
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 双重 Q 学习
+- en: One of the well-known issues in Q-learning is that the Q-value estimates we
+    obtain during learning are higher than the true Q-values because of the maximization
+    operation, ![](img/Formula_06_159.png). This phenomenon is called **maximization
+    bias**, and the reason we run into it is that we do a maximization operation over
+    noisy observations of the Q-values. As a result, we end up estimating not the
+    maximum of the true values but the maximum of the possible observations.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Q 学习中的一个著名问题是，我们在学习过程中获得的 Q 值估计值通常高于真实 Q 值，这是由于最大化操作所致，![](img/Formula_06_159.png)。这种现象被称为**最大化偏差**，其产生的原因在于我们在对
+    Q 值的噪声观察结果上进行最大化操作。结果，我们最终估算的不是真实值的最大值，而是可能观察到的最大值。
+- en: 'For two simple illustrations of how this happens, consider the examples in
+    *Figure 6.3*:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简单地说明这种现象，考虑*图 6.3*中的示例：
+- en: '![Figure 6.3 – Two examples of maximization bias'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.3 – 最大化偏差的两个示例'
+- en: '](img/B14160_06_3.jpg)'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_3.jpg)'
+- en: Figure 6.3 – Two examples of maximization bias
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.3 – 最大化偏差的两个示例
+- en: '*Figures 6.3 (a)* and *6.3 (b)* show the probability distributions of obtaining
+    various Q-value estimates for the available actions for a given state, ![](img/Formula_05_290.png),
+    where the vertical lines correspond to the true action values. In *(a)*, there
+    are three available actions. After some round of sample collection, just by chance,
+    the estimates we obtain happen to be ![](img/Formula_06_161.png). Not only is
+    the best action incorrectly predicted as ![](img/Formula_06_162.png), but its
+    action value is overestimated. In *(b)*, there are six available actions with
+    the same probability distribution of Q-value estimates. Although their true action
+    values are the same, when we take a random sample, an order will appear between
+    them just by chance. Moreover, since we take the maximum of these noisy observations,
+    chances are it will be above the true value and again the Q-value is overestimated.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*图 6.3 (a)* 和 *6.3 (b)* 展示了在给定状态下，对于可用动作的各种 Q 值估计的概率分布，![](img/Formula_05_290.png)，其中竖线表示真实的动作值。在*(a)*中，有三个可用的动作。在某些轮次的样本收集中，偶然地我们获得的估计值恰好是![](img/Formula_06_161.png)。不仅最优动作被错误地预测为![](img/Formula_06_162.png)，而且其动作值被高估了。在*(b)*中，有六个可用的动作，它们具有相同的
+    Q 值估计的概率分布。尽管它们的真实动作值相同，但当我们随机抽样时，它们之间就会出现顺序，仅仅是偶然的结果。而且，由于我们对这些噪声观察结果进行最大化操作，因此很有可能最终估算值会高于真实值，Q
+    值又一次被高估。'
+- en: 'Double Q-learning proposes a solution to the maximization bias by decoupling
+    finding the maximizing action and obtaining an action-value estimate for it by
+    using two separate action-value functions, ![](img/Formula_06_163.png)and ![](img/Formula_06_164.png).
+    More formally, we find the maximizing action using one of the functions:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 双 Q 学习通过使用两个独立的动作价值函数，![](img/Formula_06_163.png) 和 ![](img/Formula_06_164.png)，将寻找最大化动作和为其获取动作价值估计的过程解耦，从而提出了对最大化偏差的解决方案。更正式地，我们通过其中一个函数来寻找最大化动作：
+- en: '![](img/Formula_06_165.jpg)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_165.jpg)'
+- en: Then, we obtain the action value using the other function as ![](img/Formula_06_166.png).
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们使用另一个函数来获得动作价值，即 ![](img/Formula_06_166.png)。
+- en: 'In tabular Q-learning, this requires the extra effort of maintaining two action-value
+    functions. ![](img/Formula_06_167.png) and ![](img/Formula_06_168.png) are then
+    swapped randomly in each step. On the other hand, the DQN already proposes maintaining
+    a target network with ![](img/Formula_06_169.png) parameters dedicated to providing
+    action-value estimates for bootstrapping. Therefore, we implement double Q-learning
+    on top of the DQN to obtain the action-value estimate for the maximizing action,
+    as follows:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在表格 Q 学习中，这需要额外的努力来维持两个动作价值函数。然后，![](img/Formula_06_167.png) 和 ![](img/Formula_06_168.png)
+    在每一步中会随机交换。另一方面，DQN 已经提出了维护一个目标网络，使用 ![](img/Formula_06_169.png) 参数来为引导提供动作价值估计。因此，我们在
+    DQN 上实现了双 Q 学习，以获得最大化动作的动作价值估计，具体如下：
+- en: '![](img/Formula_06_170.jpg)'
+  id: totrans-153
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_170.jpg)'
+- en: 'Then, the corresponding loss function for the state-action pair ![](img/Formula_06_171.png)
+    becomes the following:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，状态-动作对 ![](img/Formula_06_171.png) 的对应损失函数变为以下形式：
+- en: '![](img/Formula_06_172.jpg)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_172.jpg)'
+- en: That's it! This is how double Q-learning works in the context of the DQN. Now,
+    let's look into the next improvement, prioritized replay.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样！这就是双 Q 学习在 DQN 中的工作原理。现在，让我们深入了解下一个改进：优先重放。
+- en: Prioritized replay
+  id: totrans-157
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 优先经验重放
+- en: 'As we mentioned, the DQN algorithm suggests sampling the experiences from the
+    replay buffer uniformly at random. On the other hand, it is natural to expect
+    that some of the experiences will be more "interesting" than others, in the sense
+    that there will be more to learn from them for the agent. This is especially the
+    case in hard-exploration problems with sparse rewards, where there are a lot of
+    uninteresting "failure" cases and only a few "successes" with non-zero rewards.
+    Schaul et al. (2015) propose using the TD error to measure how "interesting" or
+    "surprising" an experience is to the agent. The probability of sampling a particular
+    experience from the replay buffer is then set to be proportional to the TD error.
+    Namely, the probability of sampling an experience encountered at time ![](img/Formula_06_173.png),
+    ![](img/Formula_06_174.png), has the following relationship with the TD error:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们提到的，DQN 算法建议从重放缓冲区中均匀随机地采样经验。另一方面，自然地可以预期某些经验比其他经验更“有趣”，因为代理从中学到的东西更多。这尤其在困难探索问题中表现突出，尤其是那些稀疏奖励的问题，在这些问题中有很多“不感兴趣”的“失败”案例，只有少数几个带有非零奖励的“成功”案例。Schaul
+    等人（2015）建议使用 TD 误差来衡量某个经验对代理来说有多么“有趣”或“令人惊讶”。从重放缓冲区中采样某个特定经验的概率将与 TD 误差成正比。即，在时间
+    ![](img/Formula_06_173.png)，![](img/Formula_06_174.png) 遇到的经验的采样概率与 TD 误差之间有以下关系：
+- en: '![](img/Formula_06_175.jpg)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_175.jpg)'
+- en: Here, ![](img/Formula_06_176.png) is a hyperparameter controlling the shape
+    of the distribution. Note that for ![](img/Formula_06_177.png), this gives a uniform
+    distribution over the experiences, while larger ![](img/Formula_06_178.png) values
+    put more and more weight on experiences with a large TD error.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_06_176.png) 是一个超参数，用来控制分布的形状。注意，对于 ![](img/Formula_06_177.png)，这会在经验上产生均匀分布，而更大的
+    ![](img/Formula_06_178.png) 值则会把更多的权重放在具有大 TD 误差的经验上。
+- en: Dueling networks
+  id: totrans-161
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 对战网络
+- en: 'One of the common situations encountered in RL problems is that in some states,
+    actions taken by the agent have little or no effect on the environment. As an
+    example, consider the following:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 RL 问题中，一个常见的情况是，在某些状态下，代理采取的动作对环境几乎没有影响。举个例子，考虑以下情况：
+- en: A robot moving in a grid world should avoid a "trap" state, from which the robot
+    cannot escape through its actions.
+  id: totrans-163
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在网格世界中移动的机器人应该避免进入“陷阱”状态，因为从该状态中机器人无法通过自己的动作逃脱。
+- en: Instead, the environment randomly transitions the robot out of this state with
+    some low probability.
+  id: totrans-164
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 相反，环境会以某个低概率将机器人随机从这个状态转移出去。
+- en: While in this state, the robot loses some reward points.
+  id: totrans-165
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在此状态下，机器人失去了一些奖励积分。
+- en: In this situation, the algorithm needs to estimate the value of the trap state
+    so that it knows it should avoid it. On the other hand, trying to estimate the
+    individual action values is meaningless as it would just be chasing the noise.
+    It turns out that this harms the DQN's effectiveness.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，算法需要估计陷阱状态的价值，以便它知道应该避免该状态。另一方面，尝试估计单个行动值是没有意义的，因为它只是追逐噪声。事实证明，这会损害DQN的有效性。
+- en: 'Dueling networks propose a solution to this issue through an architecture that
+    simultaneously estimates the state value and the action **advantages** in parallel
+    streams for a given state. The **advantage value** of an action in a given state,
+    as is apparent from the term, is the additional expected cumulative reward that
+    comes with choosing that action instead of what the policy in use, ![](img/Formula_05_040.png),
+    suggests. It is formally defined as follows:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对偶网络通过一种架构提出了解决这个问题的方法，该架构同时估计给定状态下的状态值和行动**优势**，并在并行流中进行处理。一个给定状态下的行动的**优势值**，顾名思义，是选择该行动所带来的额外预期累计奖励，而不是所使用的策略所建议的行动！[](img/Formula_05_040.png)。它的正式定义如下：
+- en: '![](img/Formula_06_180.jpg)'
+  id: totrans-168
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_180.jpg)'
+- en: So, choosing the action with the highest advantage is equivalent to choosing
+    the action with the highest Q-value.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，选择具有最高优势的行动等同于选择具有最高Q值的行动。
+- en: 'By obtaining the Q-values from the explicit representations of the state value
+    and the action advantages, as represented in *Figure 6.4*, we enable the network
+    to have a good representation of the state value without having to accurately
+    estimate each action value for a given state:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过从状态值和行动优势的显式表示中获取Q值，如*图6.4*所示，我们使得网络能够很好地表示状态值，而不需要准确估计给定状态下的每个行动值：
+- en: '![](img/B14160_06_4.jpg)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B14160_06_4.jpg)'
+- en: 'Figure 6.4 – (a) regular DQN and (b) dueling DQN (source: Wang et al., 2016)'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.4 – (a) 常规DQN和(b) 对偶DQN（来源：Wang等，2016）
+- en: 'At this point, you might expect that the action-value estimates are just obtained
+    in this architecture using the formula we gave previously. It turns out that this
+    vanilla implementation does not work well. This is because this architecture alone
+    does not enforce the network to learn the state and action values in the corresponding
+    branches, because they are supervised indirectly through their sum. For example,
+    the sum would not change if you were to subtract 100 from the state value estimate
+    and add 100 to all advantage estimates. To overcome this issue of "identifiability,"
+    we need to remember this: in Q-learning, the policy is to pick the action with
+    the highest Q-value. Let''s represent this best action with ![](img/Formula_06_181.png).
+    Then, we have the following:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一点上，你可能会认为，行动-价值估计只是通过我们之前给出的公式，在这个架构中得到的。事实证明，这种简单的实现并不有效。这是因为仅凭这个架构并不能强制网络学习相应分支中的状态和行动值，因为它们是通过它们的总和间接监督的。例如，如果你从状态值估计中减去100，并且将100加到所有的优势估计中，那么总和并不会改变。为了克服这个“可识别性”问题，我们需要记住这一点：在Q学习中，策略是选择具有最高Q值的行动。我们用！[](img/Formula_06_181.png)表示这个最佳行动。然后，我们得到以下内容：
+- en: '![](img/Formula_06_182.jpg)'
+  id: totrans-174
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_182.jpg)'
+- en: 'This leads to ![](img/Formula_06_183.png). To enforce this, one way of obtaining
+    the action-value estimates is to use the following equation:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这导致了！[](img/Formula_06_183.png)。为了强制执行这一点，一种获得行动-价值估计的方法是使用以下方程：
+- en: '![](img/Formula_06_184.jpg)'
+  id: totrans-176
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_184.jpg)'
+- en: 'Here, ![](img/Formula_06_185.png), and ![](img/Formula_06_186.png) represent
+    the common encoder, state value, and advantage streams; and ![](img/Formula_06_187.png).
+    On the other hand, the authors use the following alternative, which leads to more
+    stable training:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_06_185.png) 和 ![](img/Formula_06_186.png) 分别表示常见的编码器、状态值和优势流；而！[](img/Formula_06_187.png)。另一方面，作者使用以下替代方案，这导致了更稳定的训练：
+- en: '![](img/Formula_06_188.jpg)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_188.jpg)'
+- en: With this architecture, the authors obtained state-of-the-art results at the
+    time on the Atari benchmarks, proving the value of the approach.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过这种架构，作者在当时的Atari基准测试中获得了最先进的结果，证明了该方法的价值。
+- en: 'Next, let''s look into another important improvement over DQNs: multi-step
+    learning.'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们来看看DQN的另一个重要改进：多步学习。
+- en: Multi-step learning
+  id: totrans-181
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 多步学习
+- en: 'In the previous chapter, we mentioned that a more accurate target value for
+    a state-action pair can be obtained by using multi-step discounted rewards in
+    the estimation obtained from the environment. In such cases, the Q-value estimates
+    used in bootstrapping will be discounted more heavily, diminishing the impact
+    of the inaccuracies of those estimates. Instead, more of the target value will
+    come from the sampled rewards. More formally, the TD error in a multi-step setting
+    becomes the following:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们提到可以通过在从环境获得的估计中使用多步折扣奖励来获得更准确的状态-动作对的目标值。在这种情况下，回溯中使用的Q值估计会受到更大的折扣，从而减小这些估计不准确的影响。相反，目标值将更多地来自采样的奖励。更正式地，多个步骤设置中的时间差分（TD）误差变为以下形式：
+- en: '![](img/Formula_06_189.jpg)![](img/Formula_06_190.jpg)'
+  id: totrans-183
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_189.jpg)![](img/Formula_06_190.jpg)'
+- en: You can see that with increasing ![](img/Formula_05_193.png), the impact of
+    the ![](img/Formula_06_192.png) term diminishes since ![](img/Formula_06_193.png).
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以看到，随着![](img/Formula_05_193.png)的增大，![](img/Formula_06_192.png)项的影响逐渐减小，因为![](img/Formula_06_193.png)。
+- en: The next extension is distributional RL, one of the most important ideas in
+    value-based learning.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个扩展是分布式强化学习（distributional RL），这是基于值学习中最重要的思想之一。
+- en: Distributional RL
+  id: totrans-186
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 分布式强化学习
+- en: In a traditional Q-learning setting, the action-value function estimates the
+    expected discounted return when action ![](img/Formula_06_194.png) is taken in
+    state ![](img/Formula_05_045.png), and then some target policy is followed. The
+    distributional RL model proposed by Bellemare et al. (2017) instead learns a probability
+    mass function over discrete support ![](img/Formula_06_196.png) for state values.
+    This ![](img/Formula_06_197.png) is a vector with ![](img/Formula_06_198.png)
+    atoms, where ![](img/Formula_06_199.png), ![](img/Formula_06_200.png). The neural
+    network architecture is then modified to estimate ![](img/Formula_06_201.png)
+    on each atom, ![](img/Formula_06_202.png). When distributional RL is used, the
+    TD error can be calculated using **Kullback-Leibler** (**KL**) divergence between
+    the current and target distributions.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在传统的Q学习设置中，动作值函数估计在状态![](img/Formula_05_045.png)下执行动作![](img/Formula_06_194.png)时的预期折扣回报，然后遵循某个目标策略。Bellemare等人（2017）提出的分布式强化学习模型则学习状态值的离散支持![](img/Formula_06_196.png)上的概率质量函数。这![](img/Formula_06_197.png)是一个包含![](img/Formula_06_198.png)个原子的向量，其中![](img/Formula_06_199.png)，![](img/Formula_06_200.png)。然后，神经网络架构被修改为估计每个原子的![](img/Formula_06_201.png)，即![](img/Formula_06_202.png)。当使用分布式强化学习时，TD误差可以通过当前和目标分布之间的**Kullback-Leibler**（**KL**）散度来计算。
+- en: To give an example here, let's say the state value in an environment for any
+    state can range between ![](img/Formula_06_203.png) and ![](img/Formula_06_204.png).
+    We can discretize this range into 11 atoms, leading to ![](img/Formula_06_205.png).
+    The value network then estimates, for a given ![](img/Formula_06_206.png) value,
+    what the probability is that its value is 0, 10, 20, and so on. It turns out that
+    this granular representation of the value function leads to a significant performance
+    boost in deep Q-learning. Of course, the additional complexity here is that ![](img/Formula_06_207.png)
+    and ![](img/Formula_06_208.png) are additional hyperparameters to be tuned.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里举个例子，假设环境中任何状态的状态值范围可以从![](img/Formula_06_203.png)到![](img/Formula_06_204.png)。我们可以将这个范围离散化为11个原子，从而得到![](img/Formula_06_205.png)。然后，值网络会估计，对于给定的![](img/Formula_06_206.png)值，其值为0、10、20等的概率。事实证明，这种对值函数的细粒度表示在深度Q学习中带来了显著的性能提升。当然，这里的额外复杂性在于，![](img/Formula_06_207.png)和![](img/Formula_06_208.png)是需要调优的附加超参数。
+- en: Finally, we will introduce the last extension, noisy nets.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们将介绍最后一个扩展——噪声网络（noisy nets）。
+- en: Noisy nets
+  id: totrans-190
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 噪声网络
+- en: 'The exploration in regular Q-learning is controlled by ![](img/Formula_06_031.png),
+    which is fixed across the state space. On the other hand, some states may require
+    higher exploration than others. Noisy nets introduce noise to the linear layers
+    of the action-value function, whose degree is learned during training. More formally,
+    noisy nets locate the linear layer:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正常Q学习中的探索由![](img/Formula_06_031.png)控制，该值在状态空间中是固定的。另一方面，某些状态可能需要比其他状态更高的探索。噪声网络将噪声引入动作值函数的线性层，噪声的程度在训练过程中学习。更正式地，噪声网络定位线性层：
+- en: '![](img/Formula_06_210.jpg)'
+  id: totrans-192
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_210.jpg)'
+- en: 'And then they replace it with the following:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将其替换为以下形式：
+- en: '![](img/Formula_06_211.jpg)'
+  id: totrans-194
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_06_211.jpg)'
+- en: Here, ![](img/Formula_06_212.png), and ![](img/Formula_06_213.png) are learned
+    parameters, whereas ![](img/Formula_06_214.png) and ![](img/Formula_06_215.png)
+    are random variables with fixed statistics, and ![](img/Formula_06_216.png) denotes
+    an element-wise product. With this setup, the exploration rate becomes part of
+    the learning process, which is helpful especially in hard-exploration problems
+    (Fortunato et al., 2017).
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，![](img/Formula_06_212.png) 和 ![](img/Formula_06_213.png) 是学习到的参数，而 ![](img/Formula_06_214.png)
+    和 ![](img/Formula_06_215.png) 是具有固定统计数据的随机变量，![](img/Formula_06_216.png) 表示逐元素乘积。通过这种设置，探索率成为学习过程的一部分，尤其在困难探索问题中，这一点尤为重要（Fortunato等，2017年）。
+- en: This concludes the discussion on extensions. Next, we will turn to discussing
+    the results of the combination of these extensions.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就结束了关于扩展的讨论。接下来，我们将转向讨论这些扩展结合后的结果。
+- en: The performance of the integrated agent
+  id: totrans-197
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 集成智能体的性能
+- en: The contribution of the Rainbow paper is that it combines all of the preceding
+    improvements into a single agent. As a result, it obtained the state-of-the-art
+    results on the famous Atari 2600 benchmarks back then, showing the importance
+    of bringing these improvements together. Of course, a natural question that arises
+    is whether each individual improvement contributed significantly to the outcome.
+    The authors demonstrated results from some ablations to answer this, which we
+    will discuss next.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Rainbow论文的贡献在于将所有前述的改进整合成一个单一的智能体。因此，它在当时的著名Atari 2600基准测试中取得了最先进的结果，展示了将这些改进整合在一起的重要性。当然，一个自然的问题是，每一个单独的改进是否对结果产生了显著影响。作者通过一些消融实验来展示结果，我们将在接下来的部分讨论这一点。
+- en: How to choose which extensions to use – ablations to Rainbow
+  id: totrans-199
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 如何选择使用哪些扩展 —— Rainbow的消融实验
+- en: 'The Rainbow paper arrives at the following findings in terms of the significance
+    of the individual extensions:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Rainbow论文得出了关于各个扩展重要性的以下结论：
+- en: Prioritized replay and multi-step learning turned out to be the most important
+    extensions contributing to the result. Taking these extensions out of the Rainbow
+    architecture led to the highest decrease in performance, indicating their significance.
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事实证明，优先回放和多步学习是对结果贡献最大的扩展。将这些扩展从Rainbow架构中移除导致性能的最大下降，表明它们的重要性。
+- en: The distributional DQN was shown to be the next important extension, which became
+    more apparent especially in the later stages of the training.
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分布式DQN被证明是下一个重要的扩展，尤其在训练的后期阶段更为显著。
+- en: Removing noisy nets from the Rainbow agent led to decreases in performance,
+    although its effect was not as significant as the other extensions mentioned previously.
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 移除Rainbow智能体中的噪声网络导致性能下降，尽管其影响不如之前提到的其他扩展显著。
+- en: Removing the dueling architecture and double Q-learning had no notable effect
+    on the performance.
+  id: totrans-204
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 移除对抗性架构和双重Q学习对性能没有显著影响。
+- en: Of course, the effects of each of these extensions depend on the problem at
+    hand, and their inclusion becomes a hyperparameter. However, these results show
+    that prioritized replay, multi-step learning, and the distributional DQN are important
+    extensions to try while training an RL agent.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，这些扩展的效果取决于具体问题，而它们的选择变成了一个超参数。然而，这些结果表明，优先回放、多步学习和分布式DQN是训练强化学习智能体时需要尝试的重要扩展。
+- en: Before we close this section, let's revisit the discussion on the deadly triad
+    and try to understand why it turns out to be less of a problem with all these
+    improvements.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们结束本节内容之前，让我们回顾一下关于致命三重奏的讨论，并尝试理解为什么随着这些改进的出现，它变得不再是一个大问题。
+- en: What happened to the deadly triad?
+  id: totrans-207
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 致命三重奏发生了什么？
+- en: The deadly triad hypothesizes that when off-policy algorithms are combined with
+    function approximators and bootstrapping, training could diverge easily. On the
+    other hand, the aforementioned work in deep Q-learning exhibits great success
+    stories. So, how come we can achieve such results if the rationale behind the
+    deadly triad is accurate?
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 致命三重奏假设当离策略算法与函数逼近器和自举法结合时，训练可能会很容易发散。另一方面，前述的深度Q学习工作却展现了巨大的成功。那么，如果致命三重奏的理论是准确的，我们如何能够实现如此好的结果呢？
+- en: 'Hasselt et al. looked into this question and found support for the following
+    hypotheses:'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Hasselt等人研究了这个问题，并支持以下假设：
+- en: Unbounded divergence is uncommon when combining Q-learning and conventional
+    deep RL function spaces. So, the fact that the divergence could happen does not
+    mean that it will happen. The authors presented results concluding that this is
+    not that much of a significant problem to begin with.
+  id: totrans-210
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在将 Q 学习与传统的深度强化学习函数空间结合时，无界发散并不常见。因此，尽管可能发生发散，但并不意味着一定会发生。作者们提出的结果表明，这其实并不是一个重大问题。
+- en: There is less divergence when bootstrapping on separate networks. The target
+    networks introduced in the DQN work help with divergence.
+  id: totrans-211
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在独立网络上进行自举时，发散较少。DQN 论文中引入的目标网络有助于减少发散。
+- en: There is less divergence when correcting for overestimation bias, meaning that
+    the double DQN is mitigating divergence issues.
+  id: totrans-212
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在纠正过度估计偏差时，发散较少，这意味着双重 DQN 在缓解发散问题方面发挥了作用。
+- en: Longer multi-step returns will diverge less easily as it reduces the influence
+    of bootstrapping.
+  id: totrans-213
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更长的多步回报将更不容易发散，因为它减少了自举影响。
+- en: Larger, more flexible networks will diverge less easily because their representation
+    power is closer to the tabular representation than function approximators with
+    less capacity.
+  id: totrans-214
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更大、更灵活的网络由于其表征能力接近表格化表示，而不像容量较小的函数逼近器那样容易发散。
+- en: Stronger prioritization of updates (high ![](img/Formula_06_176.png)) will diverge
+    more easily, which is bad. But then, the amount of update can be corrected via
+    importance sampling and that helps to prevent divergence.
+  id: totrans-215
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更强的更新优先级（高 ![](img/Formula_06_176.png)）将更容易发散，这不好。但随后，可以通过重要性采样来纠正更新量，从而帮助防止发散。
+- en: These provide great insight into why the situation with deep Q-learning is not
+    as bad as it seemed at the beginning. This is also apparent from the very exciting
+    results that have been reported over the past few years, and deep Q-learning has
+    emerged as a very promising solution approach to RL problems.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些为我们提供了关于深度 Q 学习情况为何不像最初看起来那么糟糕的重要见解。这也从过去几年报告的非常令人兴奋的结果中得到了体现，深度 Q 学习已成为一种非常有前景的强化学习问题解决方案。
+- en: This concludes our discussion on the theory of deep Q-learning. Next, we will
+    turn to a very important dimension in deep RL, which is its scalable implementation.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这标志着我们关于深度 Q 学习理论的讨论结束。接下来，我们将转向深度强化学习中的一个非常重要的维度——其可扩展的实现。
+- en: Distributed deep Q-learning
+  id: totrans-218
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分布式深度 Q 学习
+- en: Deep learning models are notorious for their hunger for data. When it comes
+    to RL, the hunger for data is much greater, which mandates using parallelization
+    in training RL models. The original DQN model is a single-threaded process. Despite
+    its great success, it has limited scalability. In this section, we will present
+    methods to parallelize deep Q-learning to many (possibly thousands) of processes.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深度学习模型以对数据的渴求而闻名。对于强化学习而言，这种对数据的需求更为强烈，因此需要在训练强化学习模型时使用并行化。原始的 DQN 模型是一个单线程过程。尽管取得了巨大的成功，但它的可扩展性有限。在本节中，我们将介绍将深度
+    Q 学习并行化到多个（可能是成千上万个）进程的方法。
+- en: The key insight behind distributed Q-learning is its off-policy nature, which
+    virtually decouples the training from experience generation. In other words, the
+    specific processes/policies that generate the experience do not matter to the
+    training process (although there are caveats to this statement). Combined with
+    the idea of using a replay buffer, this allows us to parallelize the experience
+    generation and store the data in central or distributed replay buffers. In addition,
+    we can parallelize how the data is sampled from these buffers and the action-value
+    function is updated.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分布式 Q 学习背后的关键洞察是其脱离策略的特性，这实际上将训练与经验生成解耦。换句话说，生成经验的特定进程/策略对训练过程并不重要（尽管这一说法有一些警告）。结合使用重放缓冲区的思想，这使我们能够并行化经验生成，并将数据存储在中央或分布式重放缓冲区中。此外，我们还可以并行化从这些缓冲区中采样数据的方式，并更新行动-价值函数。
+- en: Let's dive into the details of distributed deep Q-learning.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们深入探讨分布式深度 Q 学习的细节。
+- en: Components of a distributed deep Q-learning architecture
+  id: totrans-222
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分布式深度 Q 学习架构的组件
+- en: In this section, we will describe the main components of a distributed deep
+    Q-learning architecture, and then we will look into specific implementations,
+    following the structure introduced in Nair et al, (2015).
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将描述分布式深度 Q 学习架构的主要组成部分，然后我们将深入探讨具体实现，遵循 Nair 等人（2015）提出的结构。
+- en: Actors
+  id: totrans-224
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 演员
+- en: '**Actors** are processes that interact with a copy of the environment given
+    a policy, take the actions given the state they are in, and observe the reward
+    and the next state. If the task is to learn how to play chess, for example, each
+    actor plays its own chess game and collects the experience. They are provided
+    with a copy of the Q-network by a **parameter server**, as well as an exploration
+    parameter, for them to obtain actions.'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**演员**是与环境副本交互的进程，它们根据给定的策略在所处状态下采取行动，并观察奖励和下一个状态。例如，如果任务是学习如何下棋，每个演员都会进行自己的棋局并收集经验。演员由**参数服务器**提供Q网络副本，并提供一个探索参数，帮助它们选择行动。'
+- en: Experience replay memory (buffer)
+  id: totrans-226
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 经验重放记忆（缓冲区）
+- en: When the actors collect experience tuples, they store them in the replay buffer(s).
+    Depending on the implementation, there could be a global replay buffer or multiple
+    local replay buffers, possibly one associated with each actor. When the replay
+    buffer is a global one, the data can still be stored in a distributed fashion.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当演员收集经验元组时，它们会将其存储在重放缓冲区中。根据实现的不同，可能会有一个全局重放缓冲区，或多个本地重放缓冲区，每个演员可能有一个。当重放缓冲区是全局的时，数据仍然可以以分布式的方式存储。
+- en: Learners
+  id: totrans-228
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 学习者
+- en: A **learner**'s job is to calculate the gradients that will update the Q-network
+    in the parameter server. To do so, a learner carries a copy of the Q-network,
+    samples a minibatch of experiences from the replay memory, and calculates the
+    loss and the gradients before communicating them back to the parameter server.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个**学习者**的工作是计算将更新Q网络的梯度，并将其传递到参数服务器。为此，学习者携带Q网络的副本，从重放记忆中采样一个小批量的经验，计算损失和梯度，然后将这些信息传回参数服务器。
+- en: Parameter server
+  id: totrans-230
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 参数服务器
+- en: The **parameter server** is where the main copy of the Q-network is stored and
+    updated as the learning progresses. All processes periodically synchronize their
+    version of the Q-network from this parameter server. Depending on the implementation,
+    the parameter server could comprise multiple shards to allow storing large amounts
+    of data and reduce communication load per shard.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**参数服务器**是存储Q网络主副本的地方，并随着学习的进行更新。所有进程会定期从这个参数服务器同步它们的Q网络版本。根据实现的不同，参数服务器可能包括多个分片，以便存储大量数据并减少每个分片的通信负载。'
+- en: After introducing this general structure, let's go into the details of the Gorila
+    implementation – one of the early distributed deep Q-learning architectures.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在介绍这个通用结构后，我们来详细了解Gorila的实现——这是最早的分布式深度Q学习架构之一。
+- en: Gorila – general RL architecture
+  id: totrans-233
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Gorila – 一般强化学习架构
+- en: 'The Gorila architecture introduces a general framework to parallelize deep
+    Q-learning using the components we described previously. A specific version of
+    this architecture, which is implemented by the authors, bundles an actor, a learner,
+    and a local replay buffer together for learning. Then, you can create many bundles
+    for distributed learning. This architecture is described in the following figure:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Gorila架构引入了一个通用框架，通过我们之前描述的组件来并行化深度Q学习。这一架构的具体版本，由作者实现，将演员、学习者和本地重放缓冲区组合在一起进行学习。然后，你可以创建多个包来进行分布式学习。该架构在下图中有所描述：
+- en: '![Figure 6.5 – Gorila architecture'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图6.5 – Gorila架构'
+- en: '](img/B14160_06_5.jpg)'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_5.jpg)'
+- en: Figure 6.5 – Gorila architecture
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.5 – Gorila架构
+- en: Note that the exact flow will change slightly with the Rainbow improvements.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，随着Rainbow的改进，具体流程会有所变化。
+- en: 'The details of the distributed deep Q-learning algorithm are as follows within
+    a bundle:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分布式深度Q学习算法的详细步骤如下，包含在一个包中：
+- en: Initialize a replay buffer, ![](img/Formula_06_218.png), with a fixed capacity,
+    ![](img/Formula_06_219.png). Initialize the parameter server with some ![](img/Formula_06_220.png).
+    Sync the action-value function and the target network with the parameters in the
+    parameter server, ![](img/Formula_06_221.png) and ![](img/Formula_06_222.png).
+  id: totrans-240
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化一个重放缓冲区，![](img/Formula_06_218.png)，具有固定的容量，![](img/Formula_06_219.png)。初始化参数服务器并提供一些![](img/Formula_06_220.png)。同步行动值函数和目标网络的参数，![](img/Formula_06_221.png)和![](img/Formula_06_222.png)。
+- en: For ![](img/Formula_06_223.png) ![](img/Formula_06_224.png) to ![](img/Formula_06_225.png)
+    continue with the following steps.
+  id: totrans-241
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于![](img/Formula_06_223.png) ![](img/Formula_06_224.png)到![](img/Formula_06_225.png)，继续执行以下步骤。
+- en: Reset the environment to an initial state, ![](img/Formula_06_226.png). Sync
+    ![](img/Formula_06_227.png).
+  id: totrans-242
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将环境重置为初始状态，![](img/Formula_06_226.png)。同步![](img/Formula_06_227.png)。
+- en: For ![](img/Formula_06_228.png) to ![](img/Formula_06_229.png), continue with
+    the following steps.
+  id: totrans-243
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于![](img/Formula_06_228.png)到![](img/Formula_06_229.png)，继续执行以下步骤。
+- en: Take an action, ![](img/Formula_06_230.png), according to an ![](img/Formula_06_231.png)-greedy
+    policy given ![](img/Formula_06_232.png) and ![](img/Formula_06_233.png); observe
+    ![](img/Formula_06_234.png) and ![](img/Formula_06_235.png). Store the experience
+    in the replay buffer, ![](img/Formula_06_236.png).
+  id: totrans-244
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行一个动作，![](img/Formula_06_230.png)，根据给定的![](img/Formula_06_231.png)-贪心策略，使用![](img/Formula_06_232.png)和![](img/Formula_06_233.png)；观察![](img/Formula_06_234.png)和![](img/Formula_06_235.png)。将经验存储在回放缓冲区中，![](img/Formula_06_236.png)。
+- en: Sync ![](img/Formula_06_237.png); sample a random minibatch from ![](img/Formula_06_238.png)
+    and calculate the target values, ![](img/Formula_06_239.png).
+  id: totrans-245
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 同步![](img/Formula_06_237.png)；从![](img/Formula_06_238.png)中随机采样一个小批次并计算目标值，![](img/Formula_06_239.png)。
+- en: Calculate the loss; compute the gradients and send them to the parameter server.
+  id: totrans-246
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算损失；计算梯度并将其发送到参数服务器。
+- en: Every ![](img/Formula_06_240.png) gradient updates in the parameter server;
+    sync ![](img/Formula_06_241.png).
+  id: totrans-247
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每个![](img/Formula_06_240.png)梯度更新在参数服务器中；同步![](img/Formula_06_241.png)。
+- en: End for.
+  id: totrans-248
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 结束。
+- en: Some of the details in the pseudo-code are omitted, such as how to calculate
+    the target values. The original Gorila paper implements a vanilla DQN without
+    the Rainbow improvements. However, you could modify it to use, let's say, ![](img/Formula_05_193.png)-step
+    learning. The details of the algorithm would then need to be filled in accordingly.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 伪代码中的一些细节被省略了，例如如何计算目标值。原始的Gorila论文实现了一个普通的DQN，而没有Rainbow的改进。然而，你可以修改它来使用，例如，![](img/Formula_05_193.png)-步学习。算法的细节需要相应地填写。
+- en: One of the drawbacks of the Gorila architecture is that it involves a lot of
+    passing of the ![](img/Formula_06_154.png) parameters between the parameter server,
+    actors, and learners. Depending on the size of the network, this would mean a
+    significant communication load. Next, we will look into how the Ape-X architecture
+    improves Gorila.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Gorila架构的一个缺点是它涉及大量在参数服务器、演员和学习者之间传递![](img/Formula_06_154.png)参数。根据网络的大小，这将意味着一个显著的通信负载。接下来，我们将探讨Ape-X架构如何改进Gorila。
+- en: Ape-X – distributed prioritized experience replay
+  id: totrans-251
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Ape-X — 分布式优先经验回放
+- en: Horgan et al, (2018) introduced the Ape-X DQN architecture, which achieved some
+    significant improvements over the DQN, Rainbow, and Gorila. Actually, the Ape-X
+    architecture is a general framework that could be applied to learning algorithms
+    other than the DQN.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Horgan等人（2018）介绍了Ape-X DQN架构，它在DQN、Rainbow和Gorila上取得了一些显著的改进。实际上，Ape-X架构是一个通用框架，可以应用于除DQN之外的其他学习算法。
+- en: Key contributions of Ape-X
+  id: totrans-253
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Ape-X的关键贡献
+- en: 'Here are the key points in how Ape-X distributes RL training:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是Ape-X如何分配强化学习训练的关键点：
+- en: Similar to Gorila, each actor collects experiences from its own instance of
+    the environment.
+  id: totrans-255
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与Gorila类似，每个演员从其自己的环境实例中收集经验。
+- en: Unlike Gorila, there is a single replay buffer in which all the experiences
+    are collected.
+  id: totrans-256
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与Gorila不同，Ape-X有一个单独的回放缓冲区，所有的经验都在其中收集。
+- en: Unlike Gorila, there is a single learner that samples from the replay buffer
+    to update the central Q and target networks.
+  id: totrans-257
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与Gorila不同，Ape-X有一个单独的学习者，它从回放缓冲区中采样并更新中央Q和目标网络。
+- en: The Ape-X architecture completely decouples the learner from the actors, and
+    they run at their own pace.
+  id: totrans-258
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Ape-X架构完全解耦了学习者和演员，它们按照自己的节奏运行。
+- en: Unlike the regular prioritized experience replay, actors calculate the initial
+    priorities before adding the experience tuples to the replay buffer, rather than
+    setting them to a maximum value.
+  id: totrans-259
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与常规的优先经验回放不同，演员在将经验元组添加到回放缓冲区之前计算初始优先级，而不是将它们设置为最大值。
+- en: The Ape-X DQN adapts the double Q-learning and multi-step learning improvements,
+    in their paper, although other Rainbow improvements can be integrated into the
+    architecture.
+  id: totrans-260
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Ape-X DQN在其论文中适应了双重Q学习和多步学习的改进，尽管其他Rainbow的改进可以集成到架构中。
+- en: Each actor is assigned different exploration rates, within the ![](img/Formula_06_244.png)
+    spectrum, where actors with low ![](img/Formula_06_117.png) values exploit what
+    has been learned about the environment, and actors with high ![](img/Formula_05_291.png)
+    values increase the diversity in the collected experience.
+  id: totrans-261
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个演员被分配不同的探索率，在![](img/Formula_06_244.png)范围内，其中具有低![](img/Formula_06_117.png)值的演员利用已学到的环境信息，而具有高![](img/Formula_05_291.png)值的演员则增加收集经验的多样性。
+- en: 'The Ape-X DQN architecture is described in the following diagram:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ape-X DQN 架构在下图中描述：
+- en: '![Figure 6.6 – Ape-X architecture for the DQN'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.6 – DQN 的 Ape-X 架构'
+- en: '](img/B14160_06_6.jpg)'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_6.jpg)'
+- en: Figure 6.6 – Ape-X architecture for the DQN
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.6 – DQN 的 Ape-X 架构
+- en: Now, let's look into the details of the algorithms for the actor and the learners.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们深入了解演员和学习者算法的细节。
+- en: The actor algorithm
+  id: totrans-267
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 演员算法
+- en: 'Here is the algorithm for the actor:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是演员的算法：
+- en: Initialize ![](img/Formula_06_247.png), ![](img/Formula_06_248.png), and ![](img/Formula_06_249.png).
+  id: totrans-269
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化 ![](img/Formula_06_247.png)、![](img/Formula_06_248.png) 和 ![](img/Formula_06_249.png)。
+- en: For ![](img/Formula_06_250.png) to ![](img/Formula_06_251.png), continue with
+    the following steps.
+  id: totrans-270
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于 ![](img/Formula_06_250.png) 到 ![](img/Formula_06_251.png)，继续以下步骤。
+- en: Take an action, ![](img/Formula_06_252.png), obtained from ![](img/Formula_06_253.png)),
+    and observe ![](img/Formula_06_254.png).
+  id: totrans-271
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 采取行动 ![](img/Formula_06_252.png)，该行动来自 ![](img/Formula_06_253.png)，并观察 ![](img/Formula_06_254.png)。
+- en: Add the ![](img/Formula_06_255.png) experience to a local buffer.
+  id: totrans-272
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将 ![](img/Formula_06_255.png) 经验添加到本地缓冲区。
+- en: If the number of tuples in the local buffer exceeds a threshold, ![](img/Formula_06_256.png),
+    continue with the following steps.
+  id: totrans-273
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果本地缓冲区中的元组数超过阈值，![](img/Formula_06_256.png)，则继续以下步骤。
+- en: Obtain ![](img/Formula_06_257.png) from the local buffer, a batch of multi-step
+    transitions.
+  id: totrans-274
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从本地缓冲区获取 ![](img/Formula_06_257.png)，一个多步转移的批次。
+- en: Calculate ![](img/Formula_06_258.png) for ![](img/Formula_06_259.png), and initial
+    priorities for the experience.
+  id: totrans-275
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算 ![](img/Formula_06_258.png) 以得到 ![](img/Formula_06_259.png)，并为经验设置初始优先级。
+- en: Send ![](img/Formula_06_259.png) and ![](img/Formula_06_261.png) to the central
+    replay buffer.
+  id: totrans-276
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将 ![](img/Formula_06_259.png) 和 ![](img/Formula_06_261.png) 发送到中央重放缓冲区。
+- en: End if
+  id: totrans-277
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果结束
+- en: Sync the local network parameters every ![](img/Formula_06_262.png) steps from
+    the learner, ![](img/Formula_06_263.png)
+  id: totrans-278
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每经过 ![](img/Formula_06_262.png) 步骤从学习者同步本地网络参数，![](img/Formula_06_263.png)
+- en: End for
+  id: totrans-279
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 结束
+- en: 'One clarification with the preceding algorithm: don''t confuse the local buffer
+    with the replay buffer. It is just temporary storage to accumulate the experience
+    before sending it to the replay buffer, and the learner does not interact with
+    the local buffer. Also, the process that sends data to the replay buffer runs
+    in the background and does not block the process that steps through the environment.'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于前述算法有一点澄清：不要将本地缓冲区与重放缓冲区混淆。本地缓冲区只是临时存储，用于积累经验并在发送到重放缓冲区之前处理，而学习者并不直接与本地缓冲区交互。此外，向重放缓冲区发送数据的过程在后台运行，并不会阻塞与环境交互的过程。
+- en: Now, let's look into the algorithm for the learner.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们来看一下学习者算法。
+- en: The learner algorithm
+  id: totrans-282
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 学习者算法
+- en: 'Here is how the learner works:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是学习者的工作方式：
+- en: Initialize Q and the target network, ![](img/Formula_06_264.png)
+  id: totrans-284
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化 Q 和目标网络，![](img/Formula_06_264.png)
+- en: For ![](img/Formula_06_265.png) to ![](img/Formula_06_266.png), continue with
+    the following steps.
+  id: totrans-285
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于 ![](img/Formula_06_265.png) 到 ![](img/Formula_06_266.png)，继续以下步骤。
+- en: Sample a batch of experiences, ![](img/Formula_06_267.png), where ![](img/Formula_06_268.png)
+    helps uniquely identify which experience is sampled.
+  id: totrans-286
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从经验中采样一个批次，![](img/Formula_06_267.png)，其中 ![](img/Formula_06_268.png) 有助于唯一标识所采样的经验。
+- en: Compute the gradients, ![](img/Formula_06_269.png), using ![](img/Formula_06_270.png),
+    ![](img/Formula_06_271.png) and ![](img/Formula_06_272.png); update the network
+    parameters to ![](img/Formula_06_273.png) with the gradients.
+  id: totrans-287
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用 ![](img/Formula_06_270.png)、![](img/Formula_06_271.png) 和 ![](img/Formula_06_272.png)
+    计算梯度 ![](img/Formula_06_269.png)；使用这些梯度更新网络参数到 ![](img/Formula_06_273.png)。
+- en: Compute the new priorities, ![](img/Formula_06_274.png), for ![](img/Formula_06_275.png)
+    and update the priorities in the replay buffer using the ![](img/Formula_06_276.png)
+    information.
+  id: totrans-288
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算新的优先级 ![](img/Formula_06_274.png)，用于 ![](img/Formula_06_275.png)，并使用 ![](img/Formula_06_276.png)
+    信息更新重放缓冲区中的优先级。
+- en: Periodically remove old experiences from the replay buffer.
+  id: totrans-289
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定期从重放缓冲区中移除旧经验。
+- en: Periodically update the target network parameters.
+  id: totrans-290
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定期更新目标网络参数。
+- en: End for
+  id: totrans-291
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 结束
+- en: If you look into the actor and learner algorithms, they are not that complicated.
+    However, the key intuition of decoupling them brings significant performance gains.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你查看演员和学习者算法，它们并不复杂。然而，将它们解耦的关键直觉带来了显著的性能提升。
+- en: Before we wrap up our discussion in this section, let's discuss some practical
+    details of the Ape-X framework next.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们结束这一部分讨论之前，让我们接下来讨论一些 Ape-X 框架的实际细节。
+- en: Practical considerations in implementing Ape-X DQN
+  id: totrans-294
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 实现 Ape-X DQN 时的实际考虑
+- en: 'The Ape-X paper includes additional details about the implementation. Some
+    key ones are as follows:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ape-X 论文包含了实现的更多细节，以下是一些关键点：
+- en: The exploration rate for actors ![](img/Formula_06_277.png) as ![](img/Formula_06_278.png)
+    with ![](img/Formula_06_279.png) and ![](img/Formula_06_280.png), and these values
+    are held constant during training.
+  id: totrans-296
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 演员的探索率为 ![](img/Formula_06_277.png)，当 ![](img/Formula_06_278.png) 和 ![](img/Formula_06_279.png)
+    与 ![](img/Formula_06_280.png) 时，这些值在训练过程中保持不变。
+- en: There is a grace period to collect enough experiences before learning starts,
+    which the authors set to 50,000 transitions for Atari environments.
+  id: totrans-297
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在学习开始之前，有一个宽限期来收集足够的经验，作者将其设置为 50,000 次转换，用于 Atari 环境。
+- en: The rewards and gradient norms are clipped to stabilize the learning.
+  id: totrans-298
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 奖励和梯度范数被裁剪以稳定学习过程。
+- en: So, remember to pay attention to these details in your implementation.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，请记住在你的实现中关注这些细节。
+- en: This has been a long journey so far with all the theory and abstract discussions
+    – and thanks for your patience! Now, it is finally time to dive into some practice.
+    In the rest of the chapter, and the book, we will heavily rely on the Ray/RLlib
+    libraries. So, let's get an introduction to Ray next, and then implement a distributed
+    deep Q-learning agent.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，这是一个漫长的旅程，充满了理论和抽象讨论——感谢你的耐心！现在，终于到了实践环节。接下来的章节和本书的其余部分，我们将大量依赖 Ray/RLlib
+    库。所以，接下来让我们先了解一下 Ray，然后实现一个分布式深度 Q 学习代理。
+- en: Implementing scalable deep Q-learning algorithms using Ray
+  id: totrans-301
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 Ray 实现可扩展的深度 Q 学习算法
+- en: In this section, we will implement a parallelized DQN variant using the Ray
+    library. Ray is a powerful, general-purpose, yet simple framework for building
+    and running distributed applications on a single machine as well as on large clusters.
+    Ray has been built for applications that have heterogeneous computational needs
+    in mind. This is exactly what modern deep RL algorithms require as they involve
+    a mix of long- and short-running tasks, usage of GPU and CPU resources, and more.
+    In fact, Ray itself has a powerful RL library that is called RLlib. Both Ray and
+    RLlib have been increasingly adopted in academia and industry.
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将使用 Ray 库实现一个并行化的 DQN 变体。Ray 是一个强大、通用且简单的框架，适用于在单台机器以及大型集群上构建和运行分布式应用程序。Ray
+    是为具有异构计算需求的应用程序而构建的。这正是现代深度 RL 算法所需要的，因为它们涉及到长时间和短时间任务的混合、GPU 和 CPU 资源的使用等。事实上，Ray
+    本身有一个强大的 RL 库，称为 RLlib。Ray 和 RLlib 在学术界和工业界的应用日益广泛。
+- en: Info
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: For a comparison of Ray to other distributed backend frameworks, such as Spark
+    and Dask, see [https://bit.ly/2T44AzK](https://bit.ly/2T44AzK). You will see that
+    Ray is a very competitive alternative, even beating Python's own multiprocessing
+    implementation in some benchmarks.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将 Ray 与其他分布式后端框架（如 Spark 和 Dask）进行比较，请参见[https://bit.ly/2T44AzK](https://bit.ly/2T44AzK)。你会发现，Ray
+    是一个非常具有竞争力的替代方案，甚至在某些基准测试中击败了 Python 自带的多进程实现。
+- en: 'Writing a production-grade distributed application is a complex undertaking,
+    which is not what we aim for here. For that, we will cover RLlib in the next section.
+    On the other hand, implementing your own custom – albeit simple – deep RL algorithm
+    is highly beneficial, if nothing else, for educational reasons. So, this exercise
+    will help you with the following:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编写生产级的分布式应用程序是一项复杂的工作，这并不是我们在这里的目标。为此，我们将在下一节中介绍 RLlib。另一方面，实现你自己的自定义——虽然是简单的——深度
+    RL 算法是非常有益的，至少从教育角度来说是如此。因此，这个练习将帮助你实现以下目标：
+- en: Introduce you to Ray, which you can also use for tasks other than RL
+  id: totrans-306
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 向你介绍 Ray，除了 RL，你还可以用它来做其他任务。
+- en: Give you an idea about how to build your custom parallelized deep RL algorithm
+  id: totrans-307
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 让你了解如何构建自定义的并行化深度 RL 算法。
+- en: Serve as a stepping stone if you would prefer to dive into the RLlib source
+    code
+  id: totrans-308
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你希望深入了解 RLlib 源代码，这将是一个踏脚石。
+- en: You can then build your own distributed deep RL ideas on top of this exercise
+    if you would prefer to do so.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你愿意，你可以在这个练习的基础上构建自己的分布式深度 RL 想法。
+- en: With that, let's dive in!
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好了，让我们开始吧！
+- en: A primer on Ray
+  id: totrans-311
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Ray 简介
+- en: We will start with an introduction to Ray before going into our exercise. This
+    will be a rather brief tour to ensure continuity. For comprehensive documentation
+    on how Ray works, we refer you to Ray's website.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将先介绍 Ray，然后进入我们的练习。这将是一次简短的介绍，确保内容连贯。关于 Ray 工作原理的详细文档，请参考 Ray 的官方网站。
+- en: Info
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: The Ray and RLlib documentation is available at [https://docs.ray.io/en/latest/index.html](https://docs.ray.io/en/latest/index.html),
+    which includes API references, examples, and tutorials. The source code is on
+    GitHub at [https://github.com/ray-project/ray](https://github.com/ray-project/ray).
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ray 和 RLlib 的文档可以在 [https://docs.ray.io/en/latest/index.html](https://docs.ray.io/en/latest/index.html)
+    找到，其中包括 API 参考、示例和教程。源代码可以在 GitHub 上找到，地址是 [https://github.com/ray-project/ray](https://github.com/ray-project/ray)。
+- en: Next, let's discuss the main concepts in Ray.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们讨论一下 Ray 中的主要概念。
+- en: Main concepts in Ray
+  id: totrans-316
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Ray 中的主要概念
+- en: 'Before we look into writing some Ray applications, we first need to discuss
+    the main components it would involve. Ray enables your regular Python functions
+    and classes to run on separate remote processes with a simple Python decorator,
+    `@ray.remote`. During execution, Ray takes care of where these functions and classes
+    will live and execute – be it in a process on your local machine or somewhere
+    on the cluster if you have one. In more detail, here is what they are:'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们深入探讨如何编写 Ray 应用程序之前，我们需要先讨论它所涉及的主要组件。Ray 使得你可以通过一个简单的 Python 装饰器 `@ray.remote`，让常规的
+    Python 函数和类在分离的远程进程上运行。在执行过程中，Ray 会处理这些函数和类的执行位置——无论是在你本地机器上的进程，还是如果你有集群的话，在集群中的某个地方。更详细地说，以下是它们的内容：
+- en: '**Remote functions (tasks)** are like regular Python functions except they
+    are executed asynchronously, in a distributed fashion. Once called, a remote function
+    immediately returns an object ID, and a task is created to execute it on a worker
+    process. Note that remote functions do not maintain a state between calls.'
+  id: totrans-318
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**远程函数（任务）** 类似于常规的 Python 函数，只不过它们是异步执行的，并且是分布式运行的。一旦调用，远程函数会立即返回一个对象 ID，并创建一个任务在工作进程上执行它。请注意，远程函数在调用之间不会保持状态。'
+- en: '**Object IDs (futures)** are references to remote Python objects, for example,
+    an integer output of a remote function. Remote objects are stored in shared-memory
+    object stores and can be accessed by remote functions and classes. Note that an
+    object ID might refer to an object that will be available in the future, for example,
+    once the execution of a remote function finishes.'
+  id: totrans-319
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**对象 ID（未来对象）** 是远程 Python 对象的引用，例如，远程函数的整数输出。远程对象存储在共享内存对象存储中，可以通过远程函数和类访问。请注意，对象
+    ID 可能指向一个未来可用的对象，例如，等远程函数执行完成后，该对象才会可用。'
+- en: '**Remote classes (actors)** are similar to regular Python classes, but they
+    live on a worker process. Unlike remote functions, they are stateful, and their
+    methods behave like remote functions, sharing the state in the remote class. As
+    a side note, the "actor" term here is not to be confused with the distributed
+    RL "actor" – although an RL actor can be implemented using a Ray actor.'
+  id: totrans-320
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**远程类（演员）** 类似于常规的 Python 类，但它们运行在工作进程中。与远程函数不同，远程类是有状态的，它们的方法像远程函数一样工作，共享远程类中的状态。顺便提一下，这里的
+    "演员" 术语不要与分布式 RL 中的 "演员" 混淆——尽管可以使用 Ray actor 实现一个 RL actor。'
+- en: Next, let's look at how you can install Ray and use remote functions and classes.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们看看如何安装 Ray 并使用远程函数和类。
+- en: Installing and starting Ray
+  id: totrans-322
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 安装和启动 Ray
+- en: Ray can be installed through a simple `pip install -U ray` command. To install
+    it together with the RLlib library that we will use later, simply use `pip install
+    -U ray[rllib]`.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ray 可以通过简单的 `pip install -U ray` 命令安装。如果要与我们稍后使用的 RLlib 库一起安装，只需使用 `pip install
+    -U ray[rllib]`。
+- en: Info
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 信息
+- en: Note that Ray is supported on Linux and macOS. At the time of writing this book,
+    its Windows distribution is still in beta.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，Ray 支持 Linux 和 macOS。在本书撰写时，它的 Windows 版本仍处于测试阶段。
+- en: 'Once installed, Ray needs to be initialized before creating any remote functions,
+    objects, or classes:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦安装完成，Ray 需要在创建任何远程函数、对象或类之前进行初始化：
+- en: '[PRE0]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Next, let's create a few simple remote functions. In doing so, we are going
+    to use Ray's examples in their documentation.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们创建一些简单的远程函数。在此过程中，我们将使用 Ray 文档中的示例。
+- en: Using remote functions
+  id: totrans-329
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用远程函数
+- en: 'As mentioned earlier, Ray converts a regular Python function into a remote
+    one with a simple decorator:'
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，Ray 通过一个简单的装饰器将常规的 Python 函数转换为远程函数：
+- en: '[PRE1]'
+  id: totrans-331
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Once invoked, this function will execute a worker process. Therefore, invoking
+    this function multiple times will create multiple worker processes for parallel
+    execution. To do so, a remote function needs to be called with the `remote()`
+    addition:'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦调用，该函数将执行一个工作进程。因此，调用该函数多次将创建多个工作进程以实现并行执行。为此，远程函数需要通过 `remote()` 来调用：
+- en: '[PRE2]'
+  id: totrans-333
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Note that the function calls will not wait for each other to finish. However,
+    once called, the function immediately returns an object ID. To retrieve the result
+    of a function as a regular Python object using the object ID, we just use `objects
+    = ray.get(object_ids)`. Note that this makes the process wait for the object to
+    be available.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，函数调用不会等待彼此完成。然而，一旦调用，函数会立即返回一个对象 ID。为了像常规 Python 对象一样使用对象 ID 获取函数结果，我们只需要使用
+    `objects = ray.get(object_ids)`。请注意，这会使进程等待该对象可用。
+- en: 'Object IDs can be passed to other remote functions or classes just like regular
+    Python objects:'
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对象 ID 可以像常规 Python 对象一样传递给其他远程函数或类：
+- en: '[PRE3]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'There are several things to note here:'
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有几点需要注意：
+- en: This creates a dependency between the two tasks. The `remote_chain_function`
+    call will wait for the output of the `remote_function` call.
+  id: totrans-338
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这在两个任务之间创建了依赖关系。`remote_chain_function` 的调用将等待 `remote_function` 调用的输出。
+- en: Within `remote_chain_function`, we did not have to call `ray.get(value)`. Ray
+    handles it, whether it is an object ID or an object that has been received.
+  id: totrans-339
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 `remote_chain_function` 中，我们不需要调用 `ray.get(value)`。Ray 会自动处理，无论是对象 ID 还是已经接收到的对象。
+- en: If the two worker processes for these two tasks were on different machines,
+    the output is copied from one machine to the other.
+  id: totrans-340
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果这两个任务的两个工作进程位于不同的机器上，输出将会从一台机器复制到另一台机器。
+- en: This was a brief overview of the Ray remote functions. Next, we will look into
+    remote objects.
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这只是 Ray 远程函数的简要概述。接下来，我们将深入了解远程对象。
+- en: Using remote objects
+  id: totrans-342
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用远程对象
+- en: 'A regular Python object can be converted into a Ray remote object easily, as
+    follows:'
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 普通 Python 对象可以轻松地转换为 Ray 远程对象，如下所示：
+- en: '[PRE4]'
+  id: totrans-344
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: This stores the object in the shared-memory object store. Note that remote objects
+    are immutable, and their values cannot be changed after creation.
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这会将对象存储在共享内存对象存储中。请注意，远程对象是不可变的，创建后其值不能更改。
+- en: Finally, let's go over Ray remote classes.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，让我们来了解一下 Ray 远程类。
+- en: Using remote classes
+  id: totrans-347
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用远程类
+- en: 'Using remote classes (actors) in Ray is very similar to using remote functions.
+    An example of how to decorate a class with Ray''s remote decorator is as follows:'
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Ray 中使用远程类（演员）与使用远程函数非常相似。以下是如何使用 Ray 的远程装饰器装饰一个类的示例：
+- en: '[PRE5]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'In order to initiate an object from this class, we use `remote` in addition
+    to calling the class:'
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了初始化该类的对象，我们除了调用类外，还需要使用 `remote`：
+- en: '[PRE6]'
+  id: totrans-351
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Again, calling a method on this object requires using `remote`:'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，调用该对象的方法时需要使用 `remote`：
+- en: '[PRE7]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: That's it! This brief overview of Ray lays the ground for us to move on to implementing
+    a scalable DQN algorithm.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就这样！Ray 的这一简要概述为我们继续实现可扩展的 DQN 算法奠定了基础。
+- en: Ray implementation of a DQN variant
+  id: totrans-355
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Ray 实现的 DQN 变体
+- en: 'In this section, we will implement a DQN variant using Ray, which will be similar
+    to the Ape-X DQN structure, except we don''t implement prioritized replay for
+    simplicity. The code will have the following components:'
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将使用 Ray 实现一个 DQN 变体，这将类似于 Ape-X DQN 结构，只是为了简单起见，我们没有实现优先回放。代码将包括以下组件：
+- en: '`train_apex_dqn.py` is the main script that accepts the training configs and
+    initializes the other components.'
+  id: totrans-357
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`train_apex_dqn.py` 是主脚本，接受训练配置并初始化其他组件。'
+- en: '`actor.py` includes the RL actor class that interacts with the environment
+    and collects experiences.'
+  id: totrans-358
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`actor.py` 包含与环境交互并收集经验的 RL 演员类。'
+- en: '`parameter_server.py` includes a parameter server class that serves the optimized
+    Q model weights to actors.'
+  id: totrans-359
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`parameter_server.py` 包含一个参数服务器类，它将优化后的 Q 模型权重提供给演员。'
+- en: '`replay.py` includes the replay buffer class.'
+  id: totrans-360
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`replay.py` 包含回放缓冲区类。'
+- en: '`learner.py` includes a learner class that receives samples from the replay
+    buffer, takes gradient steps, and pushes the new Q-network weights to the parameter
+    server.'
+  id: totrans-361
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`learner.py` 包含一个学习者类，该类从回放缓冲区接收样本，进行梯度更新，并将新的 Q 网络权重推送到参数服务器。'
+- en: '`models.py` includes functions to create a feedforward neural network using
+    TensorFlow/Keras.'
+  id: totrans-362
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`models.py` 包含使用 TensorFlow/Keras 创建前馈神经网络的函数。'
+- en: We then run this model on Gym's CartPole (v0) and see how it performs. Let's
+    get started!
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们在 Gym 的 CartPole (v0) 上运行这个模型，看看它的表现如何。让我们开始吧！
+- en: The main script
+  id: totrans-364
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 主脚本
+- en: 'The initial step in the main script is to receive a set of configs to be used
+    during training. This looks like the following:'
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主脚本的初步步骤是接收一组将在训练过程中使用的配置。这看起来像下面这样：
+- en: '[PRE8]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Let''s look into some of the details of some of these configs:'
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看这些配置的一些细节：
+- en: '`env` is the name of the Gym environment.'
+  id: totrans-368
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`env` 是 Gym 环境的名称。'
+- en: '`num_workers` is the number of training environments/agents that will be created
+    to collect experiences. Note that each worker consumes a CPU on the computer,
+    so you need to adjust it to your machine.'
+  id: totrans-369
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`num_workers` 是将会创建的训练环境/代理的数量，用于收集经验。请注意，每个 worker 会占用计算机上的一个 CPU，因此你需要根据你的机器进行调整。'
+- en: '`eval_num_workers` is the number of evaluation environments/agents that will
+    be created to evaluate the policy at that point in training. Again, each worker
+    consumes a CPU. Note that these agents have ![](img/Formula_06_281.png) since
+    we don''t need them to explore the environment.'
+  id: totrans-370
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`eval_num_workers` 是将会创建的评估环境/代理的数量，用于在训练的该时刻评估策略。同样，每个 worker 会占用一个 CPU。请注意，这些代理具有
+    ![](img/Formula_06_281.png)，因为我们不需要它们来探索环境。'
+- en: '`n_step` is the number of steps for multi-step learning.'
+  id: totrans-371
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`n_step` 是多步学习的步数。'
+- en: '`max_eps` will set the maximum exploration rate, ![](img/Formula_06_282.png),
+    in training agents, as we will assign each training agent a different exploration
+    rate between ![](img/Formula_06_283.png).'
+  id: totrans-372
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`max_eps` 将设置训练代理中的最大探索率，![](img/Formula_06_282.png)，因为我们会为每个训练代理分配不同的探索率，范围在
+    ![](img/Formula_06_283.png) 之间。'
+- en: '`timesteps_per_iteration` decides how frequently we run the evaluation; the
+    number of steps for multi-step learning. Note that this is not how frequently
+    we take a gradient step, as the learner will continuously sample and update the
+    network parameters.'
+  id: totrans-373
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`timesteps_per_iteration` 决定我们运行评估的频率；多步学习的步数。请注意，这不是我们进行梯度更新的频率，因为学习者会持续采样并更新网络参数。'
+- en: 'With this config, we create the parameter server, replay buffer, and learner.
+    We will go into the details of these classes momentarily. Note that since they
+    are Ray actors, we use `remote` to initiate them:'
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这个配置，我们创建了参数服务器、重放缓存和学习者。我们稍后会详细介绍这些类的具体内容。请注意，由于它们是 Ray actor，我们使用`remote`来启动它们：
+- en: '[PRE9]'
+  id: totrans-375
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We mentioned that the learner is a process on its own that continuously samples
+    from the replay buffer and updates the Q-network. We kick the learning off in
+    the main script:'
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们提到过，学习者是一个独立的进程，它会持续从重放缓存中采样并更新 Q 网络。我们在主脚本中启动学习过程：
+- en: '[PRE10]'
+  id: totrans-377
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Of course, this won''t do anything alone since the actors are not collecting
+    experiences yet. We next kick off the training actors and immediately let them
+    start sampling from their environments:'
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，单独这样做不会有什么效果，因为 actor 还没有开始收集经验。接下来我们启动训练 actor 并立即让它们开始从环境中采样：
+- en: '[PRE11]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'We also start the evaluation actors, but we don''t want them to sample yet.
+    That will happen as the learner updates the Q-network:'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还启动了评估 actor，但我们不希望它们立即开始采样。这将在学习者更新 Q 网络时发生：
+- en: '[PRE12]'
+  id: totrans-381
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Finally, we have the main loop where we alternate between training and evaluation.
+    As the evaluation results improve, we will save the best model up to that point
+    in the training:'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们有主循环，在其中交替进行训练和评估。随着评估结果的改善，我们会保存训练过程中最好的模型：
+- en: '[PRE13]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Note that there is a bit more in the code that is not included here (such as
+    saving the evaluation metrics to TensorBoard). Please see the full code for all
+    the details.
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，代码中还有一些没有包括在这里的内容（例如将评估指标保存到 TensorBoard）。有关所有细节，请参阅完整的代码。
+- en: Next, let's look into the details of the actor class.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们详细了解 actor 类的内容。
+- en: RL actor class
+  id: totrans-386
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: RL actor 类
+- en: The RL actor is responsible for collecting experiences from its environment
+    given an exploratory policy. The rate of exploration is determined in the main
+    script for each actor and it remains the same throughout the sampling. The actor
+    class also stores the experiences locally before pushing it to the replay buffer
+    to reduce the communication overhead. Also note that we differentiate between
+    a training and evaluation actor since we run the sampling step for the evaluation
+    actors only for a single episode. Finally, the actors periodically pull the latest
+    Q-network weights to update their policies.
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RL actor 负责根据探索策略从环境中收集经验。探索的速率在主脚本中为每个 actor 确定，并且在整个采样过程中保持不变。actor 类还在将经验推送到重放缓存之前，先在本地存储经验，以减少通信开销。同时，请注意，我们区分训练和评估
+    actor，因为我们仅为评估 actor 运行单一回合的采样步骤。最后，actor 会定期拉取最新的 Q 网络权重，以更新其策略。
+- en: 'Here is how we initialize an actor:'
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们初始化 actor 的方法：
+- en: '[PRE14]'
+  id: totrans-389
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The actor uses the following method to update and sync its policies:'
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: actor 使用以下方法来更新和同步其策略：
+- en: '[PRE15]'
+  id: totrans-391
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: The reason why the evaluation weights are stored and pulled separately is that
+    since the learner always learns, regardless of what is happening in the main loop,
+    we need to take a snapshot of the Q-network for evaluation.
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 评估权重被单独存储和提取的原因是，由于学习者始终在学习，不论主循环中发生了什么，我们需要对 Q 网络进行快照以进行评估。
+- en: 'Now, we write the sampling loop for an actor. Let''s start with initializing
+    the variables that will be updated in the loop:'
+  id: totrans-393
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们为演员编写采样循环。让我们从初始化将在循环中更新的变量开始：
+- en: '[PRE16]'
+  id: totrans-394
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'The first thing to do in the loop is to get an action and take a step in the
+    environment:'
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 循环中的第一件事是获取一个动作并在环境中采取一步：
+- en: '[PRE17]'
+  id: totrans-396
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Our code supports multi-step learning. To implement that, the rolling trajectory
+    is stored in a deque with a maximum length of ![](img/Formula_06_284.png). When
+    the deque is at its full length, it indicates the trajectory is long enough to
+    make an experience to be stored in the replay buffer:'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的代码支持多步学习。为了实现这一点，滚动轨迹存储在一个最大长度为 ![](img/Formula_06_284.png) 的双端队列中。当双端队列满时，表示轨迹足够长，可以将经验存储到重放缓冲区中：
+- en: '[PRE18]'
+  id: totrans-398
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'We remember the update the counters we have:'
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们记得更新我们所拥有的计数器：
+- en: '[PRE19]'
+  id: totrans-400
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'At the end of the episode, we reset the environment and the episode-specific
+    counters. We also save the experience in the local buffer, regardless of its length.
+    Also note that we break the sampling loop at the end of the episode if this is
+    an evaluation rollout:'
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每一集结束时，我们重置环境和特定于该集的计数器。我们还将经验保存到本地缓冲区，无论其长度如何。还要注意，如果这是一次评估回合，我们会在回合结束时中断采样循环：
+- en: '[PRE20]'
+  id: totrans-402
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'We periodically send the experience to the replay buffer, and also periodically
+    update the network parameters:'
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们定期将经验发送到重放缓冲区，并且也定期更新网络参数：
+- en: '[PRE21]'
+  id: totrans-404
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Next, let''s look into the details of action sampling. The actions are selected
+    ![](img/Formula_06_282.png)-greedily, as follows:'
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们看看动作采样的细节。动作是以 ![](img/Formula_06_282.png)-贪婪的方式选择的，如下所示：
+- en: '[PRE22]'
+  id: totrans-406
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'The experience is extracted from the trajectory deque, as follows:'
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经验是从轨迹双端队列中提取的，如下所示：
+- en: '[PRE23]'
+  id: totrans-408
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Finally, the experience tuples that are stored locally are sent to the replay
+    buffer, as follows:'
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，存储在本地的经验元组将被发送到重放缓冲区，如下所示：
+- en: '[PRE24]'
+  id: totrans-410
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: That's all with the actor! Next, let's look into the parameter server.
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到这里，演员部分就完成了！接下来，让我们看看参数服务器。
+- en: Parameter server class
+  id: totrans-412
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 参数服务器类
+- en: 'The parameter server is a simple structure that receives the updated parameters
+    (weights) from the learner and serves them to actors. It consists of mostly setters
+    and getters, and a save method. Again, remember that we periodically take a snapshot
+    of the parameters and use them for evaluation. If the results beat the previous
+    best results, the weights are saved:'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参数服务器是一种简单的结构，用于接收来自学习者的更新参数（权重），并将它们提供给演员。它主要由设置器和获取器，以及一个保存方法组成。再一次提醒，我们定期拍摄参数的快照并将其用于评估。如果结果超过之前的最佳结果，则保存权重：
+- en: '[PRE25]'
+  id: totrans-414
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Note that the parameter server stores the actual Q-network structure just to
+    be able to use TensorFlow's convenient save functionality. Other than that, only
+    the weights of the neural network, not the full model, are passed between different
+    processes to avoid unnecessary overhead and pickling issues.
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，参数服务器仅存储实际的 Q 网络结构，以便能够使用 TensorFlow 方便的保存功能。除此之外，仅在不同进程之间传递神经网络的权重，而不是完整的模型，以避免不必要的开销和序列化问题。
+- en: Next, we will cover the replay buffer implementation.
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将介绍重放缓冲区的实现。
+- en: Replay buffer class
+  id: totrans-417
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 重放缓冲区类
+- en: 'As we mentioned previously, for simplicity, we implement a standard replay
+    buffer (without prioritized sampling). As a result, the replay buffer receives
+    experiences from actors and sends sampled ones to the learner. It also keeps track
+    of how many total experience tuples it has received up to that point in the training:'
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，为了简化，我们实现了一个标准的重放缓冲区（没有优先级采样）。因此，重放缓冲区从演员处接收经验，并将采样的经验发送给学习者。它还跟踪它在训练过程中已经接收到的所有经验元组的数量：
+- en: '[PRE26]'
+  id: totrans-419
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Model generation
+  id: totrans-420
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 模型生成
+- en: Since we are passing only the weights of the Q-network between processes, each
+    relevant actor creates its own copy of the Q-network. The weights of these Q-networks
+    are then set with what is received from the parameter server.
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们仅在进程之间传递 Q 网络的权重，因此每个相关演员都会创建其自己的 Q 网络副本。这些 Q 网络的权重随后会根据从参数服务器接收到的内容进行设置。
+- en: 'The Q-network is created using Keras, as follows:'
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Q 网络使用 Keras 创建，如下所示：
+- en: '[PRE27]'
+  id: totrans-423
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'One important implementation detail here is that this Q-network is not what
+    we want to train because, given a state, it predicts Q-values for all possible
+    actions. On the other hand, a given experience tuple includes a target value only
+    for one of these possible actions: the one that was selected in that tuple by
+    the agent. Therefore, when we update the Q-network using that experience tuple,
+    gradients should flow through only the selected action''s output. The rest of
+    the actions should be masked. We achieve that by using a masking input based on
+    the selected action a custom layer on top of this Q-network that calculates the
+    loss only for the selected action. That gives us a model that we can train.'
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里一个重要的实现细节是，这个Q网络并不是我们想要训练的，因为它对于给定的状态，会预测所有可能动作的Q值。另一方面，给定的经验元组只包含一个目标值，针对这些可能动作中的一个：在该元组中由智能体选择的动作。因此，当我们使用该经验元组更新Q网络时，梯度应该仅通过所选动作的输出流动。其余的动作应该被遮蔽。我们通过使用基于所选动作的遮蔽输入，在这个Q网络之上添加一个自定义层来实现，这个层仅计算所选动作的损失。这样，我们就得到了一个可以训练的模型。
+- en: 'Here is how we implement the masked loss:'
+  id: totrans-425
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是我们如何实现遮蔽损失的：
+- en: '[PRE28]'
+  id: totrans-426
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Then, the trainable model is obtained as follows:'
+  id: totrans-427
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，得到可训练模型，如下所示：
+- en: '[PRE29]'
+  id: totrans-428
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: It is this trainable model that the learner will optimize. The compiled Q-network
+    model will never be trained alone, and the optimizer and loss function we specify
+    in it are just placeholders.
+  id: totrans-429
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正是这个可训练的模型将由学习者来优化。编译后的Q网络模型永远不会单独训练，我们在其中指定的优化器和损失函数只是占位符。
+- en: Finally, let's look into the learner next.
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，让我们看一下学习者的部分。
+- en: The learner class
+  id: totrans-431
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 学习者类
+- en: The learner's main job is to receive a sample of experiences from the replay
+    buffer, unpack them, and take gradient steps to optimize the Q-network. Here,
+    we only include a part of the class initialization and the optimization step.
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习者的主要任务是从重放缓冲区接收一批经验样本，解包它们，并通过梯度步骤优化Q网络。这里，我们只包括了类初始化和优化步骤的一部分。
+- en: 'The class is initialized as follows:'
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类的初始化如下：
+- en: '[PRE30]'
+  id: totrans-434
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'And now the optimization step. We start with sampling from the replay buffer
+    and updating the counters we keep:'
+  id: totrans-435
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在是优化步骤。我们从重放缓冲区中采样，并更新我们保持的计数器：
+- en: '[PRE31]'
+  id: totrans-436
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Then, we unpack the samples and reshape them:'
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们解包样本并重新调整其形状：
+- en: '[PRE32]'
+  id: totrans-438
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'We create the masks to only update the Q-value for the action selected in the
+    experience tuple:'
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们创建掩码，仅更新在经验元组中选择的动作的Q值：
+- en: '[PRE33]'
+  id: totrans-440
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'In the main section, we first prepare the inputs to the trainable Q-network,
+    and then call the `fit` function on it. In doing so, we use a double DQN:'
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在主函数中，我们首先准备好输入给可训练Q网络，然后调用`fit`函数。在此过程中，我们使用双DQN：
+- en: '[PRE34]'
+  id: totrans-442
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Finally, we periodically update the target network:'
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们定期更新目标网络：
+- en: '[PRE35]'
+  id: totrans-444
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: For more details, see the full code in `learner.py`.
+  id: totrans-445
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更多细节，请参见`learner.py`中的完整代码。
+- en: That's it! Let's look at how this architecture performs in the CartPole environment.
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就这样！让我们看看这个架构在CartPole环境中的表现。
+- en: Results
+  id: totrans-447
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'You can kick off training by simply running the main script. There are a couple
+    of things to note before running it:'
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过简单地运行主脚本来开始训练。在运行之前有几点需要注意：
+- en: Don't forget to activate the Python environment in which Ray is installed. A
+    virtual environment is highly recommended.
+  id: totrans-449
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要忘记激活已安装Ray的Python环境。强烈推荐使用虚拟环境。
+- en: Set the total number of workers (for training and evaluation) to be less than
+    the number of CPUs on your machine.
+  id: totrans-450
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将工人的总数（用于训练和评估）设置为小于你机器上CPU的数量。
+- en: 'With that, you can kick off the training as follows:'
+  id: totrans-451
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，你就可以按照如下方式开始训练：
+- en: '[PRE36]'
+  id: totrans-452
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'The full code includes some additions that save the evaluation progress on
+    TensorBoard. You can start TensorBoard within the same folder with scripts, as
+    follows:'
+  id: totrans-453
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整代码包括一些保存评估进度到TensorBoard的附加功能。你可以在相同的文件夹内启动TensorBoard，方法如下：
+- en: '[PRE37]'
+  id: totrans-454
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Then, go to the default TensorBoard address at `http://localhost:6006/`. The
+    evaluation graph from our experiment looks as follows:'
+  id: totrans-455
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，访问默认的TensorBoard地址`http://localhost:6006/`。我们实验的评估图如下所示：
+- en: '![Figure 6.7 – Distributed DQN evaluation results for CartPole v0'
+  id: totrans-456
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.7 – CartPole v0的分布式DQN评估结果'
+- en: '](img/B14160_06_7.jpg)'
+  id: totrans-457
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_7.jpg)'
+- en: Figure 6.7 – Distributed DQN evaluation results for CartPole v0
+  id: totrans-458
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.7 – CartPole v0的分布式DQN评估结果
+- en: You can see that after 150,000 iterations or so, the reward reaches the maximum
+    of 200.
+  id: totrans-459
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，在大约150,000次迭代后，奖励达到了最大值200。
+- en: Great job! You have implemented a deep Q-learning algorithm that you can scale
+    to many CPUs, even to many nodes on a cluster, using Ray! Feel free to improve
+    this implementation, add further tricks, and incorporate your own ideas!
+  id: totrans-460
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 做得好！你已经实现了一个深度 Q 学习算法，并且能够通过 Ray 将其扩展到多个 CPU，甚至是集群中的多个节点！可以随意改进这个实现，加入更多技巧，融入自己的创意！
+- en: Let's close this chapter with how you can run a similar experiment in RLlib.
+  id: totrans-461
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们以在 RLlib 中如何运行类似实验来结束本章。
+- en: Using RLlib for production-grade deep RL
+  id: totrans-462
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 RLlib 进行生产级深度强化学习
+- en: 'As we mentioned at the beginning, one of the motivations of Ray''s creators
+    was to build an easy-to-use distributed computing framework that can handle complex
+    and heterogenous applications such as deep RL. With that, they also created a
+    widely used deep RL library based on Ray. Training a model similar to ours is
+    very simple using RLlib. The main steps are as follows:'
+  id: totrans-463
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在开头提到的，Ray 的创造者之一的动机是构建一个易于使用的分布式计算框架，能够处理像深度强化学习这样的复杂和异构应用。因此，他们还基于 Ray
+    创建了一个广泛使用的深度强化学习库。使用 RLlib 训练一个类似于我们的模型非常简单，主要步骤如下：
+- en: Import the default training configs for Ape-X DQN as well as the trainer.
+  id: totrans-464
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入 Ape-X DQN 的默认训练配置和训练器。
+- en: Customize the training configs.
+  id: totrans-465
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 自定义训练配置。
+- en: Train the trainer.
+  id: totrans-466
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练训练器。
+- en: 'That''s it! The code necessary for that is very simple. All you need is the
+    following:'
+  id: totrans-467
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样！所需的代码非常简单。你只需要以下内容：
+- en: '[PRE38]'
+  id: totrans-468
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'With that, your training should start. RLlib has great TensorBoard logging.
+    Initialize TensorBoard by running the following:'
+  id: totrans-469
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，你的训练应该开始了。RLlib 有很棒的 TensorBoard 日志记录功能。通过运行以下命令来初始化 TensorBoard：
+- en: '[PRE39]'
+  id: totrans-470
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'The results from our training look like the following:'
+  id: totrans-471
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们训练的结果如下所示：
+- en: '![Figure 6.8 – RLlib evaluation results for CartPole v0'
+  id: totrans-472
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 6.8 – RLlib 对 CartPole v0 的评估结果'
+- en: '](img/B14160_06_8.jpg)'
+  id: totrans-473
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14160_06_8.jpg)'
+- en: Figure 6.8 – RLlib evaluation results for CartPole v0
+  id: totrans-474
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.8 – RLlib 对 CartPole v0 的评估结果
+- en: 'It turns out that our DQN implementation was very competitive! But now, with
+    RLlib, you have access to many improvements from the RL literature. You can customize
+    your training by changing the default configs. Please take a moment to go over
+    the very long list of all the available options to you that we print in our code.
+    It looks like the following:'
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事实证明，我们的 DQN 实现非常具有竞争力！但现在，借助 RLlib，你可以访问来自强化学习文献的许多改进。你可以通过更改默认配置来自定义你的训练。请花点时间浏览我们代码中打印出来的所有可用选项的长长列表。它看起来像这样：
+- en: '[PRE40]'
+  id: totrans-476
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: Again, the list is long. But this shows the power you have at your fingertips
+    with RLlib! We will continue to use RLlib in the following chapters and go into
+    more details.
+  id: totrans-477
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次提醒，列表很长。但这展示了你在 RLlib 中拥有的强大功能！我们将在接下来的章节中继续使用 RLlib，并深入探讨更多细节。
+- en: Congratulations! You have done a great job and accomplished a lot in this chapter.
+    What we have covered here alone gives you an incredible arsenal to solve many
+    sequential decision-making problems. The next chapters will dive into even more
+    advanced material in deep RL, and now you are ready to take them on!
+  id: totrans-478
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恭喜你！你在本章中做得非常出色，取得了很多成就。仅仅我们在这里所覆盖的内容，就为你提供了一个强大的工具库，能够解决许多顺序决策问题。接下来的章节将深入探讨更先进的深度强化学习材料，现在你已经准备好迎接挑战！
+- en: Summary
+  id: totrans-479
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, we have come a long way from using tabular Q-learning to implementing
+    a modern, distributed deep Q-learning algorithm. Along the way, we covered the
+    details of NFQ, online Q-learning, DQN with Rainbow improvements, Gorila, and
+    Ape-X DQN algorithms. We also introduced you to Ray and RLlib, which are powerful
+    distributed computing and deep RL frameworks.
+  id: totrans-480
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们从使用表格型 Q 学习到实现一个现代化的分布式深度 Q 学习算法，已经走了很长一段路。在此过程中，我们介绍了 NFQ、在线 Q 学习、带有
+    Rainbow 改进的 DQN、Gorila 和 Ape-X DQN 算法的细节。我们还介绍了 Ray 和 RLlib，这两个强大的分布式计算和深度强化学习框架。
+- en: 'In the next chapter, we will look into another class of deep Q-learning algorithms:
+    policy-based methods. Those methods will allow us to directly learn random policies
+    and use continuous actions.'
+  id: totrans-481
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一个章节中，我们将探讨另一类深度 Q 学习算法：基于策略的方法。这些方法将允许我们直接学习随机策略并使用连续动作。
+- en: References
+  id: totrans-482
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 参考文献
+- en: 'Sutton, R. S. & Barto, A. G. (2018). *Reinforcement Learning: An Introduction*. *The
+    MIT Press*. URL: [http://incompleteideas.net/book/the-book.html](http://incompleteideas.net/book/the-book.html)'
+  id: totrans-483
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Sutton, R. S. & Barto, A. G. (2018). *强化学习：导论*. *MIT出版社*. URL：[http://incompleteideas.net/book/the-book.html](http://incompleteideas.net/book/the-book.html)
+- en: Mnih, V. et al. (2015). *Human-level control through deep reinforcement learning*. *Nature*,
+    518(7540), 529–533
+  id: totrans-484
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Mnih, V. 等人 (2015). *通过深度强化学习实现人类级控制*. *自然*，518(7540)，529–533
+- en: 'Riedmiller, M. (2005) Neural Fitted Q Iteration – First Experiences with a
+    Data Efficient Neural Reinforcement Learning Method. In: Gama, J., Camacho, R.,
+    Brazdil, P.B., Jorge, A.M., & Torgo L. (eds) Machine Learning: ECML 2005\. ECML
+    2005\. *Lecture Notes in Computer Science*, vol. 3720\. Springer, Berlin, Heidelberg'
+  id: totrans-485
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Riedmiller, M. (2005) 神经拟合Q迭代 – 数据高效的神经强化学习方法初步经验。载于：Gama, J., Camacho, R.,
+    Brazdil, P.B., Jorge, A.M., & Torgo L.（编辑）《机器学习：ECML 2005》. ECML 2005. *计算机科学讲座笔记*，第3720卷。Springer，柏林，海德堡
+- en: Lin, L. (1993). *Reinforcement learning for robots using neural networks*.
+  id: totrans-486
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Lin, L. (1993). *使用神经网络的机器人强化学习*。
+- en: 'McClelland, J. L., McNaughton, B. L., & O''Reilly, R. C. (1995). *Why there
+    are complementary learning systems in the hippocampus and neocortex: Insights
+    from the successes and failures of connectionist models of learning and memory*.
+    Psychological Review, 102(3), 419–457'
+  id: totrans-487
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: McClelland, J. L., McNaughton, B. L., & O'Reilly, R. C. (1995). *为何海马体和新皮层中存在互补的学习系统：来自联结主义学习和记忆模型成功与失败的启示*.
+    心理学评论，102(3)，419–457
+- en: 'van Hasselt, H., Guez, A., & Silver, D. (2016). *Deep reinforcement learning
+    with double Q-learning*. In: Proc. of AAAI, 2094–2100'
+  id: totrans-488
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: van Hasselt, H., Guez, A., & Silver, D. (2016). *深度强化学习与双Q学习*. 载于：AAAI会议论文集，2094–2100
+- en: 'Schaul, T., Quan, J., Antonoglou, I., & Silver, D. (2015). *Prioritized experience
+    replay*. In: Proc. of ICLR'
+  id: totrans-489
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Schaul, T., Quan, J., Antonoglou, I., & Silver, D. (2015). *优先经验回放*. 载于：ICLR会议论文集
+- en: 'Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas,
+    N. (2016). *Dueling network architectures for deep reinforcement learning*. In:
+    Proceedings of the 33rd International Conference on Machine Learning, 1995–2003'
+  id: totrans-490
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas,
+    N. (2016). *深度强化学习的对抗网络架构*. 载于：第33届国际机器学习会议论文集，1995–2003
+- en: Sutton, R. S. (1988). *Learning to predict by the methods of temporal differences*.
+    Machine learning 3(1), 9–44
+  id: totrans-491
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Sutton, R. S. (1988). *通过时间差分方法学习预测*. 机器学习 3(1), 9–44
+- en: 'Bellemare, M. G., Dabney, W., & Munos, R. (2017). *A distributional perspective
+    on reinforcement learning*. In: ICML'
+  id: totrans-492
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Bellemare, M. G., Dabney, W., & Munos, R. (2017). *强化学习的分布式视角*. 载于：ICML会议论文集
+- en: 'Fortunato, M., Azar, M. G., Piot, B., Menick, J., Osband, I., Graves, A., Mnih,
+    V., Munos, R., Hassabis, D., Pietquin, O., Blundell, C., & Legg, S. (2017). *Noisy
+    networks for exploration*. URL: [https://arxiv.org/abs/1706.10295](https://arxiv.org/abs/1706.10295)'
+  id: totrans-493
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Fortunato, M., Azar, M. G., Piot, B., Menick, J., Osband, I., Graves, A., Mnih,
+    V., Munos, R., Hassabis, D., Pietquin, O., Blundell, C., & Legg, S. (2017). *用于探索的噪声网络*.
+    网址：[https://arxiv.org/abs/1706.10295](https://arxiv.org/abs/1706.10295)
+- en: 'Hessel, M., Modayil, J., Hasselt, H.V., Schaul, T., Ostrovski, G., Dabney,
+    W., Horgan, D., Piot, B., Azar, M.G., & Silver, D. (2018). *Rainbow: Combining
+    Improvements in Deep Reinforcement Learning*. URL: [https://arxiv.org/abs/1710.02298](https://arxiv.org/abs/1710.02298)'
+  id: totrans-494
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'Hessel, M., Modayil, J., Hasselt, H.V., Schaul, T., Ostrovski, G., Dabney,
+    W., Horgan, D., Piot, B., Azar, M.G., & Silver, D. (2018). *Rainbow: 结合深度强化学习中的改进*.
+    网址：[https://arxiv.org/abs/1710.02298](https://arxiv.org/abs/1710.02298)'
+- en: 'Hasselt, H.V., Doron, Y., Strub, F., Hessel, M., Sonnerat, N., & Modayil, J.
+    (2018). *Deep Reinforcement Learning and the Deadly Triad*. URL: [https://arxiv.org/abs/1812.02648](https://arxiv.org/abs/1812.02648)'
+  id: totrans-495
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Hasselt, H.V., Doron, Y., Strub, F., Hessel, M., Sonnerat, N., & Modayil, J.
+    (2018). *深度强化学习与致命三合一问题*. 网址：[https://arxiv.org/abs/1812.02648](https://arxiv.org/abs/1812.02648)
+- en: 'Nair, A., Srinivasan, P., Blackwell, S., Alcicek, C., Fearon, R., Maria, A.D.,
+    Panneershelvam, V., Suleyman, M., Beattie, C., Petersen, S., Legg, S., Mnih, V.,
+    Kavukcuoglu, K., & Silver, D. (2015). *Massively Parallel Methods for Deep Reinforcement
+    Learning*. URL: [https://arxiv.org/abs/1507.04296](https://arxiv.org/abs/1507.04296)'
+  id: totrans-496
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Nair, A., Srinivasan, P., Blackwell, S., Alcicek, C., Fearon, R., Maria, A.D.,
+    Panneershelvam, V., Suleyman, M., Beattie, C., Petersen, S., Legg, S., Mnih, V.,
+    Kavukcuoglu, K., & Silver, D. (2015). *大规模并行深度强化学习方法*. 网址：[https://arxiv.org/abs/1507.04296](https://arxiv.org/abs/1507.04296)
+- en: 'Horgan, D., Quan, J., Budden, D., Barth-Maron, G., Hessel, M., Hasselt, H.V.,
+    & Silver, D. (2018). *Distributed Prioritized Experience Replay*. URL: [https://arxiv.org/abs/1803.00933](https://arxiv.org/abs/1803.00933)'
+  id: totrans-497
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Horgan, D., Quan, J., Budden, D., Barth-Maron, G., Hessel, M., Hasselt, H.V.,
+    & Silver, D. (2018). *分布式优先经验回放*. 网址：[https://arxiv.org/abs/1803.00933](https://arxiv.org/abs/1803.00933)

@@ -1,0 +1,2429 @@
+- en: Sequence-to-Sequence Learning
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 序列到序列学习
+- en: 'In the previous chapters, we learned about RNN applications, where there are
+    multiple inputs (one each in each time step) and a single output. However, there
+    are a few more applications where there are multiple inputs, and also multiple
+    time steps—machine translation for example, where there are multiple input words
+    in a source sentence and multiple output words in the target sentence. Given the
+    multiple inputs and multiple outputs, this becomes a multi-output RNN-based application—essentially,
+    a sequence to sequence learning task. This calls for building our model architecture
+    differently to what we have built so far, which we will learn about in this chapter.
+    In this chapter, we are going to learn about the following:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们学习了RNN的应用，其中有多个输入（每个时间步长一个输入）和一个输出。然而，还有一些应用场景涉及多个输入以及多个时间步长——例如机器翻译，其中源句子有多个输入词，目标句子有多个输出词。鉴于有多个输入和多个输出，这就变成了一个多输出的基于RNN的应用——本质上是一个序列到序列的学习任务。这要求我们在构建模型架构时采用不同于目前为止的方式，这将在本章中进行讲解。本章将涵盖以下内容：
+- en: Returning sequences from a network
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从网络返回序列
+- en: How bidirectional LSTM helps in named entity extraction
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 双向LSTM如何帮助命名实体提取
+- en: Extract intent and entities to build a chatbot
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 提取意图和实体以构建聊天机器人
+- en: Functioning of an encoder decoder network architecture
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 编码器-解码器网络架构的工作原理
+- en: Translating a sentence form English to French using encoder decoder architecture
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用编码器-解码器架构将英语句子翻译成法语
+- en: Improving the translations by using an attention mechanism
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过使用注意力机制改善翻译结果
+- en: Introduction
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 介绍
+- en: In the previous chapters, we learned that the LSTM, or even the RNN, returns
+    results from the last time step (hidden state values from the last time step are
+    passed on to the next layer). Imagine a scenario where the output is five dimensions
+    in size where the five dimensions are the five outputs (not softmax values for
+    five classes). To further explain this idea, let's say we are predicting, not
+    just the stock price on the next date, but the stock prices for the next five
+    days. Or, we want to predict not just the next word, but a sequence of the next
+    five words for a given combination of input sequence.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们了解到LSTM，甚至是RNN，是从最后一个时间步长返回结果的（最后一个时间步长的隐藏状态值会传递给下一层）。假设输出是五维的，其中五个维度是五个输出（而不是五个类别的softmax值）。为了进一步解释这个想法，假设我们不仅预测下一天的股价，而是预测未来五天的股价。或者，我们不仅预测下一个词，而是预测给定输入序列的下一个五个词的序列。
+- en: This situation calls for a different approach in building the network. In the
+    following section, we will look into multiple scenarios of building a network
+    to extract the outputs in different time steps.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种情况需要采用不同的方法来构建网络。在接下来的部分，我们将探讨构建网络的多个场景，以便在不同时间步长中提取输出结果。
+- en: '**Scenario 1**: Named entity extraction'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**场景 1**：命名实体提取'
+- en: In named entity extraction, we are trying to assign a label for each word that
+    is present in a sentence—whether it is related to a person or place or not. Hence,
+    it becomes a problem of one-to-one mapping between the input word and the output
+    classes of it being a name or not. While it is a one-to-one mapping between input
+    and output, there are cases where surrounding words play a role in deciding whether
+    the considered input(s) is a named entity or not. For example, the word *new* in
+    itself might not be a named entity. However, if *new* is accompanied by *york*,
+    then we know that it is a named entity. Thus, it is a problem where the input
+    time steps play a role in determining whether a word is a named entity or not,
+    even though in a majority of the cases, there might exist a one-to-one mapping
+    between inputs and outputs.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在命名实体提取中，我们试图为句子中的每个词分配一个标签——判断它是否与人名、地名相关。因此，这变成了输入词与其是否为人名或地名的输出类别之间的一对一映射问题。尽管输入和输出之间是一个一对一的映射，但在某些情况下，周围的词语会在决定某个输入是否是命名实体时起到作用。例如，单独的*new*可能不是命名实体，但如果*new*与*york*一起出现，那么我们就知道它是一个命名实体。因此，这是一个问题，输入的时间步长在决定一个词是否是命名实体时起到了作用，即使在大多数情况下，输入和输出之间可能会存在一对一的映射。
+- en: Additionally, this is a sequence returning problem as we are assigning the output
+    sequence of the named entity or not based on the input sequence of words. Given
+    that, this is a problem where there is a one-to-one connection between inputs,
+    and also the inputs in surrounding time steps playing a key role in determining
+    the output. The traditional LSTM we have learned about so far would work, as long
+    as we are ensuring that words in both directions of the time step influence the
+    output. Thus, a bidirectional LSTM comes in handy in solving such problems.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，这是一个序列返回问题，因为我们是基于输入的词序列来判断命名实体是否存在。鉴于此，这是一个输入与输出之间一一对应的关系问题，且相邻时间步的输入在决定输出时起着关键作用。只要确保时间步中两个方向的词都能影响输出，传统的LSTM就可以工作。因此，双向LSTM在解决这种问题时非常有用。
+- en: 'The architecture of a bidirectional LSTM looks as follows:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 双向LSTM的架构如下所示：
+- en: '![](img/94365b7c-707e-40a3-91cf-6d910224b71e.png)'
+  id: totrans-15
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/94365b7c-707e-40a3-91cf-6d910224b71e.png)'
+- en: Note that, in the preceding diagram, we have modified the traditional LSTM by
+    having the inputs connecting to each other in the opposite direction too, and
+    thus, ensuring that information flows from both directions. We will learn more
+    about how bidirectional LSTM works and how it is to be applied in a later section.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在前面的图示中，我们通过使输入之间相互连接并反向流动，修改了传统的LSTM，从而确保信息能够从两个方向流动。我们将在后续部分学习更多关于双向LSTM如何工作的内容，以及如何应用它。
+- en: '**Scenario 2**: Text summarization'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**场景 2**：文本摘要'
+- en: A text summarization task would require a different architecture to what we
+    discussed previously as we would typically be in a position to generate a summary
+    from text only after finishing reading the whole of the input sentence (input
+    text/review in this case).
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文本摘要任务需要不同于我们之前讨论的架构，因为我们通常需要在阅读完整个输入句子（本例中的输入文本/评论）后，才能生成摘要。
+- en: This calls for encoding all the input into a vector, and then generating output
+    based on the encoded vector of input. Additionally, given that there are multiple
+    outputs (multiple words) for a given sequence of words in a text, it becomes a
+    multi output generation problem, and thus, another scenario that can leverage
+    the multi-input multi-output power of an RNN.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这要求将所有输入编码为一个向量，然后基于输入的编码向量生成输出。此外，鉴于给定文本中的一系列词可能有多个输出（多个词），这就变成了一个多输出生成问题，因此，另一个可以利用RNN的多输入多输出特性的场景也随之而来。
+- en: 'Let''s look at how we can potentially architect the model to arrive at a solution:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下如何构建模型来得出解决方案：
+- en: '![](img/8b95da24-105a-44a0-95b4-f7013121e0f0.png)'
+  id: totrans-21
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/8b95da24-105a-44a0-95b4-f7013121e0f0.png)'
+- en: Note that, in the preceding architecture, we encode all the input text into
+    the vector that is produced at the ending word of the input sequence, and that
+    encoded vector is passed as an input to the decoder sequence. More information
+    on how to build this network will be provided in a later section of this chapter.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在前述架构中，我们将所有输入文本编码为输入序列的最后一个词生成的向量，然后将该编码向量作为输入传递给解码器序列。本章后续部分将提供更多关于如何构建此网络的信息。
+- en: '**Scenario 3**: Machine translation'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**场景 3**：机器翻译'
+- en: In the previous scenario, we encoded the input into a vector, and hopefully,
+    the vector also incorporates the word order. But, what if we explicitly provide
+    a mechanism through a network where the network is able to assign a different
+    weightage of an input word located at a given position, depending on the position
+    of the word we are decoding? For example, if the source and target words are aligned
+    similarly, that is, both languages have similar word order, then the word that
+    comes at the start of source language has very little impact on the last word
+    of target language, but has a very high impact in deciding the first word in the
+    target language.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的场景中，我们将输入编码为一个向量，并希望该向量也能包含词序信息。但是，如果我们通过网络显式提供一种机制，让网络能够根据我们正在解码的词的位置，给输入词在给定位置上的不同加权，该怎么办呢？例如，如果源语言和目标语言的词对齐方式相似，也就是说，两种语言的词序相似，那么源语言开头的词对目标语言最后一个词的影响很小，但对决定目标语言第一个词的影响却很大。
+- en: 'Attention mechanism looks as follows:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意力机制如下所示：
+- en: '![](img/436d46d9-15db-42f7-9905-f830e190e66a.png)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/436d46d9-15db-42f7-9905-f830e190e66a.png)'
+- en: Note that the attention vector (in the middle) is influenced by both the input
+    encoded vector and the hidden state of output values. More on how the attention
+    mechanism can be leveraged will be discussed in a .
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，注意力向量（中间部分）受输入编码向量和输出值的隐藏状态的影响。更多关于如何利用注意力机制的内容将在后文中讨论。
+- en: With this intuition of the reasons for different encoder decoder architectures,
+    let's dive into understanding more about generating sequences of outputs in Keras.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过理解不同编码器-解码器架构的原因，让我们深入了解如何在Keras中生成输出序列。
+- en: Returning sequences of outputs from a network
+  id: totrans-29
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从网络中返回输出序列
+- en: As we discussed in the previous section, there are multiple ways of architecting
+    a network to generate sequences of outputs. In this section, we will learn about
+    the encoder decoder way of generating outputs, and also about the one-to-one mapping
+    of inputs to outputs network on a toy dataset so that we have a strong understanding
+    of how this works.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在上一节中讨论的那样，生成输出序列的网络架构有多种方式。在本节中，我们将学习如何通过编码器-解码器方式生成输出，并且通过一个玩具数据集学习输入到输出的逐一映射网络，以便更好地理解这一过程。
+- en: 'Let''s define a sequence of inputs and a corresponding sequence of outputs,
+    as follows (the code file is available as `Return_state_and_sequences_working_details.ipynb`
+    in GitHub):'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们定义一个输入序列和一个对应的输出序列，如下所示（代码文件可在GitHub上的`Return_state_and_sequences_working_details.ipynb`找到）：
+- en: '[PRE0]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: We can see that there are two time steps in an input and that there is a corresponding
+    output to the input.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到，输入中有两个时间步，并且每个输入都有相应的输出。
+- en: 'If we were to solve this problem in a traditional way, we would define the
+    model architecture as in the following code. Note that we are using a functional
+    API as in the later scenario, we will be extracting multiple outputs, along with
+    inspecting intermediate layers:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们用传统的方法来解决这个问题，我们会像下面的代码那样定义模型架构。请注意，我们使用的是函数式API，因为在后续的场景中，我们将提取多个输出，并检查中间层：
+- en: '[PRE1]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: '![](img/41ed74e0-5c52-4375-8fb3-a94922771671.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/41ed74e0-5c52-4375-8fb3-a94922771671.png)'
+- en: Note that, in the preceding scenario, the LSTM is fed data that is of the shape
+    (`batch_size`, time steps, features per time step). Given that the LSTM is not
+    returning a sequence of outputs, the output of the LSTM is one value at the hidden
+    layer (as the number of units in the LSTM is one).
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在上述场景中，LSTM接收的数据形状是（`batch_size`，时间步，时间步每个特征）。由于LSTM不返回一系列输出，LSTM的输出是隐藏层中的一个值（因为LSTM的单元数为1）。
+- en: Given that the output is two dimensional, we shall add a dense layer that takes
+    the hidden layer output and extracts `2` values from it.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于输出是二维的，我们将添加一个全连接层，该层接受隐藏层的输出并从中提取`2`个值。
+- en: 'Let''s go ahead and fit the model, as follows:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始拟合模型，如下所示：
+- en: '[PRE2]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Now that we have the output, let''s go ahead and validate the results as we
+    did in previous chapter (note that, this is exactly the same code as what we had
+    in the previous chapter—and the explanations of it are provided in the *Building
+    an LSTM from scratch in Python* section of [Chapter 11](7a47ef1f-4c64-4f36-8672-6e589e513b16.xhtml), *Building
+    a Recurrent Neural Network*):'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了输出，让我们像上一章那样验证结果（注意，这段代码与上一章中的完全相同——它的解释已经在[第11章](7a47ef1f-4c64-4f36-8672-6e589e513b16.xhtml)的*从头开始构建LSTM*一节中提供）。
+- en: '[PRE3]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The output of `final_output` is as follows:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`final_output`的输出如下：'
+- en: '[PRE4]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: You should note that the preceding `final_output` that is generated is exactly
+    the same as what we saw in the `model.predict` output.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该注意到，前面生成的`final_output`与我们在`model.predict`输出中看到的是完全相同的。
+- en: One of the drawbacks of generating output this way is that, in cases where the
+    output of time *step 1* is definitely not dependent on time *step 2*, we are making
+    it hard for the model to come up with a way of segregating the influence of time
+    *step 2* value on time *step 1* as we are taking the hidden layer output from
+    time *step 2* (which is a combination of input value at time *step 1* and time
+    *step 2*).
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过这种方式生成输出的一个缺点是，在时间*步1*的输出显然不依赖于时间*步2*的情况下，我们使得模型很难找到将时间*步2*的值对时间*步1*的影响隔离开来的方法，因为我们正在获取时间*步2*的隐藏层输出（它是时间*步1*和时间*步2*输入值的组合）。
+- en: We can get around this problem by extracting hidden layer values from each time
+    step and then passing it to the dense layer.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过从每个时间步提取隐藏层值，然后将其传递到全连接层来解决这个问题。
+- en: '**Returning sequences of hidden layer values at each time step**'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**返回每个时间步隐藏层值的序列**'
+- en: 'In the following code, we will understand how returning sequences of hidden
+    layer values at each time step works:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的代码中，我们将了解如何返回每个时间步的隐藏层值序列：
+- en: '[PRE5]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Notice that the two changes in code that we have done are as follows:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意我们所做的两个代码更改如下：
+- en: Changing the value of the `return_sequences` parameter to `True`
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将`return_sequences`参数的值更改为`True`
+- en: 'The dense layer, giving a value of `1` as output:'
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 给定输出为`1`的全连接层：
+- en: '![](img/a0f4c974-43dd-4375-8968-774c5e1e97d0.png)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a0f4c974-43dd-4375-8968-774c5e1e97d0.png)'
+- en: Notice that, because we have extracted the output of the hidden layer value
+    at each time step (where the hidden layer has one unit), the output shape of LSTM
+    is (batch size, time steps, 1).
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，因为我们提取了每个时间步的隐藏层值（其中隐藏层只有一个单元），所以LSTM的输出形状是（批量大小，时间步，1）。
+- en: Additionally, because there is one dense layer connecting the LSTM output to
+    the final output for each of the time steps, the output shape remains the same.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，由于有一个全连接层将LSTM的输出连接到每个时间步的最终输出，因此输出形状保持不变。
+- en: 'Let''s go ahead and fit the model, as follows:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们继续训练模型，如下所示：
+- en: '[PRE6]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The predicted values are as follows:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预测值如下所示：
+- en: '[PRE7]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The preceding execution will give the following output:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的执行将给出以下输出：
+- en: '[PRE8]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Similar to the previous section, we shall validate our results by performing
+    a forward pass of input through weights and then match our predicted values.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与前一部分类似，我们将通过输入通过权重进行前向传播，然后匹配我们的预测值来验证结果。
+- en: 'We shall extract the output of the first time step as follows:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将提取第一个时间步的输出，如下所示：
+- en: '[PRE9]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'You should notice that the `final_output_1` value matches with the predicted
+    value at the first time step. Similarly, let''s go ahead and validate predictions
+    on second time step:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该注意到`final_output_1`值与第一个时间步的预测值相匹配。同样，我们继续验证第二个时间步的预测：
+- en: '[PRE10]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: You should notice that this returns the exact same value as the `model.predict` value
+    of second time step.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该注意到，这会返回与第二个时间步的`model.predict`值完全相同的结果。
+- en: Now that we understand the `return_sequences` parameter in our network, let
+    us go ahead and learn about another parameter called `return_state`. We know that
+    the two outputs of a network are hidden layer values (which is the also output
+    of LSTM in the final time step when `return_sequences` is `False` and output of
+    LSTM in each time step when `return_sequences` is `True`) and cell state values.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们理解了网络中的`return_sequences`参数，让我们继续学习另一个参数——`return_state`。我们知道网络的两个输出是隐藏层值（当`return_sequences`为`False`时，它也是LSTM在最终时间步的输出，而当`return_sequences`为`True`时，它是LSTM在每个时间步的输出）和细胞状态值。
+- en: The `return_state` helps in extracting the cell state value of a network.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`return_state`有助于提取网络的细胞状态值。'
+- en: Extracting the cell state is useful when the input text is encoded into a vector
+    and we pass, not only the encoded vector, but also the final cell state of the
+    input encoder to the decoder network (more on this in the *Encoder decoder architecture
+    for machine translation *section).
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提取细胞状态对于将输入文本编码为向量时很有用，我们不仅会传递编码向量，还会将输入编码器的最终细胞状态传递给解码器网络（更多内容请见 *机器翻译的编码器解码器架构*
+    部分）。
+- en: 'In the following section, let''s understand how `return_state` works. Note
+    that it is only for us to understand how the cell states are generated at each
+    time step, as in practice, we would use the output of this step (hidden layer
+    value and cell state value) as an input to the decoder:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分，我们来了解`return_state`是如何工作的。请注意，这只是为了帮助我们理解每个时间步的细胞状态是如何生成的，因为实际上我们会将此步骤的输出（隐藏层值和细胞状态值）作为输入传递给解码器：
+- en: '[PRE11]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'In the preceding code, we set the `return_state` parameter to `True` as well.
+    Notice the output of the LSTM now:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们同样将`return_state`参数设置为`True`。注意现在LSTM的输出：
+- en: '`lstm1`: Hidden layer at each time step (as `return_sequences` is `True` in
+    the preceding scenario)'
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`lstm1`：每个时间步的隐藏层（因为在前面的情境中，`return_sequences`为`True`）'
+- en: '`state_h`: Hidden layer value at the final time step'
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`state_h`：最终时间步的隐藏层值'
+- en: '`state_c`: Cell state value at the final time step'
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`state_c`：最终时间步的细胞状态值'
+- en: 'Let''s go ahead and predict values, as follows:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们继续预测值，如下所示：
+- en: '[PRE12]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'We will get the following values:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将得到以下值：
+- en: '[PRE13]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'You should see that there are three arrays of outputs, as we discussed previously:
+    hidden layer value sequences, final hidden layer value, and the cell state value
+    in the order.'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您应该会看到三个输出数组，正如我们之前讨论的：隐藏层值序列、最终隐藏层值，以及按顺序排列的单元状态值。
+- en: 'Let''s validate the numbers, as we arrived at previously:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们验证之前得到的数字：
+- en: '[PRE14]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The value of `hidden_layer_1` in the preceding calculation is `-0.2569`, which
+    is what we obtained from the `model.predict` method:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述计算中的`hidden_layer_1`值为`-0.2569`，这是我们从`model.predict`方法中获得的值：
+- en: '[PRE15]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: The values of `hidden_layer_2` and `input_t1_cell4` are `-0.6683` and `-0.9686`,
+    respectively.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`hidden_layer_2`和`input_t1_cell4`的值分别是`-0.6683`和`-0.9686`。'
+- en: You will notice that the outputs are exactly the same as what we have seen in
+    the predict function.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您会注意到，输出与我们在`predict`函数中看到的完全相同。
+- en: 'In the case of a bidirectional network, where we are incorporating the hidden
+    layer values as we calculate them from both sides, we code it as follows:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在双向网络的情况下，我们在计算时从两个方向同时引入隐藏层值，代码如下：
+- en: '[PRE16]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Note that, in a bidirectional LSTM, there are two outputs for the final hidden
+    state, one when the input time steps are considered from left to right, and another
+    when the input time steps are considered from right to left. In a similar manner,
+    we have two possible cell state values.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在双向LSTM中，最终的隐藏状态有两个输出，一个是从左到右考虑输入时间步长时的输出，另一个是从右到左考虑输入时间步长时的输出。以类似的方式，我们也有两个可能的单元状态值。
+- en: Typically, we would concatenate the resulting hidden states to a single vector,
+    and also the cell states into another concatenated single vector.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，我们会将得到的隐藏状态连接成一个单一的向量，并将单元状态也连接成另一个单一的向量。
+- en: For brevity, we are not validating the outputs of bidirectional LSTM in this
+    book. However, you can check the validations in the accompanying Jupyter Notebook
+    of this chapter.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为简洁起见，本书中不对双向LSTM的输出进行验证。不过，您可以在本章附带的Jupyter Notebook中查看相关验证。
+- en: Building a chatbot
+  id: totrans-94
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建聊天机器人
+- en: A chatbot is helpful in a scenario where the bot automates some of the more
+    common queries. This is very useful in a practical scenario, especially in cases
+    where you would have to just look up the result from a database or query an API
+    to obtain the result that the query is about.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些场景下，聊天机器人非常有用，尤其是当机器人能够自动处理一些常见查询时。这在实际场景中非常有用，尤其是在你只需要从数据库中查找结果，或查询API以获得与查询相关的结果时。
+- en: 'Given this, there are potentially two ways that you can design a chatbot, as
+    follows:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于此，您可以设计聊天机器人的两种潜在方式，如下所示：
+- en: 'Convert the unstructured user query into a structured format:'
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将非结构化的用户查询转换为结构化格式：
+- en: Query from the database based on the converted structure
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据转换后的结构从数据库查询
+- en: Generate responses based on the input text
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据输入文本生成回应
+- en: For this exercise, we will be adopting the first approach, as it is more likely
+    to give predictions that can be tweaked further before presenting them to the
+    user. Additionally, we will also understand the reason why we might not want to
+    generate responses based on input text after we go through the machine translation
+    and text summarization case studies.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本次练习中，我们将采用第一种方法，因为它更可能提供可以在呈现给用户之前进一步调整的预测结果。此外，我们还将了解为什么在机器翻译和文本摘要案例研究后，可能不希望根据输入文本生成回应。
+- en: 'Converting a user query into a structured format involves the following two
+    steps:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将用户查询转换为结构化格式涉及以下两个步骤：
+- en: Assign entities to each word in a query
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为查询中的每个单词分配实体
+- en: Understand the intent of query
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 理解查询的意图
+- en: Named entity recognition is one of the applications that has multiple use cases
+    across industries. For example, where does the user want to travel to? Which product
+    is a user considering to purchase? And so on. From these examples, it might occur
+    that named entity recognition is a simple lookup from a dictionary of existing
+    city names or product names. However, think of a scenario where a user says *I
+    want to travel from Boston to Seattle*. In this case, while the machine understands
+    that both *Boston* and *Seattle* are city names, we are not in a position to resolve
+    which is the *from* city and which is the *to* city.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命名实体识别是一个应用广泛的技术，适用于多个行业。例如，用户想去哪里旅行？用户考虑购买哪个产品？等等。从这些例子中，我们可能会认为命名实体识别只是从现有城市名称或产品名称的字典中进行简单查找。然而，考虑一种情境，当用户说“*我想从波士顿到西雅图*”时，机器虽然知道*波士顿*和*西雅图*是城市名，但我们无法判断哪个是*from*城市，哪个是*to*城市。
+- en: While we can add some heuristics like a name that has a *to* before it is the
+    *to city* and the other is the *from city*, it is not scalable as we replicate
+    this process across multiple such examples. Neural networks come in handy in that
+    scenario, where there is a less dependency on us to hand-tune the features. We
+    shall let the machine take care of the feature engineering part to give us the
+    output.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我们可以添加一些启发式规则，比如在“*to*”前面有名字的是*to city*，另一个是*from city*，但在多个类似示例中复制这个过程时它并不可扩展。神经网络在这种情况下非常有用，因为我们不再依赖手动调整特征。我们将让机器处理特征工程的部分，以提供输出。
+- en: Getting ready
+  id: totrans-106
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备就绪
+- en: With the preceding intuition, let's go ahead and define our approach in solving
+    this problem for a dataset that has user queries related to airlines.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于前述的直觉，让我们继续定义解决这个问题的方法，假设数据集包含与航空公司相关的用户查询。
+- en: '**Objective**: Extract the various entities from a query and also the intent
+    of the query.'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**目标**：从查询中提取各种实体，同时提取查询的意图。'
+- en: '**Approach**:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**方法**：'
+- en: 'We shall find a dataset that has the labels of query and the entity that each
+    word within the query belongs to:'
+  id: totrans-110
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将找到一个数据集，其中包含查询标签和每个查询单词所属的实体：
+- en: If we do not have a labeled dataset, we shall manually annotate the entities
+    within a query for a reasonable number of examples, so that we can train our model
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果没有标注数据集，我们将手动标注查询中的实体，对于合理数量的示例进行标注，以便训练我们的模型。
+- en: Given that the surrounding words can have an impact on the given word's classification
+    into one or the other class, let's use the RNN-based technique to solve this problem
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 考虑到周围的词汇可能会影响给定单词分类为某一类别的结果，让我们使用基于RNN的技术来解决这个问题。
+- en: Additionally, given that the surrounding word could be either on the left or
+    the right side of given word, we shall use a bidirectional RNN to solve the problem
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另外，考虑到周围的单词可能位于给定单词的左侧或右侧，我们将使用双向RNN来解决这个问题。
+- en: Preprocess the input dataset so that it could be fed into the multiple time
+    steps of an RNN
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 预处理输入数据集，以便可以输入到RNN的多个时间步中。
+- en: One-hot-encode the output dataset so that we can optimize the model
+  id: totrans-115
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对输出数据集进行一热编码，以便我们可以优化模型。
+- en: Build the model that returns the entities that each word within a query belongs
+    to
+  id: totrans-116
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建模型，返回查询中每个单词所对应的实体。
+- en: Similarly, build another model that extracts the intent of a query
+  id: totrans-117
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 同样，构建另一个模型，提取查询的意图。
+- en: How to do it...
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何做到...
+- en: 'Let''s code up the approach we defined previously, as follows (the code file
+    is available as `Intent_and_entity_extraction.ipynb` in GitHub):'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们按照之前定义的方法编写代码，如下所示（代码文件可在GitHub上的`Intent_and_entity_extraction.ipynb`中找到）：
+- en: 'Import the datasets, as shown in the following code:'
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入数据集，如以下代码所示：
+- en: '[PRE17]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Load the training dataset:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加载训练数据集：
+- en: '[PRE18]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '[PRE19]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The preceding code gives the following output:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述代码输出如下：
+- en: '![](img/05d0278c-db84-4685-817d-f16a1f3dd349.png)'
+  id: totrans-126
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/05d0278c-db84-4685-817d-f16a1f3dd349.png)'
+- en: Note that the samples in the attached dataset is the user query, slot is the
+    entity a word belongs to, and intent is the overall intent of the query.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，附加数据集中的样本是用户查询，slot是单词所属的实体，而intent是查询的整体意图。
+- en: 'Apply IDs to each of the words in query, slot, and intent:'
+  id: totrans-128
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对查询、slot和intent中的每个单词应用ID：
+- en: '[PRE20]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'A sample of IDs for token (words in vocabulary), slots (entity of a word),
+    and intent is as follows:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 词汇中的标记（单词）、slot（单词的实体）和intent的ID示例如下：
+- en: '![](img/176a3d2e-003c-4b7a-b8ec-fb5a2a0cea62.png)'
+  id: totrans-131
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/176a3d2e-003c-4b7a-b8ec-fb5a2a0cea62.png)'
+- en: 'Finally, the query, slots, and intent are converted into ID values, as follows
+    (where we report the output of the first query, intent, and slots):'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，查询、槽位和意图被转换为ID值，如下所示（我们报告第一个查询、意图和槽位的输出）：
+- en: '![](img/340d4444-f66e-435e-af01-a205b4b24886.png)'
+  id: totrans-133
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/340d4444-f66e-435e-af01-a205b4b24886.png)'
+- en: 'A sample of query, intent, and entities corresponding to the words in query
+    is as follows:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询、意图和与查询中词对应的实体示例如下：
+- en: '[PRE21]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '![](img/c5a633a2-8dd1-41bc-bf74-c6e032c8af78.png)'
+  id: totrans-136
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c5a633a2-8dd1-41bc-bf74-c6e032c8af78.png)'
+- en: Query is the statement at the top in the preceding screenshot. Slots represent
+    the type of object each word belongs to. Note that `O` represents an object, and
+    every other entity name is self-descriptive. Additionally, there are a total of
+    23 possible classes of intents that describe the query at an overall level.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询是前面截图顶部的语句。槽位表示每个词所属的对象类型。请注意，`O`表示对象，其他每个实体名称都是自描述的。此外，总共有23个可能的意图类，它们在总体上描述查询。
+- en: 'In the following code, we are converting the total data into a list of lists
+    where each list corresponds to one query in the dataset:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们将所有数据转换为一个列表的列表，其中每个列表对应数据集中的一个查询：
+- en: '[PRE22]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'A sample of tokens, intent, and query are as follows:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些令牌、意图和查询的示例如下：
+- en: '![](img/ac4fb687-0852-40b5-98b4-b9716ee3dff6.png)'
+  id: totrans-141
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ac4fb687-0852-40b5-98b4-b9716ee3dff6.png)'
+- en: 'Create the indexed inputs and outputs:'
+  id: totrans-142
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建索引化的输入和输出：
+- en: '[PRE23]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'The preceding code gives us a list of final queries and targets as follows:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码为我们提供了最终查询和目标的列表，如下所示：
+- en: '![](img/e318c431-d86c-4258-8a57-42afef0e49c2.png)'
+  id: totrans-145
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e318c431-d86c-4258-8a57-42afef0e49c2.png)'
+- en: 'Now, we are converting each **input** sentence into a corresponding list of
+    IDs of constituent words:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将每个**输入**句子转换为其组成词的对应ID列表：
+- en: '[PRE24]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'In the following code, we are converting each **output** word into its constituent
+    word IDs:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们将每个**输出**词转换为其组成的词ID：
+- en: '[PRE25]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Pad the input and one-hot-encode the output:'
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 填充输入并对输出进行独热编码：
+- en: '[PRE27]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'In the following code, we are deciding the maximum length of the query before
+    padding the input:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们决定在填充输入之前查询的最大长度：
+- en: '[PRE28]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: In the preceding code, we are deciding the maximum length of the query before
+    padding the input—which happens to be `48`.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们决定在填充输入之前查询的最大长度——这恰好是`48`。
+- en: 'In the following code, we are padding the input and output with a max length
+    of `50`, as there is no input query that is beyond `48` words in length (which
+    is the `max(length_sent)`):'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们使用最大长度为`50`来填充输入和输出，因为没有输入查询的长度超过`48`个词（即`max(length_sent)`）：
+- en: '[PRE29]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'In the following code, we are converting the output into a one-hot-encoded
+    version:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们将输出转换为独热编码版本：
+- en: '[PRE30]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: We have a total of `124` classes, as there are a total `123` unique classes
+    and the word index starts with `1`.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们总共有`124`个类，因为总共有`123`个唯一类，且词汇索引从`1`开始。
+- en: 'Build, train, and test the dataset, as well as the model:'
+  id: totrans-161
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建、训练和测试数据集，以及模型：
+- en: '[PRE31]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'In the preceding code, we are splitting the dataset into train and test datasets:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们将数据集分割为训练集和测试集：
+- en: '[PRE32]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'A summary of the model is as follows:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型的总结如下：
+- en: '![](img/083bf99b-1860-45af-a90a-5537a1108d2a.png)'
+  id: totrans-167
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/083bf99b-1860-45af-a90a-5537a1108d2a.png)'
+- en: Note that, in the preceding code, we have a bidirectional LSTM, and hence, the
+    hidden layer has 200 units (as the LSTM layer has 100 units).
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在前面的代码中，我们使用了双向LSTM，因此隐藏层有200个单元（因为LSTM层有100个单元）。
+- en: 'Compile and fit the model, as shown follows:'
+  id: totrans-169
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编译并拟合模型，如下所示：
+- en: '[PRE34]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'The preceding code results in a model that is 95% accurate in identifying the
+    right entity for a given word within a query:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码产生了一个模型，该模型在查询中的每个词上正确识别实体的准确率为95%：
+- en: '![](img/69930f68-e78b-4661-9ec4-0ed72bf4c79e.png)'
+  id: totrans-172
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/69930f68-e78b-4661-9ec4-0ed72bf4c79e.png)'
+- en: From the preceding output, we can see that our accuracy in assigning the right
+    entity to each word is >95%.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的输出中，我们可以看到我们为每个词分配正确实体的准确率超过95%。
+- en: Intent extraction
+  id: totrans-174
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 意图提取
+- en: Now that we have built a model that has a good accuracy in predicting the entities
+    within a query, let's go ahead and find the intent of the query.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经构建了一个具有良好准确性的模型，能够预测查询中的实体，接下来让我们找出查询的意图。
+- en: 'We will be reusing most of the variables that we initialized in the previous
+    model:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将重用在前一个模型中初始化的大部分变量：
+- en: 'Convert the intent of each query into an ID:'
+  id: totrans-177
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将每个查询的意图转换为ID：
+- en: '[PRE35]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Extract the one-hot-encoded version of the intents:'
+  id: totrans-179
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取意图的独热编码版本：
+- en: '[PRE36]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Build the model, as shown in the following code:'
+  id: totrans-181
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建模型，如以下代码所示：
+- en: '[PRE37]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'The preceding code results in a model that has an accuracy of 90% in identifying
+    the right intent of a query in the validation dataset:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码结果是一个模型，它在验证数据集上正确识别查询意图的准确率为 90%：
+- en: '![](img/7653b79e-d64e-4f58-a465-ed0c04bfb805.png)'
+  id: totrans-187
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7653b79e-d64e-4f58-a465-ed0c04bfb805.png)'
+- en: Putting it all together
+  id: totrans-188
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将所有内容整合起来
+- en: In the previous section, we built two models, where the first model predicts
+    the entities in a query and the second model extracts the intent of queries.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们构建了两个模型，第一个模型预测查询中的实体，第二个模型提取查询的意图。
+- en: 'In this section, we will define a function that takes a query and converts
+    it into a structured format:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将定义一个函数，接受查询并将其转换为结构化格式：
+- en: 'Preprocess the new input text so that it can be passed to the model:'
+  id: totrans-191
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 预处理新的输入文本，以便将其传递给模型：
+- en: '[PRE41]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Pre-process the input text to convert it into a list of word IDs:'
+  id: totrans-193
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 预处理输入文本，将其转换为单词 ID 列表：
+- en: '[PRE42]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '[PRE43]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'The preceding results in processed input text as follows:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的结果处理后的输入文本如下：
+- en: '![](img/f247e339-2e03-4054-96d4-1e0073daf1c6.png)'
+  id: totrans-197
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f247e339-2e03-4054-96d4-1e0073daf1c6.png)'
+- en: 'Now, we''ll predict the intent of the preceding list:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将预测前面列表的意图：
+- en: '[PRE44]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'The preceding code results in the intent of the query being about a flight,
+    as follows:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码结果是查询的意图是关于航班的，如下所示：
+- en: '![](img/6b2208a9-fac9-4df0-88bf-75c54c8f2dff.png)'
+  id: totrans-201
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6b2208a9-fac9-4df0-88bf-75c54c8f2dff.png)'
+- en: 'Extract the entities related to words in a query:'
+  id: totrans-202
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取查询中与单词相关的实体：
+- en: '[PRE45]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '![](img/aaae4594-3625-403a-8025-1476f985fb32.png)'
+  id: totrans-204
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/aaae4594-3625-403a-8025-1476f985fb32.png)'
+- en: From the preceding code, we can see that the model has correctly classified
+    a word into the right entity.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的代码中，我们可以看到模型已经正确地将一个单词分类到正确的实体中。
+- en: Now that we have the entities and intent identified, we can have a pre-defined
+    SQL query (or API) whose parameters are filled by the extracted entities, and
+    each intent could potentially have a different API/SQL query to extract information
+    for the user.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经识别出实体和意图，可以使用预定义的 SQL 查询（或 API），其参数由提取的实体填充，每个意图可能具有不同的 API/SQL 查询来为用户提取信息。
+- en: Machine translation
+  id: totrans-207
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 机器翻译
+- en: So far, we have seen a scenario where the input and output are mapped one-to-one.
+    In this section, we will look into ways in which we can construct architectures
+    that result in mapping all input data into a vector, and then decoding it into
+    the output vector.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经看到一个输入和输出一一对应的场景。在本节中，我们将探讨如何构建能够将所有输入数据映射到一个向量，然后将其解码为输出向量的架构。
+- en: We will be translating an input text in English into text in French in this
+    case study.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个案例研究中，我们将把一段英文输入文本翻译成法语文本。
+- en: Getting ready
+  id: totrans-210
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备就绪
+- en: 'The architecture that we will be defining to perform machine translation is
+    as follows:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将定义的用于执行机器翻译的架构如下：
+- en: Take a labeled dataset where the input sentence and the corresponding translation
+    in French is available
+  id: totrans-212
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 获取一个标记化的数据集，其中包含输入句子和对应的法语翻译
+- en: 'Tokenize and extract words that are frequent in each of the English and French
+    texts:'
+  id: totrans-213
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对英文和法语文本中频繁出现的单词进行标记化和提取：
+- en: To identify the frequent words, we will count the frequency of each word
+  id: totrans-214
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为了识别频繁的单词，我们将统计每个单词的频率
+- en: The words that constitute the top 80% of total cumulative frequency of all words
+    are considered the frequent words
+  id: totrans-215
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构成所有单词总累计频率前 80% 的单词被认为是频繁单词
+- en: For all the words that are not among the frequent words, replace them with an
+    unknown (`unk`) symbol
+  id: totrans-216
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于所有不属于频繁单词的单词，将其替换为未知（`unk`）符号
+- en: Assign an ID to each word
+  id: totrans-217
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为每个单词分配一个 ID
+- en: Build an encoder LSTM that fetches the vector of the input text
+  id: totrans-218
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建一个编码器 LSTM，提取输入文本的向量
+- en: Pass the encoded vector through dense layer so that we extract the probabilities
+    of decoded text at each time step
+  id: totrans-219
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过密集层传递编码向量，以便在每个时间步骤提取解码文本的概率
+- en: Fit a model to minimize the loss at the output
+  id: totrans-220
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练模型以最小化输出的损失
+- en: How to do it...
+  id: totrans-221
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何做到这一点...
+- en: There could be multiple model architectures that can help in translating the
+    input text. We will go through a few of them in the following sections (the code
+    file is available as `Machine_translation.ipynb` in GitHub).
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能有多种模型架构可以帮助翻译输入文本。我们将在以下章节中介绍其中的一些（代码文件在 GitHub 上可用，名为`Machine_translation.ipynb`）。
+- en: Preprocessing the data
+  id: totrans-223
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据预处理
+- en: 'To pass the input and output data to our model, we would have to preprocess
+    the datasets as follows:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了将输入和输出数据传递给我们的模型，我们需要像下面这样预处理数据集：
+- en: 'Import the relevant packages and dataset:'
+  id: totrans-225
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入相关的包和数据集：
+- en: '[PRE46]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: '[PRE48]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'Given that there are more than 140,000 sentences in the dataset, let''s consider
+    only the first 50,000 sentence-translation pairs to build the model:'
+  id: totrans-229
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 鉴于数据集中有超过140,000个句子，我们将仅考虑前50,000对句子翻译对来构建模型：
+- en: '[PRE49]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Convert the input and output text into lower case and also remove the punctuation:'
+  id: totrans-231
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将输入和输出文本转换为小写并移除标点符号：
+- en: '[PRE50]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'Add start and end tokens to the output sentences (French sentences). We add
+    these so that the start and end tokens are helpful in the encoder decoder architecture.
+    The reason why this will be helpful will be provided in the *Encoder decoder architecture
+    for machine translation* section:'
+  id: totrans-233
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为输出句子（法语句子）添加开始和结束标记。我们添加这些标记是为了在编码器-解码器架构中起到帮助作用。这个方法的作用将在*编码器解码器架构用于机器翻译*部分说明：
+- en: '[PRE51]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'A sample of the data looks as follows:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据的示例如下所示：
+- en: '![](img/b5773770-4057-4fec-a4af-4d033094e420.png)'
+  id: totrans-236
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b5773770-4057-4fec-a4af-4d033094e420.png)'
+- en: 'Identify the frequent words. We define a word as frequent if it is among the
+    words that have a frequency that constitutes 80% of the total frequency of all
+    words:'
+  id: totrans-237
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 识别常见单词。我们定义一个单词为常见，如果它出现在频率构成所有单词总频率80%的单词列表中：
+- en: '[PRE52]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '[PRE53]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'The preceding code, extracts the number of English words that cumulatively
+    constitute 80% of total English words in input:'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码提取了累计构成输入中80%总英语单词的英语单词数量：
+- en: '[PRE54]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: The preceding code, extracts the number of French words that cumulatively constitute
+    80% of total French words in output.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码提取了累计构成输出中80%总法语单词的法语单词数量。
+- en: 'Filter out the less frequent words. If a word is not among the frequent words,
+    we shall replace it with an unknown word—`unk`:'
+  id: totrans-243
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 过滤掉不常见的单词。如果某个单词不在常见单词列表中，我们将用一个未知单词`unk`来替代它：
+- en: '[PRE55]'
+  id: totrans-244
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'The preceding code takes a sentence as input, extracts the unique words, and
+    if a word does not exist among the more frequent English words (`final_eng_words`),
+    then it shall be replaced by `unk`:'
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码以句子为输入，提取唯一的单词，如果某个单词不在更常见的英语单词（`final_eng_words`）中，则用`unk`替代：
+- en: '[PRE56]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: The preceding code takes a sentence as input, extracts the unique words, and
+    if a word does not exist among the more frequent French words (`final_fr_words`),
+    then it shall be replaced by `unk`.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码以句子为输入，提取唯一的单词，如果某个单词不在更常见的法语单词（`final_fr_words`）中，则用`unk`替代。
+- en: 'For example, on a random sentence with frequent words and also infrequent words,
+    the output looks as follows:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，在一个包含常见单词和不常见单词的随机句子中，输出结果如下所示：
+- en: '[PRE57]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '![](img/7e4f6d3b-1d82-4d60-bf15-dffc91a1ba42.png)'
+  id: totrans-250
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7e4f6d3b-1d82-4d60-bf15-dffc91a1ba42.png)'
+- en: '[PRE58]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: In the preceding code, we are replacing all the English and French sentences
+    based on the functions we defined previously.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们根据之前定义的函数替换所有的英语和法语句子。
+- en: 'Assign ID to each word across both English (input) and French (output) sentences:'
+  id: totrans-253
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 给每个单词在英语（输入）和法语（输出）句子中分配一个ID：
+- en: 'Store the list of all unique words in data (English and French sentences):'
+  id: totrans-254
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 存储数据中所有唯一单词的列表（英语和法语句子）：
+- en: '[PRE59]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '[PRE60]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'Create a dictionary of input words and their corresponding index:'
+  id: totrans-257
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建输入单词及其对应索引的字典：
+- en: '[PRE61]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'Extract the maximum length of input and target sentences so that all of the
+    sentences can have the same size:'
+  id: totrans-259
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取输入和目标句子的最大长度，以便所有句子具有相同的大小：
+- en: '[PRE62]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: Now that we have preprocessed the datasets, let's try out multiple architectures
+    on the dataset to compare their performance.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经处理好数据集，让我们在数据集上尝试多种架构，比较它们的表现。
+- en: Traditional many to many architecture
+  id: totrans-263
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 传统的多对多架构
+- en: In this architecture, we will embed each input word into a 128 dimensional vector,
+    resulting in an output vector of shape (`batch_size, 128, 17`). We want to do
+    this because, in this version, we want to test out the scenario where the input
+    data has 17 time steps and the output dataset also has 17 time steps.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个架构中，我们将每个输入单词嵌入到一个128维的向量中，得到形状为（`batch_size, 128, 17`）的输出向量。我们这样做是因为在这个版本中，我们希望测试输入数据有17个时间步，输出数据集也有17个时间步的场景。
+- en: 'We shall connect each input time step to the output time step through an LSTM,
+    and then perform a softmax on top of the predictions:'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将通过LSTM将每个输入时间步连接到输出时间步，然后对预测结果执行softmax：
+- en: 'Create input and output datasets. Note that we have `decoder_input_data` and
+    `decoder_target_data`. For now, let us create `decoder_input_data` as the word
+    ID corresponding to the target sentence words. The `decoder_target_data` is the
+    one-hot-encoded version of the target data for all words after the `start` token:'
+  id: totrans-266
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建输入和输出数据集。注意我们有`decoder_input_data`和`decoder_target_data`。现在，让我们将`decoder_input_data`创建为目标句子单词对应的单词ID。`decoder_target_data`是目标数据的独热编码版本，包含在`start`标记后的所有单词：
+- en: '[PRE64]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'Note that we are adding a `+1` to `num_decodder_tokens`, as there is no word
+    corresponding to index `0` in the dictionary we created in *step 7b* of the previous
+    section:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们在`num_decodder_tokens`中添加了`+1`，因为在我们在*步骤7b*中创建的字典中没有对应于索引`0`的单词。
+- en: '[PRE65]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: In the preceding code, we are looping through the input text and target text
+    to replace a sentence that is in English or French to its corresponding word IDs
+    in English and French.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的代码中，我们正在循环遍历输入文本和目标文本，将英语或法语中的句子替换为对应的英语和法语单词ID。
+- en: 'Furthermore, we are one-hot-encoding the target data in the decoder so that
+    we can pass it to the model. Additionally, given that all sentences have the same
+    length now, we are replacing the values of the target data with one at the 89th
+    index (as `89` belongs to the end index) after the sentence length is exceeded
+    in the `for` loop:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们在解码器中对目标数据进行独热编码，以便将其传递给模型。由于现在所有句子具有相同的长度，我们在`for`循环中将目标数据的值替换为在第89个索引处的1（因为`89`是结束索引），当句子长度超出时：
+- en: '[PRE66]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: In the preceding code, we are replacing the value of zero in the decoder input
+    data with 89 (as 89 is the ending token and zero does not have any word associated
+    with it in the word indices that we created).
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的代码中，我们将解码器输入数据中零的值替换为89（因为89是结束标记，零在我们创建的单词索引中没有任何单词对应）。
+- en: 'Note that the shapes of the three datasets that we created are as follows:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意我们创建的三个数据集的形状如下：
+- en: '[PRE67]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: 'The following is the output of the preceding code:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是前面代码的输出：
+- en: '[PRE68]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'Build and fit the model, as follows:'
+  id: totrans-278
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按照如下方式构建和拟合模型：
+- en: '[PRE69]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '![](img/5b1c05e4-823c-4fae-8955-1d164f10ebdd.png)'
+  id: totrans-280
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/5b1c05e4-823c-4fae-8955-1d164f10ebdd.png)'
+- en: '[PRE70]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: '![](img/58c5e0ac-b3aa-4bf6-a6cb-0800b766d9dd.png)'
+  id: totrans-283
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/58c5e0ac-b3aa-4bf6-a6cb-0800b766d9dd.png)'
+- en: Note that the accuracy number coming from the model could be misleading as it
+    counts the `end` token in its accuracy measure as well.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，模型输出的准确度可能具有误导性，因为它也将`end`标记计入准确度衡量中。
+- en: 'Calculate the number of words that were correctly translated:'
+  id: totrans-285
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算正确翻译的单词数量：
+- en: '[PRE72]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: In the preceding code, we are making a prediction on test data (which is the
+    last 5% of total dataset as the validation split is 5%).
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的代码中，我们正在对测试数据进行预测（测试数据是总数据集的最后5%，因为验证集为5%）。
+- en: From the preceding code, we can see that ~19% of the total words were correctly
+    translated.
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的代码可以看出，大约19%的总单词被正确翻译。
+- en: Many to hidden to many architecture
+  id: totrans-289
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 多对隐藏到多架构
+- en: One of the drawbacks of the previous architecture was that we had to artificially
+    increase the number of time steps in input to 17, even though we knew that the
+    input has a maximum of eight time steps where there was some input.
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前架构的一个缺点是，我们必须人为地将输入的时间步数增加到17，尽管我们知道输入最大只有八个时间步，其中有一些输入。
+- en: 'In this architecture, let''s go ahead and build a model that extracts hidden
+    state value at the last time step of input. Furthermore, it replicates the hidden
+    state value 17 times (as there are 17 time steps in the output). It passes the
+    replicated hidden time steps through a Dense layer to finally extract the probable
+    classes in output. Let''s code the logic as follows:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个架构中，构建一个模型，提取输入的最后时间步的隐藏状态值。此外，它将隐藏状态值复制17次（因为输出有17个时间步）。它将复制的隐藏时间步通过一个Dense层，最终提取输出中的可能类别。让我们按以下方式编写逻辑：
+- en: 'Redo the creation of input and output datasets so that we have eight time steps
+    in the input and 17 in the output. This is different from the previous iteration
+    as the input had 17 time steps in that versus eight in the current version:'
+  id: totrans-292
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重新创建输入和输出数据集，以便输入有8个时间步，输出有17个时间步。这与之前的迭代不同，因为输入在之前版本中有17个时间步，而当前版本中为8个：
+- en: '[PRE73]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: 'Build the model. Note that the `RepeatVector` layer replicates the output of
+    the bidirectional layer''s output 17 times:'
+  id: totrans-294
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建模型。注意，`RepeatVector`层将双向层的输出复制17次：
+- en: '[PRE74]'
+  id: totrans-295
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'A summary of model is as follows:'
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型的总结如下：
+- en: '![](img/0049d9b6-60e5-4351-a51d-7281e266f1c8.png)'
+  id: totrans-297
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0049d9b6-60e5-4351-a51d-7281e266f1c8.png)'
+- en: 'Compile and fit the model:'
+  id: totrans-298
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编译并拟合模型：
+- en: '[PRE75]'
+  id: totrans-299
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '![](img/4d726ed2-1d9e-488d-8982-4608468389d6.png)'
+  id: totrans-300
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4d726ed2-1d9e-488d-8982-4608468389d6.png)'
+- en: 'Calculate the % of total words that are correctly translated:'
+  id: totrans-301
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算总单词中正确翻译的百分比：
+- en: '[PRE76]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: The preceding results in an accuracy of 19%, which is almost on par compared
+    to the previous iteration.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以上结果准确率为19%，与之前的迭代几乎相当。
+- en: The preceding is expected, as we tend to lose considerable amounts of information
+    when all the input time steps' information is stored only in the last hidden layer
+    value.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是可以预期的，因为当所有输入时间步的信息仅存储在最后一个隐藏层的值中时，我们往往会丢失大量信息。
+- en: Additionally, we are not making use of the cell state that contains considerable
+    amounts of information about what needs to be forgotten in which time step.
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外，我们没有利用单元状态，该状态包含关于需要在每个时间步忘记哪些信息的相当多的内容。
+- en: Encoder decoder architecture for machine translation
+  id: totrans-306
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 机器翻译的编码器解码器架构
+- en: 'There are two potential logical enhancements to the architecture we defined
+    in the previous section:'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们之前定义的架构中，有两个潜在的逻辑增强：
+- en: Make use of the information present in the cell state while generating translations
+  id: totrans-308
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在生成翻译时，利用单元状态中存在的信息
+- en: Make use of the previously translated words as an input in predicting the next
+    word
+  id: totrans-309
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在预测下一个单词时，利用之前翻译过的单词作为输入
+- en: The second technique is called **Teacher Forcing**. Essentially, by giving the
+    previous time step's actual value as input while generating the current time step,
+    we are tuning the network faster, and practically more accurately.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种技术称为**教师强制**。本质上，通过在生成当前时间步时，给定前一个时间步的实际值作为输入，我们可以更快地调整网络，且在实践中更加准确。
+- en: Getting ready
+  id: totrans-311
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备就绪
+- en: 'The strategy that we''ll adopt to build a machine translation system using
+    the encoder decoder architecture is as follows:'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将采用的策略是使用编码器-解码器架构构建机器翻译系统，具体如下：
+- en: 'We have two decoder datasets while preparing input and output datasets:'
+  id: totrans-313
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在准备输入和输出数据集时，我们有两个解码器数据集：
+- en: The `decoder_input_data` combined with `encoder_input_data` is the input and
+    `decoder_target_data` is the output
+  id: totrans-314
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`decoder_input_data`与`encoder_input_data`的组合为输入，`decoder_target_data`为输出'
+- en: The `decoder_input_data` starts with the `start` word
+  id: totrans-315
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`decoder_input_data`从`start`单词开始'
+- en: When we are predicting the first word in the decoder, we are using the input
+    set of words, converting them into a vector, which then gets passed through a
+    decoder model that has `start` as input. The expected output is the first word
+    after `start` in output
+  id: totrans-316
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当我们预测解码器中的第一个单词时，我们使用单词输入集，将其转换为向量，然后通过一个以`start`为输入的解码器模型。预期的输出是`start`后面的第一个单词。
+- en: We proceed in a similar manner, where the actual first word in the output is
+    the input, while predicting the second word
+  id: totrans-317
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们以类似的方式继续，其中输出的实际第一个单词作为输入，同时预测第二个单词
+- en: We'll calculate the accuracy of model based on this strategy
+  id: totrans-318
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将基于这个策略计算模型的准确率
+- en: How to do it...
+  id: totrans-319
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何操作...
+- en: With this, let us go ahead and build the model on the input and output datasets
+    that we already prepared in the previous section (*step 1* of many to hidden to
+    many architecture of the previous section remains the same). The code file is
+    available as `Machine_translation.ipynb` in GitHub.
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这个，我们继续在之前准备好的输入和输出数据集上构建模型（前一部分的*第1步*中，许多到隐藏到许多的架构保持不变）。代码文件可以在GitHub上的`Machine_translation.ipynb`中找到。
+- en: 'Build the model, as follows:'
+  id: totrans-321
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按如下方式构建模型：
+- en: '[PRE77]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: 'Prepare the encoder model:'
+  id: totrans-323
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 准备编码器模型：
+- en: '[PRE78]'
+  id: totrans-324
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: Note that we are using a functional API since we are extracting the intermediate
+    layers of the encoder network and will be passing multiple datasets as input (encoder
+    input data and decoder input data).
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，由于我们正在提取编码器网络的中间层，并且将多个数据集作为输入（编码器输入数据和解码器输入数据），因此我们使用的是功能性API。
+- en: 'Prepare the decoder model:'
+  id: totrans-326
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 准备解码器模型：
+- en: '[PRE79]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'Build the model, as follows:'
+  id: totrans-328
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按如下方式构建模型：
+- en: '[PRE80]'
+  id: totrans-329
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: '![](img/7d7eed63-bb60-43d2-a998-0b25454011cf.png)'
+  id: totrans-330
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7d7eed63-bb60-43d2-a998-0b25454011cf.png)'
+- en: 'Fit the model, as shown in the following code:'
+  id: totrans-331
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按照以下代码拟合模型：
+- en: '[PRE81]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '![](img/920127b1-562b-4a64-b5eb-b5100a0d54fd.jpg)'
+  id: totrans-333
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/920127b1-562b-4a64-b5eb-b5100a0d54fd.jpg)'
+- en: 'Calculate the % of words that are accurately transcribed:'
+  id: totrans-334
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算准确转录的单词百分比：
+- en: '[PRE82]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: Note that we have correctly translated 44% of the total words in this scenario.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在此场景下，我们已正确翻译了总词汇的44%。
+- en: However, note that we should not be using `decoder_input_data` while calculating
+    accuracy on the test dataset, as we do not have access to this during a real-time
+    scenario.
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，请注意，在计算测试数据集的准确性时，我们不应使用`decoder_input_data`，因为在实际场景中我们无法访问此数据。
+- en: This calls for us to use the predicted word in the previous time step as the
+    decoder input word for the current time step, as follows.
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这要求我们将上一时间步的预测单词作为当前时间步的解码器输入单词，如下所示。
+- en: 'We will re-initialize the `decoder_input_data` as `decoder_input_data_pred`:'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将重新初始化`decoder_input_data`为`decoder_input_data_pred`：
+- en: '[PRE84]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: Note that, in the preceding code, the word index 284 corresponds to the start
+    word. We are passing the start word as the first word in the decoder input and
+    predicting the word with the highest probability in the next time step.
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在前面的代码中，单词索引284对应起始单词。我们将起始单词作为解码器输入的第一个单词，并预测下一时间步中概率最高的单词。
+- en: Once we predict the second word, we update `decoder_input_word_pred`, predict
+    the third word, and continue until we encounter the stop word.
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们预测出第二个单词，我们就更新`decoder_input_word_pred`，预测第三个单词，并继续直到遇到停止词。
+- en: 'Now that we have modified our predicted translated words, let us calculate
+    the accuracy of our translation:'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经修改了预测的翻译单词，让我们来计算翻译的准确性：
+- en: '[PRE85]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '[PRE86]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: The preceding results in 46% of all words that are correctly translated through
+    this method.
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样做的结果是，所有单词中有46%通过此方法被正确翻译。
+- en: While there is a considerable improvement in the accuracy of translation from
+    the previous methods, we are still not taking the intuition that words that are
+    at the start in the source language are quite likely to be at the start, even
+    in the target language, that is, the word alignment is not taken into consideration.
+    In the next section, we will look into solving the problem of word alignment.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管相较于之前的方法，翻译的准确性有了显著提高，但我们仍未考虑到这样一个直觉：在源语言中位于开头的单词，在目标语言中也很可能位于开头，也就是说，单词的对齐并未被考虑。接下来的部分，我们将探讨如何解决单词对齐的问题。
+- en: Encoder decoder architecture with attention for machine translation
+  id: totrans-349
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 带有注意力机制的编码器解码器架构用于机器翻译
+- en: In the previous section, we learned that we could increase the accuracy of translation
+    by enabling the teacher forcing technique, where the actual word in the previous
+    time step of target was used as an input to the model.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们学习了通过启用教师强制技术（即使用目标序列中上一时间步的实际单词作为模型输入）可以提高翻译准确度。
+- en: In this section, we will extend this idea further and assign weightage to the
+    input encoder based on how similar the encoder and decoder vectors are at each
+    time step. This way, we are enabling that certain words have a higher weightage
+    in the encoder's hidden vector, depending on the time step of the decoder.
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将进一步扩展这一思路，并根据编码器和解码器向量在每个时间步的相似度为输入编码器分配权重。通过这种方式，我们可以根据解码器的时间步，确保某些单词在编码器的隐藏向量中具有更高的权重。
+- en: How to do it...
+  id: totrans-352
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何做……
+- en: With this, let's look at how we can build the encoder decoder architecture,
+    along with the attention mechanism. The code file is available as `Machine_translation.ipynb` in
+    GitHub.
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这个，让我们看看如何构建编码器解码器架构，并结合注意力机制。代码文件在GitHub上的`Machine_translation.ipynb`中可用。
+- en: 'Build the encoder, as shown in the following code:'
+  id: totrans-354
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建编码器，如以下代码所示：
+- en: '[PRE87]'
+  id: totrans-355
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: 'Build the decoder, as follows:'
+  id: totrans-356
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建解码器，如下所示：
+- en: '[PRE88]'
+  id: totrans-357
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: Note that, in the preceding code, we have not finalized the decoder architecture.
+    We have only extracted the hidden layer values at the decoder.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在前面的代码中，我们并没有最终确定解码器架构。我们只是提取了解码器中的隐藏层值。
+- en: Build the attention mechanism. The attention mechanism will be based on how
+    similar the encoder hidden vector and the decoder hidden vector are at each time
+    step. Based on this similarity (softmax performed to give a weight value that
+    sums up to one across all possible input time steps), we assign weightage to the
+    encoder vector, as follows.
+  id: totrans-359
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建注意力机制。注意力机制将基于编码器隐藏向量与解码器隐藏向量在每个时间步的相似度。基于这种相似度（执行softmax操作以提供一个加权值，所有可能的输入时间步的加权值总和为1），我们将给编码器向量赋予权重，如下所示。
+- en: 'Passing the encoder decoder vectors through an activation and dense layer so
+    that we achieve further non-linearity before taking the dot product (a measure
+    of similarity—cosine similarity) between the vectors:'
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将编码器解码器向量通过激活层和密集层处理，以便在进行点积（衡量相似度——余弦相似度）之前实现进一步的非线性：
+- en: '[PRE89]'
+  id: totrans-361
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: 'Identify the weightage that is to be given to the input time steps:'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定需要给输入时间步长分配的权重：
+- en: '[PRE90]'
+  id: totrans-363
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: 'Calculate the weighted encoder vector, as follows:'
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算加权编码器向量，方法如下：
+- en: '[PRE91]'
+  id: totrans-365
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'Combine the decoder and weighted encoder vector:'
+  id: totrans-366
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将解码器和加权编码器向量结合起来：
+- en: '[PRE92]'
+  id: totrans-367
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'Connect the combination of decoder and weighted encoded vector to output layer:'
+  id: totrans-368
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将解码器和加权编码向量的组合连接到输出层：
+- en: '[PRE93]'
+  id: totrans-369
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: 'Compile and fit the model, shown in the following code:'
+  id: totrans-370
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编译并拟合模型，下面是相关代码：
+- en: '[PRE94]'
+  id: totrans-371
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: 'A plot of architecture is as follows:'
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结构图如下：
+- en: '![](img/05ba35a2-0d0a-4d38-aad8-640520b67267.png)'
+  id: totrans-373
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/05ba35a2-0d0a-4d38-aad8-640520b67267.png)'
+- en: '[PRE95]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '![](img/ca8e9bfd-b064-4ba3-8414-c9b80eda03ec.png)'
+  id: totrans-375
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ca8e9bfd-b064-4ba3-8414-c9b80eda03ec.png)'
+- en: Once you fit the model, you will notice that the validation loss in this model
+    is slightly better than the previous iteration.
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦你拟合了模型，你会发现该模型的验证损失略优于之前的迭代。
+- en: 'Calculate the accuracy of translation in a similar way to what we did in the
+    previous section:'
+  id: totrans-377
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以我们在上一部分所做的类似方式计算翻译的准确率：
+- en: '[PRE96]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '[PRE97]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: '[PRE98]'
+  id: totrans-380
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: The preceding code results in 52% of total words that are correctly translated,
+    which is an improvement from the previous iteration.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码结果是52%的总词汇被正确翻译，相较于上一个迭代有了改进。
+- en: 'Now that we have built a translation system that has a reasonable accuracy,
+    let us inspect a few translations in the test dataset (the test dataset is the
+    last 5% of the total dataset as we specified the `validation_split` to be 5%),
+    as follows:'
+  id: totrans-382
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们已经构建了一个具有合理准确率的翻译系统，让我们检查一下测试数据集中的一些翻译（测试数据集是总数据集的最后5%，因为我们将`validation_split`指定为5%），如下所示：
+- en: '[PRE99]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: 'Extract the predicted translations in terms of words:'
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提取按词汇计算的预测翻译：
+- en: '[PRE100]'
+  id: totrans-385
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: 'The output of the preceding code after converting English sentence to French 
+    is as follows:'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将英文句子转换为法文后的前面代码输出如下：
+- en: '[PRE101]'
+  id: totrans-387
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: 'Extract the actual translations in terms of words:'
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提取实际的翻译，以词汇为单位：
+- en: '[PRE102]'
+  id: totrans-389
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: 'The output of the preceding code is as follows:'
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码输出如下：
+- en: '[PRE103]'
+  id: totrans-391
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: 'We see that the predicted translation is fairly close to the original translation.
+    In a similar manner, let us explore a few more translations on the validation
+    dataset:'
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们看到预测的翻译与原始翻译非常接近。以类似的方式，我们来探索验证数据集中的更多翻译：
+- en: '| **Original translation** | **Predicted translation** |'
+  id: totrans-393
+  prefs: []
+  type: TYPE_TB
+  zh: '| **原始翻译** | **预测翻译** |'
+- en: '| *jétais tellement occupée la unk unk end* | *jétais tellement occupé pour
+    plus unk end* |'
+  id: totrans-394
+  prefs: []
+  type: TYPE_TB
+  zh: '| *我在这个未知的周末忙得不可开交* | *我为更多的未知周末忙碌* |'
+- en: '| *je ne fais que ce unk me dit end* | *je viens fais que ce unk me fait end*
+    |'
+  id: totrans-395
+  prefs: []
+  type: TYPE_TB
+  zh: '| *我只是做我所说的未知* | *我做的正是我所做的未知* |'
+- en: '| *jai unk de faire la unk end* | *je unk de unk la unk end* |'
+  id: totrans-396
+  prefs: []
+  type: TYPE_TB
+  zh: '| *我有做这个未知的周末* | *我做这个未知的周末* |'
+- en: 'From the preceding table, we can see that there is a decent translation, however
+    there are a few areas of potential improvement:'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从上表中，我们可以看到有一个不错的翻译，然而，仍有一些潜在的改进空间：
+- en: 'Accounting for word similarities:'
+  id: totrans-398
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 考虑到词汇相似性：
+- en: Words like *je* and *j'ai* are fairly similar, and so they should not be penalized
+    heavily, even though it is decreasing the accuracy metric
+  id: totrans-399
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 像*je*和*j'ai*这样的词汇是相当相似的，因此它们不应该受到过多惩罚，即使这会导致准确度指标的下降
+- en: 'Reducing the number of `unk` words:'
+  id: totrans-400
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 减少`unk`词汇的数量：
+- en: We have reduced the number of `unk` words to reduce the dimensionality of our
+    dataset
+  id: totrans-401
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们减少了`unk`词汇的数量，以降低数据集的维度
+- en: We can potentially work on high dimensional data when we collect a larger corpus
+    and work on a machine with industrial scale configuration
+  id: totrans-402
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当我们收集更大的语料库，并在工业级配置的机器上工作时，我们可能能够处理高维数据

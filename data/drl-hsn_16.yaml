@@ -1,0 +1,1673 @@
+- en: '16'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '16'
+- en: Trust Region Methods
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 信任区域方法
+- en: 'In this chapter, we will take a look at the approaches used to improve the
+    stability of the stochastic policy gradient method. Some attempts have been made
+    to make the policy improvement more stable, and in this chapter, we will focus
+    on three methods:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨一些改进随机策略梯度方法稳定性的策略。已有一些尝试使得策略改进更加稳定，本章我们将重点介绍三种方法：
+- en: Proximal policy optimization (PPO)
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 近端策略优化（PPO）
+- en: Trust region policy optimization (TRPO)
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 信任区域策略优化（TRPO）
+- en: Advantage actor-critic (A2C) using Kronecker-factored trust region (ACKTR) .
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 Kronecker 分解信任区域的优势演员-评论员方法（A2C）.
+- en: In addition, we will compare these methods to a relatively new off-policy method
+    called soft actor-critic (SAC), which is the evolution of the deep deterministic
+    policy gradients (DDPG) method described in Chapter [15](ch019.xhtml#x1-27200015).
+    To compare them to the A2C baseline, we will use several environments from the
+    so-called “locomotion gym environments” – environments shipped with Farama Gymnasium
+    (using MuJoCo and PyBullet). We also will do a head-to-head comparison between
+    PyBullet and MuJoCo (which we discussed in Chapter 15).
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们还将这些方法与一种相对较新的离策略方法——软演员-评论员方法（SAC）进行比较，SAC 是深度确定性策略梯度方法（DDPG）的演变，DDPG
+    方法在第[15章](ch019.xhtml#x1-27200015)中有详细描述。为了与 A2C 基准方法进行比较，我们将使用所谓的“运动训练环境”中的几个环境——这些环境与
+    Farama Gymnasium 一起提供（使用 MuJoCo 和 PyBullet）。我们还将对 PyBullet 和 MuJoCo 进行正面比较（我们在第15章中讨论了这些内容）。
+- en: 'The purpose of the methods that we will look at is to improve the stability
+    of the policy update during training. There is a dilemma: on the one hand, we’d
+    like to train as fast as we can, making large steps during the stochastic gradient
+    descent (SGD) update. On the other hand, a large update of the policy is usually
+    a bad idea. The policy is a very nonlinear thing, so a large update could ruin
+    the policy we’ve just learned.'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将要讨论的方法的目的是提高训练过程中策略更新的稳定性。这里存在一个两难困境：一方面，我们希望尽可能快地训练，在随机梯度下降（SGD）更新过程中采取较大的步伐。另一方面，策略的大幅更新通常是个坏主意。策略是一个高度非线性的事物，因此大幅更新可能会破坏我们刚刚学习到的策略。
+- en: Things can become even worse in the reinforcement learning (RL) landscape because
+    you can’t recover from making a bad update to the policy by subsequent updates.
+    Instead, the bad policy will provide bad experience samples that we will use in
+    subsequent training steps, which could break our policy completely. Thus, we want
+    to avoid making large updates by all means possible. One of the naïve solutions
+    would be to use a small learning rate to take baby steps during SGD, but this
+    would significantly slow down the convergence.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在强化学习（RL）领域，情况可能会变得更糟，因为你无法通过后续的更新从一个不好的策略更新中恢复过来。相反，糟糕的策略会提供不良的经验样本，这些样本会在后续的训练步骤中使用，可能会彻底破坏我们的策略。因此，我们要尽一切可能避免进行大的更新。一个简单的解决方案是使用较小的学习率，在随机梯度下降（SGD）过程中采取小步伐，但这会显著减慢收敛速度。
+- en: To break this vicious cycle, several attempts have been made by researchers
+    to estimate the effect that our policy update is going to have in terms of future
+    outcomes. One of the popular approaches is the trust region optimization extension,
+    which constrains the steps taken during the optimization to limit its effect on
+    the policy. The main idea is to prevent a dramatic policy update during the loss
+    optimization by checking the Kullback-Leibler (KL) divergence between the old
+    and the new policy. Of course, this is an informal explanation, but it can help
+    you understand the idea, especially as those methods are quite math-heavy (especially
+    TRPO).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了打破这个恶性循环，研究人员已做出多次尝试，评估我们的策略更新对未来结果的影响。一个流行的方法是信任区域优化扩展，它限制了优化过程中采取的步伐，从而限制对策略的影响。其主要思想是在损失优化过程中通过检查旧策略和新策略之间的
+    Kullback-Leibler（KL）散度来防止剧烈的策略更新。当然，这只是一个非正式的解释，但它可以帮助你理解这一思想，特别是因为这些方法相当数学化（尤其是
+    TRPO）。
+- en: Environments
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 环境
+- en: Previous editions of this book used the Roboschool library from OpenAI ([https://openai.com/index/roboschool](https://openai.com/index/roboschool))
+    to illustrate trust region methods. But eventually, OpenAI deprecated Roboschool
+    and stopped its support.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书的早期版本使用了来自 OpenAI 的 Roboschool 库（[https://openai.com/index/roboschool](https://openai.com/index/roboschool)）来说明信任区域方法。但是最终，OpenAI
+    停止了对 Roboschool 的支持并弃用了该库。
+- en: 'But environments are still available in other sources:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但其他来源仍然提供这些环境：
+- en: 'PyBullet: The physics simulator we experimented with in the previous chapter,
+    which includes a wide variety of environments that support Gym. PyBullet may be
+    a bit outdated (the latest release was in 2022), but it is still workable with
+    a bit of hacking.'
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet：我们在前一章中实验过的物理模拟器，包含支持Gym的各种环境。PyBullet可能有些过时（最新版本发布于2022年），但通过一些小修改，它仍然可以正常工作。
+- en: 'Farama Gymnasium MuJoCo environments: MuJoCo is a physics simulator that we
+    discussed in Chapter [15](ch019.xhtml#x1-27200015). After it was made open source,
+    MuJoCo was adopted in various products, including Gymnasium, which ships several
+    environments: [https://gymnasium.farama.org/environments/mujoco/](https://gymnasium.farama.org/environments/mujoco/).'
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Farama Gymnasium MuJoCo环境：MuJoCo是我们在第[15](ch019.xhtml#x1-27200015)章中讨论的物理模拟器。自从它开源以来，MuJoCo已被应用到多个产品中，包括Gymnasium，它提供了多个环境：[https://gymnasium.farama.org/environments/mujoco/](https://gymnasium.farama.org/environments/mujoco/)。
+- en: 'In this chapter, we will explore two problems: HalfCheetah-v4, which models
+    a two-legged creature, and Ant-v4, which has four legs. Their state and action
+    spaces are very similar to the Minitaur environment that we saw in Chapter [15](ch019.xhtml#x1-27200015):
+    the state includes characteristics from joints, and the actions are activations
+    of those joints. The goal for each problem is to move as far as possible, minimizing
+    the energy spent. The following figure shows screenshots of the two environments:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨两个问题：HalfCheetah-v4，模拟一个两条腿的生物，和Ant-v4，模拟一个四条腿的生物。它们的状态和动作空间与我们在第[15](ch019.xhtml#x1-27200015)章中看到的Minitaur环境非常相似：状态包括关节的特征，而动作是这些关节的激活。每个问题的目标是尽可能地移动，同时最小化能量消耗。下图展示了这两个环境的截图：
+- en: '![PIC](img/file215.png)'
+  id: totrans-16
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file215.png)'
+- en: 'Figure 16.1: Screenshots of the cheetah and ant environments'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.1：猎豹和蚂蚁环境的截图
+- en: 'In our experiment, we’ll use PyBullet and MuJoCo to do a comparison of both
+    simulators in terms of speed and training dynamics (however, note that the internal
+    structure of the PyBullet and MuJoCo environments might be different, and so the
+    comparison of training dynamics may not always be reliable). To install the Gymnasium
+    with MuJoCo extensions, you need to run the following command in your Python environment:
+    pip install gymnasium[mujoco]==0.29.0.'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的实验中，我们将使用PyBullet和MuJoCo对这两个模拟器进行速度和训练动态方面的比较（但请注意，PyBullet和MuJoCo环境的内部结构可能不同，因此训练动态的比较可能并不总是可靠的）。要安装带有MuJoCo扩展的Gymnasium，你需要在Python环境中运行以下命令：`pip
+    install gymnasium[mujoco]==0.29.0`。
+- en: The A2C baseline
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: A2C基准
+- en: 'To establish the baseline results, we will use the A2C method in a very similar
+    way to the previous chapter. The complete source code is in the Chapter16/01_train_a2c.py
+    and Chapter16/lib/model.py files. There are a few differences between this baseline
+    and the version we used before:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了建立基准结果，我们将以与前一章非常相似的方式使用A2C方法。完整的源代码位于Chapter16/01_train_a2c.py和Chapter16/lib/model.py文件中。这个基准与我们之前使用的版本有一些区别：
+- en: 16 parallel environments are used to gather experience during the training.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练过程中使用16个并行环境来收集经验。
+- en: They differ in model structure and the way that we perform exploration.
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们在模型结构和我们进行探索的方式上有所不同。
+- en: Implementation
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: To illustrate the differences between this baseline and the previously discussed
+    version, let’s look at the model and the agent classes.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明这个基准和之前讨论的版本之间的区别，我们来看看模型和代理类。
+- en: The actor and critic are placed in separate networks without sharing weights.
+    They follow the approach used in Chapter [15](ch019.xhtml#x1-27200015), with our
+    critic estimating the mean and the variance for the actions. However, now, variance
+    is not a separate head of the base network; it is just a single parameter of the
+    model. This parameter will be adjusted during the training by SGD, but it doesn’t
+    depend on the observation.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Actor和Critic被放置在不同的网络中，且不共享权重。它们遵循第[15](ch019.xhtml#x1-27200015)章中使用的方法，我们的Critic估计动作的均值和方差。然而，现在，方差不再是基础网络的单独头部；它只是模型的一个参数。这个参数将在训练过程中通过SGD进行调整，但它不依赖于观察结果。
+- en: 'The actor network has two hidden layers of 64 neurons, each with tanh nonlinearity
+    (to push the output in the −1…1 range). The variance is modeled as a separate
+    network parameter and is interpreted as a logarithm of the standard deviation:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Actor网络有两个64个神经元的隐藏层，每个层都有tanh非线性（将输出压缩到−1…1范围内）。方差被建模为一个单独的网络参数，并被解释为标准差的对数：
+- en: '[PRE0]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The critic network also has two hidden layers of the same size, with one single
+    output value, which is the estimation of V (s), which is a discounted value of
+    the state:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 评论网络也有两个相同大小的隐藏层，并且只有一个输出值，即V(s)的估计值，这是状态的折扣值：
+- en: '[PRE1]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The agent that converts the state into the action also works by simply obtaining
+    the predicted mean from the state and applying the noise with variance, dictated
+    by the current value of the logstd parameter:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将状态转换为动作的智能体也仅通过从状态中获得预测均值，并根据当前logstd参数的值应用具有方差的噪声来工作：
+- en: '[PRE2]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Results
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'The training utility 01_train_a2c.py could be started in two different modes:
+    with PyBullet as the physics simulator (without any extra command-line options)
+    or with MuJoCo (if the --mujoco parameter is given).'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练工具01_train_a2c.py可以以两种不同的模式启动：使用PyBullet作为物理模拟器（无需额外的命令行选项）或使用MuJoCo（如果提供了--mujoco参数）。
+- en: By default, the HalfCheetah environment is used, which simulates a flat two-legged
+    creature that can jump around on its legs. With -e ant, you can switch to the
+    Ant environment, which is a 3-dimensional 4-legged spider. You can also experiment
+    with other environments shipped with Gymnasium and PyBullet, but this will require
+    tweaking the common.py module.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，使用HalfCheetah环境，它模拟了一个可以用腿跳跃的平地双足生物。通过-e ant选项，你可以切换到Ant环境，这是一个三维的四足蜘蛛。你还可以尝试Gymnasium和PyBullet随附的其他环境，但这需要调整common.py模块。
+- en: Results for HalfCheetah on PyBullet are shown in Figure [16.2](#x1-294002r2).
+    Performance on my machine (using the GPU) was about 1,600 frames per second during
+    the training, so 100M training steps took 20 hours in total.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PyBullet中HalfCheetah的结果如图[16.2](#x1-294002r2)所示。我机器上的表现（使用GPU）在训练过程中大约是1,600帧每秒，因此100M的训练步骤总共花费了20小时。
+- en: '![PIC](img/B22150_16_02.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_02.png)'
+- en: 'Figure 16.2: The reward during training (left) and test reward (right) for
+    HalfCheetah on PyBullet'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.2：PyBullet中HalfCheetah训练过程中的奖励（左）和测试奖励（右）
+- en: The dynamics suggest that the policy could be further improved with more time
+    given to optimization, but for our purpose of method comparison, it should be
+    enough. Of course, if you’re curious and have plenty of time, you can run this
+    for longer and find the point when the policy stops improving. According to research
+    papers, HalfCheetah has a maximum score of around 4,000-5,000.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 动力学表明，通过给予优化更多时间，策略可能会进一步改进，但对于我们进行方法比较的目的来说，现有的结果应该足够。当然，如果你感兴趣且时间充裕，可以运行更长时间，找到策略停止改进的点。根据研究论文，HalfCheetah的最高分数大约在4,000到5,000之间。
+- en: 'To use MuJoCo as a physics simulation engine, training has to be started with
+    the --mujoco command-line option. MuJoCo has a performance of 5,100 frames per
+    second, which is 3 times faster than PyBullet, which is really nice. In addition,
+    the training has much better dynamics, so in 90M training steps (which took about
+    5 hours) the model got a reward of 4,500\. Plots for MuJoCo are shown in Figure [16.3](#x1-294004r3):'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用MuJoCo作为物理仿真引擎，必须使用--mujoco命令行选项启动训练。MuJoCo的性能为5,100帧每秒，比PyBullet快三倍，这非常棒。此外，训练的动态性更好，因此在90M训练步骤（大约需要5小时）中，模型得到了4,500的奖励。MuJoCo的图形显示在图[16.3](#x1-294004r3)中：
+- en: '![PIC](img/B22150_16_03.png)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_03.png)'
+- en: 'Figure 16.3: The reward during training (left) and the test reward (right)
+    for HalfCheetah on MuJoCo'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.3：MuJoCo中HalfCheetah训练过程中的奖励（左）和测试奖励（右）
+- en: The difference could be explained by a more accurate simulation, but could also
+    be attributed to the difference in the observation space and the underlying model
+    differences. PyBullet’s model has 26 parameters provided to the agent as observations,
+    while MuJoCo has only 17, so those models are not identical.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 差异可以通过更准确的仿真来解释，但也可以归因于观察空间的不同和底层模型的差异。PyBullet的模型为智能体提供了26个观察参数，而MuJoCo只有17个，因此这两个模型并不完全相同。
+- en: To test our model in the Ant environment, the -e ant command-line option has
+    to be passed to the training process. This model is more complex (due to the 3D
+    nature of the model and more joints being used), so the simulation is slower.
+    On PyBullet, the speed is around 1,400 frames per second. On MuJoCo, the speed
+    is 2,500.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在Ant环境中测试我们的模型，必须将-e ant命令行选项传递给训练过程。该模型更为复杂（由于模型的三维特性和使用了更多的关节），因此仿真速度较慢。在PyBullet上，速度约为1,400帧每秒。在MuJoCo上，速度为2,500帧每秒。
+- en: The MuJoCo Ant environment also has an additional check for “healthiness” –
+    if the simulated creature is inclined more than a certain degree, the episode
+    is terminated. This check is enabled by default and has a very negative effect
+    on the training – in the early stage of the training, our method has no chance
+    of figuring out how to make the ant stand on its legs. The reward in the environment
+    is the distance traveled, but with this early termination, our training has no
+    chance of discovering this. As a result, the training process got stuck forever
+    in local minima without making progress. To overcome this, we need to disable
+    this healthiness check by passing the --no-unhealthy command-line option (which
+    only has to be done for MuJoCo training).
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MuJoCo Ant环境还额外检查“健康状态”——如果模拟生物的倾斜角度超过某个特定角度，回合将被终止。默认启用此检查，并且它对训练有非常负面的影响——在训练的早期阶段，我们的方法无法弄清楚如何让蚂蚁站立起来。环境中的奖励是旅行的距离，但由于这个提前终止，我们的训练没有机会发现这一点。结果，训练过程永远停滞在局部最小值中，无法取得进展。为了克服这个问题，我们需要通过传递--no-unhealthy命令行选项来禁用此健康检查（仅在MuJoCo训练中需要执行此操作）。
+- en: In principle, you can implement more advanced exploration methods, such as the
+    OU process (discussed in Chapter [15](ch019.xhtml#x1-27200015)) or other methods
+    (covered in Chapter [18](ch022.xhtml#x1-32800018)) to address the issue we just
+    discussed.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原则上，您可以实现更高级的探索方法，如OU过程（在第[15](ch019.xhtml#x1-27200015)章中讨论）或其他方法（在第[18](ch022.xhtml#x1-32800018)章中讨论）来解决我们刚刚讨论的问题。
+- en: The results of the training in the Ant environment are shown in Figure [16.4](#x1-294006r4)
+    and Figure [16.5](#x1-294007r5).
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ant环境的训练结果如图[16.4](#x1-294006r4)和图[16.5](#x1-294007r5)所示。
+- en: '![PIC](img/B22150_16_04.png)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_04.png)'
+- en: 'Figure 16.4: The reward during training (left) and the test reward (right)
+    for Ant on PyBullet'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.4：PyBullet上Ant训练过程中的奖励（左）与测试奖励（右）
+- en: '![PIC](img/B22150_16_05.png)'
+  id: totrans-49
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_05.png)'
+- en: 'Figure 16.5: The reward during training (left) and the test reward (right)
+    for Ant on MuJoCo'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.5：MuJoCo上Ant训练过程中的奖励（左）与测试奖励（右）
+- en: 'As you can see from the MuJoCo plots in Figure [16.5](#x1-294007r5), the testing
+    reward had almost no increase for the first 100M steps of training, but then grew
+    to a score of 5,000 (the best model got 5,380 on testing). This result is quite
+    impressive. According to the [https://paperswithcode.com](https://paperswithcode.com)
+    website, the state of the art for Ant MuJoCo environment is 4,362.9, obtained
+    by IQ-Learn in 2021: [https://paperswithcode.com/sota/mujoco-games-on-ant](https://paperswithcode.com/sota/mujoco-games-on-ant).'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您从图[16.5](#x1-294007r5)中的MuJoCo图表中看到的，测试奖励在训练的前1亿步几乎没有增加，但随后增长到5,000分（最佳模型在测试中得到了5,380分）。这个结果相当令人印象深刻。根据[https://paperswithcode.com](https://paperswithcode.com)网站的数据，Ant在MuJoCo环境中的最新技术水平是4,362.9，由IQ-Learn在2021年获得：[https://paperswithcode.com/sota/mujoco-games-on-ant](https://paperswithcode.com/sota/mujoco-games-on-ant)。
+- en: Video recording
+  id: totrans-52
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 视频记录
+- en: 'As in the previous chapter, there is a utility that can benchmark the trained
+    model and record a video of the agent in action. As all the methods in this chapter
+    share the same actor network, the tool is universal for all the methods illustrated
+    here: 02_play.py.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与上一章一样，存在一个工具可以基准测试训练好的模型并录制代理的动作视频。由于本章中的所有方法共享相同的演员网络，因此该工具对本章所示的所有方法都是通用的：02_play.py。
+- en: You need to pass the model file stored in the saves directory during training,
+    change the environment using the -e ant command line, and enable the MuJoCo engine
+    with the --mujoco parameter. This is important because the same environments in
+    PyBullet and MuJoCo have different amounts of observations, and so the physics
+    engine has to match to the model.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，您需要传递存储在`saves`目录中的模型文件，通过-e ant命令行更改环境，并使用--mujoco参数启用MuJoCo引擎。这一点很重要，因为PyBullet和MuJoCo中的相同环境有不同的观察量，因此物理引擎必须与模型匹配。
+- en: 'You can find the individual videos for the best A2C models as follows:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以找到最佳A2C模型的单独视频，网址如下：
+- en: 'HalfCheetah on PyBullet (score 2,189): [https://youtu.be/f3ZhjnORQm0](https://youtu.be/f3ZhjnORQm0)'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: HalfCheetah在PyBullet上的表现（得分2,189）：[https://youtu.be/f3ZhjnORQm0](https://youtu.be/f3ZhjnORQm0)
+- en: 'HalfCheetah on MuJoCo (score 4,718): [https://youtube.com/shorts/SpaWbS0hM8I](https://youtube.com/shorts/SpaWbS0hM8I)'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: HalfCheetah在MuJoCo上的表现（得分4,718）：[https://youtube.com/shorts/SpaWbS0hM8I](https://youtube.com/shorts/SpaWbS0hM8I)
+- en: 'Ant on PyBullet (score 2,425): [https://youtu.be/SIUM_Q24zSk](https://youtu.be/SIUM_Q24zSk)'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet上的Ant（得分2,425）：[https://youtu.be/SIUM_Q24zSk](https://youtu.be/SIUM_Q24zSk)
+- en: 'Ant on MuJoCo (score 5,380): [https://youtube.com/shorts/mapOraGKtG0](https://youtube.com/shorts/mapOraGKtG0)'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Ant在MuJoCo上的表现（得分5380）：[https://youtube.com/shorts/mapOraGKtG0](https://youtube.com/shorts/mapOraGKtG0)
+- en: PPO
+  id: totrans-60
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: PPO
+- en: The PPO method came from the OpenAI team, and it was proposed after TRPO, which
+    is from 2015\. However, we will start with PPO because it is much simpler than
+    TRPO. It was first proposed in the 2017 paper named Proximal Policy Optimization
+    Algorithms by Schulman et al. [[Sch+17](#)].
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PPO方法来自OpenAI团队，在TRPO之后提出，TRPO是2015年提出的。然而，我们将从PPO开始，因为它比TRPO简单得多。它最早是在2017年由Schulman等人提出的论文《Proximal
+    Policy Optimization Algorithms》中提出的[[Sch+17](#)]。
+- en: 'The core improvement over the classic A2C method is changing the formula used
+    to estimate the policy gradients. Instead of using the gradient of the logarithm
+    probability of the action taken, the PPO method uses a different objective: the
+    ratio between the new and the old policy scaled by the advantages.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相对于经典的A2C方法，核心的改进在于估计策略梯度时所使用的公式发生了变化。PPO方法并不是使用所采取动作的对数概率的梯度，而是使用了一个不同的目标：新旧策略之间的比率，按优势进行缩放。
+- en: In math form, the A2C objective could be written like this
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数学形式中，A2C的目标可以写作这样
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq60.png)'
+  id: totrans-64
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq60.png)'
+- en: which means our gradient on model 𝜃 is estimated as the logarithm of the policy
+    π multiplied by the advantage A.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着我们对模型𝜃的梯度被估计为策略π的对数与优势A的乘积。
+- en: 'The new objective proposed in PPO is the following:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在PPO中提出的新目标是以下内容：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq55.png)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq55.png)'
+- en: 'The reason for changing the objective is the same as with the cross-entropy
+    method covered in Chapter [4](ch008.xhtml#x1-740004): importance sampling. However,
+    if we just start to blindly maximize this value, it may lead to a very large update
+    to the policy weights. To limit the update, the clipped objective is used. If
+    we write the ratio between the new and the old policy as ![-π𝜃(at|st)- π𝜃old(at|st)](img/eq56.png),
+    the clipped objective could be written as'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 改变目标函数的原因与第[4章](ch008.xhtml#x1-740004)中涉及的交叉熵方法相同：重要性采样。然而，如果我们只是盲目地开始最大化这个值，它可能会导致策略权重的非常大更新。为了限制更新，采用了剪切目标。如果我们将新旧策略之间的比率写为
+    ![-π𝜃(at|st)- π𝜃old(at|st)](img/eq56.png)，那么剪切目标可以写为
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq57.png)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq57.png)'
+- en: This objective limits the ratio between the old and the new policy to be in
+    the interval [1 −𝜖,1 + 𝜖], so by varying 𝜖, we can limit the size of the update.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个目标将旧策略和新策略之间的比率限制在区间[1 −𝜖,1 + 𝜖]内，因此通过变化𝜖，我们可以限制更新的大小。
+- en: Another difference from the A2C method is the way that we estimate the advantage.
+    In the A2C paper, the advantage obtained from the finite-horizon estimation of
+    T steps is in the form
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与A2C方法的另一个区别在于我们如何估计优势。在A2C论文中，从T步的有限视野估计中获得的优势是以下形式
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq58.png)'
+  id: totrans-72
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq58.png)'
+- en: In the PPO paper, the authors used a more general estimation
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在PPO论文中，作者使用了更一般的估计方法
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq59.png)'
+  id: totrans-74
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq59.png)'
+- en: where σ[t] = r[t] + γV (s[t+1]) −V (s[t]).
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中σ[t] = r[t] + γV (s[t+1]) −V (s[t])。
+- en: 'The original A2C estimation is a special case of the proposed method with λ
+    = 1\. The PPO method also uses a slightly different training procedure: a long
+    sequence of samples is obtained from the environment and then the advantage is
+    estimated for the whole sequence before several epochs of training are performed.'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原始的A2C估计是提出的方法的一个特例，当λ = 1时。PPO方法还使用了稍微不同的训练程序：从环境中获取一长串样本，然后在执行多个训练周期之前，估算整个序列的优势。
+- en: Implementation
+  id: totrans-77
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: 'The code of the sample is placed in two source code files: Chapter16/04_train_ppo.py
+    and Chapter16/lib/model.py. The actor, the critic, and the agent classes are exactly
+    the same as we had in the A2C baseline.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示例的代码被分布在两个源代码文件中：Chapter16/04_train_ppo.py 和 Chapter16/lib/model.py。演员、评论员和代理类与我们在A2C基线中的类完全相同。
+- en: 'The differences are in the training procedure and the way that we calculate
+    advantages, but let’s start with the hyperparameters:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 区别在于训练程序和我们计算优势的方式，但让我们从超参数开始：
+- en: '[PRE3]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: The value of GAMMA is already familiar, but GAE_LAMBDA is the new constant that
+    specifies the lambda factor in the advantage estimator. The authors chose to use
+    a value of 0.95 in the PPO paper.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GAMMA的值已经很熟悉，但GAE_LAMBDA是一个新的常数，用于指定优势估计中的λ因子。作者在PPO论文中选择了0.95的值。
+- en: The method assumes that a large number of transitions will be obtained from
+    the environment for every subiteration. (As mentioned previously in this section,
+    when describing PPO, during training, it performs several epochs over the sampled
+    training batch.) We also use two different optimizers for the actor and the critic
+    (as they have no shared weights).
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方法假设在每次子迭代中将从环境中获得大量的过渡。（如本节前面所述，描述PPO时提到，在训练过程中，它对采样的训练批次执行多次epoch。）我们还为演员和评论者使用两个不同的优化器（因为它们没有共享权重）。
+- en: 'For every batch of TRAJECTORY_SIZE samples, we perform PPO_EPOCHES iterations
+    of the PPO objective, with mini-batches of 64 samples. The value PPO_EPS specifies
+    the clipping value for the ratio of the new and the old policy. The following
+    function takes the trajectory with steps and calculates advantages for the actor
+    and reference values for the critic training. Our trajectory is not a single episode,
+    but could be several episodes concatenated together:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于每一批TRAJECTORY_SIZE样本，我们执行PPO_EPOCHES次PPO目标的迭代，每次使用64个样本的小批量。值PPO_EPS指定新旧策略比率的裁剪值。以下函数接受带有步骤的轨迹，并计算演员的优势值和评论者训练的参考值。我们的轨迹不是单个回合，而是可以由多个回合连接而成：
+- en: '[PRE4]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: As the first step, we ask the critic to convert states into values.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一阶段，我们要求评论者将状态转换为值。
+- en: 'The next loop joins the values obtained and experience points:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个循环将获得的值与经验点结合起来：
+- en: '[PRE5]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: For every trajectory step, we need the current value (obtained from the current
+    state) and the value for the subsequent step (to perform the estimation using
+    the Bellman equation). We also traverse the trajectory in reverse order in order
+    to calculate more recent values of the advantage in one step.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于每个轨迹步骤，我们需要当前值（从当前状态获得）和后续步骤的值（以使用Bellman方程进行估计）。我们还以反向顺序遍历轨迹，以便在一步中计算更近期的优势值。
+- en: '[PRE6]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: In every step, our action depends on the done_trunc flag for this step. If this
+    is the terminal step of the episode, we have no prior reward to take into account.
+    (Remember, we’re processing the trajectory in reverse order.) So, our value of
+    delta in this step is just the immediate reward minus the value predicted for
+    the step. If the current step is not terminal, delta will be equal to the immediate
+    reward plus the discounted value from the subsequent step, minus the value for
+    the current step. In the classic A2C method, this delta was used as an advantage
+    estimation, but here, the smoothed version is used, so the advantage estimation
+    (tracked in the last_gae variable) is calculated as the sum of deltas with the
+    discount factor γ^λ.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每一步中，我们的行动依赖于该步骤的done_trunc标志。如果这是回合的终止步骤，我们不需要考虑之前的奖励。（记住，我们是以反向顺序处理轨迹的。）因此，我们在该步骤的delta值只是即时奖励减去该步骤预测的值。如果当前步骤不是终止步骤，delta将等于即时奖励加上后续步骤的折扣值，再减去当前步骤的值。在经典的A2C方法中，这个delta用作优势估计，但这里使用的是平滑版本，因此优势估计（在last_gae变量中跟踪）是通过折扣因子γ^λ计算的所有delta的总和。
+- en: 'The goal of the function is to calculate advantages and reference values for
+    the critic, so we save them in lists:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数的目标是为评论者计算优势值和参考值，因此我们将它们保存在列表中：
+- en: '[PRE7]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'At the end of the function, we convert values to tensors and return them:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在函数的最后，我们将值转换为张量并返回：
+- en: '[PRE8]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'In the training loop, we gather a trajectory of the desired size using the
+    ExperienceSource(steps_count=1) class from the PTAN library. This configuration
+    provides us with individual steps from the environment in Experience dataclass
+    instances, containing the state, action, reward, and termination flag. The following
+    is the relevant part of the training loop:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练循环中，我们使用PTAN库中的ExperienceSource(steps_count=1)类收集所需大小的轨迹。此配置提供来自环境的单个步骤，存储在Experience数据类实例中，其中包含状态、动作、奖励和终止标志。以下是训练循环中的相关部分：
+- en: '[PRE9]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'When we’ve got a trajectory that’s large enough for training (which is given
+    by the TRAJECTORY_SIZE hyperparameter), we convert states and actions taken into
+    tensors and use the already-described function to obtain advantages and reference
+    values. Although our trajectory is quite long, the observations of our environments
+    are small enough, so it’s fine to process our batch in one step. In the case of
+    Atari frames, such a batch could cause a GPU memory error. In the next step, we
+    calculate the logarithm of the probability of the actions taken. This value will
+    be used as π[𝜃[old]] in the objective of PPO. Additionally, we normalize the advantage’s
+    mean and variance to improve the training stability:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们拥有足够大的轨迹用于训练时（由 TRAJECTORY_SIZE 超参数给出），我们将状态和所采取的动作转换为张量，并使用已经描述的函数来获取优势和参考值。尽管我们的轨迹相当长，但我们的环境观察足够小，因此可以一次性处理我们的批次。在
+    Atari 帧的情况下，可能会导致 GPU 内存错误。接下来的步骤中，我们计算所采取动作的概率的对数。这个值将作为目标函数中 PPO 的 π[𝜃[old]]。此外，我们还将优势的均值和方差归一化，以提高训练稳定性：
+- en: '[PRE10]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'The two subsequent lines drop the last entry from the trajectory to reflect
+    the fact that our advantages and reference values are one step shorter than the
+    trajectory length (as we shifted values in the loop inside the calc_adv_ref function):'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来的两行删除了轨迹中的最后一个条目，以反映我们的优势和参考值比轨迹长度少一步的事实（因为我们在 `calc_adv_ref` 函数内部的循环中移动了值）：
+- en: '[PRE11]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'When all the preparations have been done, we perform several epochs of training
+    on our trajectory. For every batch, we extract the portions from the corresponding
+    arrays and do the critic and the actor training separately:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当所有准备工作完成后，我们对轨迹进行多个训练周期。对于每个批次，我们从相应的数组中提取部分数据，并分别进行评论员和演员训练：
+- en: '[PRE12]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'To train the critic, all we need to do is calculate the mean squared error
+    (MSE) loss with the reference values calculated beforehand:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要训练评论员，我们需要做的就是计算之前计算好的参考值的均方误差（MSE）损失：
+- en: '[PRE13]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'In the actor training, we minimize the negated clipped objective:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在演员训练中，我们最小化了负剪切目标：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq61.png) ![π (a |s) = P[At = a|St = s]
+    ](img/eq62.png)'
+  id: totrans-106
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s]](img/eq61.png) ![π (a |s) = P[At = a|St = s]](img/eq62.png)'
+- en: 'To achieve this, we use the following code:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这一点，我们使用以下代码：
+- en: '[PRE14]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Results
+  id: totrans-109
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: After being trained in both our test environments, the PPO method has shown
+    much faster convergence than the A2C method. On HalfCheetah using PyBullet, PPO
+    reached an average training reward of 1,800 and 2,500 during the testing after
+    8 hours of training and 25M training steps. A2C got lower results after 110M steps
+    and 20 hours. Figure [16.6](#x1-298002r6) shows the comparison plots.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们两个测试环境中训练后，PPO 方法的收敛速度明显快于 A2C 方法。在 PyBullet 上使用 HalfCheetah 时，PPO 在 8 小时的训练和
+    25M 训练步后，达到了 1,800 的平均训练奖励和 2,500 的测试奖励。A2C 在 110M 步和 20 小时后得到了较低的结果。图 [16.6](#x1-298002r6)
+    显示了比较图表。
+- en: '![PIC](img/B22150_16_06.png)'
+  id: totrans-111
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_06.png)'
+- en: 'Figure 16.6: The reward during training (left) and the test reward (right)
+    for HalfCheetah on PyBullet'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 16.6：在 PyBullet 上训练期间的奖励（左）和测试奖励（右）对于 HalfCheetah
+- en: But on HalfCheetah using MuJoCo, the situation is the opposite – PPO growth
+    was much slower, and I stopped it after 50M training steps (12 hours). Figure [16.7](#x1-298003r7)
+    shows the plots.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但在使用 MuJoCo 的 HalfCheetah 上，情况正好相反——PPO 的增长速度要慢得多，我在 50M 训练步（12 小时）后停止了训练。图
+    [16.7](#x1-298003r7) 显示了这些图表。
+- en: '![PIC](img/B22150_16_07.png)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_07.png)'
+- en: 'Figure 16.7: The reward during training (left) and the test reward (right)
+    for HalfCheetah on MuJoCo'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 16.7：在 MuJoCo 上训练期间的奖励（左）和测试奖励（右）对于 HalfCheetah
+- en: After checking the video of the model (links are provided later in this section),
+    we might guess the reason for the low score – our agent learned how to flip the
+    cheetah on its back and move forward in this position. During training, it wasn’t
+    able to get from this suboptimal “local maximum.” Most likely, running the training
+    several times might yield a better policy. Another approach to solving this might
+    be to optimize hyperparameters. Again, this is something you can try experimenting
+    with.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在查看了模型的视频后（稍后会提供链接），我们可能猜测低分的原因——我们的智能体学会了如何将猎豹翻转到背部并在这个位置前进。在训练过程中，它无法从这个次优的“局部最大值”中脱离出来。很可能多次运行训练会得到更好的策略。另一种解决方法可能是优化超参数。同样，这也是你可以尝试实验的内容。
+- en: 'In the Ant environment, PPO was better on both PyBullet and MuJoco and was
+    able to reach the same level of reward almost twice as fast as A2C. This comparison
+    is shown in the plots in Figure [16.8](#x1-298005r8) and Figure [16.9](#x1-298006r9):'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Ant 环境中，PPO 在 PyBullet 和 MuJoCo 上的表现都优于 A2C，并且能够几乎是 A2C 的两倍速度达到相同的奖励水平。这个对比展示在图
+    [16.8](#x1-298005r8) 和图 [16.9](#x1-298006r9) 中：
+- en: '![PIC](img/B22150_16_08.png)'
+  id: totrans-118
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_08.png)'
+- en: 'Figure 16.8: The reward during training (left) and the test reward (right)
+    for Ant on PyBullet'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 16.8：PyBullet 上 Ant 训练过程中的奖励（左）和测试奖励（右）
+- en: '![PIC](img/B22150_16_09.png)'
+  id: totrans-120
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_09.png)'
+- en: 'Figure 16.9: The reward during training (left) and the test reward (right)
+    for Ant on MuJoCo'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 16.9：MuJoCo 上 Ant 训练过程中的奖励（左）和测试奖励（右）
+- en: 'As before, you can use the 02_play.py utility to benchmark saved models and
+    record videos of the learned policy in action. This is the list of the best models
+    for my training experiments:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如之前所述，您可以使用 02_play.py 工具来基准测试保存的模型，并录制学习到的策略在实际中的表现。这是我训练实验中最佳模型的列表：
+- en: 'HalfCheetah on PyBullet (score 2,567): [https://youtu.be/Rai-smyfyeE](https://youtu.be/Rai-smyfyeE).
+    The agent learned how to do long jumps with the back leg.'
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet 上的 HalfCheetah（得分 2,567）：[https://youtu.be/Rai-smyfyeE](https://youtu.be/Rai-smyfyeE)。代理学会了如何用后腿做远跳。
+- en: 'HalfCheetah on MuJoCo (score 1,623): [https://youtube.com/shorts/VcyzNtbVzd4](https://youtube.com/shorts/VcyzNtbVzd4).
+    Quite a funny video: the cheetah flips on its back and moves forward this way.'
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MuJoCo 上的 HalfCheetah（得分 1,623）：[https://youtube.com/shorts/VcyzNtbVzd4](https://youtube.com/shorts/VcyzNtbVzd4)。这是一段非常有趣的视频：猎豹翻身并以这种方式向前移动。
+- en: 'Ant on PyBullet (score 2,560): [https://youtu.be/8lty_Mdjnfs](https://youtu.be/8lty_Mdjnfs).
+    The Ant policy is much better than A2C – it steadily moves forward.'
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet 上的 Ant（得分 2,560）：[https://youtu.be/8lty_Mdjnfs](https://youtu.be/8lty_Mdjnfs)。Ant
+    策略比 A2C 好得多——它能稳定地向前移动。
+- en: 'Ant on MuJoCo (score 5,108): [https://youtube.com/shorts/AcXxH2f_KWs](https://youtube.com/shorts/AcXxH2f_KWs).
+    This model is much faster; most likely, the weight of the ant in the MuJoCo model
+    is lower than in PyBullet.'
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MuJoCo 上的 Ant（得分 5,108）：[https://youtube.com/shorts/AcXxH2f_KWs](https://youtube.com/shorts/AcXxH2f_KWs)。这个模型更快；很可能，MuJoCo
+    模型中的蚂蚁重量低于 PyBullet 模型中的蚂蚁。
+- en: TRPO
+  id: totrans-127
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TRPO
+- en: TRPO was proposed in 2015 by Berkeley researchers in a paper by Schulman et
+    al., called Trust region policy optimization [[Sch15](#)]. This paper was a step
+    towards improving the stability and consistency of stochastic policy gradient
+    optimization and has shown good results on various control tasks.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TRPO 由伯克利研究人员于 2015 年在 Schulman 等人的论文《信任区域策略优化》（Trust region policy optimization）中提出[[Sch15](#)]。这篇论文是提升随机策略梯度优化的稳定性和一致性的一个步骤，并在各种控制任务中取得了良好的结果。
+- en: Unfortunately, the paper and the method are quite math-heavy, so it can be hard
+    to understand the details. The same could be said about the implementation, which
+    uses the conjugate gradients method to efficiently solve the constrained optimization
+    problem.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，论文和方法相当数学化，因此理解细节可能比较困难。实现部分也存在同样的问题，它使用共轭梯度法来高效地解决约束优化问题。
+- en: 'As the first step, the TRPO method defines the discounted visitation frequencies
+    of the state as follows:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为第一步，TRPO 方法将状态的折扣访问频率定义如下：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq63.png)'
+  id: totrans-131
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq63.png)'
+- en: In this equation, P(s[i] = s) equals the sampled probability of state s to be
+    met at position i of the sampled trajectories.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个方程中，P(s[i] = s) 等于在采样轨迹的第 i 个位置上遇到状态 s 的采样概率。
+- en: Then, TRPO defines the optimization objective as
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，TRPO 将优化目标定义为
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq64.png)'
+  id: totrans-134
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq64.png)'
+- en: where
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq65.png)'
+  id: totrans-136
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq65.png)'
+- en: is the expected discounted reward of the policy and π̃ = arg max[a]A[π](s,a)
+    defines the deterministic policy. To address the issue of large policy updates,
+    TRPO defines the additional constraint on the policy update, which is expressed
+    as the maximum KL divergence between the old and the new policies, which could
+    be written as
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是策略的期望折扣奖励，π̃ = arg max[a]A[π](s,a) 定义了确定性策略。为了解决大规模策略更新的问题，TRPO 对策略更新定义了额外的约束，该约束表示为旧策略与新策略之间的最大
+    KL 散度，形式如下：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq66.png)'
+  id: totrans-138
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq66.png)'
+- en: 'As a reminder, KL divergence measures the similarity between probability distributions
+    and is calculated as follows:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提醒一下，KL 散度衡量的是概率分布之间的相似度，计算公式如下：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq67.png)'
+  id: totrans-140
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq67.png)'
+- en: We met KL divergence in Chapter [4](ch008.xhtml#x1-740004) and Chapter [11](ch015.xhtml#x1-18200011).
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在第[4](ch008.xhtml#x1-740004)章和第[11](ch015.xhtml#x1-18200011)章中遇到过KL散度。
+- en: Implementation
+  id: totrans-142
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: 'Most of the TRPO implementations available on GitHub, or in other open source
+    repositories, are very similar to each other, probably because all of them grew
+    from the original John Schulman TRPO implementation here: [https://github.com/joschu/modular_rl](https://github.com/joschu/modular_rl).
+    My version of TRPO is also not very different and uses the core functions that
+    implement the conjugate gradient method (used by TRPO to solve the constrained
+    optimization problem) from this repository: [https://github.com/ikostrikov/pytorch-trpo](https://github.com/ikostrikov/pytorch-trpo).'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GitHub或其他开源代码库中大多数可用的TRPO实现都非常相似，这可能是因为它们都源自最初的John Schulman TRPO实现：[https://github.com/joschu/modular_rl](https://github.com/joschu/modular_rl)。我版本的TRPO也没有太大不同，使用了该代码库中的核心函数，这些函数实现了共轭梯度方法（TRPO用于解决约束优化问题）：[https://github.com/ikostrikov/pytorch-trpo](https://github.com/ikostrikov/pytorch-trpo)。
+- en: 'The complete example is in 03_train_trpo.py and lib/trpo.py, and the training
+    loop is very similar to the PPO example: we sample the trajectory of transitions
+    of the predefined length and calculate the advantage estimation using the smoothed
+    formula discussed in the PPO section (historically, this estimator was proposed
+    first in the TRPO paper.) Next, we do one training step of the critic using MSE
+    loss with the calculated reference value, and one step of the TRPO update, which
+    consists of finding the direction we should go in by using the conjugate gradients
+    method and doing a linear search in this direction to find a step that preserves
+    the desired KL divergence.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整的例子可以在03_train_trpo.py和lib/trpo.py中找到，训练循环与PPO的示例非常相似：我们采样预定义长度的轨迹转移，并使用PPO部分讨论的平滑公式计算优势估计（历史上，这个估计最早是在TRPO论文中提出的）。接下来，我们用计算出的参考值进行一次使用MSE损失的评论者训练步骤，并执行一次TRPO更新步骤，这一步骤包括使用共轭梯度方法找到我们应走的方向，并在该方向上进行线性搜索，找到一个保持所需KL散度的步长。
+- en: 'The following is the piece of the training loop that carries out both those
+    steps:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是执行这两个步骤的训练循环部分：
+- en: '[PRE15]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'To perform the TRPO step, we need to provide two functions: the first will
+    calculate the loss of the current actor policy, which uses the same ratio as the
+    PPO of the new and the old policies multiplied by the advantage estimation. The
+    second function has to calculate KL divergence between the old and the current
+    policy:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了执行TRPO步骤，我们需要提供两个函数：第一个函数计算当前演员策略的损失，这个损失使用新的和旧的策略之间的比例，乘以优势估计。第二个函数则计算旧策略和当前策略之间的KL散度：
+- en: '[PRE16]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: In other words, the PPO method is TRPO that uses the simple clipping of the
+    policy ratio to limit the policy update, instead of the complicated conjugate
+    gradients and line search.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，PPO方法实际上就是TRPO，它使用简单的策略比例剪切来限制策略更新，而不是使用复杂的共轭梯度和线性搜索。
+- en: Results
+  id: totrans-150
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: 'TRPO in the HalfCheetah environment was able to reach better rewards than PPO
+    and A2C. In Figure [16.10](#x1-301002r10), the results from PyBullet training
+    is shown. On MuJoCo, the results are even more impressive – the best reward was
+    over 5,000\. The plots for MuJoCo are shown in Figure [16.11](#x1-301003r11):'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在HalfCheetah环境中，TRPO能够获得比PPO和A2C更好的奖励。在图[16.10](#x1-301002r10)中，展示了PyBullet训练的结果。在MuJoCo上，结果更加令人印象深刻——最佳奖励超过了5000。MuJoCo的图示见图[16.11](#x1-301003r11)：
+- en: '![PIC](img/B22150_16_10.png)'
+  id: totrans-152
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_10.png)'
+- en: 'Figure 16.10: The reward during training (left) and test reward (right) for
+    HalfCheetah on PyBullet'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.10：PyBullet环境中HalfCheetah的训练奖励（左）和测试奖励（右）
+- en: '![PIC](img/B22150_16_11.png)'
+  id: totrans-154
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_11.png)'
+- en: 'Figure 16.11: The reward during training (left) and the test reward (right)
+    for HalfCheetah on MuJoCo'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.11：MuJoCo环境中HalfCheetah的训练奖励（左）和测试奖励（右）
+- en: 'Unfortunately, the Ant environment shows much less stable convergence. The
+    plots shown in Figure [16.12](#x1-301005r12) and Figure [16.13](#x1-301006r13)
+    compare the train and test rewards on A2C and TRPO:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，Ant环境显示出远不如预期的稳定收敛性。图[16.12](#x1-301005r12)和图[16.13](#x1-301006r13)比较了A2C和TRPO在训练和测试奖励上的表现：
+- en: '![PIC](img/B22150_16_12.png)'
+  id: totrans-157
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_12.png)'
+- en: 'Figure 16.12: The reward during training (left) and the test reward (right)
+    for Ant on PyBullet'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.12：PyBullet环境中Ant的训练奖励（左）和测试奖励（右）
+- en: '![PIC](img/B22150_16_13.png)'
+  id: totrans-159
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_13.png)'
+- en: 'Figure 16.13: The reward during training (left) and the test reward (right)
+    for Ant on MuJoCo'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.13：MuJoCo环境中Ant的训练奖励（左）和测试奖励（右）
+- en: 'Video recordings of the best actions could be done in the same way as before.
+    Here are some videos for the best TRPO models:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最佳动作的视频记录可以像以前一样进行。这里有一些最佳TRPO模型的视频：
+- en: 'HalfCheetah on PyBullet (score 2,419): [https://youtu.be/NIfkt2lVT74](https://youtu.be/NIfkt2lVT74).
+    Front leg joints are not used.'
+  id: totrans-162
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet中的半豹（得分2,419）：[https://youtu.be/NIfkt2lVT74](https://youtu.be/NIfkt2lVT74)。前腿关节没有使用。
+- en: 'HalfCheetah on MuJoCo (score 5,753): [https://youtube.com/shorts/FLM2t-XWDLc?feature=share](https://youtube.com/shorts/FLM2t-XWDLc?feature=share).
+    This is a really fast Cheetah!'
+  id: totrans-163
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MuJoCo中的半豹（得分5,753）：[https://youtube.com/shorts/FLM2t-XWDLc?feature=share](https://youtube.com/shorts/FLM2t-XWDLc?feature=share)。这真是一只飞快的豹子！
+- en: 'Ant on PyBullet (score 834): [https://youtu.be/Ny1WBPVluNQ](https://youtu.be/Ny1WBPVluNQ).
+    The training got stuck in a “stand still” local minimum.'
+  id: totrans-164
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet中的蚂蚁（得分834）：[https://youtu.be/Ny1WBPVluNQ](https://youtu.be/Ny1WBPVluNQ)。训练卡在了一个“静止不动”的局部最小值。
+- en: 'Ant on MuJoCo (score 993): [https://youtube.com/shorts/9sybZGvXQFs](https://youtube.com/shorts/9sybZGvXQFs).
+    The same as PyBullet – the agent just stands still and does not move anywhere.'
+  id: totrans-165
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MuJoCo中的蚂蚁（得分993）：[https://youtube.com/shorts/9sybZGvXQFs](https://youtube.com/shorts/9sybZGvXQFs)。与PyBullet相同——智能体只是站着不动，哪里也不去。
+- en: ACKTR
+  id: totrans-166
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: ACKTR
+- en: The third method that we will compare, ACKTR, uses a different approach to address
+    SGD stability. In the paper by Wu et al. called Scalable trust-region method for
+    deep reinforcement learning using Kronecker-factored approximation, published
+    in 2017 [[Wu+17](#)], the authors combined the second-order optimization methods
+    and trust region approach.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将比较的第三种方法ACKTR，采用了不同的方式来解决SGD稳定性问题。在吴等人于2017年发表的论文《一种用于深度强化学习的可扩展信任域方法，基于克罗内克近似》（Scalable
+    trust-region method for deep reinforcement learning using Kronecker-factored approximation）[[Wu+17](#)]中，作者结合了二阶优化方法和信任域方法。
+- en: The idea of the second-order methods is to improve the traditional SGD by taking
+    the second-order derivatives of the optimized function (in other words, its curvature)
+    to improve the convergence of the optimization process. To make things more complicated,
+    working with the second-order derivatives usually requires you to build and invert
+    a Hessian matrix, which can be prohibitively large, so the practical methods typically
+    approximate it in some way. This area is currently very active in research because
+    developing robust, scalable optimization methods is very important for the whole
+    machine learning domain.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二阶方法的思想是通过对优化函数进行二阶导数（换句话说，就是它的曲率）的计算，来改进传统的SGD，从而提高优化过程的收敛性。为了让事情更复杂，处理二阶导数通常需要构建并反转一个Hessian矩阵，而这个矩阵可能非常庞大，因此实际的方法通常会以某种方式对其进行近似。这个领域目前在研究中非常活跃，因为开发稳健且可扩展的优化方法对于整个机器学习领域至关重要。
+- en: One of the second-order methods is called Kronecker-factored approximate curvature
+    (K-FAC), which was proposed by James Martens and Roger Grosse in their paper Optimizing
+    neural networks with Kronecker-factored approximate curvature, published in 2015
+    [[MG15](#)]. However, a detailed description of this method is well beyond the
+    scope of this book.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种二阶方法叫做克罗内克近似曲率（K-FAC），由James Martens和Roger Grosse在他们2015年发表的论文《使用克罗内克近似曲率优化神经网络》（Optimizing
+    neural networks with Kronecker-factored approximate curvature）[[MG15](#)]中提出。然而，详细描述这种方法远远超出了本书的范围。
+- en: Implementation
+  id: totrans-170
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: There are not very many implementations of this method available, and none of
+    them are part of PyTorch (unfortunately). As far as I know, there are two versions
+    of the K-FAC optimizer that work with PyTorch; one from Ilya Kostrikov ([https://github.com/ikostrikov/pytorch-a2c-ppo-acktr](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr))
+    and one from Nicholas Gao ([https://github.com/n-gao/pytorch-kfac](https://github.com/n-gao/pytorch-kfac)).
+    I’ve experimented only with the first one; you can give the second one a try.
+    There is a version of K-FAC available for TensorFlow, which comes with OpenAI
+    Baselines, but porting and testing it on PyTorch can be difficult.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前这个方法的实现并不多，而且没有任何一个是PyTorch的官方实现（很遗憾）。据我所知，有两个版本的K-FAC优化器可以与PyTorch一起使用；一个来自Ilya
+    Kostrikov（[https://github.com/ikostrikov/pytorch-a2c-ppo-acktr](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr)），另一个来自Nicholas
+    Gao（[https://github.com/n-gao/pytorch-kfac](https://github.com/n-gao/pytorch-kfac)）。我只试过第一个版本；你可以尝试第二个版本。K-FAC也有TensorFlow版本，随OpenAI
+    Baselines提供，但将其移植并在PyTorch上测试可能会有难度。
+- en: For my experiments, I’ve taken the K-FAC implementation from Kostrikov and adapted
+    it to the existing code, which required replacing the optimizer and doing an extra
+    backward() call to gather Fisher information. The critic was trained in the same
+    way as in A2C. The complete example is in 05_train_acktr.py and is not shown here,
+    as it’s basically the same as A2C. The only difference is that a different optimizer
+    was used.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我的实验，我采用了Kostrikov的K-FAC实现并将其适配到现有代码中，这需要替换优化器并额外调用backward()来收集Fisher信息。评论员的训练方式与A2C相同。完整的示例代码位于05_train_acktr.py中，本文未展示，因为它基本上与A2C相同。唯一的区别是使用了不同的优化器。
+- en: Results
+  id: totrans-173
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: Overall, the ACKTR method was very unstable in both environments and physics
+    engines. It could be due to a lack of fine-tuning of hyperparameters or some bugs
+    in the implementation.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总体来看，ACKTR方法在这两种环境和物理引擎中都非常不稳定。这可能是由于超参数的调优不足，或者实现中存在一些bug。
+- en: The results of experiments on HalfCheetah are shown in Figure [16.14](#x1-304002r14)
+    and Figure [16.15](#x1-304003r15).
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: HalfCheetah实验的结果如图[16.14](#x1-304002r14)和图[16.15](#x1-304003r15)所示。
+- en: '![PIC](img/B22150_16_14.png)'
+  id: totrans-176
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_14.png)'
+- en: 'Figure 16.14: The reward during training (left) and the test reward (right)
+    for HalfCheetah on PyBullet'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.14：训练期间的奖励（左）和在PyBullet上测试的奖励（右），针对HalfCheetah
+- en: '![PIC](img/B22150_16_15.png)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_15.png)'
+- en: 'Figure 16.15: The reward during training (left) and test reward (right) for
+    HalfCheetah on MuJoCo'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.15：训练期间的奖励（左）和在MuJoCo上测试的奖励（右），针对HalfCheetah
+- en: In the Ant environment, the ACKTR method shows bad results on PyBullet and no
+    reward improvements compared to training on MuJoCo. Figure [16.16](#x1-304005r16)
+    shows plots for PyBullet.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Ant环境中，ACKTR方法在PyBullet上的表现较差，与在MuJoCo上训练相比没有奖励改进。图[16.16](#x1-304005r16)展示了PyBullet的图表。
+- en: '![PIC](img/B22150_16_16.png)'
+  id: totrans-181
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_16_16.png)'
+- en: 'Figure 16.16: The reward during training (left) and the test reward (right)
+    for Ant on PyBullet'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.16：训练期间的奖励（左）和在PyBullet上测试的奖励（右），针对Ant
+- en: SAC
+  id: totrans-183
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: SAC
+- en: 'In the final section, we will check our environments on a relatively new method
+    called SAC, which was proposed by a group of Berkeley researchers and introduced
+    in the paper Soft actor-critic: Off-policy maximum entropy deep reinforcement
+    learning, by Haarnoja et al., published in 2018 [[Haa+18](#)].'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在最后一节中，我们将检查一种相对较新的方法，称为SAC，该方法由伯克利研究人员提出，并在2018年Haarnoja等人发布的论文《Soft actor-critic:
+    Off-policy maximum entropy deep reinforcement learning》中介绍[[Haa+18](#)]。'
+- en: At the moment, it’s considered to be one of the best methods for continuous
+    control problems and is very widely used. The core idea of the method is closer
+    to the DDPG method than to A2C policy gradients. We will compare it directly with
+    PPO’s performance, which has been considered to be the standard in continuous
+    control problems for a long time.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前，这被认为是解决连续控制问题的最佳方法之一，并且得到了广泛应用。该方法的核心思想与DDPG方法更接近，而不是A2C策略梯度方法。我们将与PPO的表现进行直接比较，PPO长期以来被认为是连续控制问题的标准方法。
+- en: 'The central idea of the SAC method is entropy regularization, which adds a
+    bonus reward at each timestamp that is proportional to the entropy of the policy
+    at this timestamp. In mathematical notation, the policy we’re looking for is the
+    following:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SAC方法的核心思想是熵正则化，它在每个时间戳上添加一个与该时间戳策略熵成正比的奖励。从数学符号表示，我们要寻找的策略是：
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq68.png)'
+  id: totrans-187
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq68.png)'
+- en: Here, H(P) = 𝔼 [x∼P] [−log P(x)] is the entropy of distribution P. In other
+    words, we give the agent a bonus for getting into situations where the entropy
+    is at its maximum, which is very similar to the advanced exploration methods covered
+    in Chapter [18](ch022.xhtml#x1-32800018). In addition, the SAC method incorporates
+    the clipped double-Q trick, where, in addition to the value function, we learn
+    two networks predicting Q-values, and choose the minimum of them for Bellman approximation.
+    According to researchers, this helps with dealing with Q-value overestimation
+    during training. This problem was discussed in Chapter [8](ch012.xhtml#x1-1240008),
+    but was addressed differently.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，H(P) = 𝔼 [x∼P] [−log P(x)] 是分布P的熵。换句话说，我们通过奖励智能体进入熵值最大化的状态，类似于第[18](ch022.xhtml#x1-32800018)章中提到的高级探索方法。此外，SAC方法融合了剪切双Q技巧，在此技巧中，除了值函数外，我们还学习两个预测Q值的网络，并选择其中的最小值进行Bellman近似。研究人员认为，这有助于解决训练过程中Q值过度估计的问题。这个问题在第[8](ch012.xhtml#x1-1240008)章中已讨论过，但采用了不同的方法进行处理。
+- en: 'So, in total, we train four networks: the policy, π(s), value, V (s,a) and
+    two Q-networks, Q[1](s,a) and Q[2](s,a). For the value network, V (s,a), the target
+    network is used. So, in summary, SAC training looks like this:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，总共我们训练四个网络：策略网络π(s)、值网络V(s,a)和两个Q网络Q[1](s,a)与Q[2](s,a)。对于值网络V(s,a)，使用目标网络。因此，SAC训练流程总结如下：
+- en: 'Q-networks are trained using the MSE objective by doing Bellman approximation
+    using the target value network: y[q](r,s′) = r+γV [tgt](s′) (for non-terminating
+    steps)'
+  id: totrans-190
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Q网络通过使用目标值网络进行Bellman近似，使用MSE目标进行训练：y[q](r,s′) = r+γV [tgt](s′)（对于非终止步骤）
+- en: The V-network is trained using the MSE objective with the following target,
+    y[v](s) = min[i=1,2]Q[i](s,ã) −α log π[𝜃](ã|s), where ã is sampled from policy
+    π[𝜃](⋅|s)
+  id: totrans-191
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: V网络通过使用MSE目标和以下目标进行训练：y[v](s) = min[i=1,2]Q[i](s,ã) −α log π[𝜃](ã|s)，其中ã是从策略π[𝜃](⋅|s)中采样的
+- en: The policy network, π[𝜃], is trained in DDPG style by maximizing the following
+    objective, Q[1](s,ã[𝜃](s)) −α log π[𝜃](ã[𝜃](s)|s), where ã[𝜃] is a sample from
+    π[𝜃](⋅|s)
+  id: totrans-192
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 策略网络π[𝜃]通过最大化以下目标来以DDPG风格进行训练：Q[1](s,ã[𝜃](s)) −α log π[𝜃](ã[𝜃](s)|s)，其中ã[𝜃]是从π[𝜃](⋅|s)中采样的
+- en: Implementation
+  id: totrans-193
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现
+- en: 'The implementation of the SAC method is in 06_train_sac.py. The model consists
+    of the following networks, defined in lib/model.py:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SAC方法的实现位于06_train_sac.py中。该模型由以下网络组成，这些网络在lib/model.py中定义：
+- en: 'ModelActor: This is the same policy that we used in the previous examples in
+    this chapter. As the policy variance is not parametrized by the state (the logstd
+    field is not a network, but just a tensor), the training objective does not 100%
+    comply with SAC. On the one hand, it might influence the convergence and performance,
+    as the core idea of the SAC method is entropy regularization, which can’t be implemented
+    without parametrized variance. On the other hand, it decreases the number of parameters
+    in the model. If you’re curious, you can extend the example with the parametrized
+    variance of the policy and implement a proper SAC method.'
+  id: totrans-195
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ModelActor：这是我们在本章前面示例中使用的相同策略。由于策略方差没有通过状态来参数化（logstd字段不是网络，只是一个张量），因此训练目标并不完全符合SAC方法。从一方面来说，这可能会影响收敛性和性能，因为SAC方法的核心思想是熵正则化，而没有参数化方差的话无法实现这一点。另一方面，它减少了模型中的参数数量。如果你感兴趣的话，可以通过对策略进行参数化方差扩展该示例，并实现一个完整的SAC方法。
+- en: 'ModelCritic: This is the same value network as in the previous examples.'
+  id: totrans-196
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ModelCritic：这是与前面示例相同的值网络。
+- en: 'ModelSACTwinQ: These two networks take the state and action as the input and
+    predict Q-values.'
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ModelSACTwinQ：这两个网络将状态和动作作为输入，预测Q值。
+- en: 'The first function implementing the method is unpack_batch_sac(), and it is
+    defined in lib/common.py. Its goal is to take the batch of trajectory steps and
+    calculate target values for V-networks and twin Q-networks:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现该方法的第一个函数是unpack_batch_sac()，它定义在lib/common.py中。它的目标是获取轨迹步骤的批次并为V网络和双Q网络计算目标值：
+- en: '[PRE17]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The first step of the function uses the already defined unpack_batch_a2c() method,
+    which unpacks the batch, converts states and actions into tensors, and calculates
+    the reference for Q-networks using Bellman approximation. Once this is done, we
+    need to calculate the reference for the V-network from the minimum of the twin
+    Q-values minus the scaled entropy coefficient. The entropy is calculated from
+    our current policy network. As was already mentioned, our policy has the parametrized
+    mean value, but the variance is global and doesn’t depend on the state.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数的第一步使用已经定义的unpack_batch_a2c()方法，该方法解包批次，将状态和动作转换为张量，并通过Bellman近似计算Q网络的参考值。完成此步骤后，我们需要从双Q值的最小值减去缩放的熵系数来计算V网络的参考值。熵是通过当前策略网络计算的。如前所述，我们的策略具有参数化的均值，但方差是全局的，并不依赖于状态。
+- en: 'In the main training loop, we use the function defined previously and do three
+    different optimization steps: for V, for Q, and for the policy. The following
+    is the relevant part of the training loop defined in 06_train_sac.py:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在主要训练循环中，我们使用先前定义的函数，并进行三种不同的优化步骤：V网络、Q网络和策略网络。以下是06_train_sac.py中定义的训练循环的相关部分：
+- en: '[PRE18]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: In the beginning, we unpack the batch to get the tensors and targets for the
+    Q- and V-networks.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一开始，我们解包批次以获取Q和V网络的张量和目标。
+- en: 'The twin Q-networks are optimized by the same target value:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 双Q网络通过相同的目标值进行优化：
+- en: '[PRE19]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The critic network is also optimized with the trivial MSE objective using the
+    already calculated target value:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 评论者网络也通过使用已经计算的目标值和简单的MSE目标进行优化：
+- en: '[PRE20]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'And finally, we optimize the actor network:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们优化行为者网络：
+- en: '[PRE21]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: In comparison with the formulas given previously, the code is missing the entropy
+    regularization term and corresponds to DDPG training. As our variance doesn’t
+    depend on the state, it can be omitted from the optimization objective.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与之前给出的公式相比，代码缺少了熵正则化项，实际上对应的是DDPG训练。由于我们的方差不依赖于状态，它可以从优化目标中省略。
+- en: Results
+  id: totrans-211
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: I ran SAC training in the HalfCheetah and Ant environments for 9-13 hours, with
+    5M observations. The results are a bit contradictory. On the one hand, the sample
+    efficiency and reward growing dynamics of SAC were better than the PPO method.
+    For example, SAC was able to reach a reward of 900 after just 0.5M observations
+    on HalfCheetah. PPO required more than 1M observations to reach the same policy.
+    In the MuJoCo environment, SAC was able to find the policy that got a reward of
+    7,063, which is an absolute record (demonstrating state-of-the-art performance
+    on this environment).
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我在HalfCheetah和Ant环境中进行了9到13小时的SAC训练，观察数据为5M。结果有点矛盾。一方面，SAC的样本效率和奖励增长动态优于PPO方法。例如，SAC只需0.5M观察就能在HalfCheetah上达到900的奖励，而PPO需要超过1M观察才能达到相同的策略。在MuJoCo环境中，SAC找到了获得7,063奖励的策略，这是一个绝对的记录（展示了该环境上的最先进表现）。
+- en: On the other hand, due to the off-policy nature of SAC, the training speed was
+    much slower, as we did more calculations than with on-policy methods. On my machine,
+    5M frames on HalfCheetah took 10 hours. As a reminder, A2C did 50M observations
+    in the same time.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，由于SAC是离策略方法，训练速度较慢，因为我们进行了比传统的在策略方法更多的计算。在我的机器上，5M帧的HalfCheetah训练花费了10小时。作为提醒，A2C在同样时间内完成了50M观察。
+- en: 'This demonstrates the trade-offs between on-policy and off-policy methods,
+    as you have seen many times in this book so far: if your environment is fast and
+    observations are cheap to obtain, an on-policy method like PPO might be the best
+    choice. But if your observations are hard to obtain, off-policy methods will do
+    a better job, but require more calculations to be performed.'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这展示了在本书中你已多次看到的在策略和离策略方法之间的权衡：如果你的环境反应速度快，且观察数据易得，那么像PPO这样的在策略方法可能是最佳选择。但如果你的观察数据难以获得，离策略方法将更有效，但需要更多的计算。
+- en: 'Figure [16.17](#x1-307002r17) and Figure [16.18](#x1-307003r18) show the reward
+    dynamics on HalfCheetah:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图[16.17](#x1-307002r17)和图[16.18](#x1-307003r18)展示了HalfCheetah上的奖励动态：
+- en: '![PIC](img/B22150_16_17.png)'
+  id: totrans-216
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_17.png)'
+- en: 'Figure 16.17: The reward during training (left) and the test reward (right)
+    for HalfCheetah on PyBullet'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.17：PyBullet中HalfCheetah的训练奖励（左）和测试奖励（右）
+- en: '![PIC](img/B22150_16_18.png)'
+  id: totrans-218
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_18.png)'
+- en: 'Figure 16.18: The reward during training (left) and the test reward (right)
+    for HalfCheetah on MuJoCo'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.18：MuJoCo中HalfCheetah的训练奖励（左）和测试奖励（右）
+- en: 'The results in the Ant environment are much worse – according to the score,
+    the learned policy can barely stand. The PyBullet plots are shown in Figure [16.19](#x1-307005r19);
+    MuJoCo plots are shown in Figure [16.20](#x1-307006r20):'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Ant环境中的结果则差得多——根据得分，学习到的策略几乎无法维持。PyBullet的图像见图[16.19](#x1-307005r19)；MuJoCo的图像见图[16.20](#x1-307006r20)：
+- en: '![PIC](img/B22150_16_19.png)'
+  id: totrans-221
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_19.png)'
+- en: 'Figure 16.19: The reward during training (left) and the test reward (right)
+    for Ant on PyBullet'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.19：PyBullet中Ant的训练奖励（左）和测试奖励（右）
+- en: '![PIC](img/B22150_16_20.png)'
+  id: totrans-223
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_16_20.png)'
+- en: 'Figure 16.20: The reward during training (left) and the test reward (right)
+    for Ant on MuJoCo'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图16.20：MuJoCo中Ant的训练奖励（左）和测试奖励（右）
+- en: 'Here are the videos for the best SAC models:'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是最佳SAC模型的视频：
+- en: 'HalfCheetah on PyBullet (score 1,765): [https://youtu.be/80afu9OzQ5s](https://youtu.be/80afu9OzQ5s).
+    Our creature is a bit clumsy here.'
+  id: totrans-226
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet中的HalfCheetah（得分1,765）：[https://youtu.be/80afu9OzQ5s](https://youtu.be/80afu9OzQ5s)。我们的生物在这里显得有点笨拙。
+- en: 'HalfCheetah on MuJoCo (score 7,063): [https://youtube.com/shorts/0Ywn3LTJxxs](https://youtube.com/shorts/0Ywn3LTJxxs).
+    This result is really impressive – a super-fast Cheetah.'
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MuJoCo中的HalfCheetah（得分7,063）：[https://youtube.com/shorts/0Ywn3LTJxxs](https://youtube.com/shorts/0Ywn3LTJxxs)。这个结果非常令人印象深刻——一只超快的猎豹。
+- en: 'Ant on PyBullet (score 630): [https://youtu.be/WHqXJ3VqX4k](https://youtu.be/WHqXJ3VqX4k).
+    After a couple of steps, the ant got stuck for some reason.'
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyBullet中的Ant（得分630）：[https://youtu.be/WHqXJ3VqX4k](https://youtu.be/WHqXJ3VqX4k)。在几步之后，蚂蚁因某种原因被卡住了。
+- en: Overall results
+  id: totrans-229
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总体结果
+- en: 'To simplify the comparison of the methods, I put all the numbers related to
+    the best rewards obtained in the following table:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简化方法的比较，我将所有与最佳奖励相关的数据汇总在下面的表格中：
+- en: '| Method | HalfCheetah | Ant |'
+  id: totrans-231
+  prefs: []
+  type: TYPE_TB
+  zh: '| 方法 | HalfCheetah | Ant |'
+- en: '|  | PyBullet | MuJoCo | PyBullet | MuJoCo |'
+  id: totrans-232
+  prefs: []
+  type: TYPE_TB
+  zh: '|  | PyBullet | MuJoCo | PyBullet | MuJoCo |'
+- en: '| A2C | 2,189 | 4,718 | 2,425 | 5,380 |'
+  id: totrans-233
+  prefs: []
+  type: TYPE_TB
+  zh: '| A2C | 2,189 | 4,718 | 2,425 | 5,380 |'
+- en: '| PPO | 2,567 | 1,623 | 2,560 | 5,108 |'
+  id: totrans-234
+  prefs: []
+  type: TYPE_TB
+  zh: '| PPO | 2,567 | 1,623 | 2,560 | 5,108 |'
+- en: '| TRPO | 2,419 | 5,753 | 834 | 993 |'
+  id: totrans-235
+  prefs: []
+  type: TYPE_TB
+  zh: '| TRPO | 2,419 | 5,753 | 834 | 993 |'
+- en: '| ACKTR | 250 | 3,100 | 1,820 | — |'
+  id: totrans-236
+  prefs: []
+  type: TYPE_TB
+  zh: '| ACKTR | 250 | 3,100 | 1,820 | — |'
+- en: '| SAC | 1,765 | 7,063 | 630 | — |'
+  id: totrans-237
+  prefs: []
+  type: TYPE_TB
+  zh: '| SAC | 1,765 | 7,063 | 630 | — |'
+- en: 'Table 16.1: Summary table'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表16.1：总结表
+- en: As you can see, there is no single winning method – some do well in some environments
+    but get worse results in others. In principle, we can call A2C and PPO as quite
+    consistent methods because they’re getting good results everywhere (PPO’s “backflip
+    cheetah” on MuJoCo could be attributed to a bad starting seed, so rerunning the
+    training might lead to a better policy).
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，没有单一的获胜方法——某些方法在某些环境中表现良好，但在其他环境中效果较差。原则上，我们可以称A2C和PPO为相当一致的方法，因为它们在各个环境中都能取得不错的结果（PPO在MuJoCo上的“后空翻猎豹”可能归因于不好的初始种子，因此重新训练可能会产生更好的策略）。
+- en: Summary
+  id: totrans-240
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we checked three different methods with the aim of improving
+    the stability of the stochastic policy gradient and compared them to the A2C implementation
+    on two continuous control problems. Along with the methods covered in the previous
+    chapter (DDPG and D4PG), these methods are basic tools to work with a continuous
+    control domain. Finally, we checked a relatively new off-policy method that is
+    an extension of DDPG: SAC. Here, we have just scratched the surface of this topic,
+    but it could be a good starting point to dive into it in more depth. These methods
+    are widely used in robotics and related areas.'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们检查了三种不同的方法，目的是提高随机策略梯度的稳定性，并将它们与A2C在两个连续控制问题上的实现进行比较。连同上一章介绍的方法（DDPG和D4PG），这些方法是处理连续控制领域的基本工具。最后，我们检查了一种相对较新的离策略方法，它是DDPG的扩展：SAC。我们只是触及了这个话题的表面，但这可能是一个很好的起点，可以进一步深入研究。这些方法在机器人技术及相关领域中广泛应用。
+- en: 'In the next chapter, we will switch to a different set of RL methods that have
+    been becoming popular recently: black-box or gradient-free methods.'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将转向最近越来越流行的另一类强化学习方法：黑箱或无梯度方法。
+- en: Join our community on Discord
+  id: totrans-243
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 加入我们的Discord社区
+- en: Read this book alongside other users, Deep Learning experts, and the author
+    himself. Ask questions, provide solutions to other readers, chat with the author
+    via Ask Me Anything sessions, and much more. Scan the QR code or visit the link
+    to join the community. [https://packt.link/rl](https://packt.link/rl)
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其他用户、深度学习专家以及作者本人一起阅读本书。提问、为其他读者提供解决方案、通过问我任何问题环节与作者互动，等等。扫描二维码或访问链接加入社区。[https://packt.link/rl](https://packt.link/rl)
+- en: '![PIC](img/file1.png)'
+  id: totrans-245
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file1.png)'

@@ -1,0 +1,1332 @@
+- en: '*Chapter 7*: High Fidelity Face Generation'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第7章*：高保真面部生成'
+- en: As GANs began to become more stable to train, thanks to improvements to loss
+    functions and normalization techniques, people started to shift their focus to
+    trying to generate higher-resolution images. Previously, most GANs were only capable
+    of generating images up to a resolution of 256x256, and simply adding more upscaling
+    layers to the generator did not help.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着生成对抗网络（GAN）的训练变得更加稳定，这得益于损失函数和归一化技术的改进，人们开始将注意力转向尝试生成更高分辨率的图像。此前，大多数GAN仅能生成最高256x256分辨率的图像，而仅仅向生成器中添加更多的上采样层并没有帮助。
+- en: In this chapter, we will look at techniques that are capable of generating images
+    of high resolutions of 1024x1024 and beyond. We will start by implementing a seminal
+    GAN known as **Progressive GAN**, sometimes abbreviated to **ProGAN**. This was
+    the first GAN that was successful at generating 1024x1024 high-fidelity face portraits.
+    High-fidelity doesn't just mean high-resolution but also a high resemblance to
+    a real face. We can have a high-resolution generated face image, but if it has
+    four eyes, then it isn't high fidelity.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将介绍一些能够生成高达1024x1024及更高分辨率图像的技术。我们将从实现一个开创性的GAN——**渐进式GAN（Progressive
+    GAN）**开始，有时简写为**ProGAN**。这是第一个成功生成1024x1024高保真面部肖像的GAN。高保真不仅仅意味着高分辨率，还意味着与真实面孔的高度相似。我们可以生成一张高分辨率的面部图像，但如果它有四只眼睛，那它就不是高保真了。
+- en: After ProGAN, we will implement **StyleGAN**, which builds on top of ProGAN.
+    StyleGAN incorporates AdaIN from style transfer to allow finer style control and
+    style mixing to generate a variety of images.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在ProGAN之后，我们将实现**StyleGAN**，它在ProGAN的基础上进行构建。StyleGAN结合了风格迁移中的AdaIN，允许更细致的风格控制和风格混合，从而生成多样的图像。
+- en: 'We will cover the following in this chapter:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章内容包括以下内容：
+- en: ProGAN overview
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ProGAN概述
+- en: Building a ProGAN
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建ProGAN
+- en: Implementing StyleGAN
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现StyleGAN
+- en: Technical requirements
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'The Jupyter notebooks and code can be found here:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Jupyter笔记本和代码可以在此找到：
+- en: '[https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter07](https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter07)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter07](https://github.com/PacktPublishing/Hands-On-Image-Generation-with-TensorFlow-2.0/tree/master/Chapter07)'
+- en: 'The notebooks used in this chapter are listed here:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中使用的Jupyter笔记本如下所示：
+- en: '`ch7_progressive_gan.ipynb`'
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ch7_progressive_gan.ipynb`'
+- en: '`ch7_style_gan.ipynb`'
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ch7_style_gan.ipynb`'
+- en: ProGAN overview
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: ProGAN概述
+- en: In a typical GAN setting, the generator output shape is fixed. In other words,
+    the training image size does not change. If we want to try to double the image
+    resolution, we add an additional upsampling layer to the generator architecture
+    and start the training from scratch. People have tried and failed to increase
+    image resolution by this brute-force method. The enlarged image resolution and
+    network size increases the dimension space, making it more difficult to learn.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在典型的GAN设置中，生成器的输出形状是固定的。换句话说，训练图像的大小不会改变。如果我们想尝试将图像分辨率加倍，我们需要在生成器架构中添加一个额外的上采样层，并从头开始训练。人们曾尝试过这种暴力方法来增加图像分辨率，但却以失败告终。增大的图像分辨率和网络规模增加了维度空间，使得学习变得更加困难。
+- en: 'CNNs faced the same problem and solved it by using a batch normalization layer,
+    but this doesn''t work well with GANs. The idea of ProGAN is to not train all
+    the layers simultaneously but start by training the lowest layer in both the generator
+    and the discriminator, so that the layer''s weights are stabilized before adding
+    new layers. We can see it as pre-training the network with lower resolutions.
+    This idea is the core innovation brought by ProGAN, as detailed in the academic
+    paper *Progressive Growing of GANs for Improved Quality, Stability, and Variation*
+    by T. Karras et al. The following diagram illustrates the process of growing the
+    network in ProGAN:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 卷积神经网络（CNN）面临同样的问题，并通过使用批归一化层来解决，但这在GAN中效果不佳。ProGAN的核心思想是，不能同时训练所有层，而是从训练生成器和判别器中最底层开始，这样层的权重在添加新层之前可以得到稳定。我们可以将其看作是通过较低分辨率对网络进行预训练。这个想法是ProGAN带来的核心创新，详细内容见T.
+    Karras等人撰写的学术论文《渐进式生成对抗网络（GAN）以提高质量、稳定性和变异性》。下图展示了ProGAN中网络逐渐增长的过程：
+- en: '![Figure 7.1 – Illustration of the progressive growing of layers.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图7.1 – 层渐进式增长的示意图。'
+- en: (Redrawn from T. Karras et al. 2018, "Progressive Growing of GANs for Improved
+    Quality, Stability,
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （重新绘制自T. Karras等人2018年，“渐进式生成对抗网络（GAN）以提高质量、稳定性，
+- en: and Variation," https://arxiv.org/abs/1710.10196)
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 和变异，” https://arxiv.org/abs/1710.10196)
+- en: '](img/B14538_07_01.jpg)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_01.jpg)'
+- en: Figure 7.1 – Illustration of the progressive growing of layers.(Redrawn from
+    T. Karras et al. 2018, "Progressive Growing of GANs for Improved Quality, Stability,
+    and Variation," https://arxiv.org/abs/1710.10196)
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.1 – 层逐步增长的示意图。（图源：T. Karras 等人，2018年，"Progressive Growing of GANs for Improved
+    Quality, Stability, and Variation"，https://arxiv.org/abs/1710.10196）
+- en: 'Like vanilla GANs, ProGAN''s input is a latent vector sampled from random noise.
+    As shown in the preceding diagram, we start with an image resolution of **4x4**
+    and only have one block in both the generator and the discriminator. After training
+    in the **4x4** resolution for a while, we add new layers for the **8x8** resolution.
+    We then keep doing that until we reach the final image resolution of **1024x1024**.
+    The following 256x256 images were generated using ProGAN and were released by
+    NVIDIA. The image quality is breathtaking; they are literally indistinguishable
+    from real faces:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像传统GAN一样，ProGAN的输入是从随机噪声中采样的潜在向量。如上图所示，我们从**4x4**分辨率的图像开始，生成器和判别器中只有一个模块。在**4x4**分辨率训练一段时间后，我们为**8x8**分辨率添加新层。然后继续这样做，直到最终达到**1024x1024**的图像分辨率。以下256x256的图像是使用ProGAN生成的，并由NVIDIA发布。图像质量令人叹为观止，它们几乎无法与真实面孔区分：
+- en: '![Figure 7.2 – High-fidelity images generated by ProGAN'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.2 – ProGAN生成的高保真图像'
+- en: '(Source: https://github.com/tkarras/progressive_growing_of_gans)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （来源：https://github.com/tkarras/progressive_growing_of_gans）
+- en: '](img/B14538_07_02.jpg)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_02.jpg)'
+- en: 'Figure 7.2 – High-fidelity images generated by ProGAN (Source: https://github.com/tkarras/progressive_growing_of_gans)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.2 – ProGAN生成的高保真图像（来源：https://github.com/tkarras/progressive_growing_of_gans）
+- en: It is fair to say that the superior image generation is mostly down to growing
+    the networks progressively. The network architecture is quite simple, consisting
+    only of convolutional layers and dense layers, rather than more complex architectures
+    such as residual blocks or VAE-like architectures that were more common among
+    GANs.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以公平地说，卓越的图像生成主要归功于逐步增长网络结构。网络架构非常简单，仅由卷积层和全连接层组成，而不像GANs中常见的更复杂架构，如残差块或类似VAE的架构。
+- en: 'It was not until two generations after the introduction of ProGAN, with StyleGAN
+    2, that the authors started exploring these network architectures. The loss function
+    is also simple, just WGAN-GP loss, without any other losses such as content loss,
+    reconstruction loss, or KL divergence loss. However, there are several minor innovations
+    that we should go over before implementing the core part of growing layers progressively.
+    These innovations are as follows:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直到ProGAN推出两代之后，作者才开始探索这些网络架构。损失函数也很简单，仅为WGAN-GP损失，没有其他损失函数，如内容损失、重建损失或KL散度损失。然而，在实现逐步增长层的核心部分之前，我们应该了解一些小的创新。以下是这些创新：
+- en: Pixel normalization
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 像素归一化
+- en: Minibatch statistics
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 小批量统计
+- en: Equalized learning rate
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 等化学习率
+- en: Pixel normalization
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 像素归一化
+- en: Batch normalization should reduce the covariate shift, but the ProGAN authors
+    did not observe that in the network training. Therefore, they ditched batch normalization
+    and used a custom normalization for the generator, known as **pixel normalization**.
+    On a separate note, other researchers later found that batch normalization doesn't
+    really solve the covariate problem despite stabilizing deep neural network training.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 批量归一化应该能减少协变量偏移，但ProGAN的作者并未在网络训练中观察到这一点。因此，他们放弃了批量归一化，使用了一种自定义的归一化方法，称为**像素归一化**。另外，其他研究者后来发现，尽管批量归一化有助于稳定深度神经网络训练，但并没有真正解决协变量问题。
+- en: Anyway, the purpose of normalization in ProGAN is to limit the weight values
+    to prevent them from growing exponentially. Large weights could escalate signal
+    magnitudes and result in unhealthy competition between the generator and the discriminator.
+    Pixel normalization normalizes the feature in each pixel location (H, W) across
+    the channel dimension to unit length. If the tensor is a batched RGB image with
+    dimension (N, H, W, C), the RGB vector of any pixel will have a magnitude of 1\.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论如何，ProGAN中归一化的目的是限制权重值，以防止它们呈指数增长。大的权重可能会放大信号幅度，导致生成器和判别器之间的不健康竞争。像素归一化将每个像素位置（H，W）上的特征在通道维度上归一化为单位长度。如果张量是一个批量RGB图像，维度为（N，H，W，C），那么任何像素的RGB向量将具有1的幅度。
+- en: 'We can implement the equation using a custom layer as shown in the following
+    code:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用自定义层实现这个方程，如下所示的代码：
+- en: '[PRE0]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Unlike other normalizations, pixel normalization doesn't have any learnable
+    parameters; it only consists of simple arithmetic operations and hence is computationally
+    efficient to run.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其他归一化方法不同，像素归一化没有任何可学习的参数；它仅由简单的算术操作组成，因此在计算上高效。
+- en: Increasing image variation with minibatch statistics
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用小批量统计量增加图像变化
+- en: '**Mode collapse** happens when a GAN generates similar-looking images as it
+    captures only a subset of the variation found in the training data. One way to
+    encourage more variation is to show the statistics of a minibatch to the discriminator.
+    The statistics from a minibatch are more varied compared to only a single instance,
+    and this encourages the generator to generate images that show similar statistics.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**模式崩溃**发生在GAN生成相似的图像时，因为它只捕捉到训练数据中的一部分变化。鼓励更多变化的一种方式是将小批量的统计量显示给判别器。与单个实例相比，小批量的统计量更加多样化，这鼓励生成器生成显示出类似统计量的图像。'
+- en: Batch normalization uses minibatch statistics to normalize the activation, which
+    in some way serves this purpose, but ProGAN doesn't use batch normalization. Instead,
+    it uses a **minibatch layer** that calculates the minibatch standard deviation
+    and appends it to the activation without changing the activation itself.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 批量归一化使用小批量统计量来归一化激活值，这在某种程度上实现了这个目的，但ProGAN不使用批量归一化。相反，它使用一个**小批量层**，该层计算小批量标准差并将其附加到激活值中，而不改变激活值本身。
+- en: 'The steps to calculate minibatch statistics are as follows:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算小批量统计量的步骤如下：
+- en: Calculate the standard deviation for each feature in each spatial location over
+    the minibatch – in other words, across dimension *N*.
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算每个特征在每个空间位置上的标准差，即在维度 *N* 上进行计算。
+- en: Calculate the average of these standard deviations across the (*H, W, C*) dimensions
+    to arrive at a single scale value.
+  id: totrans-43
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算这些标准差在（*H, W, C*）维度上的平均值，从而得出一个单一的尺度值。
+- en: Replicate this value across the feature map of (*H, W*) and append it to the
+    activation. As a result, the output activation has a shape of (*N, H, W, C+1*).
+  id: totrans-44
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将这个值在特征图（*H, W*）上复制，并将其附加到激活值上。结果，输出的激活值形状为（*N, H, W, C+1*）。
+- en: 'The following is the code for a minibatch standard deviation custom layer:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一个小批量标准差自定义层的代码：
+- en: '[PRE1]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Before calculating the standard deviation, the activation is first split into
+    groups of `4` or the batch size, whichever is lower. To simplify the code, we
+    assume that the batch size is at least `4` during training. The minibatch layer
+    can be inserted anywhere in the discriminator, but it was found to be more effective
+    toward the end, which is the 4x4 layer.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在计算标准差之前，激活值首先会被拆分成`4`个组，或者是批次大小，以较小者为准。为了简化代码，我们假设训练期间批次大小至少为`4`。小批量层可以插入到判别器的任何位置，但发现它在最后更有效，即4x4层。
+- en: Equalized learning rate
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 等化学习率
+- en: The name can be misleading, as the **equalized learning rate** does not modify
+    the learning rate like **learning rate decay**. In fact, the learning rate of
+    the optimizer stays constant throughout the training. To understand this, let's
+    recap how backpropagation works. When using a simple **stochastic gradient descent**
+    (**SGD**) optimizer, the negative gradients are multiplied by the learning rate
+    before updating the weights. Therefore, the layers closer to the generator input
+    will receive less gradient (remember the vanishing gradient?).
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个名字可能会令人误解，因为**等化学习率**并不像**学习率衰减**那样修改学习率。事实上，优化器的学习率在整个训练过程中保持不变。为了理解这一点，让我们回顾一下反向传播是如何工作的。当使用简单的**随机梯度下降**（**SGD**）优化器时，负梯度会在更新权重之前与学习率相乘。因此，越靠近生成器输入的层接收到的梯度会越小（记得消失梯度吗？）。
+- en: What if we want a layer to receive more gradient? Let's say we perform a simple
+    matrix multiplication *y = w*x*, and now we add a constant *2* to make it *y =
+    2*w*x*. During backpropagation, the gradients will also be multiplied by *2*,
+    hence becoming larger. We could then set different multiplier constants for different
+    layers to effectively have different learning rates.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们希望某一层接收更多的梯度怎么办？假设我们执行一个简单的矩阵乘法 *y = w*x*，现在我们加上一个常数 *2*，使得它变成 *y = 2*w*x*。在反向传播过程中，梯度也会被
+    *2* 放大，从而变得更大。我们可以为不同的层设置不同的乘数常数，从而有效地实现不同的学习率。
+- en: 'In ProGAN, these multiplier constants are calculated from He''s initializer.
+    **He** or **Kaiming** initialization is named after Kaiming He, the inventor of
+    ResNet. The **weight** initialization is designed specifically for networks that
+    use the ReLU family of activation functions. Usually, weights are initialized
+    using normal distribution with a specified standard deviation; for example, we
+    used 0.02 in previous chapters. Instead of having to guess the standard deviation,
+    He calculates it using the following equation:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在ProGAN中，这些乘法常数是通过He的初始化方法计算得出的。**He**或**Kaiming**初始化法以ResNet的发明者Kaiming He命名。**权重**初始化方法专为使用ReLU系列激活函数的网络设计。通常，权重是通过标准正态分布初始化的，指定标准差；例如，我们在前几章中使用了0.02。He方法则通过以下公式计算标准差，而无需猜测：
+- en: '![](img/Formula_07_001.jpg)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_07_001.jpg)'
+- en: '`kernel, kernel, channel_in, channel_out`), the *fan in* is the multiplication
+    of `kernel x kernel x channel_in`. To use this in weight initialization, we can
+    pass `tf.keras.initializers.he_normal` to the Keras layer. However, an equalized
+    learning rate does this at runtime, so we will write custom layers to calculate
+    the standard deviation.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`kernel, kernel, channel_in, channel_out`)，*fan in*是`kernel x kernel x channel_in`的乘积。为了在权重初始化中使用它，我们可以将`tf.keras.initializers.he_normal`传递给Keras层。然而，等化学习率在运行时完成这一步，因此我们将编写自定义层来计算标准差。'
+- en: 'The default gain factor for the initialization is 2, but ProGAN uses a lower
+    gain for the dense layer for the input of the 4x4 generator. ProGAN uses standard
+    normal distribution to initialize the layer weights and scale them with their
+    normalization constant. This deviates from the trend of careful weight initializations
+    that was common among GANs. We now write a custom Conv2D layer that uses pixel
+    normalization:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 初始化的默认增益因子为2，但ProGAN在4x4生成器的输入的`Dense`层中使用较低的增益。ProGAN使用标准正态分布来初始化层的权重，并通过它们的归一化常数来缩放。这与GAN中普遍采用的细致权重初始化方法有所不同。接下来，我们编写一个使用像素归一化的自定义Conv2D层：
+- en: '[PRE2]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The official ProGAN uses zero padding in the convolutional layer, and you can
+    see the border artifacts, especially when viewing low-resolution images. Therefore,
+    we added reflective padding except for the 1x1 kernel, where no padding is needed.
+    Larger layers have smaller scale factors, which effectively reduces the gradient
+    and hence the learning rate. This causes the learning rate to be adjusted based
+    on the layer size so that weights in big layers do not grow too quickly, hence
+    the name equalized learning rate.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 官方ProGAN在卷积层中使用零填充，你可以看到边缘伪影，特别是在查看低分辨率图像时。因此，我们为除了1x1卷积核外的所有卷积层添加了反射填充，1x1卷积核不需要填充。较大的层有较小的缩放因子，从而有效地减小了梯度，进而减小了学习率。这导致学习率会根据层的大小进行调整，以避免大层的权重增长过快，因此得名等化学习率。
+- en: 'The custom `Dense` layer can be written in a similar manner:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自定义的`Dense`层可以类似地编写：
+- en: '[PRE3]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Notice that the custom layer accepts `**kwargs` in the constructor, meaning
+    we can pass in the usual Keras keyword arguments for the `Dense` layer. We now
+    have all the ingredients required to start building a ProGAN in the next section.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，自定义层在构造函数中接受`**kwargs`，这意味着我们可以传入常见的Keras关键字参数，用于`Dense`层。我们现在已经拥有了开始在下一节构建ProGAN所需的所有要素。
+- en: Building a ProGAN
+  id: totrans-60
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建ProGAN
+- en: We have now learned about the three features of ProGANs – pixel normalization,
+    minibatch standard deviation statistics, and the equalized learning rate. Now,
+    we are going to delve into the network architecture and look at how to grow the
+    network progressively. ProGAN grows an image by growing the layers, starting from
+    a resolution of 4x4, then doubling it to 8x8, 16x16, and so on to 1024x1024\.
+    Thus, we will first write the code to build the layer block at each scale. The
+    building blocks of the generator and discriminator are trivially simple, as we
+    will see.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在已经了解了ProGAN的三个特性——像素归一化、小批量标准差统计和等化学习率。接下来，我们将深入研究网络架构，看看如何逐步扩展网络。ProGAN通过扩展网络层来增长图像，从4x4的分辨率开始，逐步加倍，直到达到1024x1024。因此，我们将首先编写代码，以便在每个尺度下构建层模块。生成器和判别器的构建模块非常简单，正如我们将看到的那样。
+- en: Building the generator blocks
+  id: totrans-62
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 构建生成器模块
+- en: 'We will start by building the 4x4 generator block, which forms the base of
+    the generator and takes in the latent code as input. The input is normalized by
+    `PixelNorm` before going to `Dense`. A lower gain is used for the equalized learning
+    rate for that layer. Leaky ReLU and pixel normalization are used throughout all
+    the generator blocks. We build the generator as follows:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从构建 4x4 的生成器块开始，它构成生成器的基础，并将潜在代码作为输入。输入通过 `PixelNorm` 进行归一化，然后输入到 `Dense`
+    层。为该层使用较低的增益来实现均衡学习率。在所有生成器块中，都使用 Leaky ReLU 和像素归一化。我们按如下方式构建生成器：
+- en: '[PRE4]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'After the 4x4 generator block, all subsequent blocks have the same architecture,
+    which involves an upsampling layer followed by two convolutional layers. The only
+    difference is the convolutional filter size. In the ProGAN''s default setting,
+    a filter size of 512 is used up to the 32x32 generator block, then it is halved
+    at each stage to finally reach 16 at 1024x1024, as follows:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 4x4 生成器块之后，所有后续块都具有相同的架构，其中包括一个上采样层，接着是两个卷积层。唯一的区别是卷积滤波器的大小。在 ProGAN 的默认设置中，直到
+    32x32 的生成器块使用 512 的滤波器大小，然后在每个阶段将其减半，最终在 1024x1024 时达到 16，如下所示：
+- en: '[PRE5]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'To make the coding easier, we can linearize the resolution by taking logarithm
+    with base `2`. Hence, *log2(4)* is *2*, *log2(8)* is *3*, ... to *log2(1024)*
+    is *10*. Then, we can loop through the resolution linearly in `log2` from 2 to
+    10 as follows:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简化编码，我们可以通过对分辨率取以 `2` 为底的对数来将其线性化。因此，*log2(4)* 等于 *2*，*log2(8)* 等于 *3*，...直到
+    *log2(1024)* 等于 *10*。然后，我们可以按以下方式线性地通过 `log2` 从 2 循环到 10：
+- en: '[PRE6]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: We can now use this code to build all the generator blocks from 4x4 all the
+    way to the target resolution.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在可以使用这段代码从 4x4 一直到目标分辨率构建所有生成器块。
+- en: Building the discriminator blocks
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 构建判别器块
+- en: 'We can now shift our attention to the discriminator. The basic discriminator
+    is at a 4x4 resolution, where it takes 4x4x3 images and predicts whether the image
+    is real or fake. It uses one convolutional layer, followed by two dense layers.
+    Unlike the generator, the discriminator does not use pixel normalization; in fact,
+    no normalization is used at all. We will insert the minibatch standard deviation
+    layer as follows:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以将注意力转向判别器。基本的判别器是在 4x4 的分辨率下，它接受 4x4x3 的图像并预测该图像是真实的还是假的。它使用一个卷积层，接着是两个全连接层。与生成器不同，判别器不使用像素归一化；事实上，完全没有使用归一化。我们将按如下方式插入小批量标准差层：
+- en: '[PRE7]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'After that, the discriminator uses two convolutional layers followed by downsampling,
+    using average pooling at every stage:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，判别器使用两个卷积层，接着进行下采样，每个阶段都使用平均池化：
+- en: '[PRE8]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: We now have all the basic building blocks defined. Next, we will look at how
+    to join them together to grow the network progressively.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在定义了所有基本的构建块。接下来，我们将查看如何将它们组合在一起，逐步增长网络。
+- en: Progressively growing the network
+  id: totrans-76
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 渐进式增长网络
+- en: 'This is the most important part of ProGAN – growing the network. We can use
+    the preceding functions to create generator and discriminator blocks at different
+    resolutions. All we need to do now is to join them together as we grow the layers.
+    The following diagram shows the process of growing the network. Let''s start from
+    the left-hand side:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是 ProGAN 中最重要的部分——网络的增长。我们可以使用之前的函数在不同的分辨率下创建生成器和判别器块。现在我们要做的就是在增长层时将它们连接在一起。下图展示了网络增长的过程。让我们从左侧开始：
+- en: '![Figure 7.3 – Illustration of progressively growing layers.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.3 – 渐进式增长层的示意图。'
+- en: Redrawn from T. Karras et al. 2018, "Progressive Growing of GANs for Improved
+    Quality, Stability, and Variation," https://arxiv.org/abs/1710.10196)
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新绘制自 T. Karras 等人 2018 年的论文《渐进式增长的 GANs 用于提高质量、稳定性和变异性》，https://arxiv.org/abs/1710.10196
+- en: '](img/B14538_07_03.jpg)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_03.jpg)'
+- en: Figure 7.3 – Illustration of progressively growing layers.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.3 – 渐进式增长层的示意图。
+- en: Redrawn from T. Karras et al. 2018, "Progressive Growing of GANs for Improved
+    Quality, Stability, and Variation," https://arxiv.org/abs/1710.10196)
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新绘制自 T. Karras 等人 2018 年的论文《渐进式增长的 GANs 用于提高质量、稳定性和变异性》，https://arxiv.org/abs/1710.10196
+- en: In the generator and discriminator blocks that we have built, we assume both
+    the input and output to be layer activations rather than RGB images. Thus, we
+    will need to convert the activation from the generator block into an RGB image.
+    Similarly, for the discriminator, we will need to convert the image into activation.
+    This is shown by **(a)** in the preceding figure.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们构建的生成器和判别器模块中，我们假设输入和输出都是层激活值，而不是 RGB 图像。因此，我们需要将生成器模块的激活值转换为 RGB 图像。同样，对于判别器，我们需要将图像转换为激活值。这在前图中的**(a)**所示。
+- en: 'We will create two more functions that build the blocks to convert into and
+    from RGB images. Both blocks use a 1x1 convolutional layer; the `to_rgb` block
+    uses a filter size of 3 to match the RGB channels, while the `from_rgb` blocks
+    use a filter size that matches the input activation of the discriminator block
+    at that scale. The code of the two functions is as follows:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将创建两个函数，构建将图像转换为 RGB 图像以及从 RGB 图像转换的模块。两个模块都使用 1x1 卷积层；`to_rgb` 模块使用大小为 3
+    的滤波器以匹配 RGB 通道，而 `from_rgb` 模块使用与判别器模块输入激活值相匹配的滤波器大小。两个函数的代码如下：
+- en: '[PRE9]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Now, assume the network is at 16x16, meaning there are already layers at the
+    lower resolutions of 8x8 and 4x4\. Now we are about to grow the 32x32 layer. However,
+    if we add a new untrained layer to the network, the newly generated images will
+    look like noise and will result in a huge loss. This can in turn result in exploding
+    gradients and destabilize the training.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，假设网络处于 16x16 状态，意味着已经有 8x8 和 4x4 低分辨率的层。现在我们即将扩展到 32x32 层。然而，如果我们向网络中添加一个新的未训练层，新生成的图像将像噪声，并导致巨大的损失。这反过来可能导致梯度爆炸，并使训练不稳定。
+- en: 'To minimize this disruption, the 32x32 image generated by the new layer is
+    not used immediately. Instead, we upsample the 16x16 image from the previous stage
+    and fade in with the new 32x32 image. Fade is a technical term in image processing
+    that refers to gradually increasing the opacity of an image. This is implemented
+    by using a weighted sum with the following equation:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了最小化这种干扰，由新层生成的 32x32 图像不会立即使用。相反，我们将从前一个阶段的 16x16 图像进行上采样，并与新生成的 32x32 图像进行淡入。淡入是图像处理中的一个术语，指的是逐渐增加图像的透明度。这是通过使用加权和公式实现的，公式如下：
+- en: '![](img/Formula_07_002.jpg)'
+  id: totrans-88
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_07_002.jpg)'
+- en: 'In this transition phase, alpha increases from 0 to 1\. In other words, at
+    the start of the phase, we discard the image from the new layer completely and
+    use the one from the previous trained layer. We then increase alpha linearly to
+    1 when only the image generated by the new layer is used. The stable state is
+    shown by *(c)* in the preceding diagram. We can implement a custom layer to perform
+    the weighted sum as follows:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个过渡阶段，alpha 从 0 增加到 1。换句话说，在阶段开始时，我们完全丢弃新层的图像，使用来自先前训练层的图像。然后我们将 alpha 线性增加到
+    1，当只使用新层生成的图像时。稳定状态如前图中的*(c)*所示。我们可以实现一个自定义层来执行加权和，代码如下：
+- en: '[PRE10]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: When using a subclass to define a layer, we can pass in a scalar alpha to the
+    function. However, it is not possible when we use `self.alpha = tf.Variable(1.0)`,
+    will be converted to a constant when we compile the model and can no longer be
+    changed in the training.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用子类定义一个层时，我们可以将一个标量 alpha 传递给函数。然而，当我们使用 `self.alpha = tf.Variable(1.0)` 时，就不可能做到这一点，因为它会在编译模型时被转换为常量，并且在训练中无法再更改。
+- en: One way to pass in a scalar alpha is to write the entire model with subclassing,
+    but I feel it is more convenient in this case to use the sequential or functional
+    API to create the models. To address this problem, we define alpha as an input
+    to the model. However, the model input is assumed to be a minibatch. To be concrete,
+    if we define `Input(shape=(1))`, its actual shape will be (*None, 1*), where the
+    first dimension is the batch size. Therefore, `tf.reduce_mean()` in `FadeIN()`
+    is meant to convert the batched value to a scalar value.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 传递标量 alpha 的一种方法是使用子类化编写整个模型，但我认为在这种情况下，使用顺序或函数式 API 创建模型更为方便。为了解决这个问题，我们将 alpha
+    定义为模型的输入。然而，模型输入假定为一个小批量。具体来说，如果我们定义了 `Input(shape=(1))`，则其实际形状将是 (*None, 1*)，其中第一维是批量大小。因此，`FadeIN()`
+    中的 `tf.reduce_mean()` 旨在将批量值转换为标量值。
+- en: 'Now, we can look at the following steps to grow the generator to, say, 32x32:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以查看以下步骤，将生成器扩展到例如 32x32：
+- en: Add a 4x4 generator, where the input is a latent vector.
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 添加一个 4x4 的生成器，其中输入是一个潜在向量。
+- en: In a loop, add subsequent generators of gradually increasing resolutions until
+    the one before the target resolution (in our example, 16x16).
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在一个循环中，添加逐步增加分辨率的生成器，直到达到目标分辨率之前的一个（在我们的示例中为16x16）。
+- en: Add `to_rgb` from 16x16 and upsample it to 32x32.
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从16x16添加`to_rgb`，并将其上采样到32x32。
+- en: Add the 32x32 generator block.
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 添加32x32生成器块。
+- en: Fade in the two images to create one final RGB image.
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 淡入两张图片，创建最终的RGB图像。
+- en: 'The code is as follows:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码如下：
+- en: '[PRE11]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The growing discriminator is done similarly but in the reverse direction, as
+    follows:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 判别器的增长过程类似，但方向相反，如下所示：
+- en: At the resolution of the input image, say, 32x32, add `from_rgb` to the discriminator
+    block of 32x32\. The output is the activation with a 16x16 feature map.
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在输入图像的分辨率下，比如32x32，向32x32的判别器块中添加`from_rgb`。输出是一个16x16特征图的激活。
+- en: Parallelly, downsample the input image to 16x16, and add `from_rgb` to the 16x16
+    discriminator block.
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 同时，将输入图像下采样到16x16，并在16x16判别器块中添加`from_rgb`。
+- en: Fade in the two preceding features and feed that into the next discriminator
+    block of 8x8.
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 淡入前面两项特征，并将其输入到下一个8x8的判别器块。
+- en: Continue adding the discriminator blocks to the base of 4x4, where the output
+    is a single prediction value.
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续向4x4基础的判别器块中添加判别器块，输出是一个单一的预测值。
+- en: 'The following is the code to grow the discriminator:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是扩展判别器的代码：
+- en: '[PRE12]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Finally, we build a model from the grown generator and discriminator as follows:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们从扩展后的生成器和判别器构建模型，如下所示：
+- en: '[PRE13]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: We reset the optimizer states after the new layer is added. This is because
+    optimizers such as Adam have internal states that store the gradient history for
+    each layer. The easiest way to do that is probably to instantiate a new optimizer
+    using the same parameters.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新添加层之后，我们重置优化器的状态。这是因为像Adam这样的优化器有内部状态，用来存储每一层的梯度历史。最简单的方法可能是使用相同的参数实例化一个新的优化器。
+- en: Loss function
+  id: totrans-111
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 损失函数
+- en: You may have noticed the **Wasserstein loss** in the preceding code snippet.
+    That's right, the generator uses Wasserstein loss, where the loss function is
+    a multiplication between predictions and the labels. The discriminator uses the
+    WGAN-GP gradient penalty loss. We learned about WGAN-GP in [*Chapter 3*](B14538_03_Final_JM_ePub.xhtml#_idTextAnchor060)*,
+    Generative Adversarial Network*, but let's recap the loss function here.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能已经注意到前面的代码片段中使用了**Wasserstein损失**。没错，生成器使用Wasserstein损失，其损失函数是预测值与标签之间的乘积。判别器使用WGAN-GP梯度惩罚损失。我们在[*第3章*](B14538_03_Final_JM_ePub.xhtml#_idTextAnchor060)*《生成对抗网络*》中学习了WGAN-GP，但这里我们再回顾一下损失函数。
+- en: WGAN-GP interpolates between fake and real images and feeds the interpolation
+    to the discriminator. From there, gradients are calculated with respect to the
+    input interpolation rather the usual optimization that calculate gradients against
+    the weights. From there, we calculate the gradient penalty (loss) and add it to
+    the discriminator loss for backpropagation. We will reuse the WGAN-GP that we
+    developed in [*Chapter 3*](B14538_03_Final_JM_ePub.xhtml#_idTextAnchor060)*, Generative
+    Adversarial Network*. Unlike the original WGAN-GP, which trains the discriminator
+    five times for every generator training step, ProGAN uses equal amounts of training
+    for both the discriminator and the generator.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WGAN-GP在假图像和真实图像之间插值，并将插值输入判别器。然后，梯度是相对于输入插值计算的，而不是传统的计算相对于权重的梯度。接着，我们计算梯度惩罚（损失）并将其加到判别器的损失中，进行反向传播。我们将重用在[*第3章*](B14538_03_Final_JM_ePub.xhtml#_idTextAnchor060)*《生成对抗网络*》中开发的WGAN-GP。与原始WGAN-GP不同，原始WGAN-GP对每一次生成器训练步骤都会训练判别器五次，而ProGAN对判别器和生成器进行等量的训练。
+- en: 'Apart from the WGAN-GP losses, there is an additional loss type known as **drift
+    loss**. The discriminator output is unbounded and can be large positive or negative
+    values. This drift loss aims to keep the discriminator output from drifting too
+    far away from zero toward the infinity. The following code snippet shows how to
+    calculate drift loss from the discriminator output:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了WGAN-GP损失，还有一种额外的损失类型，叫做**漂移损失**。判别器的输出是无界的，可能是非常大的正值或负值。漂移损失旨在防止判别器的输出过度偏离零，朝着无穷大方向漂移。以下代码片段展示了如何根据判别器输出计算漂移损失：
+- en: '[PRE14]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Now, we can start training our ProGAN!
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以开始训练我们的ProGAN了！
+- en: Growing pains
+  id: totrans-117
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 成长的阵痛
+- en: ProGAN is extremely slow to train. It took the authors eight Tesla V100 GPUs
+    and 4 days to train on the 1024x1024 `CelebA-HQ` dataset. If you have access to
+    only one GPU, it would take you more than 1 month to train! Even for the relatively
+    low resolution of 256x256, it would take a good 2 or 3 days to train with a single
+    GPU. Take that into consideration before starting training. You might want to
+    start with a lower target resolution, such as 64x64.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProGAN 的训练非常缓慢。作者们使用了八个 Tesla V100 GPU，并花费了 4 天时间在 1024x1024 `CelebA-HQ` 数据集上进行训练。如果你只有一块
+    GPU，训练可能需要超过 1 个月！即使是较低的 256x256 分辨率，单 GPU 训练也需要 2 到 3 天的时间。在开始训练之前，请考虑这一点。你可能想从更低的目标分辨率开始，例如
+    64x64。
+- en: 'Having said that, for a start, we don''t have to use a high-resolution dataset.
+    Datasets with a 256x256 resolution are sufficient. The notebook left out the input
+    part, so feel free to fill in the input to load your dataset. For your information,
+    there are two popular 1024x1024 face datasets that are freely downloadable:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 话虽如此，刚开始时我们不需要使用高分辨率数据集。256x256 分辨率的数据集已经足够。笔记本中省略了输入部分，因此可以自行填写输入以加载数据集。供参考，有两个流行的
+    1024x1024 面部数据集可以免费下载：
+- en: 'CelebA-HQ on the official ProGAN TensorFlow 1 implementation: [https://github.com/tkarras/progressive_growing_of_gans](https://github.com/tkarras/progressive_growing_of_gans).
+    It requires the download of the original `CelebA` dataset plus HQ-related files.
+    The generation scripts also rely on some dated libraries. Therefore, I don''t
+    recommend you do it this way; you should try finding a dataset that is pre-converted.'
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 官方 ProGAN TensorFlow 1 实现中的 CelebA-HQ：[https://github.com/tkarras/progressive_growing_of_gans](https://github.com/tkarras/progressive_growing_of_gans)。它需要下载原始的
+    `CelebA` 数据集以及与 HQ 相关的文件。生成脚本还依赖于一些过时的库。因此，我不建议你按这种方式操作；你应该尝试寻找一个已经预处理好的数据集。
+- en: 'FFHQ: [https://github.com/NVlabs/ffhq-dataset](https://github.com/NVlabs/ffhq-dataset).
+    This dataset was created for StyleGAN (a successor of ProGAN) and is more varied
+    and diverse than the `CelebA-HQ` dataset. It can also be difficult to download
+    due to the download limit set by the server.'
+  id: totrans-121
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'FFHQ: [https://github.com/NVlabs/ffhq-dataset](https://github.com/NVlabs/ffhq-dataset)。这个数据集是为
+    StyleGAN（ProGAN 的继任者）创建的，比 `CelebA-HQ` 数据集更加多样和丰富。由于服务器的下载限制，它也可能比较难以下载。'
+- en: When we download high-resolution images, we will need to downscale them to lower
+    resolutions to be used for training. You can do that at runtime, but it can slow
+    down the training slightly due to the additional computation to perform the downsampling,
+    and it requires more memory bandwidth to transfer the images. Alternatively, you
+    can create the multiscale images from the original image resolution first, which
+    can save time in memory transfer and image resizing.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们下载高分辨率图像时，需要将它们降采样到较低的分辨率以用于训练。你可以在运行时进行降采样，但由于额外的计算量，这会稍微降低训练速度，同时需要更多的内存带宽来传输图像。另一种方法是先从原始图像分辨率创建多尺度图像，这样可以节省内存传输和图像调整大小的时间。
+- en: The other thing to note is the batch size. As the image resolution grows, so
+    does the GPU memory required to store the images and the larger layer activations.
+    We will run out of GPU memory if we set the batch size too high. Therefore, we
+    use a batch size of 16 from 4x4 to 64x64, then halve the batch size as the resolution
+    doubles. You should adjust the batch size accordingly to fit your GPU.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个需要注意的点是批处理大小。随着图像分辨率的增长，存储图像和更大层激活所需的 GPU 内存也会增加。如果批处理大小设置得太高，我们的 GPU 内存将不足。因此，我们从
+    4x4 到 64x64 使用批处理大小 16，然后随着分辨率的翻倍，将批处理大小减半。你应该根据自己的 GPU 调整批处理大小。
+- en: 'The following figure shows the generated images from 16x16 resolution to 64x64
+    resolution using our ProGAN:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图显示了使用我们的 ProGAN 从 16x16 分辨率到 64x64 分辨率生成的图像：
+- en: '![Figure 7.4 – Images growing from 8x8 to 64x64 as generated by our ProGAN'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.4 – 我们的 ProGAN 生成的图像从 8x8 增长到 64x64'
+- en: '](img/B14538_07_04.jpg)'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_04.jpg)'
+- en: Figure 7.4 – Images growing from 8x8 to 64x64 as generated by our ProGAN
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.4 – 我们的 ProGAN 生成的图像从 8x8 增长到 64x64
+- en: ProGAN is a very delicate model. When reproducing the models in this book, I
+    only implemented the key parts to match the details of the original implementation.
+    I would leave out something that I thought was not that important and swap it
+    for something that I hadn't covered. This applied to optimizers, learning rates,
+    normalization techniques, and loss functions.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProGAN 是一个非常精细的模型。在本书中重现模型时，我只实现了关键部分，以匹配原始实现的细节。我省略了一些我认为不那么重要的部分，并替换为我未涉及的内容。这适用于优化器、学习率、归一化技术和损失函数。
+- en: However, I found that I had to implement everything to almost the exact original
+    specification for ProGAN in order to make it work. This includes using the same
+    batch size, drift loss, and equalized learning rate gain. Nevertheless, when we
+    get the network to work, it does generate high-fidelity faces that are unmatched
+    by any models that came before it!
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，我发现为了让ProGAN工作，我必须几乎完全按照原始规格来实现所有内容。这包括使用相同的批量大小、漂移损失和等化学习率增益。然而，当我们让网络正常工作时，它确实生成了高保真的面孔，这是任何之前的模型都无法比拟的！
+- en: Now let's see how StyleGAN improves on ProGAN to allow for style mixing.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看StyleGAN如何在ProGAN的基础上改进，以实现风格混合。
+- en: Implementing StyleGAN
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现StyleGAN
+- en: ProGAN is great at generating high-resolution images by growing the network
+    progressively, but the network architecture is quite primitive. The simple architecture
+    resembles earlier GANs such as DCGAN that generate images from random noise but
+    without fine control over the images to be generated.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProGAN擅长通过逐步增长网络来生成高分辨率图像，但其网络架构相当原始。这个简单的架构类似于早期的GAN，例如DCGAN，它们从随机噪声生成图像，但无法对生成的图像进行精细控制。
+- en: 'As we have seen in previous chapters, many innovations happened in image-to-image
+    translation to allow better manipulation of the generator outputs. One of them
+    is the use of the AdaIN layer ([*Chapter 5*](B14538_05_Final_JM_ePub.xhtml#_idTextAnchor104)*,
+    Style Transfer*) to allow style transfer, mixing the content and style features
+    from two different images. **StyleGAN** adopts this concept of style-mixing to
+    come out with *a style-based generator architecture for generative adversarial
+    networks* – this is the title of the paper written for **FaceBid**. The following
+    figure shows that StyleGAN can mix the style features from two different images
+    to generate a new one:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在前几章中看到的，图像到图像的翻译中出现了许多创新，使得生成器输出的操作更加灵活。其中之一是使用AdaIN层（[*第5章*](B14538_05_Final_JM_ePub.xhtml#_idTextAnchor104)*，风格迁移*），它可以实现风格迁移，将两张不同图像的内容和风格特征进行混合。**StyleGAN**采用了这种风格混合的概念，提出了*基于风格的生成对抗网络生成器架构*——这是为**FaceBid**所写论文的标题。下图展示了StyleGAN如何将两张不同图像的风格特征混合生成一张新图像：
+- en: '![Figure 7.5 – Mixing styles to produce new images'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图7.5 – 混合风格生成新图像'
+- en: '(Source: T. Karras et al, 2019 "A Style-Based Generator Architecture for Generative
+    Adversarial Networks," https://arxiv.org/abs/1812.04948)'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （来源：T. Karras等，2019年《基于风格的生成对抗网络生成器架构》，https://arxiv.org/abs/1812.04948）
+- en: '](img/B14538_07_05.jpg)'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_05.jpg)'
+- en: 'Figure 7.5 – Mixing styles to produce new images (Source: T. Karras et al,
+    2019 "A Style-Based Generator Architecture for Generative Adversarial Networks,"
+    https://arxiv.org/abs/1812.04948)'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图7.5 – 混合风格生成新图像（来源：T. Karras等，2019年《基于风格的生成对抗网络生成器架构》，https://arxiv.org/abs/1812.04948）
+- en: We will now delve into the StyleGAN generator architecture.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将深入探讨StyleGAN生成器架构。
+- en: Style-based generator
+  id: totrans-139
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基于风格的生成器
+- en: 'The following diagram compares the generator architectures of ProGAN and StyleGAN:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图对比了ProGAN和StyleGAN的生成器架构：
+- en: '![Figure 7.6 – Comparing generators between (a) ProGAN and (b) StyleGAN'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图7.6 – 对比(a)ProGAN和(b)StyleGAN之间的生成器'
+- en: Redrawn from T. Karras et al, 2019 "A Style-Based Generator Architecture for
+    Generative Adversarial Networks," https://arxiv.org/abs/1812.04948)
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重绘自T. Karras等，2019年《基于风格的生成对抗网络生成器架构》，https://arxiv.org/abs/1812.04948）
+- en: '](img/B14538_07_06.jpg)'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_06.jpg)'
+- en: Figure 7.6 – Comparing generators between (a) ProGAN and (b) StyleGAN Redrawn
+    from T. Karras et al, 2019 "A Style-Based Generator Architecture for Generative
+    Adversarial Networks," https://arxiv.org/abs/1812.04948)
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图7.6 – 对比(a)ProGAN和(b)StyleGAN之间的生成器（重绘自T. Karras等，2019年《基于风格的生成对抗网络生成器架构》，https://arxiv.org/abs/1812.04948）
+- en: The ProGAN architecture is a simple feedforward design, where the single input
+    is the latent code. All the latent information, for example, content, style, and
+    randomness, are included in the single latent code *z*. On the right in the preceding
+    figure is the StyleGAN generator architecture, where the latent code no longer
+    goes directly into the synthesis network. The latent code is mapped to style code
+    that goes into a multi-scale synthesis network.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProGAN架构是一个简单的前馈设计，其中单一输入是潜在代码。所有潜在信息，例如内容、风格和随机性，都包含在单一潜在代码*z*中。在前面的图中，右侧是StyleGAN生成器架构，其中潜在代码不再直接进入合成网络。潜在代码被映射到风格代码，并进入多尺度合成网络。
+- en: 'We will go through the generation pipeline now, which has the following the
+    major building blocks:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将讲解生成管道，它包括以下主要构建模块：
+- en: '**Mapping network, f**: This is 8 dense layers with 512 dimensions. Its input
+    is 512-dimensional latent code, and the output *w* is also a vector of 512\. *w*
+    is broadcast to every scale of the generator.'
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**映射网络，f**：这是 8 层密集网络，每层有 512 个维度。它的输入是 512 维的潜在代码，输出 *w* 也是一个 512 维的向量。*w*
+    会广播到生成器的每个尺度。'
+- en: '**Affine transform, A**: In every scale, there is a block that maps *w* into
+    styles *y = (y*s*, y*b*).* In other words, the global latent vector is converted
+    to localized style code at each image scale. The affine transform is implemented
+    using dense layers.'
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**仿射变换，A**：在每个尺度上，都有一个块将 *w* 映射到风格 *y = (y*s*, y*b*)*。换句话说，全局潜在向量在每个图像尺度上被转换为局部风格代码。仿射变换通过密集层实现。'
+- en: '**AdaIN**: AdaIN modulates the style code and content code. The content code
+    *x* is the convolutional layer''s activation, while *y* is the style code:'
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**AdaIN**：AdaIN 调节风格代码和内容代码。内容代码 *x* 是卷积层的激活，而 *y* 是风格代码：'
+- en: '![](img/Formula_07_003.jpg)'
+  id: totrans-150
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_07_003.jpg)'
+- en: '**Synthesis network, g**: This is essentially made up of the ProGAN multiscale
+    generator blocks. The notable difference with ProGAN is that the input to the
+    synthesis network is just some constant values. This is because the latent code
+    presents itself as style codes in every generator layer, including the first 4x4
+    block, so there is no need to have another random input to the synthesis network.'
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**合成网络，g**：本质上是由 ProGAN 的多尺度生成器模块组成。与 ProGAN 的显著区别在于，合成网络的输入只是一些常数值。这是因为潜在代码在每个生成器层中作为风格代码呈现，包括第一个
+    4x4 块，因此不需要另一个随机输入到合成网络。'
+- en: '**Multiscale noise**: There are many aspects of human portraits that can be
+    seen as stochastic (random). For example, the exact placement of hairs and freckles
+    can be random, but this does not change our perception of an image. This randomness
+    comes from the noise that is injected into the generator. The Gaussian noise has
+    a shape that matches the convolution layer activation map (H, W, 1). It is scaled
+    per channel by *B* to (H, W, C) before being added to the convolutional activation.'
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**多尺度噪声**：人像的许多方面可以看作是随机的（stochastic）。例如，头发和雀斑的精确位置可能是随机的，但这并不改变我们对图像的感知。这种随机性来自注入生成器的噪声。高斯噪声的形状与卷积层的激活图（H,
+    W, 1）匹配。在添加到卷积激活之前，它会通过 *B* 按通道缩放到 (H, W, C)。'
+- en: In most GANs that came before StyleGAN, the latent code was injected only at
+    input or into one of the internal layer. The brilliance of the StyleGAN generator
+    is that we can now inject style code and noise at every layer, meaning we can
+    tweak images at different levels. Styles at coarse spatial resolutions (from 4x4
+    to 8x8) correspond to high-level aspects such as poses and face shapes. Middle
+    resolutions (from 16x16 to 32x32) are to do with smaller-scale facial features,
+    hairstyles, and whether eyes are open or closed. Finally, higher resolutions (from
+    64x64 to 1024x1024) mainly change the color scheme and microstructure.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在大多数 StyleGAN 之前的 GAN 中，潜在代码仅在输入或内部某一层被注入。StyleGAN 生成器的亮点在于我们现在可以在每一层注入风格代码和噪声，这意味着我们可以在不同的层次上调整图像。粗略空间分辨率的风格（从
+    4x4 到 8x8）对应于高层次的方面，如姿势和面部形状。中等分辨率（从 16x16 到 32x32）与较小尺度的面部特征、发型以及眼睛是否睁开有关。最后，更高分辨率（从
+    64x64 到 1024x1024）主要改变色彩方案和微观结构。
+- en: The StyleGAN generator may have looked complex at first, but hopefully it doesn't
+    look that scary now. As with ProGAN, the individual blocks are simple. We will
+    leverage code from ProGAN heavily; now let's start to build the StyleGAN generator!
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: StyleGAN 生成器最初看起来可能很复杂，但希望现在看起来不那么吓人了。像 ProGAN 一样，单个模块很简单。我们会大量借用 ProGAN 的代码；现在让我们开始构建
+    StyleGAN 生成器吧！
+- en: Implementing the mapping network
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现映射网络
+- en: 'The mapping network maps the 512-dimensional latent code into 512-dimensional
+    features as follows:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 映射网络将 512 维潜在代码映射到 512 维特征，具体如下：
+- en: '[PRE15]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: It is a straightforward implementation of dense layers with leaky ReLU activation.
+    One thing to note is that the learning rate is multiplied by 0.01 to make it more
+    stable to train. Therefore, the custom `Dense` layer is modified to take in an
+    additional `lrmul` argument. At the end of the network, we create eight copies
+    of `w`, which will go into eight layers of generator blocks. We could skip the
+    tiling if we don't intend to use style mixing.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个简单的密集层实现，使用了泄漏ReLU激活函数。需要注意的是，学习率乘以0.01，以使训练更加稳定。因此，自定义的 `Dense` 层被修改为接受一个额外的
+    `lrmul` 参数。在网络的最后，我们创建了八个 `w` 的副本，它们将进入生成器模块的八个层。如果我们不打算使用风格混合，可以跳过平铺操作。
+- en: Adding noise
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 添加噪声
+- en: 'We now create a custom layer to add noise to the convolution layer output,
+    which includes the *B* block in the architectural diagram. The code is as follows:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在创建一个自定义层，将噪声添加到卷积层输出中，其中包括架构图中的 *B* 模块。代码如下：
+- en: '[PRE16]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: The noise is multiplied with the learnable `B` to scale it per channel, then
+    it is added to the input activation.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 噪声与可学习的 `B` 相乘，按通道进行缩放，然后加到输入激活上。
+- en: Implementing AdaIN
+  id: totrans-163
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现AdaIN
+- en: 'The AdaIN that we will implement for StyleGAN is different from the one for
+    style transfer for the following reasons:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在StyleGAN中实现的AdaIN与用于风格迁移的AdaIN有所不同，原因如下：
+- en: We will include affine transformation *A*. This is implemented with two dense
+    layers to predict *y**s* and *yb*, respectively.
+  id: totrans-165
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将包括仿射变换 *A*。这是通过两个密集层实现的，分别预测 *ys* 和 *yb*。
+- en: 'Original AdaIN involves the normalization of the input activation, but since
+    the input activation to our AdaIN has undergone pixel normalization, we will not
+    perform normalization within this custom layer. The code for the AdaIN layer is
+    as follows:'
+  id: totrans-166
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 原始AdaIN涉及对输入激活进行归一化，但由于我们AdaIN的输入激活已经经过像素归一化，因此在此自定义层中不进行归一化。AdaIN层的代码如下：
+- en: '[PRE17]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Comparing AdaIN with style transfer
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 比较AdaIN与风格迁移
+- en: The AdaIN in ProGAN is different from the original implementation for style
+    transfer. In style transfer, the style feature is Gram matrix calculated from
+    VGG features of an input image. In ProGAN, the 'style' is vector *w* generated
+    from random noise.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProGAN中的AdaIN与用于风格迁移的原始实现不同。在风格迁移中，风格特征是通过VGG特征计算得到的Gram矩阵。而在ProGAN中，“风格”是通过随机噪声生成的向量*
+    w *。
+- en: Building the generator block
+  id: totrans-170
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 构建生成器模块
+- en: 'Now, we can put `AddNoise` and `AdaIN` into the generator block, which looks
+    similar to ProGAN''s code to build generator block, as follows:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以将 `AddNoise` 和 `AdaIN` 放入生成器模块中，这与ProGAN中构建生成器模块的代码类似，如下所示：
+- en: '[PRE18]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: The generator block takes three inputs. For a 4x4 generator block, the input
+    is a constant tensor of 1 and we bypass the upsampling and convolutional blocks.
+    The other two inputs are the vector *w* and random noise.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成器模块有三个输入。对于一个4x4的生成器模块，输入是一个值为1的常量张量，并且我们跳过了上采样和卷积模块。其他两个输入分别是向量 *w* 和随机噪声。
+- en: Training StyleGAN
+  id: totrans-174
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练StyleGAN
+- en: As mentioned at the beginning of the section, the main changes from ProGAN to
+    StyleGAN are to the generator. There are some minor differences in the discriminator
+    and training details, but they don't affect performance as much. Therefore, we
+    will keep the rest of the pipeline the same as ProGAN.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如本节开头所提到的，从ProGAN到StyleGAN的主要变化发生在生成器上。判别器和训练细节上有一些小的差异，但对性能的影响不大。因此，我们会保持剩余的管道与ProGAN相同。
+- en: 'The following figure shows 256x256 images generated by our StyleGAN. The same
+    style *w* is used but with different randomly generated noise:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下图显示了我们的StyleGAN生成的256x256图像。使用了相同的风格 *w*，但噪声是随机生成的：
+- en: '![Figure 7.7 – Portraits generated using the same style but different noise'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.7 – 使用相同风格但不同噪声生成的肖像](img/B14538_07_07.jpg)'
+- en: '](img/B14538_07_07.jpg)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B14538_07_07.jpg)'
+- en: Figure 7.7 – Portraits generated using the same style but different noise
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.7 – 使用相同风格但不同噪声生成的肖像
+- en: 'We can see that the faces belong to the same person but with varying details,
+    such as length of hair and head pose. We can also mix styles by using *w* from
+    different latent code as shown in the following figure:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到这些面孔属于同一个人，但细节有所不同，如头发长度和头部姿势。我们还可以通过使用来自不同潜在代码的 *w* 来混合风格，如下图所示：
+- en: '![Figure 7.8 – All images are generated by our StyleGAN. The face on the right
+    was created by mixing styles from the first two faces](img/B14538_07_08.jpg)'
+  id: totrans-181
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 7.8 – 所有图像均由我们的StyleGAN生成。右侧的脸部是通过混合前两张脸的风格创建的](img/B14538_07_08.jpg)'
+- en: Figure 7.8 – All images are generated by our StyleGAN. The face on the right
+    was created by mixing styles from the first two faces
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图7.8 – 所有图像均由我们的StyleGAN生成。右侧的面孔是通过混合前两个面孔的风格生成的。
+- en: Knowing that StyleGAN can be difficult to train, therefore I have provided a
+    pretrained 256x256 model that you can download. You can use the widget in the
+    Jupyter notebook to experiment with the face generation and style mixing.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解到StyleGAN可能比较难以训练，因此我提供了一个预训练的256x256模型，您可以下载使用。您可以在Jupyter notebook中使用小工具来进行面孔生成和风格混合的实验。
+- en: This concludes our journey with StyleGAN.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这标志着我们与StyleGAN的旅程的结束。
+- en: Summary
+  id: totrans-185
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we entered the realm of high-definition image generation with
+    ProGAN. ProGAN first trains on low-resolution images before moving on to higher-resolution
+    images. The network training becomes more stable by growing the network progressively.
+    This lays the foundation for high-fidelity image generation, as this coarse-to-fine
+    training method is adopted by other GANs. For example, pix2pixHD has two generators
+    at two different scales, where the coarse generator is pre-trained before both
+    are trained together. We have also learned about equalized learning rates, minibatch
+    statistics, and pixel normalization, which are also used in StyleGAN.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们进入了高分辨率图像生成的领域，首先介绍了ProGAN。ProGAN首先在低分辨率图像上进行训练，然后再过渡到更高分辨率的图像。通过逐步扩展网络，网络训练变得更加稳定。这为高保真图像生成奠定了基础，因为这种从粗到精的训练方法也被其他GAN模型采纳。例如，pix2pixHD有两个不同尺度的生成器，其中粗略生成器在两者共同训练之前会进行预训练。我们还学习了均衡学习率、小批量统计和像素归一化，这些技术也在StyleGAN中得到了应用。
+- en: With the use of the AdaIN layer from style transfer in the generator, not only
+    does StyleGAN produce better-quality images, but this also allows control of features
+    when mixing styles. By injecting different style code and noise at different scales,
+    we can control both the global and fine details of an image. StyleGAN achieved
+    state-of-the-art results in high-definition image generation and remains the state
+    of the art at the time of writing. The style-based model is now the mainstream
+    architecture. We have seen the use of this model in style transfer, image-to-image
+    translation, and StyleGAN.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在生成器中使用来自风格迁移的AdaIN层，不仅使得StyleGAN生成了更高质量的图像，还能够在混合风格时控制特征。通过在不同的尺度上注入不同的风格代码和噪声，我们可以控制图像的全局和细节部分。StyleGAN在高清图像生成中取得了最先进的成果，并且在写作时依然是该领域的领先技术。基于风格的模型现在已成为主流架构。我们已经看到这种模型在风格迁移、图像到图像的翻译以及StyleGAN中得到了应用。
+- en: In the next chapter, we will look at another popular family of GANs, which are
+    known as attention-based models.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨另一类流行的GAN家族，即基于注意力的模型。

@@ -1,0 +1,2340 @@
+- en: Detecting and Localizing Objects in Images
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 检测和定位图像中的物体
+- en: In the chapters on building a deep convolutional neural network and transfer
+    learning, we have learned about detecting the class that an image belongs to using
+    deep CNN and also by leveraging transfer learning.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在构建深度卷积神经网络和迁移学习的章节中，我们学习了如何使用深度 CNN 检测图像属于哪个类别，也学习了如何利用迁移学习进行检测。
+- en: While object classification works, in the real world, we will also be encountering
+    a scenario where we would have to locate the object within an image.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然物体分类是有效的，但在现实世界中，我们还会遇到需要定位图像中物体的场景。
+- en: For example, in the case of a self-driving car, we would not only have to detect
+    that a pedestrian is in the view point of a car, but also be able to detect how
+    far the pedestrian is located away from the car so that an appropriate action
+    can then be taken.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，在自动驾驶汽车的情况下，我们不仅需要检测到行人出现在汽车的视野中，还需要检测行人与汽车之间的距离，从而可以采取适当的行动。
+- en: 'In this chapter, we will be discussing the various techniques of detecting
+    objects in an image. The case studies we will be covering in this chapter are
+    as follows:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将讨论检测图像中物体的各种技术。本章将涵盖以下案例研究：
+- en: Creating the training dataset of bounding box
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建边界框的训练数据集
+- en: Generating region proposals within an image using selective search
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用选择性搜索生成图像中的区域提议
+- en: Calculating an intersection over a union between two images
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 计算两幅图像的交集与并集的比值
+- en: Detecting objects using region proposal-based CNN
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用基于区域提议的 CNN 检测物体
+- en: Performing non-max suppression
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 执行非最大抑制
+- en: Detecting a person using the anchor box-based algorithm
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用基于锚框的算法检测人物
+- en: Introduction
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 介绍
+- en: With the rise of autonomous cars, facial detection, smart video surveillance,
+    and people counting solutions, fast and accurate object detection systems are
+    in great demand. These systems include not only object recognition and classification
+    in an image, but can also locate each one of them by drawing appropriate boxes
+    around them. This makes object detection a harder task than its traditional computer
+    vision predecessor, image classification.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着自动驾驶汽车、人脸检测、智能视频监控和人流计数解决方案的兴起，快速且准确的目标检测系统需求巨大。这些系统不仅包括图像中的物体识别和分类，还能通过在物体周围绘制适当的框来定位每个物体。这使得目标检测比其传统的计算机视觉前身——图像分类更具挑战。
+- en: 'To understand how the output of object detection looks like, let''s go through
+    the following picture:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解目标检测的输出是什么样的，让我们看一下以下这张图片：
+- en: '![](img/310b9e9a-7372-4f0d-ba7d-00ce7a848ffd.png)'
+  id: totrans-14
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/310b9e9a-7372-4f0d-ba7d-00ce7a848ffd.png)'
+- en: So far, in the previous chapters, we have learned about classification.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，在前面的章节中，我们已经学习了分类。
+- en: In this chapter, we will learn about having a tight bounding box around the
+    object in the picture, which is the localization task.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将学习如何为图像中的物体生成一个紧密的边界框，这是定位任务。
+- en: Additionally, we will also learn about detecting the multiple objects in the
+    picture, which is the object detection task.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们还将学习如何检测图像中的多个物体，这就是目标检测任务。
+- en: Creating the dataset for a bounding box
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建边界框的数据集
+- en: We have learned that object detection gives us the output where a bounding box
+    surrounds the object of interest in an image. For us to build an algorithm that
+    detects the bounding box surrounding the object in an image, we would have to
+    create the input–output mapping, where the input is the image and the output is
+    the bounding boxes surrounding the objects in the given image.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经学到，目标检测可以输出一个围绕图像中感兴趣物体的边界框。为了构建一个检测图像中物体边界框的算法，我们需要创建输入输出映射，其中输入是图像，输出是给定图像中围绕物体的边界框。
+- en: Note that when we detect the bounding box, we are detecting the pixel locations
+    of the top-left corner of the bounding box surrounding the image, and the corresponding
+    width and height of the bounding box.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，当我们检测边界框时，我们实际上是在检测围绕图像的边界框左上角的像素位置，以及边界框的相应宽度和高度。
+- en: To train a model that provides the bounding box, we need the image, and also
+    the corresponding bounding-box coordinates of all the objects in an image.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了训练一个提供边界框的模型，我们需要图像以及图像中所有物体的对应边界框坐标。
+- en: In this section, we will highlight one of the ways to create the training dataset
+    where the image shall be given as input and the corresponding bounding boxes are
+    stored in an XML file.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将重点介绍创建训练数据集的一种方法，其中图像作为输入，相应的边界框存储在XML文件中。
+- en: We shall be using the `labelImg` package to annotate the bounding boxes and
+    the corresponding classes.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用`labelImg`包来标注边界框和相应的类别。
+- en: How to do it...
+  id: totrans-24
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何操作...
+- en: 'Bounding boxes around objects in image can be prepared as follows:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过以下方式准备图像中的物体的边界框：
+- en: Windows
+  id: totrans-26
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Windows
+- en: Download the executable file of `labelImg` from the link here: [https://github.com/tzutalin/labelImg/files/2638199/windows_v1.8.1.zip](https://github.com/tzutalin/labelImg/files/2638199/windows_v1.8.1.zip).
+  id: totrans-27
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从以下链接下载`labelImg`的可执行文件：[https://github.com/tzutalin/labelImg/files/2638199/windows_v1.8.1.zip](https://github.com/tzutalin/labelImg/files/2638199/windows_v1.8.1.zip)。
+- en: 'Extract and open the `labelImg.exe` GUI, shown in the following screenshot:'
+  id: totrans-28
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取并打开`labelImg.exe`图形界面，如下图所示：
+- en: '![](img/93cd65bd-cb08-4193-a83f-b4c592fa6e51.png)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/93cd65bd-cb08-4193-a83f-b4c592fa6e51.png)'
+- en: 'Specify all the possible labels in an image in the `predefined_classes.txt`
+    file in the `data` folder. We need to ensure that all the classes are listed in
+    a separate line, as follows:'
+  id: totrans-30
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`data`文件夹中的`predefined_classes.txt`文件中指定图像中所有可能的标签。我们需要确保每个类别都列在单独的一行中，如下所示：
+- en: '![](img/77c07038-7b8a-4a11-b2a9-1f14354f96eb.jpg)'
+  id: totrans-31
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/77c07038-7b8a-4a11-b2a9-1f14354f96eb.jpg)'
+- en: 'Open an image by clicking Open in the GUI and annotate the image by clicking
+    on Create RectBox, which will pop up the classes that will be selected as follows:'
+  id: totrans-32
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在GUI中点击“打开”以打开图像，并通过点击“创建矩形框”来标注图像，这将弹出如下所示的可选类别：
+- en: '![](img/9f98e69a-7ac4-42c9-85e3-d0adecbbe359.png)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/9f98e69a-7ac4-42c9-85e3-d0adecbbe359.png)'
+- en: Click on Save and save the XML file.
+  id: totrans-34
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 点击“保存”并保存XML文件。
+- en: 'Inspect the XML file. A snapshot of the XML file after drawing the rectangular
+    bounding box looks as follows:'
+  id: totrans-35
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查XML文件。绘制矩形边界框后的XML文件快照如下所示：
+- en: '![](img/74ad33e9-c30c-4f97-a457-25d976da745d.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/74ad33e9-c30c-4f97-a457-25d976da745d.png)'
+- en: From the preceding screenshot, you should note that the `bndbox` contains the
+    coordinates of the minimum and maximum values of the *x* and *y* coordinates corresponding
+    to the objects of interest in the image. Additionally, we should also be in a
+    position to extract the classes corresponding to the objects in image.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的截图中，你应该注意到`bndbox`包含了与图像中感兴趣物体相对应的*x*和*y*坐标的最小值和最大值。此外，我们还应该能够提取图像中物体对应的类别。
+- en: Ubuntu
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Ubuntu
+- en: 'In Ubuntu, the same steps as preceding ones can be executed by keying in the
+    following commands:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Ubuntu中，可以通过输入以下命令执行与前述相同的步骤：
+- en: '[PRE0]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The script `labelImg.py` can be found in the GitHub link here: [https://github.com/tzutalin/labelImg](https://github.com/tzutalin/labelImg).
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脚本`labelImg.py`可以通过以下GitHub链接找到：[https://github.com/tzutalin/labelImg](https://github.com/tzutalin/labelImg)。
+- en: Once we execute the preceding code, we should be in a position to perform the
+    same analysis as we have seen in the *Windows* section.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们执行了前面的代码，我们应该能够进行与*Windows*部分中看到的相同分析。
+- en: MacOS
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MacOS
+- en: 'In macOS, the same preceding steps can be executed by keying in the following
+    commands:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在macOS中，可以通过输入以下命令来执行相同的前述步骤：
+- en: '[PRE1]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The script `labelImg.py` can be found in the GitHub link here: [https://github.com/tzutalin/labelImg](https://github.com/tzutalin/labelImg).
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脚本`labelImg.py`可以通过以下GitHub链接找到：[https://github.com/tzutalin/labelImg](https://github.com/tzutalin/labelImg)。
+- en: Once we execute the preceding script, we should be in a position to perform
+    the same analysis as we have seen in the *Windows* section.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们执行了前面的脚本，我们应该能够进行与*Windows*部分中看到的相同分析。
+- en: Generating region proposals within an image, using selective search
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在图像中生成区域提议，使用选择性搜索
+- en: To understand what a region proposal is, let's break the term into its constituents—region
+    and proposal.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解什么是区域提议，让我们将这个术语分解为两个组成部分——区域和提议。
+- en: A **region** is a portion of the total image where the pixels in that portion
+    have very similar values.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**区域**是图像的一个部分，其中该部分的像素具有非常相似的值。'
+- en: A **region proposal** is the smaller portion of the total image, where there
+    is a higher chance of the portion belonging to a particular object.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**区域提议**是图像的较小部分，在该部分中有更高的可能性属于某个特定物体。'
+- en: A region proposal is useful, as we generate candidates from the image where
+    the chances of an object being located in one of those regions is high. This comes
+    in handy in the object localization tasks, where we need to have a bounding box
+    around the object that is similar to what we have in the picture in the previous
+    section.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 区域提议是有用的，因为我们从图像中生成了候选区域，这些区域内物体出现的概率较高。在目标定位任务中非常有用，我们需要围绕物体生成一个与前一节中图像中类似的边界框。
+- en: Getting ready
+  id: totrans-53
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备工作
+- en: In this section, we will look into a way of generating a bounding box within
+    an image of a person.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将探讨如何在一个人的图像中生成一个边界框。
+- en: Selective search is a region proposal algorithm used in object detection. It
+    is designed to be fast with a very high recall. It is based on computing a hierarchical
+    grouping of similar regions based on color, texture, size, and shape compatibility.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择性搜索是一种在目标检测中使用的区域提议算法。它旨在快速运行，并具有非常高的召回率。该算法基于计算基于颜色、纹理、大小和形状兼容性的相似区域的层次分组。
+- en: Region proposals can be generated using a Python package named `selectivesearch`
+    as follows.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用名为`selectivesearch`的Python包生成区域提议，示例如下。
+- en: The selective search starts by over-segmenting the image (generating thousands
+    of region proposals) based on intensity of the pixels using a graph-based segmentation
+    method by Felzenszwalb and Huttenlocher.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择性搜索通过使用Felzenszwalb和Huttenlocher提出的基于图的分割方法，首先对图像进行过度分割（生成成千上万的区域提议），并基于像素的强度来执行。
+- en: 'Selective search algorithm takes these over-segments as the initial input and
+    performs the following steps:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择性搜索算法将这些过度分割作为初始输入，并执行以下步骤：
+- en: Add all bounding boxes corresponding to segmented parts to the list of regional
+    proposals
+  id: totrans-59
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将所有与分割部分对应的边界框添加到区域提议列表中
+- en: Group adjacent segments based on similarity
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 根据相似性将相邻的区域分组
+- en: Go to step one
+  id: totrans-61
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 进入第一步
+- en: At each iteration, larger segments are formed and added to the list of region
+    proposals. Hence, we create region proposals from smaller segments to larger segments
+    in a bottom-up approach.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每次迭代中，较大的区域会被形成并添加到区域提议列表中。因此，我们采用自下而上的方法，从较小的区域生成较大的区域提议。
+- en: Selective search uses four similarity measures based on color, texture, size,
+    and shape compatibility to come up with the region proposals.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择性搜索使用四种相似性度量方法，分别基于颜色、纹理、大小和形状兼容性来生成区域提议。
+- en: Region proposals help identify the possible objects of interest in an image.
+    Thus, we could potentially convert the exercise of localization into a classification
+    exercise where we shall classify each region as whether it contains the object
+    of interest.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 区域提议有助于识别图像中的潜在感兴趣目标。因此，我们可能会将定位的任务转化为分类任务，分类每个区域是否包含感兴趣的物体。
+- en: How to do it...
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何进行...
+- en: 'In this section, we will demonstrate the extracting of region proposals, as
+    follows (The code file is available as `Selective_search.ipynb` in GitHub):'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将展示如何提取区域提议，示例如下（代码文件在GitHub上的`Selective_search.ipynb`中可用）：
+- en: 'Install `selectivesearch` as follows:'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按如下方式安装`selectivesearch`：
+- en: '[PRE2]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Import the relevant packages, shown in the following code:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入相关的包，见下面的代码：
+- en: '[PRE3]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Load the image, as follows:'
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按如下方式加载图像：
+- en: '[PRE4]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Extract the region proposals:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取区域提议：
+- en: '[PRE5]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The parameter `min_size` provides a constraint that the region proposal should
+    be at least 2,000 pixels in size, and the parameter scale effectively sets a scale
+    of observation, in that a larger scale causes a preference for larger components.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参数`min_size`提供了一个约束，要求区域提议的大小至少为2,000个像素，而参数scale有效地设置了观察的尺度，较大的尺度倾向于偏好较大的组件。
+- en: 'Check the resulting number of regions and store them in a list:'
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查结果中区域的数量，并将其存储在列表中：
+- en: '[PRE6]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: In the preceding step, we have stored all the regions that are more than 2,000
+    pixels in size (area) into a set of candidates.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一步中，我们将所有大于2,000像素（面积）的区域存储到候选区域集合中。
+- en: 'Plot the resulting image with candidates:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 绘制包含候选区域的结果图像：
+- en: '[PRE7]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: '![](img/eb1ac059-09d8-4f87-bb46-23877f68f432.png)'
+  id: totrans-81
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/eb1ac059-09d8-4f87-bb46-23877f68f432.png)'
+- en: From the preceding screenshot, we see that there are multiple regions that are
+    extracted from the image.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的截图中可以看到，图像中提取了多个区域。
+- en: Calculating an intersection over a union between two images
+  id: totrans-83
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 计算两个图像之间的交集与并集
+- en: 'To understand how accurate the proposed regions are, we use a metric named
+    **Intersection over Union** (**IoU**). IoU can be visualized as follows:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解提议区域的准确性，我们使用一个名为**交并比**（**IoU**）的度量。IoU可以如下可视化：
+- en: '![](img/c167b0ff-23eb-4dd7-8e62-f3c265fe7b82.png)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c167b0ff-23eb-4dd7-8e62-f3c265fe7b82.png)'
+- en: Note that, in the preceding picture, the blue box (lower one) is the ground
+    truth and the red box (the upper rectangle) is the region proposal.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在上面的图片中，蓝色框（下方）是实际位置，红色框（上方的矩形）是区域提议。
+- en: The intersection over the union of the region proposal is calculated as the
+    ratio of the intersection of the proposal and the ground truth over the union
+    of the region proposal and the ground truth.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 区域提议的交集与并集的计算方法是将提议区域与真实位置的交集面积除以提议区域与真实位置的并集面积。
+- en: How to do it...
+  id: totrans-88
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何执行这个操作...
+- en: 'IoU is calculated as follows (the code file is available as `Selective_search.ipynb`
+    in GitHub):'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: IoU的计算方式如下（代码文件可以在GitHub中的`Selective_search.ipynb`找到）：
+- en: 'Define the IoU extraction function, demonstrated in the following code:'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义IoU提取函数，以下代码演示了这个过程：
+- en: '[PRE8]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: In the preceding function, we take the candidate, actual object region, and
+    image shape as input.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述函数中，我们将候选区域、实际物体区域和图像形状作为输入。
+- en: Further, we initialized two zero-value arrays of the same shape for the candidate
+    image and the actual object location image.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们为候选图像和实际物体位置图像初始化了两个相同形状且值为零的数组。
+- en: We have over-written the candidate image and the actual object location images
+    with one, wherever the image and object are located.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经覆盖了候选图像和实际物体位置图像，在它们各自的位置上显示图像和物体。
+- en: Finally, we calculated the intersection over the union of the candidate image
+    with the actual object location image.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们计算了候选图像与实际物体位置图像的交集与并集的比值。
+- en: 'Import the image of interest:'
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入感兴趣的图像：
+- en: '[PRE9]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Plot the image and verify the actual location of the object of interest:'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 绘制图像并验证物体的实际位置：
+- en: '[PRE10]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '![](img/77532f5a-d1fd-4883-a1f0-92c9aa15685c.png)'
+  id: totrans-100
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/77532f5a-d1fd-4883-a1f0-92c9aa15685c.png)'
+- en: Note that the region of interest is ~50 pixels from bottom left extending to
+    ~290th pixel of the image. Additionally, on the *y* axis, it starts from ~50th
+    pixel too till the end of the image.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，感兴趣的区域大约从左下角的50个像素开始，延伸到图像的第290个像素。此外，在*y*轴上，它也从大约第50个像素开始，直到图像的末端。
+- en: So, the actual location of object is (50, 50, 290, 500), which is in the format
+    of (`xmin`, `ymin`, `xmax`, `ymax`).
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，物体的实际位置是（50，50，290，500），这是（`xmin`，`ymin`，`xmax`，`ymax`）格式。
+- en: 'Extract the region proposals:'
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取区域提议：
+- en: '[PRE11]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The regions extracted from the `selectivesearch` method are in the format of
+    (`xmin`, `ymin`, `width`, `height`). Hence, before extracting the IoU of the regions,
+    we should ensure that the candidate and the actual location of image are in the
+    same format that is, (`xmin`, `ymin`, `xmax`, `ymax`)
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从`selectivesearch`方法提取的区域格式为（`xmin`，`ymin`，`width`，`height`）。因此，在提取区域的IoU之前，我们需要确保候选区域和实际位置图像的格式一致，即（`xmin`，`ymin`，`xmax`，`ymax`）。
+- en: 'Apply the IoU extraction function to the image of interest. Note that the function
+    takes the actual object''s location and the candidate image shape as input:'
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将IoU提取函数应用于感兴趣的图像。请注意，函数的输入是实际物体的位置和候选图像的形状：
+- en: '[PRE12]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Identify the region that has the highest overlap with the actual object of
+    interest (ground truth bounding box):'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定与实际物体（真实边界框）具有最高重叠的区域：
+- en: '[PRE13]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: The preceding output for this specific image is the tenth candidate where the
+    coordinates are 0, 0, 299, 515.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这个特定图像，前述输出是第十个候选区域，其坐标为0，0，299，515。
+- en: 'Let''s print the actual bounding box and the candidate bounding box. For this,
+    we have to convert the (`xmin`, `ymin`, `xmax`, `ymax`) format of output into
+    (`xmin`, `ymin`, `width`, `height`):'
+  id: totrans-111
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们打印实际的边界框和候选边界框。为此，我们需要将输出的（`xmin`，`ymin`，`xmax`，`ymax`）格式转换为（`xmin`，`ymin`，`width`，`height`）：
+- en: '[PRE14]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Let''s append the actual and the bounding box with the highest IoU:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们附加实际边界框和具有最高IoU的候选边界框：
+- en: '[PRE15]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Now, we will loop through the preceding list and assign a bigger line width
+    for actual location of object in image, so that we are able to distinguish between
+    candidate and the actual object''s location:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将循环遍历前述列表，并为图像中物体的实际位置分配更大的线宽，以便区分候选区域与实际物体的位置：
+- en: '[PRE16]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '![](img/46f2426e-a451-4087-bce0-45d0c1b1d303.png)'
+  id: totrans-117
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/46f2426e-a451-4087-bce0-45d0c1b1d303.png)'
+- en: In this way, we are in a position to identify each candidate's IoU with the
+    actual location of an object in the image. Additionally, we are also in a position
+    to identify the candidate that has the highest IoU with the actual location of
+    an object in the image.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过这种方式，我们可以确定每个候选区域与图像中物体实际位置的IoU。此外，我们还可以确定与图像中物体实际位置IoU最高的候选区域。
+- en: Detecting objects, using region proposal-based CNN
+  id: totrans-119
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用基于区域建议的 CNN 进行物体检测
+- en: In the previous section, we have learned about generating region proposals from
+    an image. In this section, we will leverage the region proposals to come up with
+    object detection and localization within an image.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节中，我们已经学习了如何从图像中生成区域建议。 本节中，我们将利用这些区域建议来进行物体检测和定位。
+- en: Getting ready
+  id: totrans-121
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备工作
+- en: 'The strategy we shall be adopting to perform region proposal-based object detection
+    and localization is as follows:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将采用的基于区域建议的物体检测和定位策略如下：
+- en: For the current exercise, we'll build the model based on images that contain
+    only one object
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于当前的练习，我们将基于仅包含一个物体的图像来构建模型
+- en: We'll extract the various region proposals (candidates) within the image
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将从图像中提取不同的区域建议（候选框）
+- en: 'We will calculate how close the candidate is to the actual object location:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将计算候选框与实际物体位置的接近程度：
+- en: Essentially, we calculate the intersection over the union of the candidate with
+    the actual location of the object
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 本质上，我们计算候选框与物体实际位置的交并比
+- en: 'If the intersection over the union is greater than a certain threshold—the
+    candidate is considered to contain the object of interest—or else, it doesn''t:'
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果交并比大于某个阈值——则该候选框被认为包含目标物体，否则不包含：
+- en: This creates the label for each candidate where the candidate's image is input
+    and the intersection over the union threshold provides the output
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这将为每个候选框创建标签，其中候选框的图像作为输入，交并比阈值提供输出
+- en: We'll resize and pass each candidate image through the VGG16 model (which we
+    have learned in the previous chapter) to extract features of the candidates
+  id: totrans-129
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将调整每个候选框的图像大小，并通过 VGG16 模型（我们在前一章节中学习过）提取候选框的特征
+- en: Additionally, we will create the training data of the bounding-box correction
+    by comparing the location of the candidate and the actual location of an object
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 此外，我们将通过比较候选框的位置与物体实际位置来创建边界框修正的训练数据
+- en: Build a classification model that maps the features of the candidate to the
+    output of whether the region contains an object
+  id: totrans-131
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建一个分类模型，将候选框的特征映射到区域是否包含物体的输出
+- en: For the regions that contain an image (as per the model), build a regression
+    model that maps the input features of candidate to the correction required to
+    extract the accurate bounding box of an object
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于包含图像的区域（根据模型），构建一个回归模型，将候选框的输入特征映射到提取物体准确边界框所需的修正
+- en: 'Perform non-max suppression on top of the resulting bounding boxes:'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对结果边界框执行非极大值抑制：
+- en: Non-max suppression ensures that the candidates that overlap a lot are reduced
+    to 1, where only the candidate that has the highest probability of containing
+    an object is left
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非极大值抑制确保了重叠度较高的候选框被压缩为1，最终只保留具有最高概率包含物体的候选框
+- en: By performing a non-max suppression, we would be in a position to replicate
+    the model that we built for images that contain multiple objects within the image
+    too
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过执行非极大值抑制，我们将能够复现为包含多个物体的图像构建的模型
+- en: 'A schematic of the preceding is shown as follows:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是前述内容的示意图：
+- en: '![](img/cffb313a-6080-4b13-a921-c383a7830bb1.png)'
+  id: totrans-137
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/cffb313a-6080-4b13-a921-c383a7830bb1.png)'
+- en: How to do it...
+  id: totrans-138
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何做到……
+- en: 'In this section, we will code up the algorithm that we have discussed in the
+    previous section (the code file and corresponding recommended dataset link is
+    available as `Region_proposal_based_object_detection.ipynb` in GitHub along with
+    the recommended dataset):'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将编写前一节讨论过的算法（代码文件和相应推荐数据集的链接可在 GitHub 上找到，文件名为`Region_proposal_based_object_detection.ipynb`，并附有推荐的数据集）：
+- en: Download the dataset that contains a set of images, the objects contained in
+    them, and the corresponding bounding boxes of objects in the image. The dataset
+    and the corresponding code files that you can work on are provided in GitHub.
+  id: totrans-140
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 下载包含一组图像、其中包含的物体及图像中物体对应的边界框的数据集。数据集和相应的代码文件可以在 GitHub 上找到，供您使用。
+- en: 'A sample image and the corresponding bounding box co-ordinates and class of
+    object in image are available as follows:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一个示例图像及其对应的边界框坐标和图像中的物体类别：
+- en: '![](img/98a29fdc-3138-4c23-b471-afd9c7b39b9b.png)'
+  id: totrans-142
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/98a29fdc-3138-4c23-b471-afd9c7b39b9b.png)'
+- en: 'The class of object and bounding box co-ordinates would be available in an
+    XML file (Details of how to obtain the XML file are available in code file in
+    GitHub) and can be extracted from the XML file as follows:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 物体的类别和边界框坐标将保存在XML文件中（如何获取XML文件的详细信息可参考GitHub上的代码文件），可以通过以下方式从XML文件中提取：
+- en: If  `xml["annotation"]["object"]`  is a list, it indicates that there multiple
+    objects present in the same image.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`xml["annotation"]["object"]`是一个列表，说明图像中存在多个物体。
+- en: '`xml["annotation"]["object"]["bndbox"]`  extracts the bounding box of object
+    present in image where the bounding box is available as "xmin","ymin","xmax" and
+    "ymax" co-ordinates of object in image.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`xml["annotation"]["object"]["bndbox"]`提取图像中物体的边界框，其中边界框的坐标包括“xmin”、“ymin”、“xmax”和“ymax”。'
+- en: '`xml["annotation"]["object"]["name"]`  extracts the class of object present
+    in image.'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`xml["annotation"]["object"]["name"]`提取图像中物体的类别。'
+- en: 'Import the relevant packages as follows:'
+  id: totrans-147
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按如下方式导入相关包：
+- en: '[PRE17]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Define the IoU extraction function, shown in the following code:'
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义IoU提取函数，如下代码所示：
+- en: '[PRE18]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Define the candidate extraction function, shown as follows:'
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义候选框提取函数，如下所示：
+- en: '[PRE19]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Note that, in the preceding function, we are excluding all candidates which
+    occupy less than 5% of the area of image.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，在上述函数中，我们排除了占据图像面积小于5%的所有候选框。
+- en: 'Import the pre-trained VGG16 model as follows:'
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按如下方式导入预训练的VGG16模型：
+- en: '[PRE20]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Create the input and output mapping for the images that contain only one object
+    within them. Initialize multiple lists that will be populated as we go through
+    the images:'
+  id: totrans-156
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为包含单一物体的图像创建输入和输出映射。初始化多个列表，随着图像的遍历，它们将被填充：
+- en: '[PRE21]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We''ll loop through the images and shall work on only those that contain a
+    single object:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将遍历图像，只处理那些包含单一物体的图像：
+- en: '[PRE22]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: In the preceding code, we are extracting the `xml` attributes of an image and
+    checking whether the image contains multiple objects (if the output of `xml["annotation"]["object"]`
+    is a list, then the image contains multiple objects).
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码中，我们提取了图像的`xml`属性，并检查图像是否包含多个对象（如果`xml["annotation"]["object"]`的输出是一个列表，则图像包含多个对象）。
+- en: 'Normalize the object location coordinates so that we can work on the normalized
+    bounding box. This is done so that the normalized bounding box does not change,
+    even if the image shape is changed for further processing. For example, if the
+    object''s `xmin` is at 20% of *x* axis and 50% of *y* axis, it would be the same,
+    even when the image is reshaped (however, had we been dealing with pixel values,
+    the `xmin` value would be changed):'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 归一化物体位置坐标，以便我们可以处理归一化后的边界框。这样即使图像形状在进一步处理时发生变化，归一化的边界框也不会变化。例如，如果物体的`xmin`在*x*轴的20%和*y*轴的50%处，即使图像被重新调整大小，其位置也不会变化（但如果处理的是像素值，`xmin`的值会发生变化）：
+- en: '[PRE23]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: In the preceding code, we have normalized the bounding-box coordinates.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码中，我们已经对边界框坐标进行了归一化处理。
+- en: 'Extract candidates of the image:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提取图像中的候选框：
+- en: '[PRE24]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: In the preceding code, we are using the `extract_candidates` function to extract
+    the region proposals of the resized image.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码中，我们使用了`extract_candidates`函数来提取调整大小后的图像的区域建议。
+- en: 'Loop through the candidates to calculate the intersection over union of each
+    candidate with the actual bounding box of the object in the image and also the
+    corresponding delta between the actual bounding box and the candidate:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 遍历候选框，计算每个候选框与图像中实际边界框的交并比（IoU），并计算实际边界框与候选框之间的对应偏差：
+- en: '[PRE25]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Calculate the VGG16 features of each region proposal and assign the target
+    based on the IoU of the region proposal with the actual bounding box:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算每个区域建议的VGG16特征，并根据区域建议与实际边界框的IoU来分配目标：
+- en: '[PRE26]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Create input and output arrays:'
+  id: totrans-171
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建输入和输出数组：
+- en: '[PRE27]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'We utilize the `get_dummies` method as the classes are categorical text values:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用`get_dummies`方法，因为类别是分类文本值：
+- en: '[PRE28]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Build and compile the model:'
+  id: totrans-175
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建并编译模型：
+- en: '[PRE29]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Fit the model, shown as follows:'
+  id: totrans-177
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练模型，如下所示：
+- en: '[PRE30]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: The preceding results in a classification accuracy of 97% on a test dataset.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述结果在测试数据集上实现了97%的分类准确率。
+- en: We are dividing the input array by `x_train.max()`, as the maximum value in
+    an input array is ~11\. Typically, it is a good idea to have input values between
+    zero and one, and given that the VGG16 prediction on the scaled input has a maximum
+    value of ~11, we divide the input array by `x_train.max()`—which is equal to ~11.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过 `x_train.max()` 来对输入数组进行除法操作，因为输入数组中的最大值大约是11。通常来说，将输入值缩放至0和1之间是一个好主意，并且考虑到VGG16在缩放输入上的预测最大值大约是11，所以我们将输入数组除以
+    `x_train.max()` —— 其值大约为11。
+- en: Make a prediction of the class from the dataset (ensure that we do not consider
+    an image that was used for training).
+  id: totrans-181
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对数据集中的类别进行预测（确保我们不考虑用于训练的图像）。
+- en: 'Pick an image that was not used for testing:'
+  id: totrans-182
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择一个未用于测试的图像：
+- en: '[PRE31]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Build a function that performs image preprocessing to extract candidates, performs
+    model prediction on resized candidates, filters out the predicted background class
+    regions, and, finally, plots the region (candidate) that has the highest probability
+    of containing a class that is other than the background class:'
+  id: totrans-184
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建一个函数，执行图像预处理以提取候选区域，对调整大小后的候选区域进行模型预测，过滤掉预测为背景类别的区域，最后绘制出具有最高概率包含非背景类别的区域（候选区域）：
+- en: '[PRE32]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'In the preceding code, we are resizing an input image and are extracting candidates
+    from it:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在调整输入图像的大小，并从中提取候选区域：
+- en: '[PRE33]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'In the preceding code, are plotting an image and are initializing the predicted
+    probability and predicted class lists that will be populated in subsequent steps:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在绘制一张图像，并初始化预测的概率和预测类别列表，这些列表将在后续步骤中被填充：
+- en: '[PRE34]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'In the preceding code, we are looping through the candidates, resizing them,
+    and passing them through the VGG16 model. Furthermore, we are passing the VGG16
+    output through our model, which provides the probability of the image belonging
+    to various classes:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在遍历候选区域，调整其大小，并将其通过VGG16模型进行处理。此外，我们还将VGG16的输出传入我们的模型，后者提供了图像属于各种类别的概率：
+- en: '[PRE35]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'In the preceding code, we are extracting the candidate that has the highest
+    probability of containing an object that is non-background (the predicted class
+    of one corresponds to the background):'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在提取具有最高概率包含非背景物体的候选区域（其中一个预测类别对应于背景）：
+- en: '[PRE36]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: In the preceding code, we are plotting the image along with rectangular patch
+    of the bounding box.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在绘制图像并显示边界框的矩形区域。
+- en: 'Call the function defined with a new image:'
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 调用定义的函数并使用一张新图像：
+- en: '[PRE37]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '![](img/3dbde263-8f5e-4c2e-8c25-2cd98af80476.png)'
+  id: totrans-197
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3dbde263-8f5e-4c2e-8c25-2cd98af80476.png)'
+- en: Note that the model accurately figured the class of the object in the image.
+    Additionally, the bounding box (candidate) that has the highest probability of
+    containing a person needs a little bit of correction.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，模型准确地预测了图像中物体的类别。此外，具有最高概率包含人的边界框（候选区域）需要稍作修正。
+- en: In the next step, we will correct the bounding box further.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一步中，我们将进一步修正边界框。
+- en: 'Build and compile a model that takes the VGG16 features of image as input and
+    predicts the bounding-box corrections:'
+  id: totrans-200
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建并编译一个模型，该模型以图像的VGG16特征作为输入，并预测边界框的修正值：
+- en: '[PRE38]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Build the model to predict bounding-box corrections. However, we need to ensure
+    that we predict bounding-box corrections only for those regions that are likely
+    to contain an image:'
+  id: totrans-202
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建模型以预测边界框的修正值。然而，我们需要确保只对那些可能包含图像的区域进行边界框修正预测：
+- en: '[PRE39]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: In the preceding code, we are looping through the input array dataset and creating
+    a new dataset that is only for those regions that are likely to contain a non-background.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在遍历输入数组数据集，并创建一个新的数据集，该数据集仅包含那些可能包含非背景区域的部分。
+- en: Additionally, we are repeating the preceding step 1,000 different times to fine
+    tune the model.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们正在重复执行前面的步骤1,000次，以微调模型。
+- en: 'Build a function that takes an image path as input and predicts the class of
+    an image, along with correcting the bounding box:'
+  id: totrans-206
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建一个函数，输入图像路径并预测图像的类别，同时修正边界框：
+- en: '[PRE40]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Extract the test images that contain only one object (as we have built the
+    model on images that contain a single object):'
+  id: totrans-208
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取仅包含一个物体的测试图像（因为我们已经构建了仅包含单一物体的图像模型）：
+- en: '[PRE41]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: In the preceding code, we are looping through the image annotations and identifying
+    the images that contain a single object.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在遍历图像注释并识别包含单一物体的图像。
+- en: 'Predict on the single object image:'
+  id: totrans-211
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对单一物体图像进行预测：
+- en: '[PRE42]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '![](img/3ae32885-779f-4d76-997b-a69f51db9f4e.png)'
+  id: totrans-213
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3ae32885-779f-4d76-997b-a69f51db9f4e.png)'
+- en: Note that the second model was able to correct the bounding box to fit the person;
+    however, the bounding box still needs to be corrected a little more. This could
+    potentially be achieved when trained on more data points.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，第二个模型能够修正边界框以适应人物；然而，边界框仍然需要稍微进一步修正。这可以通过在更多数据点上进行训练来实现。
+- en: Performing non-max suppression
+  id: totrans-215
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 执行非极大值抑制（NMS）
+- en: So far, in the previous section, we have only considered the candidates that
+    do not have a background, and further considered the candidate that has the highest
+    probability of the object of interest. However, this fails in the scenario where
+    there are multiple objects present in an image.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，在前一节中，我们只考虑了没有背景的候选区域，并进一步考虑了具有最高物体兴趣概率的候选。然而，这在图像中存在多个物体的情况下无法正常工作。
+- en: In this section, we will discuss the ways to shortlist the candidate region
+    proposals so that we are in a position to extract as many objects as possible
+    within the image.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将讨论筛选候选区域提议的方法，以便我们能够提取图像中尽可能多的物体。
+- en: Getting ready
+  id: totrans-218
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备工作
+- en: 'The strategy we adopt to perform NMS is as follows:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们采用的NMS策略如下：
+- en: Extract the region proposals from an image
+  id: totrans-220
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从图像中提取区域提议。
+- en: Reshape the region proposals and predict the object that is contained in the
+    image
+  id: totrans-221
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 重新调整区域提议的形状，并预测图像中包含的物体。
+- en: If the object is non-background, we shall keep the candidate
+  id: totrans-222
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果物体不是背景类，我们将保留该候选区域。
+- en: For all the non-background class candidates, we'll order them by the probability
+    that they contain an object
+  id: totrans-223
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于所有非背景类的候选区域，我们将按其包含物体的概率排序。
+- en: The first candidate (post-rank ordering by decreasing probability of any class)
+    will be compared with all the rest of candidates in terms of the IoU
+  id: totrans-224
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一个候选（按照各类别概率降序排序后的第一个候选）将与其余所有候选区域进行IoU比较。
+- en: If there is considerable overlap between any other region with the first candidate,
+    they shall be discarded
+  id: totrans-225
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果其他任何区域与第一个候选区域有较大重叠，它们将被丢弃。
+- en: Among the candidates that remain, we'll again consider the candidate that has
+    the highest probability of containing an object
+  id: totrans-226
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在剩下的候选中，我们将再次考虑具有最高包含物体概率的候选区域。
+- en: We'll repeat the comparison of first candidate (among the filtered list that
+    has limited overlap with the first candidate in the previous step) with the rest
+    of the candidates
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将重复比较第一个候选（在前一步中已过滤且与第一个候选重叠较小的候选列表中的候选）与其余候选区域。
+- en: This process continues until there are no candidates left for comparison
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该过程将持续进行，直到没有剩余候选区域可以比较为止。
+- en: We'll plot the candidates for the candidates that remain after the preceding
+    steps as the final bounding boxes
+  id: totrans-229
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将绘制前述步骤后剩余候选区域的最终边界框。
+- en: How to do it...
+  id: totrans-230
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何执行……
+- en: Non-max suppression is coded in Python as follows. We'll continue from step
+    14 in the previous recipe (The code file and corresponding recommended dataset
+    link is available as `Region_proposal_based_object_detectionn.ipynb` in GitHub).
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非极大值抑制的Python代码如下。我们将从前面食谱中的第14步继续（代码文件及对应推荐数据集链接可在GitHub中的`Region_proposal_based_object_detectionn.ipynb`找到）。
+- en: 'Extract all the regions from an image where there is a high confidence of containing
+    an object that is of a non-background class:'
+  id: totrans-232
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从图像中提取所有有较高信心包含非背景类物体的区域：
+- en: '[PRE43]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'The image that we are considering is as follows:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们正在考虑的图像如下：
+- en: '![](img/ad993779-4983-499c-841a-61bc9b3c2692.png)'
+  id: totrans-235
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ad993779-4983-499c-841a-61bc9b3c2692.png)'
+- en: 'Pre-process the candidates—pass them through VGG16 model, and then predict
+    the class of each region proposal, as well as the bounding boxes of the regions:'
+  id: totrans-236
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对候选区域进行预处理——将它们通过VGG16模型，然后预测每个区域提议的类别以及区域的边界框：
+- en: '[PRE44]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Extract the non-background class predictions and their corresponding bounding-box
+    corrections:'
+  id: totrans-238
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取非背景类预测结果及其对应的边界框修正值：
+- en: '[PRE45]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: In the preceding step, we have filtered all the probabilities, classes, and
+    bounding-box corrections for the regions that are non-background (predicted class
+    `1` belongs to background class in our data preparation process).
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一步中，我们已过滤掉所有概率、类别和边界框修正值，针对非背景区域（预测类别`1`在我们的数据准备过程中属于背景类别）。
+- en: 'Correct the candidates using the bounding-box correction values:'
+  id: totrans-241
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用边界框修正值校正候选区域：
+- en: '[PRE46]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: Additionally, we have also ensured that the `xmax` and `ymax` coordinates cannot
+    be greater than `224`.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们还确保了`xmax`和`ymax`坐标不能大于`224`。
+- en: 'Furthermore, we need to ensure that the width and height of bounding boxes
+    cannot be negative:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们需要确保边界框的宽度和高度不能为负值：
+- en: '[PRE47]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'Plot the image along with the bounding boxes:'
+  id: totrans-246
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 绘制包含边界框的图像：
+- en: '[PRE48]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '![](img/509c6bb7-d6d8-4e13-b9d7-7c10a5da93ed.png)'
+  id: totrans-248
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/509c6bb7-d6d8-4e13-b9d7-7c10a5da93ed.png)'
+- en: 'Perform non-max suppression on top of the bounding boxes. For this, we''ll
+    define a function that performs NMS by taking the minimum possible intersection
+    that two bounding boxes can have (threshold), bounding-box coordinates, and the
+    probability score associated with each bounding box in the following steps:'
+  id: totrans-249
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对边界框执行非最大值抑制（NMS）。为此，我们将定义一个函数，该函数通过考虑两个边界框可能具有的最小交集（阈值）、边界框坐标以及与每个边界框相关的概率得分来执行NMS，详细步骤如下：
+- en: 'Calculate the `x`, `y`, `w`, and `h` values of each bounding box, their corresponding
+    areas, and, also, their probability order:'
+  id: totrans-250
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算每个边界框的`x`、`y`、`w`和`h`值，它们的对应面积，以及它们的概率顺序：
+- en: '[PRE49]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Calculate the intersection over union of the candidate with highest probability
+    with the rest of the candidates:'
+  id: totrans-252
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 计算概率最高的候选框与其他候选框之间的交并比（IoU）：
+- en: '[PRE50]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'Identify the candidates that have an IoU that is less than the threshold:'
+  id: totrans-254
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定那些IoU小于阈值的候选框：
+- en: '[PRE51]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: In the preceding step, we are ensuring that we have the next set of candidates
+    (other than the first candidate) that are to be looped through the same steps
+    (notice the `while` loop at the start of the function).
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的步骤中，我们确保了接下来的一组候选框（除了第一个候选框）将循环执行相同的步骤（注意函数开始处的`while`循环）。
+- en: 'Return the index of candidates that need to be kept:'
+  id: totrans-257
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 返回需要保留的候选框的索引：
+- en: '[PRE52]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Execute the preceding function:'
+  id: totrans-259
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 执行前面的函数：
+- en: '[PRE53]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Plot those bounding boxes that were left from the previous step:'
+  id: totrans-261
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 绘制前一步留下的边界框：
+- en: '[PRE54]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '![](img/415d8874-7c1a-4f5a-af2e-6e66958d87e6.png)'
+  id: totrans-263
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/415d8874-7c1a-4f5a-af2e-6e66958d87e6.png)'
+- en: From the preceding screenshot, we see that we removed all the other bounding
+    boxes that were generated as region proposals.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的截图中，我们看到我们移除了所有其他作为区域提案生成的边界框。
+- en: Detecting a person using an anchor box-based algorithm
+  id: totrans-265
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用基于锚框的算法检测人物
+- en: One of the drawbacks of region proposal based CNN is that it does not enable
+    a real-time object recognition, as selective search takes considerable time to
+    propose regions. This results in region proposal-based object detection algorithms
+    not being useful in cases like self-driving car, where real-time detection is
+    very important.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于区域提案的CNN的一个缺点是它无法实现实时物体识别，因为选择性搜索需要相当长的时间来提出区域。这使得基于区域提案的物体检测算法在像自动驾驶汽车这样的实时检测场景中不具备实用性。
+- en: In order to achieve real-time detection, we will build a model that is inspired
+    by the **You Only Look Once** (**YOLO**) algorithm from scratch that looks at
+    the images that contain a person in image and draws a bounding box around the
+    person in image.
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现实时检测，我们将从零开始构建一个受**You Only Look Once**（**YOLO**）算法启发的模型，该模型可以查看包含人物的图像，并在图像中的人物周围绘制边界框。
+- en: Getting ready
+  id: totrans-268
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备就绪
+- en: To understand how YOLO overcomes the drawback of consuming considerable time
+    in generating region proposals, let us break the term YOLO into its constituent
+    terms—we shall make all the predictions (class of image and also the bounding
+    box) from a single forward pass of the neural network. Compare this with what
+    we did with region proposal based CNN, where a selective search algorithm gave
+    us the region proposals, and then we built a classification algorithm on top of
+    it.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解YOLO如何克服生成区域提案时所消耗的时间这一缺点，让我们将“YOLO”一词拆解成其组成部分——我们将在神经网络的单次前向传播中完成所有预测（图像类别以及边界框）。与基于区域提案的CNN方法相比，我们首先使用选择性搜索算法得到区域提案，然后在其基础上构建分类算法。
+- en: 'To figure out the working details of YOLO, let''s go through a toy example.
+    Let''s say the input image looks as follows—where the image is divided into a
+    3 x 3 grid:'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了弄清楚YOLO的工作细节，让我们通过一个简单的示例。假设输入图像如下所示——该图像被划分为一个3 x 3的网格：
+- en: '![](img/d767d1cb-cba0-4129-af5e-a1ce782a7733.png)'
+  id: totrans-271
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d767d1cb-cba0-4129-af5e-a1ce782a7733.png)'
+- en: The output of our neural network model shall be of 3 x 3 x 5 in size, where
+    the first 3 x 3 correspond to the number of grids we have in the image, and the
+    first output of the five channels corresponds to the probability of the grid containing
+    an object, and the other four constituents are the *delta of x, y, w, h* coordinates
+    corresponding to the grid in the image.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的神经网络模型的输出将是3 x 3 x 5的大小，其中前3 x 3表示图像中的网格数，第一个输出通道对应网格包含物体的概率，另外四个通道是网格对应的*
+    x *，* y *，* w *，* h *坐标的增量。
+- en: One other lever that we use is the anchor boxes. Essentially, we already know
+    that there are certain shapes within the set of images we have. For example, a
+    car will have a shape where the width is greater than the height and a standing
+    person would generally have a higher height when compared to the width.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个我们使用的工具是锚框。实质上，我们已经知道，在我们拥有的图像集合中，有些形状是已知的。例如，汽车的形状通常宽度大于高度，而站立的人物通常高度大于宽度。
+- en: Hence, we shall cluster all the height and width values we have in our image
+    set into five clusters and that shall result in the five anchor boxes' height
+    and width that we shall use to identify bounding boxes around the objects in our
+    image.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们将把图像集中所有的高度和宽度值聚类成五个簇，这样就会得到五个锚框的高度和宽度，用于识别图像中的物体边界框。
+- en: If there are five anchor boxes working on an image, the output then shall be
+    3 x 3 x 5 x 5, where the 5 x 5 corresponds to the five constituents (one probability
+    of the object and the four delta along *x*, *y*, *w*, and *h*) of each of the
+    five anchor boxes.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果图像中有五个锚框工作，则输出将是3 x 3 x 5 x 5，其中5 x 5对应每个锚框的五个组成部分（一个物体的概率和四个* x *，* y *，*
+    w *，* h *的增量）。
+- en: From the preceding, we can see that the 3 x 3 x 5 x 5 output can be generated
+    from a single forward pass through the neural network model.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从前面的内容可以看出，3 x 3 x 5 x 5的输出可以通过神经网络模型的单次前向传播生成。
+- en: 'In the following section, the pseudo code to understand the ways to generate
+    the size of anchors:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分，我们将看到如何生成锚框大小的伪代码：
+- en: Extract the width and height of all images in a dataset
+  id: totrans-278
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 提取数据集中所有图像的宽度和高度。
+- en: Run a k-means clustering with five clusters to identify the clusters of width
+    and height present in the image
+  id: totrans-279
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 运行一个具有五个簇的k-means聚类，来识别图像中宽度和高度的簇。
+- en: The five cluster centers correspond to the width and height of the five anchor
+    boxes to build the model
+  id: totrans-280
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 五个簇中心对应五个锚框的宽度和高度，用于构建模型。
+- en: 'Furthermore, in the following section, we will understand how the YOLO algorithm
+    works:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，在接下来的部分，我们将了解YOLO算法是如何工作的：
+- en: Divide the image into a fixed number of grid cells
+  id: totrans-282
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将图像分割成固定数量的网格单元。
+- en: The grid that corresponds to the center of the ground truth of the bounding
+    box of the image shall be the grid that is responsible in predicting the bounding
+    box
+  id: totrans-283
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与图像的真实边界框中心相对应的网格将负责预测边界框。
+- en: The center of anchor boxes shall be the same as the center of the grid
+  id: totrans-284
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 锚框的中心将与网格的中心相同。
+- en: 'Create the training dataset:'
+  id: totrans-285
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建训练数据集：
+- en: For the grid that contains the center of object, the dependent variable is one and
+    the delta of *x*, *y*, *w*, and *h* need to be calculated for each anchor box
+  id: totrans-286
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于包含物体中心的网格，因变量为1，且需要为每个锚框计算* x *，* y *，* w *，* h *的增量。
+- en: For the grids that do not contain the center of object, the dependent variable
+    is zero and the delta of *x*, *y*, *w*, and *h* do not matter
+  id: totrans-287
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于不包含物体中心的网格，因变量为零，且* x *，* y *，* w *，* h *的增量不重要。
+- en: In the first model, we shall predict the anchor box and grid cell combination
+    that contain the center of the image
+  id: totrans-288
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在第一个模型中，我们将预测包含图像中心的锚框和网格单元组合。
+- en: In the second model, we predict the bounding box corrections of the anchor box
+  id: totrans-289
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在第二个模型中，我们预测锚框的边界框修正。
+- en: How to do it...
+  id: totrans-290
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何实现...
+- en: 'We will build the code to perform person detection (The code file and corresponding
+    recommended dataset link is available as `Anchor_box_based_person_detection.ipynb` in
+    GitHub along with the recommended dataset):'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将构建用于执行人脸检测的代码（代码文件和相应推荐数据集链接可以在GitHub中作为`Anchor_box_based_person_detection.ipynb`找到，连同推荐的数据集）：
+- en: Download the dataset that contains a set of images, the objects contained in
+    them, and the corresponding bounding boxes of the objects in the images. The recommended
+    dataset and the corresponding code files that you can work on are provided in
+    GitHub.
+  id: totrans-292
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 下载包含一组图像、图像中物体及其对应边界框的数据集。可以在GitHub上找到推荐的数据集及其相关代码文件供你使用。
+- en: A sample image and its corresponding bounding box location output would look
+    similar to the one that we saw in step 1 of "*Object detection using region proposal
+    based CNN*" recipe.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个示例图像及其相应的边界框位置输出看起来类似于我们在"*基于区域提议的CNN物体检测*"食谱的第1步中看到的内容。
+- en: 'Import the relevant packages, as follows:'
+  id: totrans-294
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入相关的包，如下所示：
+- en: '[PRE55]'
+  id: totrans-295
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'Define the IoU extraction function, shown in the following code:'
+  id: totrans-296
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义IoU提取函数，如下所示：
+- en: '[PRE56]'
+  id: totrans-297
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'Define the anchor boxes'' width and height as a percentage of total image''s
+    width and height:'
+  id: totrans-298
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将锚框的宽度和高度定义为图像总宽度和高度的百分比：
+- en: 'Identify all the possible widths and heights of the person in the bounding
+    boxes:'
+  id: totrans-299
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定边界框中人物的所有可能宽度和高度：
+- en: '[PRE57]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: In the preceding code, we are looping through all the images that have only
+    one object within them, and are then calculating the width and height of bounding
+    box, if the image contains a person.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们遍历所有仅包含一个物体的图像，然后计算该图像中的边界框的宽度和高度，前提是图像中包含一个人。
+- en: 'Fit k-means clustering with five centers:'
+  id: totrans-302
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用五个中心进行k-means聚类：
+- en: '[PRE58]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'The preceding results in cluster centers, shown as follows:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的步骤产生了如下所示的聚类中心：
+- en: '[PRE59]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'Create the training dataset:'
+  id: totrans-306
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建训练数据集：
+- en: 'Initialize empty lists so that they can be appended with data in further processing:'
+  id: totrans-307
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 初始化空列表，以便在进一步处理时向其中添加数据：
+- en: '[PRE60]'
+  id: totrans-308
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'Loop through the dataset so that we work on images that contain only one object
+    in it, and also the object is a person:'
+  id: totrans-309
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 遍历数据集，处理只包含一个物体且该物体为人的图像：
+- en: '[PRE61]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: The preceding code appends the location of the object (post-normalized for the
+    width and height of the image).
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码附加了物体的位置（经过归一化的图像宽度和高度）。
+- en: 'Resize the image of person so that all images are of the same shape. Additionally,
+    scale the image so that the values are between zero and one:'
+  id: totrans-312
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 调整人物图像的大小，使所有图像具有相同的形状。此外，将图像缩放至值域在零到一之间：
+- en: '[PRE62]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'Extract the object bounding box location, and also the normalized bounding-box
+    coordinates:'
+  id: totrans-314
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取物体的边界框位置，并且还要提取归一化的边界框坐标：
+- en: '[PRE63]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'Extract the VGG16 features of the input image:'
+  id: totrans-316
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取输入图像的VGG16特征：
+- en: '[PRE64]'
+  id: totrans-317
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: By this step, we have created the input features.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到这一步，我们已经创建了输入特征。
+- en: 'Let''s create the output features—in this case, we shall have 5 x 5 x 5 outputs
+    for class label and 5 x 5 x 20 labels for the bounding-box correction labels:'
+  id: totrans-319
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们创建输出特征——在本例中，我们将为类标签生成5 x 5 x 5的输出，为边界框修正标签生成5 x 5 x 20的标签：
+- en: '[PRE65]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'In the preceding step, we have initialized zero arrays for the target class
+    and bounding-box corrections:'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的步骤中，我们为目标类和边界框修正初始化了零数组：
+- en: '[PRE66]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'In the preceding step, we have defined a function that contains the center
+    of the object:'
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的步骤中，我们定义了一个包含物体中心的函数：
+- en: '[PRE67]'
+  id: totrans-324
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: The preceding code helps us assign a class of `1` to the grid that contains
+    the center of object and every other grid shall have a label of zero.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码帮助我们将`1`类分配给包含物体中心的网格，其他所有网格的标签将为零。
+- en: 'Additionally, let''s define a function that finds the anchor that is closest
+    to the shape of the object of interest:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，让我们定义一个函数，找到与感兴趣物体形状最接近的锚框：
+- en: '[PRE68]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: The preceding code compares the width and height of the object of interest in
+    an image, with all the possible anchors, and identifies the anchor that is closest
+    to the width and height of the actual object in the image.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码将图像中感兴趣物体的宽度和高度与所有可能的锚框进行比较，并识别出最接近图像中实际物体宽度和高度的锚框。
+- en: 'Finally, we shall also define a function that calculates the bounding-box corrections
+    of anchor, as follows:'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们还将定义一个计算锚框边界框修正的函数，如下所示：
+- en: '[PRE69]'
+  id: totrans-330
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'We are all set to create the target data now:'
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经准备好创建目标数据了：
+- en: '[PRE70]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: In the preceding code, we have assigned a target class of `1` when the anchor
+    considered is the closest anchor that matches the shape of the object in an image.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，当考虑到的锚框是与图像中物体形状最接近的锚框时，我们将目标类赋值为`1`。
+- en: 'We have also stored the bounding-box corrections in another list:'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还将边界框修正存储在另一个列表中：
+- en: '[PRE71]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'Build a model to identify the grid cell and anchor that is most likely to contain
+    an object:'
+  id: totrans-336
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建一个模型来识别最可能包含物体的网格单元和锚框：
+- en: '[PRE72]'
+  id: totrans-337
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'Create the input and output array for classification:'
+  id: totrans-338
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建用于分类的输入和输出数组：
+- en: '[PRE73]'
+  id: totrans-339
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: 'Compile and fit the model for classification:'
+  id: totrans-340
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编译并拟合分类模型：
+- en: '[PRE74]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'From the preceding model, we are in a position to identify the grid cell and
+    anchor box combination that is most likely to have a person. In this step, we
+    shall build a dataset where we correct the bounding box for the predictions that
+    are most likely to contain an object:'
+  id: totrans-342
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从前面的模型中，我们能够识别出最可能包含人物的网格单元和锚框组合。在此步骤中，我们将构建一个数据集，其中我们修正最有可能包含物体的预测边界框：
+- en: '[PRE75]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: In the preceding step, we have prepared the input (which is the VGG16 features
+    of original image) and the output bounding-box corrections for the predictions
+    that are most likely to contain an object.
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一步中，我们已经准备好了输入（即原始图像的VGG16特征）和输出边界框修正，用于预测最有可能包含物体的区域。
+- en: Note that we are multiplying `coord` by a factor of four, as for each grid cell
+    and anchor box combination, there are four possible values of corrections for
+    *x*, *y*, *w*, and *h*.
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们将`coord`乘以四，因为对于每个网格单元和锚框组合，都有四个可能的修正值，分别对应* x *、* y *、* w * 和 * h *。
+- en: 'Build a model that predicts the correction in *x*, *y*, *w*, and *h* coordinates:'
+  id: totrans-346
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建一个模型，用来预测* x *、* y *、* w * 和 * h * 坐标的修正：
+- en: 'Create input and output arrays, and normalize the four bounding-box correction
+    values so that all four values have a similar range:'
+  id: totrans-347
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建输入和输出数组，并对四个边界框修正值进行标准化，使得所有四个值具有相似的范围：
+- en: '[PRE76]'
+  id: totrans-348
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: 'Build a model that predicts the bounding-box corrections, given the VGG16 features:'
+  id: totrans-349
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 构建一个模型，根据VGG16特征预测边界框修正：
+- en: '[PRE77]'
+  id: totrans-350
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: 'Compile and fit the model:'
+  id: totrans-351
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 编译并拟合模型：
+- en: '[PRE78]'
+  id: totrans-352
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'Predict the bounding box on a new image:'
+  id: totrans-353
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在新图像上预测边界框：
+- en: 'Extract the position that is most likely to contain the object:'
+  id: totrans-354
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取最有可能包含物体的位置：
+- en: '[PRE79]'
+  id: totrans-355
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: In the preceding step, we are picking an image that contains a person within
+    it, and resizing it, so that it can be further processed to extract the VGG16
+    features. Finally, we are identifying the anchor that is most likely to contain
+    the location of a person.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的步骤中，我们选择了一张包含人物的图像，并调整其大小，以便进一步处理以提取VGG16特征。最后，我们识别出最有可能包含人物位置的锚框。
+- en: Extract the grid cell and anchor box combination that is most likely to contain
+    an image.
+  id: totrans-357
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取最有可能包含图像的网格单元和锚框组合。
+- en: 'The preceding predicts the grid cell and anchor box combination that is most
+    likely to contain the object of interest, which is done as follows:'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上一步预测了最有可能包含感兴趣物体的网格单元和锚框组合，具体做法如下：
+- en: '[PRE80]'
+  id: totrans-359
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: In the preceding code, `a2` and `b2` would be the grid cell (the *x* axis and
+    *y* axis combination) that is most likely to contain an object, and `c2` is the
+    anchor box that is possibly of the same shape as the object.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，`a2`和`b2`将是最有可能包含物体的网格单元（即* x *轴和* y *轴的组合），`c2`是可能与物体形状相同的锚框。
+- en: 'Predict the corrections in *x*, *y*, *w*, and *h* coordinates:'
+  id: totrans-361
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 预测* x *、* y *、* w * 和 * h * 坐标的修正：
+- en: '[PRE81]'
+  id: totrans-362
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: 'De-normalize the predicted bounding-box corrections:'
+  id: totrans-363
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 去标准化预测的边界框修正：
+- en: '[PRE82]'
+  id: totrans-364
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: 'Extract the final corrected *x*, *y*, *w*, and *h* coordinates:'
+  id: totrans-365
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提取最终修正后的* x *、* y *、* w * 和 * h * 坐标：
+- en: '[PRE83]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: 'Plot the image along with the bounding box:'
+  id: totrans-367
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 绘制图像和边界框：
+- en: '[PRE84]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '![](img/e075ef65-23d0-48bd-b284-2b3b3e9ff3b0.png)'
+  id: totrans-369
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e075ef65-23d0-48bd-b284-2b3b3e9ff3b0.png)'
+- en: One of the drawbacks with this approach is that it gets difficult when we are
+    detecting objects that are very small when compared to the image size.
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法的一个缺点是，当我们检测的物体相较于图像大小非常小时，检测变得更加困难。
+- en: There's more...
+  id: totrans-371
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 还有更多...
+- en: Let's consider a scenario where the object to be detected is small in size.
+    If we passed this image through a pre-trained network, this object would be detected
+    in earlier layers, as, in the last few layers, the image would be passed through
+    multiple pooling layers, resulting in the object to be detected shrinking to a
+    very small space.
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们考虑一个要检测的物体较小的场景。如果将这张图片传入预训练网络中，该物体会在早期层中被检测到，因为在最后几层中，图像会经过多个池化层处理，导致物体被压缩到一个非常小的空间中。
+- en: Similarly, if the object to be detected is large in size, that object will be
+    detected in the last layers of the pre-trained network.
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样地，如果要检测的物体较大，那么该物体会在预训练网络的最后几层中被检测到。
+- en: 'A single shot detector uses a pre-trained network where different layers of
+    the network work toward detecting different types of images:'
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单次检测器使用一个预训练网络，其中网络的不同层负责检测不同类型的图像：
+- en: '![](img/363ff5ac-cf10-4007-8109-73940627fee0.png)'
+  id: totrans-375
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/363ff5ac-cf10-4007-8109-73940627fee0.png)'
+- en: Source: https://arxiv.org/pdf/1512.02325.pdf
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来源：https://arxiv.org/pdf/1512.02325.pdf
+- en: In the preceding diagram, you should note that features from different layers
+    are passed through a dense layer, and, finally, concatenated together so that
+    a model can be built and fine-tuned.
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的图示中，你需要注意，不同层的特征会通过一个全连接层，最终被连接在一起，以便构建和微调模型。
+- en: Additionally, YOLO can also be implemented based on the tutorial available here: [https://pjreddie.com/darknet/yolo/](https://pjreddie.com/darknet/yolo/).
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，YOLO也可以基于此教程实现：[https://pjreddie.com/darknet/yolo/](https://pjreddie.com/darknet/yolo/)。

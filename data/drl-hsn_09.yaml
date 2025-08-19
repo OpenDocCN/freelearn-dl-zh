@@ -1,0 +1,1152 @@
+- en: '9'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '9'
+- en: Ways to Speed Up RL
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 加速强化学习（RL）的方法
+- en: 'In Chapter [8](ch012.xhtml#x1-1240008), you saw several practical tricks to
+    make the deep Q-network (DQN) method more stable and converge faster. They involved
+    basic DQN method modifications (like injecting noise into the network or unrolling
+    the Bellman equation) to get a better policy, with less time spent on training.
+    But in this chapter, we will explore another way to do this: tweaking the implementation
+    details of the method to improve the speed of the training. This is a pure engineering
+    approach, but it’s also important since it is useful in practice.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第[8](ch012.xhtml#x1-1240008)章中，你看到了一些实用的技巧，可以使深度 Q 网络（DQN）方法更加稳定并加速收敛。它们涉及基本的
+    DQN 方法修改（例如向网络注入噪声或展开 Bellman 方程）来获得更好的策略，同时减少训练所需的时间。但在本章中，我们将探索另一种方法：调整方法的实现细节，以提高训练速度。这是一种纯粹的工程方法，但它同样重要，因为在实践中非常有用。
+- en: 'In this chapter, we will:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将：
+- en: Take the Pong environment from the previous chapter and try to get it solved
+    as fast as possible
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 取用上一章中的 Pong 环境，并尽量以最快速度解决它
+- en: In a step-by-step manner, get Pong solved almost 2 times faster using exactly
+    the same commodity hardware
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以逐步的方式，使用完全相同的商品硬件将 Pong 游戏的解决速度提高近 2 倍
+- en: Why speed matters
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为什么速度很重要
+- en: First, let’s talk a bit about why speed is important and why we optimize it
+    at all. It might not be obvious, but enormous hardware performance improvements
+    have happened in the last decade or two. Almost 20 years ago, I was involved with
+    a project that focused on building a supercomputer for computational fluid dynamics
+    (CFD) simulations performed by an aircraft engine design company. The system consisted
+    of 64 servers, occupied three 42-inch racks, and required dedicated cooling and
+    power subsystems. The hardware alone (without cooling) cost around $1M.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们来谈谈为什么速度如此重要，为什么我们要优化它。也许并不明显，但过去二十年里硬件性能有了巨大的提升。近二十年前，我曾参与一个项目，专注于为一个航空发动机设计公司构建一个用于计算流体力学（CFD）仿真的超级计算机。该系统由
+    64 台服务器组成，占据了三组 42 英寸的机架，并且需要专门的冷却和电力子系统。仅硬件部分（不包括冷却）就花费了大约 100 万美元。
+- en: In 2005, this supercomputer was ranked fourth among ex-USSR supercomputers and
+    was the fastest system installed in the industry. Its theoretical performance
+    was 922 GFLOPS (almost a trillion floating-point operations per second), but in
+    comparison to the GTX 1080 Ti released 12 years later, all the capabilities of
+    this pile of iron look tiny.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 2005 年，这台超级计算机在前苏联超级计算机中排名第四，是业内安装的最快系统。它的理论性能为 922 GFLOPS（几乎每秒一万亿次浮点运算），但与
+    12 年后发布的 GTX 1080 Ti 相比，这堆铁块的所有能力看起来显得微不足道。
+- en: One single GTX 1080 Ti is able to perform 11,340 GFLOPS, which is 12.3 times
+    more than what supercomputers from 2005 could do. And the price was only $700
+    per GPU when it was released! If we count computation power per $1, we get a price
+    drop of more than 17,500 times for every GFLOP. This number is even more dramatic
+    with the latest (at the time of writing) H100 GPU, which provides 134 teraflops
+    (with FP32 operations).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一块单独的 GTX 1080 Ti 能够执行 11,340 GFLOPS，性能是 2005 年的超级计算机的 12.3 倍。而且它发布时，每个 GPU
+    的价格仅为 $700！如果我们按每花费 $1 的计算能力来算，那么每个 GFLOP 的价格下降了超过 17,500 倍。这个数字在最新的（撰写时）H100
+    GPU 上更为惊人，H100 提供了 134 teraflops 的性能（使用 FP32 操作）。
+- en: It has been said many times that artificial intelligence (AI) progress (and
+    machine learning (ML) in general) is being driven by data availability and computing
+    power increases, and I believe that this is absolutely true. Imagine some computations
+    that require a month to complete on one machine (a very common situation in CFD
+    and other physics simulations). If we are able to increase speed by five times,
+    this month of patient waiting will turn into six days. Speeding up by 100 times
+    will mean that this heavy one-month computation will end up taking eight hours,
+    so you could have three of them done in just one day! It’s very cool to be able
+    to get 20,000 times more power for the same money nowadays. By the way, speeding
+    up by 20k times will mean that our one-month problem will be done in two to three
+    minutes!
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多人多次提到，人工智能（AI）的进步（以及机器学习（ML）的一般进展）是由数据可用性和计算能力的提升所推动的，我认为这绝对是正确的。想象一下，一些计算在一台机器上需要一个月才能完成（这在计算流体力学（CFD）和其他物理仿真中非常常见）。如果我们能将速度提高五倍，那么原本需要耐心等待一个月的时间将缩短为六天。提高
+    100 倍的速度意味着这个一个月的计算将只需要八小时完成，那么你一天之内就能完成三次计算！如今，只花相同的钱就能获得 20,000 倍的计算能力，真是太酷了。顺便提一下，速度提高
+    20,000 倍意味着我们原本需要一个月的计算问题只需要两到三分钟就能完成！
+- en: 'This has happened not only in the “big iron” (also known as high-performance
+    computing) world; basically, it is everywhere. Modern microcontrollers have the
+    performance characteristics of the desktops that we worked with 15 years ago (for
+    example, you can build a pocket computer for $50, with a 32-bit microcontroller
+    running at 120 MHz, that is able to run the Atari 2600 emulator: [https://hackaday.io/project/80627-badge-for-hackaday-conference-2018-in-belgrade](https://hackaday.io/project/80627-badge-for-hackaday-conference-2018-in-belgrade)).
+    I’m not even talking about modern smartphones, which normally have four to eight
+    cores, a graphics processing unit (GPU), and several GB of RAM.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种情况不仅发生在“巨型计算机”（也称为高性能计算）领域；基本上，它无处不在。现代微控制器的性能特点已经与我们15年前使用的桌面计算机相当（例如，你可以花50美元打造一台便携计算机，配备运行120
+    MHz的32位微控制器，能够运行Atari 2600模拟器：[https://hackaday.io/project/80627-badge-for-hackaday-conference-2018-in-belgrade](https://hackaday.io/project/80627-badge-for-hackaday-conference-2018-in-belgrade)）
+    。我甚至没有提到现代智能手机，它们通常配有四到八个核心、图形处理单元（GPU）以及数GB的内存。
+- en: 'Of course, there are a lot of complications there. It’s not just taking the
+    same code that you used a decade ago and now, magically, finding that it works
+    several thousand times faster. It might be the opposite: you might not be able
+    to run it at all, due to a change in libraries, operating system interfaces, and
+    other factors. (Have you ever tried to read old CD-RW disks written just a decade
+    ago?) Nowadays, to get the full capabilities of modern hardware, you need to parallelize
+    your code, which automatically means tons of details about distributed systems,
+    data locality, communications, and the internal characteristics of the hardware
+    and libraries. High-level libraries try to hide all those complications from you,
+    but you can’t ignore all of them if you want to use these libraries efficiently.
+    However, it is definitely worth it — one month of patient waiting could be turned
+    into three minutes, remember. On the other hand, it might not be fully obvious
+    why we need to speed things up in the first place. One month is not that long,
+    after all; just lock the computer in a server room and go on vacation! But think
+    about the process involved in preparing and making this computation work. You
+    might already have noticed that even simple ML problems can be almost impossible
+    to implement properly on the first attempt.'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，那里有很多复杂的因素。这不仅仅是将十年前用过的相同代码现在神奇地让它运行得快上几千倍。可能正好相反：你甚至可能完全无法运行它，因为库、操作系统接口以及其他因素的变化。（你是否曾尝试读取十年前写入的CD-RW磁盘？）如今，要充分发挥现代硬件的能力，你需要将代码并行化，这意味着你必须处理大量关于分布式系统、数据局部性、通信以及硬件和库内部特性的细节。高级库尽力隐藏这些复杂性，但如果你想高效地使用这些库，就无法忽视这些问题。然而，这绝对是值得的——记住，一整个月的耐心等待可以缩短为三分钟。另一方面，为什么我们要加速操作，可能并不完全明显。毕竟，一个月并不算太长；只需将计算机锁在服务器室，然后去度个假！但请想一下准备和使这个计算过程正常运行的整个过程。你可能已经注意到，即使是简单的机器学习问题，初次尝试时也几乎不可能做到完美实现。
+- en: They require many trial runs before you find good hyperparameters and fix all
+    the bugs and code ready for a clean launch. There is exactly the same process
+    in physics simulations, RL research, big data processing, and programming in general.
+    So, if we are able to make something run faster, it’s not only beneficial for
+    the single run but also enables us to iterate quickly and do more experiments
+    with code, which might significantly speed up the whole process and improve the
+    quality of the final result.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它们需要多次试运行，才能找到合适的超参数并修复所有的错误和代码，准备好进行干净的发布。在物理仿真、强化学习研究、大数据处理和编程领域，确实存在完全相同的过程。因此，如果我们能够让某个程序运行得更快，它不仅对单次运行有利，还能让我们快速迭代，进行更多的实验，这可能显著加速整个过程，并提高最终结果的质量。
+- en: I remember one situation from my career when we deployed a Hadoop cluster in
+    our department, where we were developing a web search engine (similar to Google,
+    but for Russian websites). Before the deployment, it took several weeks to conduct
+    even simple experiments with data. Several terabytes of data were lying on different
+    servers; you needed to run your code several times on every machine, gather and
+    combine intermediate results, deal with occasional hardware failures, and do a
+    lot of manual tasks not related to the problem that you were supposed to solve.
+    After integrating the Hadoop platform into the data processing, the time needed
+    for experiments dropped to several hours, which was completely game-changing.
+    Since then, developers have been able to conduct many experiments much more easily
+    and faster without bothering with unnecessary details. The number of experiments
+    (and willingness to run them) has increased significantly, which has also increased
+    the quality of the final product.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我记得职业生涯中有一个情境，当时我们在部门内部部署了一个Hadoop集群，我们当时正在开发一个网页搜索引擎（类似Google，但用于俄罗斯网站）。在部署之前，即使是进行简单的数据实验，也需要几个星期的时间。几TB的数据分布在不同的服务器上；你需要在每台机器上运行多次代码，收集和合并中间结果，处理偶尔发生的硬件故障，并完成许多与问题无关的手动任务。将Hadoop平台集成到数据处理后，实验所需的时间减少到了几个小时，这完全改变了游戏规则。从那时起，开发人员能够更轻松、更快速地进行更多实验，而不必为不必要的细节烦恼。实验的数量（以及进行实验的意愿）显著增加，这也提高了最终产品的质量。
+- en: 'Another reason in favor of optimization is the size of problems that we can
+    deal with. Making some method run faster might mean two different things: we can
+    get the results sooner, or we can increase the size (or some other measure of
+    the problem’s complexity). A complexity increase might have different meanings
+    in different cases, like getting more accurate results, making fewer simplifications
+    of the real world, or taking into account more data, but, almost always, this
+    is a good thing.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个支持优化的理由是我们可以处理的问题的规模。让某种方法运行得更快可能意味着两件事：我们可以更快得到结果，或者我们可以增加问题的规模（或其他衡量问题复杂性的标准）。复杂性增加在不同情况下可能有不同的含义，比如得到更准确的结果，减少对现实世界的简化，或者考虑更多的数据，但几乎总是，这是好事。
+- en: Returning to the main topic of the book, let’s outline how RL methods might
+    benefit from speed-ups. First of all, even state-of-the-art RL methods are not
+    very sample efficient, which means that training needs to communicate with the
+    environment many times (in the case of Atari, millions of times) before learning
+    a good policy, and that might mean weeks of training. If we can speed up this
+    process a bit, we can get the results faster, do more experiments, and find better
+    hyperparameters. Besides this, if we have faster code, we can even increase the
+    complexity of the problems that they are applied to.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回到本书的主题，让我们概述一下强化学习方法如何通过加速来受益。首先，即使是最先进的强化学习方法也不是非常高效，这意味着训练需要多次与环境进行交互（在雅达利的情况下是数百万次），才能学到一个好的策略，这可能需要几周的训练。如果我们能加速这个过程，我们就可以更快地得到结果，进行更多的实验，并找到更好的超参数。除此之外，如果我们的代码更快，我们甚至可以增加应用这些方法时问题的复杂性。
+- en: In modern RL, Atari games are considered solved; even so-called “hard-exploration
+    games,” like Montezuma’s Revenge, can be trained to superhuman accuracy. Therefore,
+    new frontiers in research require more complex problems, with richer observation
+    and action spaces, which inevitably require more training time and more hardware.
+    Such research has already been started (and has increased the complexity of problems
+    a bit too much, from my point of view) by DeepMind and OpenAI, which have switched
+    from Atari to much more challenging problems like protein folding (AlphaFold system)
+    and Large Language Models (LLMs). Those problems require thousands of GPUs working
+    in parallel.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在现代强化学习（RL）中，雅达利游戏被认为已经解决；即使是所谓的“困难探索游戏”，如《蒙特祖玛的复仇》，也可以被训练到超人类的准确度。因此，新的研究前沿需要更复杂的问题，具有更丰富的观察和行动空间，这必然需要更多的训练时间和硬件。这样的研究已经由DeepMind和OpenAI开始（从我的角度来看，这也增加了问题的复杂性，可能有点过头了），他们从雅达利转向了更具挑战性的问题，如蛋白质折叠（AlphaFold系统）和大型语言模型（LLMs）。这些问题需要成千上万的GPU并行工作。
+- en: 'I want to end this introduction with a small warning: all performance optimizations
+    make sense only when the core method is working properly (which is not always
+    obvious in cases of RL and ML in general). As an instructor of an online course
+    about performance optimizations said, “It’s much better to have a slow and correct
+    program than a fast but incorrect one.”'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我想以一个小小的警告结束这段介绍：所有的性能优化只有在核心方法正常工作的情况下才有意义（这在强化学习和机器学习的情况下并不总是显而易见）。正如一位在线课程的讲师所说：“有一个慢而正确的程序，比一个快但不正确的程序要好得多。”
+- en: Baseline
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基准线
+- en: 'In this chapter, we will take the Atari Pong environment that you are already
+    familiar with and try to speed up its convergence. As a baseline, we will take
+    the same simple DQN that we used in Chapter [8](ch012.xhtml#x1-1240008), and the
+    hyperparameters will also be the same. To compare the effect of our changes, we
+    will use two characteristics:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将使用你已经熟悉的Atari Pong环境，并尝试加速其收敛速度。作为基准，我们将使用第[8章](ch012.xhtml#x1-1240008)中使用的相同简单DQN，超参数也将保持一致。为了比较我们改动的效果，我们将使用两个特征：
+- en: The number of frames that we consume from the environment every second (FPS).
+    This indicates how fast we can communicate with the environment during the training.
+    It is very common in RL papers to indicate the number of frames that the agent
+    observed during the training; normal numbers are 25M–50M frames. So, if our FPS=200,
+    it will take ![--50⋅106--- 200⋅60⋅60⋅24](img/eq39.png) ≈ 2.89 days. In such calculations,
+    you need to take into account that RL papers commonly report raw environment frames.
+    But if frame skip is used (and it almost always is), the count of frames needs
+    to be divided by this factor, which is commonly equal to 4\. In our measurements,
+    we calculate FPS in terms of agent communications with the environment, so the
+    “raw environment FPS” will be four times larger.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每秒钟我们从环境中消耗的帧数（FPS）。这表示我们在训练过程中与环境的交互速度。在强化学习的文献中，通常会标明智能体在训练过程中观察到的帧数，正常的数字范围是2500万到5000万帧。因此，如果我们的FPS=200，那么需要的时间为![--50⋅106---
+    200⋅60⋅60⋅24](img/eq39.png) ≈ 2.89天。在这种计算中，需要考虑到强化学习文献通常报告的是原始环境帧数。但如果使用了帧跳跃（几乎总是使用），则帧数需要除以这个因子，通常是4。在我们的测量中，我们计算的是智能体与环境的交互帧数，因此“原始环境FPS”将是其四倍。
+- en: The wall clock time before the game is solved. We stop training when the smoothed
+    reward for the last 100 episodes reaches 18 (the maximum score in Pong is 21.)
+    This boundary could be increased, but normally 18 is a good indication that the
+    agent has almost mastered the game and polishing the policy to perfection is just
+    a matter of the training time. We check the wall clock time because FPS alone
+    is not the best indicator of training speed-up.
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 游戏解决之前的墙钟时间。当最后100个回合的平滑奖励达到18时，我们停止训练（Pong游戏的最高分是21）。这个边界值可以提高，但通常18已经是一个很好的指标，表明智能体几乎掌握了游戏，进一步精炼策略仅仅是训练时间的问题。我们检查墙钟时间，因为单纯的FPS并不是训练加速的最佳指标。
+- en: Due to our manipulations performed with the code, we can get a very high FPS,
+    but convergence might suffer. This value alone also can’t be used as a reliable
+    characteristic of our improvements, as the training process is stochastic. Even
+    by specifying random seeds (we need to set seeds explicitly for PyTorch, Gym,
+    and NumPy), parallelization (which will be used in subsequent steps) adds randomness
+    to the process, which is almost impossible to avoid. So, the best we can do is
+    run the benchmark several times and average the results. But one single run’s
+    outcome can’t be used to make any decisions.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们在代码中进行的操作，我们可以获得非常高的FPS，但收敛可能会受到影响。仅凭这个数值也不能作为我们改进效果的可靠指标，因为训练过程是随机的。即使指定了随机种子（我们需要明确设置PyTorch、Gym和NumPy的种子），并行化（在后续步骤中会使用）也会为过程增加随机性，几乎无法避免。所以，我们能做的最好的是多次运行基准测试并取平均值。但单次运行的结果不能作为决策的依据。
+- en: Because of the randomness mentioned above, all the charts in this chapter were
+    obtained from averaging 5 runs of the same experiment. All the benchmarks use
+    the same machine with an Intel i5-7600K CPU, a GTX 1080 Ti GPU with CUDA 12.3,
+    and NVIDIA drivers version 545.29.06.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于上述提到的随机性，本章中的所有图表都是通过对同一实验的5次运行结果进行平均得到的。所有基准测试都使用相同的机器，配置为Intel i5-7600K
+    CPU、GTX 1080 Ti GPU，CUDA版本12.3，以及NVIDIA驱动版本545.29.06。
+- en: 'Our first benchmark will be our baseline version, which is in Chapter09/01_baseline.py.
+    I will not provide the source code here, as it has already been given in the previous
+    chapter and is the same here. During the training, the code writes into TensorBoard
+    several metrics:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的第一个基准将是基线版本，位于 Chapter09/01_baseline.py。我这里不提供源代码，因为它已经在前一章中给出，并且在此与前面相同。在训练过程中，代码会向
+    TensorBoard 写入几个指标：
+- en: 'reward: The raw undiscounted reward from the episode; the x axis is the episode
+    number.'
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'reward: 来自剧集的原始未折扣奖励；x 轴是剧集的编号。'
+- en: 'avg_reward: The same as reward but smoothed by running the average with α =
+    0.98.'
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'avg_reward: 与奖励相同，但通过使用 α = 0.98 的滑动平均进行平滑处理。'
+- en: 'steps: The number of steps that the episode lasted. Normally, in the beginning,
+    the agent loses very quickly, so every episode is around 1,000 steps. Then, it
+    learns how to act better, so the number of steps increases to 3,000–4,000 with
+    the reward increase; but, in the end, when the agent masters the game, the number
+    of steps drops back to 2,000 steps, as the policy is polished to win as quickly
+    as possible (due to the discount factor γ). In fact, this drop in episode length
+    might be an indication of overfitting to the environment, which is a huge problem
+    in RL. However, dealing with this issue is beyond the scope of our experiments.'
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'steps: 剧集持续的步数。通常，在开始时，代理会迅速失败，所以每个剧集大约有 1,000 步。然后，代理学会了更好的行为，所以步数增加到 3,000–4,000，并且奖励也增加；但是，最终，当代理掌握了游戏时，步数会降回到
+    2,000 步，因为策略被优化到尽可能快地获胜（由于折扣因子 γ）。事实上，这种剧集长度的下降可能表明过拟合了环境，这在强化学习中是一个巨大的问题。然而，处理这个问题超出了我们实验的范围。'
+- en: 'loss: The loss during the training, sampled every 100 iterations. It should
+    be around 2⋅10^(−3)…1⋅10^(−2), with occasional increases when the agent discovers
+    new behavior, leading to a different reward from that learned by the Q-value.'
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'loss: 训练中的损失，每 100 次迭代采样一次。它应该在 2⋅10^(−3)…1⋅10^(−2) 之间，偶尔会有增加，当代理发现新的行为时，导致奖励与
+    Q 值学习的奖励不同。'
+- en: 'avg_loss: A smoothed version of the loss.'
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'avg_loss: 损失的平滑版本。'
+- en: 'epsilon: The current value of 𝜖 — probability of taking the random action.'
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'epsilon: 当前 𝜖 的值——采取随机行动的概率。'
+- en: 'avg_fps: The speed of agent communication with the environment (observations
+    per second), smoothed with a running average.'
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 'avg_fps: 代理与环境通信的速度（每秒观察数），通过滑动平均进行平滑处理。'
+- en: 'In Figure [9.1](#x1-162006r1) and Figure [9.2](#x1-162007r2), the charts are
+    averaged from 5 baseline runs. As before, each chart is drawn with two x axes:
+    the bottom one is the wall clock time in hours, and the top is the step number
+    (episode in Figure [9.1](#x1-162006r1) and training iteration in Figure [9.2](#x1-162007r2)):'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在图 [9.1](#x1-162006r1) 和图 [9.2](#x1-162007r2) 中，图表是从 5 次基线运行中平均得出的。如之前所示，每个图表都绘制了两个
+    x 轴：底部是小时为单位的墙钟时间，上面是步数（图 [9.1](#x1-162006r1) 中为剧集数，图 [9.2](#x1-162007r2) 中为训练迭代次数）：
+- en: '![PIC](img/B21150_09_01.png)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B21150_09_01.png)'
+- en: 'Figure 9.1: Reward and episode length in baseline version'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.1：基线版本中的奖励和剧集长度
+- en: '![PIC](img/B21150_09_02.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B21150_09_02.png)'
+- en: 'Figure 9.2: Loss and FPS during the training of baseline version'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.2：基线版本训练中的损失和 FPS
+- en: The computation graph in PyTorch
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: PyTorch 中的计算图
+- en: 'Our first examples won’t be around speeding up the baseline, but will show
+    one common, and not always obvious, situation that can cost you performance. In
+    Chapter [3](ch007.xhtml#x1-530003), we discussed the way PyTorch calculates gradients:
+    it builds the graph of all operations that you perform on tensors, and when you
+    call the backward() method of the final loss, all gradients in the model parameters
+    are automatically calculated.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的第一个例子不会集中在加速基线上，而是展示一种常见的、并不总是显而易见的情况，这种情况可能会影响性能。在第 [3](ch007.xhtml#x1-530003)
+    章中，我们讨论了 PyTorch 如何计算梯度：它会构建你对张量执行的所有操作的图，当你调用最终损失的 backward() 方法时，所有模型参数中的梯度会被自动计算出来。
+- en: 'This works well, but RL code is normally much more complex than traditional
+    supervised learning training, so the RL model that we are currently training is
+    also being applied to get the actions that the agent needs to perform in the environment.
+    The target network discussed in Chapter [6](#) makes it even more tricky. So,
+    in DQN, a neural network (NN) is normally used in three different situations:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法有效，但强化学习代码通常比传统的监督学习训练要复杂得多，因此我们当前训练的强化学习模型也在用于获取代理在环境中需要执行的动作。第 [6](#)
+    章中讨论的目标网络使得这一过程更加复杂。因此，在 DQN 中，神经网络（NN）通常在三种不同的情况中使用：
+- en: When we want to calculate Q-values predicted by the network to get the loss
+    in respect to reference Q-values approximated by the Bellman equation
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当我们希望计算由网络预测的Q值，以根据Bellman方程得到相对于参考Q值的损失时
+- en: When we apply the target network to get Q-values for the next state to calculate
+    a Bellman approximation
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当我们应用目标网络来获取下一个状态的Q值，以计算Bellman近似时
+- en: When the agent wants to make a decision about the action to perform
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当代理想要决定执行的动作时
+- en: In our training, we need gradients calculated only for the first situation.
+    In Chapter [6](#), we avoided gradients by explicitly calling detach() on the
+    tensor returned by the target network. This detach is very important, as it prevents
+    gradients from flowing into our model “from the unexpected direction” and, without
+    this, the DQN might not converge at all. In the third situation, gradients were
+    stopped by converting the network result into a NumPy array.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的训练中，我们只需要在第一种情况下计算梯度。在第[6](#)章中，我们通过显式调用detach()来避免计算梯度，这个detach非常重要，因为它防止了梯度“从意外的方向”流入我们的模型，如果没有它，DQN可能根本无法收敛。在第三种情况下，梯度通过将网络结果转换为NumPy数组来停止。
+- en: 'Our code in Chapter [6](#), worked, but we missed one subtle detail: the computation
+    graph that is created for all three situations. This is not a major problem, but
+    creating the graph still uses some resources (in terms of both speed and memory),
+    which are wasted because PyTorch creates this computation graph even if we don’t
+    call backward() on some graph. To prevent this, one very nice option exists: the
+    decorator torch.no_grad().'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在第[6](#)章中的代码是有效的，但我们错过了一个细节：三种情况下创建的计算图。这个问题不大，但创建计算图仍然会使用一些资源（无论是速度还是内存），而这些资源会浪费，因为即使我们没有对某个图调用backward()，PyTorch也会创建这个计算图。为了解决这个问题，有一个非常好的选项：装饰器torch.no_grad()。
+- en: 'Decorators in Python is a very wide topic. They give the developer a lot of
+    power (when properly used), but are well beyond the scope of this book. Here,
+    I’ll just give an example where we define two functions:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python中的装饰器是一个非常广泛的话题。它们为开发者提供了很多功能（如果使用得当），但超出了本书的讨论范围。在这里，我仅给出一个示例，我们定义了两个函数：
+- en: '[PRE0]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Both these functions are doing the same thing, doubling its argument, but the
+    first function is declared with torch.no_grad() and the second is just a normal
+    function. This decorator temporarily disables gradient computation for all tensors
+    passed to the function. As you can see, although the tensor, t, requires grad,
+    the result from fun_a (the decorated function) doesn’t have gradients:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两个函数做的是相同的事情，都是将参数翻倍，但第一个函数使用了torch.no_grad()装饰器，第二个则是普通函数。这个装饰器暂时禁用传递给函数的所有张量的梯度计算。如你所见，尽管张量t需要计算梯度，但从fun_a（被装饰的函数）返回的结果并没有梯度：
+- en: '[PRE1]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'But this effect is bounded inside the decorated function:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是这个效果仅限于装饰器函数内部：
+- en: '[PRE2]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'The function torch.no_grad() also could be used as a context manager (another
+    powerful Python concept that I recommend you learn about) to stop gradients in
+    some chunk of code:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数torch.no_grad()也可以作为上下文管理器使用（这是另一个强大的Python概念，我建议你学习它），用于停止某段代码中的梯度计算：
+- en: '[PRE3]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This functionality provides you with a very convenient way to indicate parts
+    of your code that should be excluded from the gradient machinery completely. This
+    has already been done in ptan.agent.DQNAgent (and other agents provided by PTAN)
+    and in the common.calc_loss_dqn function. But if you are writing a custom agent
+    or implementing your own code, it might be very easy to forget about this.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个功能为你提供了一种非常方便的方式，能够指示你代码中应该完全排除梯度计算的部分。这在ptan.agent.DQNAgent（以及PTAN提供的其他代理）和common.calc_loss_dqn函数中已经完成。但是如果你正在编写自定义代理或实现自己的代码，很容易忘记这一点。
+- en: 'To benchmark the effect of unnecessary graph calculation, I’ve provided the
+    modified baseline code in Chapter09/00_slow_grads.py, which is exactly the same,
+    but the agent and loss calculations are copied without torch.no_grad(). The following
+    charts show the effect of this:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了评估不必要的图计算的效果，我在Chapter09/00_slow_grads.py中提供了修改后的基准代码，它与原代码完全相同，但代理和损失计算部分没有使用torch.no_grad()。以下图表展示了这一效果：
+- en: '![PIC](img/B21150_09_03.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B21150_09_03.png)'
+- en: 'Figure 9.3: A comparison of reward and FPS between the baseline and version
+    without torch.no_grad()'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.3：基准版本与没有torch.no_grad()版本之间的奖励和FPS比较
+- en: As you can see, the speed penalty is not that large (around 10 FPS), but that
+    might become different in the case of a larger network with a more complicated
+    structure. I’ve seen a 50% performance boost in more complex recurrent NNs obtained
+    after adding torch.no_grad().
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所看到的，速度损失并不大（大约10FPS），但在网络更大且结构更复杂的情况下，这可能会有所不同。我曾看到在更复杂的递归神经网络中，加入torch.no_grad()后，性能提升了50%。
+- en: Several environments
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 多个环境
+- en: 'The first idea that we usually apply to speed up deep learning training is
+    larger batch size. It’s also applicable to the domain of deep RL, but you need
+    to be careful here. In the normal supervised learning case, the simple rule “a
+    large batch is better” is usually true: you just increase your batch as your GPU
+    memory allows, and a larger batch normally means more samples will be processed
+    in a unit of time thanks to enormous GPU parallelism.'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通常用来加速深度学习训练的第一个思路是增加批量大小。这同样适用于深度强化学习领域，但你需要小心。在普通的监督学习中，简单的规则“较大的批量更好”通常是成立的：只要你的GPU内存允许，就增加批量，较大的批量通常意味着在单位时间内处理更多样本，这得益于强大的GPU并行计算。
+- en: 'The RL case is slightly different. During the training, two things happen simultaneously:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强化学习的情况稍有不同。在训练过程中，两个事情是同时发生的：
+- en: Your network is trained to get better predictions on the current data
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你的网络经过训练，可以在当前数据上获得更好的预测
+- en: Your agent explores the environment
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你的代理探索环境
+- en: As the agent explores the environment and learns about the outcome of its actions,
+    the training data changes. In a shooter example, your agent can run randomly for
+    a time while being shot by monsters and have only a miserable “death is everywhere”
+    experience in the training buffer. But after a while, the agent will discover
+    that it has a weapon it can use. This new experience can dramatically change the
+    data that we are using for training. RL convergence usually lies on a fragile
+    balance between training and exploration. If we just increase a batch size without
+    tweaking other options, we can easily overfit to the current data (for our shooter
+    example, your agent can start thinking that “dying young” is the only option to
+    minimize suffering and may never discover the gun it has).
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着代理探索环境并学习其行为的结果，训练数据会发生变化。在射击游戏的例子中，代理可能会随机运行一段时间，被怪物击中并在训练缓冲区中只获得“死亡无处不在”的痛苦经验。但过了一段时间，代理会发现它有一把可以使用的武器。这种新的经验可能会极大地改变我们用于训练的数据。强化学习的收敛通常依赖于训练和探索之间的微妙平衡。如果我们只是增加批量大小而没有调整其他选项，我们很容易在当前数据上过拟合（在射击游戏的例子中，代理可能开始认为“早死”是最小化痛苦的唯一选择，甚至永远不会发现它拥有的枪）。
+- en: 'So, in the example in Chapter09/02_n_envs.py, our agent uses several copies
+    of the same environment to gather the training data. On every training iteration,
+    we populate our replay buffer with samples from all those environments and then
+    sample a proportionally larger batch size. This also allows us to speed up inference
+    time a bit, as we can make a decision about the actions to execute for all N environments
+    in one forward pass of the NN. In terms of implementation, the preceding logic
+    requires just a couple of changes in the code:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在Chapter09/02_n_envs.py中的示例中，我们的代理使用多个相同环境的副本来收集训练数据。在每次训练迭代中，我们将所有环境中的样本填充到重放缓冲区，然后按比例增大批量大小。这也使得我们能够稍微加速推理时间，因为我们可以在神经网络的一次前向传递中，对所有N个环境执行动作决策。在实现方面，前面的逻辑只需要对代码进行几处修改：
+- en: As PTAN supports several environments out of the box, what we need to do is
+    just pass N Gym environments to the ExperienceSource instance
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由于PTAN原生支持多个环境，我们需要做的就是将N个Gym环境传递给ExperienceSource实例
+- en: The agent code (in our case, DQNAgent) is already optimized for the batched
+    application of the NN
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 代理代码（在我们的例子中是DQNAgent）已经为神经网络的批处理应用进行了优化
+- en: 'Several pieces of code were changed to address this. The function that generates
+    batches now performs multiple steps (equal to the total number of environments)
+    for every training iteration:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，修改了几段代码。生成批次的函数现在在每次训练迭代中执行多个步骤（等于环境总数）：
+- en: '[PRE4]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'The experience source accepts the array of environments instead of a single
+    environment:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经验源接受多个环境的数组，而不是单一环境：
+- en: '[PRE5]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Other changes are just minor tweaks of constants to adjust the FPS tracker
+    and compensated speed of epsilon decay (ratio of random steps). As the number
+    of environments is the new hyperparameter that needs to be tuned, I ran several
+    experiments with N from 2…6\. The following charts show the averaged dynamics:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他变化仅是对常量的小调整，用于调整FPS追踪器和补偿ε衰减的速度（随机步骤的比例）。由于环境数量是需要调优的新超参数，我进行了几个实验，N的范围是从2到6。以下图表展示了平均的动态：
+- en: '![PIC](img/B21150_09_04.png)'
+  id: totrans-73
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B21150_09_04.png)'
+- en: 'Figure 9.4: Reward and FPS in the baseline, two, and three environments'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.4：基准、两个和三个环境中的奖励与FPS
+- en: '![PIC](img/B21150_09_05.png)'
+  id: totrans-75
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B21150_09_05.png)'
+- en: 'Figure 9.5: Reward and FPS for n = 3…6'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.5：n = 3…6时的奖励与FPS
+- en: As you can see from the charts, adding an extra environment provided a 47% gain
+    in FPS (from 227 FPS to 335 FPS) and sped up the convergence about 10% (from 52
+    minutes to 48 minutes). The same effect came from adding the third environment
+    (398 FPS, and 36 minutes), but adding more environments had a negative effect
+    on convergence speed, despite a further increase in FPS. So, it looks like N =
+    3 is more or less the optimal value for our hyperparameter, but, of course, you
+    are free to tweak and experiment. It also illustrates why we’re monitoring not
+    just raw speed in FPS but also how quickly the agent is able to solve the game.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你从图表中看到的，增加一个额外的环境提供了47%的FPS增益（从227 FPS到335 FPS），并加速了约10%的收敛速度（从52分钟到48分钟）。同样的效果也来自于增加第三个环境（398
+    FPS，36分钟），但是尽管FPS进一步增加，增加更多环境对收敛速度产生了负面影响。因此，看起来N = 3差不多是我们的超参数的最优值，但当然，你可以自由调整和实验。这也说明了为什么我们不仅监控FPS的原始速度，还要观察智能体解决游戏的速度。
+- en: Playing and training in separate processes
+  id: totrans-78
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在不同进程中进行游戏和训练
+- en: 'At a high level, our training contains a repetition of the following steps:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从高层次来看，我们的训练过程包含以下步骤的重复：
+- en: Ask the current network to choose actions and execute them in our array of environments.
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 请求当前网络选择动作，并在我们的环境阵列中执行这些动作。
+- en: Put observations into the replay buffer.
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将观察值放入重放缓冲区。
+- en: Randomly sample the training batch from the replay buffer.
+  id: totrans-82
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从重放缓冲区随机抽取训练批次。
+- en: Train on this batch.
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在这一批次上进行训练。
+- en: The purpose of the first two steps is to populate the replay buffer with samples
+    from the environment (which are observation, action, reward, and next observation).
+    The last two steps are for training our network.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前两步的目的是将环境中的样本（包括观察、动作、奖励和下一个观察）填充到重放缓冲区中。最后两步用于训练我们的网络。
+- en: The following is an illustration of the preceding steps that will make potential
+    parallelism slightly more obvious. On the left, the training flow is shown. The
+    training steps use environments, the replay buffer, and our NN. The solid lines
+    show data and code flow. Dotted lines represent usage of the NN for training and
+    inference.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是前面步骤的示意图，旨在使潜在的并行性更为明显。在左侧显示了训练流程。训练步骤使用了环境、重放缓冲区和我们的神经网络（NN）。实线表示数据和代码流动。虚线代表神经网络在训练和推理中的使用。
+- en: '![PIC](img/B21150_09_06.png)'
+  id: totrans-86
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B21150_09_06.png)'
+- en: 'Figure 9.6: A sequential diagram of the training process'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.6：训练过程的顺序图
+- en: 'As you can see, the top two steps communicate with the bottom only via the
+    replay buffer and NN. This makes it possible to separate those two parts in different
+    parallel processes. The following figure is a diagram of the scheme:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所见，前两个步骤与下部仅通过重放缓冲区和神经网络通信。这使得我们可以将这两部分在不同的并行进程中分开。以下图是该方案的示意图：
+- en: '![PIC](img/B21150_09_07.png)'
+  id: totrans-89
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B21150_09_07.png)'
+- en: 'Figure 9.7: The parallel version of the training and play steps'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.7：训练和游戏步骤的并行版本
+- en: In the case of our Pong environment, it might look like an unnecessary complication
+    of the code, but this separation might be extremely useful in some cases. Imagine
+    that you have a very slow and heavy environment, so every step takes seconds of
+    computations. That’s not a contrived example; for instance, past NeurIPS competitions,
+    such as Learning to Run, AI for Prosthetics Challenge, and Learn to Move ( [https://www.aicrowd.com/challenges/neurips-2019-learn-to-move-walk-around](https://www.aicrowd.com/challenges/neurips-2019-learn-to-move-walk-around)),
+    have very slow neuromuscular simulators, so you have to separate experience gathering
+    from the training process. In such cases, you can have many concurrent environments
+    that deliver the experience to the central training process.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的Pong环境中，这看起来像是对代码的一个不必要的复杂化，但这种分离在某些情况下可能非常有用。想象一下你有一个非常慢且复杂的环境，每一步都需要数秒的计算。这并不是一个人为的例子；例如，过去的NeurIPS竞赛，如Learning
+    to Run、AI for Prosthetics Challenge和Learn to Move（[https://www.aicrowd.com/challenges/neurips-2019-learn-to-move-walk-around](https://www.aicrowd.com/challenges/neurips-2019-learn-to-move-walk-around)）中使用了非常缓慢的神经肌肉模拟器，因此你必须将经验收集与训练过程分开。在这种情况下，你可以有许多并行的环境，将经验传递给中央训练过程。
+- en: To turn our serial code into parallel code, some modifications are needed. In
+    the file Chapter09/03_parallel.py, you can find the full source of the example.
+    In the following, I’ll focus only on major differences.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了将我们的串行代码转变为并行代码，需要做一些修改。在文件Chapter09/03_parallel.py中，你可以找到这个示例的完整源码。接下来，我将只关注主要的区别。
+- en: 'First, we use the torch.multiprocessing module as a drop-in replacement for
+    the standard Python multiprocessing module:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们使用torch.multiprocessing模块来替代标准的Python multiprocessing模块：
+- en: '[PRE6]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: The version from the standard library provides several primitives to work with
+    code executed in separated processes, such as mp.Queue (distributed queue), mp.Process
+    (child process), and others. PyTorch provides a wrapper around the standard multiprocessing
+    library, which allows torch tensors to be shared between processes without copying
+    them. This is implemented using shared memory in the case of CPU tensors, or CUDA
+    references for tensors on a GPU. This sharing mechanism removes the major bottleneck
+    when communication is performed within a single computer. Of course, in the case
+    of truly distributed communications, you need to serialize data yourself.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标准库中的版本提供了几个用于处理在独立进程中执行的代码的原语，例如mp.Queue（分布式队列）、mp.Process（子进程）等。PyTorch提供了一个对标准multiprocessing库的封装，它允许在进程间共享torch张量，而无需复制它们。这是通过共享内存实现的，针对CPU张量使用共享内存，或者针对GPU上的张量使用CUDA引用。这种共享机制消除了在单台计算机内部进行通信时的主要瓶颈。当然，在真正分布式的通信中，你需要自行序列化数据。
+- en: The function play_func implements our “play process” and will be running in
+    a separate child process started by the main process. Its responsibility is to
+    get experience from the environment and push it into the shared queue. In addition,
+    it wraps information about the end of the episode into a dataclass and pushes
+    it into the same queue to keep the training process informed about the episode
+    reward and the number of steps.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数play_func实现了我们的“播放进程”，并将在由主进程启动的单独子进程中运行。它的职责是从环境中获取经验并将其推送到共享队列中。此外，它将关于回合结束的信息封装成一个数据类，并将其推送到同一个队列中，以便训练过程可以获得关于回合奖励和步数的信息。
+- en: 'The function batch_generator is replaced by the class BatchGenerator:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数batch_generator被类BatchGenerator所替代：
+- en: '[PRE7]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'This class provides an iterator over batches and additionally mimics the ExperienceSource
+    interface with the method pop_reward_steps(). The logic of this class is simple:
+    it consumes the queue (populated by the “play process”), and if the EpisodeEnded
+    object was received, it remembers information about epsilon and the count of steps
+    the game took; otherwise, the object is a piece of experience that needs to be
+    added into the replay buffer. From the queue, we consume all objects available
+    at the moment, and then the training batch is sampled from the buffer and yielded.'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个类提供了一个批次的迭代器，并且通过方法pop_reward_steps()额外模拟了ExperienceSource接口。这个类的逻辑很简单：它消费队列（由“播放进程”填充），如果接收到EpisodeEnded对象，它会记住关于epsilon的信息和游戏所经历的步骤数；否则，该对象就是一条需要添加到重放缓冲区的经验。从队列中，我们消费当前可用的所有对象，然后从缓冲区中抽样训练批次并返回。
+- en: 'In the beginning of the training process, we need to tell torch.multiprocessing
+    which start method to use:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程的开始，我们需要告诉torch.multiprocessing使用哪种启动方法：
+- en: '[PRE8]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: There are several of them, but spawn is the most flexible.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它们有几个，但 spawn 是最灵活的。
+- en: 'Then, the queue for communication is created, and we start our play_func as
+    a separate process. As arguments, we pass the NN, hyperparameters, and queue to
+    be used for experience:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，创建用于通信的队列，并将 play_func 作为单独的进程启动。我们传递的参数包括神经网络（NN）、超参数以及用于经验的队列：
+- en: '[PRE9]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The rest of the code is almost the same, with the exception that we use a BatchGenerator
+    instance as the data source for Ignite and for EndOfEpisodeHandler (which requires
+    the method pop_rewards_steps()). The following charts were obtained from my benchmarks:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其余的代码几乎相同，唯一不同的是我们使用 BatchGenerator 实例作为 Ignite 和 EndOfEpisodeHandler 的数据源（后者需要使用方法
+    pop_rewards_steps()）。以下图表是从我的基准测试中获得的：
+- en: '![PIC](img/B21150_09_08.png)'
+  id: totrans-106
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B21150_09_08.png)'
+- en: 'Figure 9.8: Reward and FPS in the baseline and parallel version'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.8：基线版本和并行版本中的奖励和 FPS
+- en: 'As you can see, in terms of FPS, we got an increase of 27%: 290 FPS in the
+    parallel version versus 228 in the baseline. The average time to solve the environment
+    decreased by 41%.'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，在 FPS 方面，我们获得了 27% 的提升：并行版本的 FPS 为 290，而基线为 228。解决环境的平均时间减少了 41%。
+- en: In terms of FPS increase, the parallel version looks worse than the best result
+    from the previous section (with 3 game environments, we got almost 400 FPS), but
+    the convergence speed is better.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就 FPS 增加而言，尽管并行版本比前一节中的最佳结果（使用 3 个游戏环境时，我们获得了接近 400 FPS）看起来要差，但收敛速度更快。
+- en: Tweaking wrappers
+  id: totrans-110
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 调整封装器
+- en: 'The final step in our sequence of experiments will be tweaking wrappers applied
+    to the environment. This is very easy to overlook, as wrappers are normally written
+    once or just borrowed from other code, applied to the environment, and left to
+    sit there. But you should be aware of their importance in terms of the speed and
+    convergence of your method. For example, the normal DeepMind-style stack of wrappers
+    applied to an Atari game looks like this:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们实验序列中的最后一步是调整应用于环境的封装器。这个步骤很容易被忽视，因为封装器通常是写一次或从其他代码借用后应用到环境中的，并且被留在那里。但你应该意识到它们在方法的速度和收敛性方面的重要性。例如，DeepMind
+    风格的正常 Atari 游戏封装器堆栈如下：
+- en: 'NoopResetEnv: Applies a random amount of NOOP operations to the game reset.
+    In some Atari games, this is needed to remove weird initial observations.'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: NoopResetEnv：对游戏重置应用随机数量的 NOOP 操作。在某些 Atari 游戏中，需要这个操作来去除奇怪的初始观察值。
+- en: 'MaxAndSkipEnv: Applies max to N observations (four by default) and returns
+    this as an observation for the step. This solves the “flickering” problem in some
+    Atari games, when the game draws different portions of the screen on even and
+    odd frames (a normal practice among Atari developers to overcome the platform’s
+    limitations and increase the complexity of the game’s sprites).'
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: MaxAndSkipEnv：对 N 次观察应用最大值（默认四次），并将其作为该步的观察返回。这样解决了某些 Atari 游戏中的“闪烁”问题，因为这些游戏在偶数帧和奇数帧上绘制屏幕的不同部分（这是
+    Atari 开发者常用的做法，以克服平台的限制并增加游戏精灵的复杂度）。
+- en: 'EpisodicLifeEnv: In some games, this detects a lost life and turns this situation
+    into the end of the episode. This significantly increases convergence, as our
+    episodes become shorter (one single life versus several given by the game logic).
+    This is relevant only for some games supported by the Atari 2600 Learning Environment.'
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: EpisodicLifeEnv：在某些游戏中，这会检测丢失的生命并将其转化为该集的结束。这显著提高了收敛性，因为我们的回合变得更短（一次生命而非游戏逻辑给出的多次生命）。这仅对
+    Atari 2600 学习环境支持的某些游戏相关。
+- en: 'FireResetEnv: Executes a FIRE action on game reset. Some games require this
+    to start the gameplay. Without this, our environment becomes a partially observable
+    Markov decision process (POMDP), which makes it impossible to converge.'
+  id: totrans-115
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: FireResetEnv：在游戏重置时执行 FIRE 操作。有些游戏需要这个操作才能开始游戏。如果没有这个操作，我们的环境就变成了部分可观察的马尔可夫决策过程（POMDP），这使得无法收敛。
+- en: 'WarpFrame: Also known as ProcessFrame84, this converts an image to grayscale
+    and resizes it to 84 × 84.'
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: WarpFrame：也称为 ProcessFrame84， 将图像转换为灰度并将其调整为 84 × 84 大小。
+- en: 'ClipRewardEnv: Clips the reward to a −1…1 range, which unifies wide variability
+    in scoring among different Atari games. For example, Pong might have a −21…21
+    score range, but the score in the River Raid game could be 0…∞.'
+  id: totrans-117
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: ClipRewardEnv：将奖励裁剪到 −1…1 范围，这统一了不同 Atari 游戏中分数的广泛变化。例如，Pong 的分数范围可能是 −21…21，而
+    River Raid 游戏的分数可能是 0…∞。
+- en: 'FrameStack: Stacks N sequential observations into the stack (the default is
+    four). As we already discussed in Chapter [6](#), in some games, this is required
+    to fulfill the Markov property. For example, in Pong, from one single frame, it
+    is impossible to get the direction the ball is moving in.'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: FrameStack：将N个连续的观察堆叠到栈中（默认是四个）。正如我们在第[6](#)章中讨论的那样，在某些游戏中，这是实现马尔可夫性质所必需的。例如，在Pong游戏中，从单一的一帧图像中无法得知球的运动方向。
+- en: 'The code of those wrappers was heavily optimized by many people and several
+    versions exist. My personal favorite is the Stable Baselines3, which is a fork
+    from the OpenAI Baselines project. You can find it here: [https://stable-baselines3.readthedocs.io/.](https://stable-baselines3.readthedocs.io/.)'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些包装器的代码经过了许多人的精心优化，并且存在多个版本。个人最喜欢的是 Stable Baselines3，它是 OpenAI Baselines 项目的一个分支。你可以在这里找到它：[https://stable-baselines3.readthedocs.io/.](https://stable-baselines3.readthedocs.io/.)
+- en: But you shouldn’t take this code as the final source of truth, as your concrete
+    environment might have different requirements and specifics. For example, if you
+    are interested in speeding up one specific game from the Atari suite, NoopResetEnv
+    and MaxAndSkipEnv (more precisely, the max pooling operation from MaxAndSkipEnv)
+    might not be needed. Another thing that could be tweaked is the number of frames
+    in the FrameStack wrapper. The normal practice is to use four, but you need to
+    understand that this number was used by DeepMind and other researchers to train
+    on the full Atari 2600 game suite, which currently includes more than 50 games.
+    For your specific case, a history of two frames might be enough to give you a
+    performance boost, as less data will need to be processed by the NN.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但你不应该将这段代码视为最终的真理源，因为你的具体环境可能有不同的需求和细节。例如，如果你有兴趣加速 Atari 套件中的某个特定游戏，NoopResetEnv
+    和 MaxAndSkipEnv（更准确地说，是 MaxAndSkipEnv 中的最大池化操作）可能并不需要。另一个可以调整的地方是 FrameStack 包装器中的帧数。通常做法是使用四帧，但你需要理解，这个数字是
+    DeepMind 和其他研究人员在对完整的 Atari 2600 游戏套件进行训练时使用的，该套件目前包含超过 50 个游戏。对于你的特定情况，使用两帧的历史可能足以提供性能提升，因为神经网络需要处理的数据会更少。
+- en: Finally, the image resize could be the bottleneck of wrappers, so you might
+    want to optimize libraries used by wrappers, for example, rebuilding them or replacing
+    them with faster versions. Prior to 2020, replacing the OpenCV2 library with the
+    pillow-simd library gave a boost of about 50 frames per second. Nowadays, OpenCV2
+    uses an optimized rescaling operation, so such replacement has no effect. But
+    still, you might experiment with different scaling methods and different libraries.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，图像调整大小可能是包装器的瓶颈，因此你可能需要优化包装器使用的库，例如重新构建它们或替换为更快速的版本。2020年之前，将 OpenCV2 库替换为
+    pillow-simd 库能提高大约 50 帧每秒的速度。如今，OpenCV2 使用了优化的重新缩放操作，因此这种替换已不再有效。但你仍然可以尝试不同的缩放方法和不同的库。
+- en: 'Here, we’ll apply the following changes to the Pong wrappers:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将对 Pong 的包装器应用以下更改：
+- en: Disable NoopResetEnv
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 禁用 NoopResetEnv
+- en: Replace MaxAndSkipEnv with a simplified version, which just skips four frames
+    without max pooling
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用简化版本替换 MaxAndSkipEnv，只跳过四帧而不进行最大池化。
+- en: Keep only two frames in FrameStack
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 只保留两个帧在 FrameStack 中
+- en: 'To check the combined effect of our tweaks, we’ll add the above changes to
+    the modifications done in the previous two sections: several environments and
+    parallel execution of playing and training.'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了检查我们调整的综合效果，我们将把上面的更改添加到前两节所做的修改中：多个环境和并行执行游戏与训练。
+- en: 'As the changes are not complex, let’s just quickly discuss them without the
+    actual code (the full code can be found in the files Chapter09/04_wrappers_n_env.py,
+    Chapter09/04_wrappers_parallel.py, and Chapter09/lib/atari_wrappers.py):'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于这些更改并不复杂，我们就不展示具体代码了（完整代码可以在文件 Chapter09/04_wrappers_n_env.py、Chapter09/04_wrappers_parallel.py
+    和 Chapter09/lib/atari_wrappers.py 中找到）：
+- en: Library atari_wrappers.py is quite simple — it contains the copy of the wrap_dqn
+    function from PTAN and the AtariWrapper class from Stable Baselines3.
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 库 atari_wrappers.py 相当简单——它包含了 PTAN 中 wrap_dqn 函数的副本和 Stable Baselines3 中的 AtariWrapper
+    类。
+- en: In AtariWrapper, the class MaxAndSkipEnv was replaced with a simplified version
+    without max pooling between frames.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 AtariWrapper 中，MaxAndSkipEnv 类被一个简化版本替代，去除了帧间的最大池化操作。
+- en: Two modules, 04_wrappers_n_env.py and 04_wrappers_prallel.py, are just copies
+    of 02_n_env.py and 03_parallel.py we’ve already seen, with tweaked environment
+    creation.
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 两个模块，04_wrappers_n_env.py 和 04_wrappers_prallel.py，仅仅是我们之前见过的 02_n_env.py 和
+    03_parallel.py 的副本，环境创建经过调整。
+- en: 'That’s it! The following are charts with reward dynamics and FPS for both versions:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样！以下是两种版本的奖励动态和FPS图表：
+- en: '![PIC](img/B21150_09_09.png)'
+  id: totrans-132
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B21150_09_09.png)'
+- en: 'Figure 9.9: Reward and FPS in the baseline and “3 environments and 2 frames”
+    version'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.9：基准版和“3 个环境与 2 帧版本”的奖励与 FPS
+- en: '![PIC](img/B21150_09_10.png)'
+  id: totrans-134
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B21150_09_10.png)'
+- en: 'Figure 9.10: Reward and FPS in the baseline and “parallel and 2 frames” version'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.10：基准版和“并行与 2 帧版本”的奖励与 FPS
+- en: Out of curiosity, I also tried to reduce the number of frames kept in FrameStack
+    to just one frame (you can repeat the experiment with the command-line argument
+    --stack 1). Surprisingly, such a version was able to solve the game, but it took
+    significantly longer in terms of games needed and the training became unstable
+    (about 3 out of 8 training runs didn’t converge at all). This might be an indication
+    that Pong with just one frame is not POMDP and the agent still can learn how to
+    win the game having just one frame as observation. But the efficiency of training
+    definitely suffers.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 出于好奇，我还尝试将 FrameStack 中保持的帧数减少到仅一个帧（你可以通过命令行参数 --stack 1 重复实验）。令人惊讶的是，这样的版本也能解决游戏，但所需的游戏次数显著增加，训练变得不稳定（大约
+    8 次训练中的 3 次完全没有收敛）。这可能表明，只有一个帧的 Pong 并不是 POMDP，代理仍然可以仅凭一个帧作为观察，学习如何赢得游戏。但训练效率肯定会受到影响。
+- en: Benchmark results
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基准结果
+- en: 'I’ve summarized our experiments in the following table. The percentages show
+    the changes versus the baseline version:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我已将我们的实验总结在以下表格中。百分比显示相对于基准版的变化：
+- en: '| Step | FPS | FPS Δ | Time, mins | Time Δ |'
+  id: totrans-139
+  prefs: []
+  type: TYPE_TB
+  zh: '| 步骤 | FPS | FPS Δ | 时间（分钟） | 时间 Δ |'
+- en: '| Baseline | 229 |  | 52.2 |  |'
+  id: totrans-140
+  prefs: []
+  type: TYPE_TB
+  zh: '| 基准 | 229 |  | 52.2 |  |'
+- en: '| Without torch.no_grad() | 219 | -4.3% | 51.0 | -2.3% |'
+  id: totrans-141
+  prefs: []
+  type: TYPE_TB
+  zh: '| 没有 torch.no.grad() | 219 | -4.3% | 51.0 | -2.3% |'
+- en: '| 3 environments | 395 | +72.5% | 36.0 | -31.0% |'
+  id: totrans-142
+  prefs: []
+  type: TYPE_TB
+  zh: '| 3 个环境 | 395 | +72.5% | 36.0 | -31.0% |'
+- en: '| Parallel version | 290 | +26.6% | 31.2 | -40.2% |'
+  id: totrans-143
+  prefs: []
+  type: TYPE_TB
+  zh: '| 并行版本 | 290 | +26.6% | 31.2 | -40.2% |'
+- en: '| Wrappers + 3 environments | 448 | +95.6% | 47.4 | -9.2% |'
+  id: totrans-144
+  prefs: []
+  type: TYPE_TB
+  zh: '| 包装器 + 3 个环境 | 448 | +95.6% | 47.4 | -9.2% |'
+- en: '| Wrappers + parallel | 325 | +41.9% | 30.0 | -42.5% |'
+  id: totrans-145
+  prefs: []
+  type: TYPE_TB
+  zh: '| 包装器 + 并行 | 325 | +41.9% | 30.0 | -42.5% |'
+- en: 'Table 9.1: Optimization results'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 9.1：优化结果
+- en: Summary
+  id: totrans-147
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, you saw several ways to improve the performance of the RL method
+    using a pure engineering approach, which was in contrast to the “algorithmic”
+    or “theoretical” approach covered in Chapter [8](ch012.xhtml#x1-1240008). From
+    my perspective, both approaches complement each other, and a good RL practitioner
+    needs to both know the latest tricks that researchers have found and be aware
+    of the implementation details.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，你看到了几种通过纯工程方法提高 RL 方法性能的方式，这与第 [8](ch012.xhtml#x1-1240008) 章中介绍的“算法”或“理论”方法形成对比。从我的角度来看，这两种方法是互补的，一个优秀的
+    RL 从业者需要既了解研究人员发现的最新技巧，也要了解实现细节。
+- en: In the next chapter, we will begin applying our DQN knowledge to stocks trading
+    as a practical example.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，我们将开始将我们的 DQN 知识应用于股票交易作为实际示例。

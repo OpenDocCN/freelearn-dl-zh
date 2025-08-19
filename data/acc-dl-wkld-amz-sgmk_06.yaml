@@ -1,0 +1,2255 @@
+- en: '6'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '6'
+- en: Engineering Distributed Training
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分布式训练工程
+- en: In the previous chapter, we discussed how to select optimal hardware for the
+    **Deep** **Learning** (**DL**) training job and optimize your model for the target
+    hardware platform. In this chapter, we will consider, in depth, how to design
+    efficient distributed training on Amazon SageMaker given your particular use case
+    and model architecture.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们讨论了如何为**深度** **学习**（**DL**）训练任务选择最优硬件，并针对目标硬件平台优化你的模型。在本章中，我们将深入探讨如何根据你的特定用例和模型架构，在亚马逊
+    SageMaker 上设计高效的分布式训练。
+- en: There are two specific problems that distributed training aims to address. The
+    first problem is how to reduce the training time of large models by distributing
+    training tasks across multiple compute devices. Another problem arises when we
+    need to train large models that cannot fit into the memory of a single GPU device.
+    This problem is especially relevant for NLP tasks where it’s shown that very large
+    models have more expressive power and, hence, better performance on a wide range
+    of NLP tasks. For instance, the latest open source SOTA language model, called
+    BLOOM, was trained for ~3.5 months on a compute cluster with 384 GPU accelerators
+    (NVIDIA A100). Model weights alone are around 329 GB, and a checkpoint with model
+    weights and optimizer states is 2.3 TB. For more details, please refer to the
+    model card at [https://huggingface.co/bigscience/bloom](https://huggingface.co/bigscience/bloom).
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分布式训练旨在解决两个具体问题。第一个问题是如何通过将训练任务分配到多个计算设备上来减少大型模型的训练时间。另一个问题是在需要训练无法完全加载到单个 GPU
+    设备内存中的大型模型时出现的。这一问题在自然语言处理（NLP）任务中尤为重要，因为研究表明，超大模型具有更强的表达能力，因此在广泛的 NLP 任务中表现更好。例如，最新的开源
+    SOTA 语言模型 BLOOM，在一个包含 384 个 GPU 加速器（NVIDIA A100）的计算集群上训练了大约 3.5 个月。仅模型权重就有约 329
+    GB，而包含模型权重和优化器状态的检查点则为 2.3 TB。更多详情，请参阅 [https://huggingface.co/bigscience/bloom](https://huggingface.co/bigscience/bloom)。
+- en: Two approaches have emerged to address these problems; the first is **Data parallel**
+    distributed training to speed up training time by simultaneously distributing
+    tasks. The second is **Model parallel** distributed training to distribute large
+    models between several GPUs and, hence, allow you to use models that cannot fit
+    into the memory of an individual GPU device.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为解决这些问题，已经出现了两种方法；第一种是**数据并行**分布式训练，通过同时分配任务来加速训练时间。第二种是**模型并行**分布式训练，将大型模型分布到多个
+    GPU 之间，从而使你能够使用无法完全加载到单个 GPU 设备内存中的模型。
+- en: As you probably already guessed, large models that do not fit a single GPU device
+    also require considerable time to train. So, inevitably, model parallelism will
+    need to be combined with data parallelism to make the training time acceptable.
+    The combination of data parallelism and model parallelism is known as **hybrid
+    parallelism**. In this chapter, we will discuss these three types of parallelism.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你可能已经猜到的那样，无法适配单个 GPU 设备的大型模型也需要相当长的训练时间。因此，必然需要将模型并行与数据并行结合起来，以使训练时间变得可接受。数据并行和模型并行的结合被称为**混合并行**。在本章中，我们将讨论这三种并行方式。
+- en: 'While understanding distributed training approaches is essential, you also
+    need to understand the available implementations for your DL framework and model
+    architecture. SageMaker provides proprietary libraries for distributed training:
+    **SageMaker Distributed Data Parallel** (**SDDP**) and **SageMaker Distributed
+    Model Parallel** (**SDMP**). We will review their benefits and gain practical
+    experience in how to use them in this chapter. Additionally, we will discuss other
+    popular open source alternatives for distributed training for both the TensorFlow
+    and PyTorch frameworks and how to use them on the SageMaker platform.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然理解分布式训练方法至关重要，但你还需要了解适用于你的 DL 框架和模型架构的实现方式。SageMaker 提供了用于分布式训练的专有库：**SageMaker
+    分布式数据并行**（**SDDP**）和**SageMaker 分布式模型并行**（**SDMP**）。在本章中，我们将回顾它们的优点，并实际体验如何使用它们。此外，我们还将讨论针对
+    TensorFlow 和 PyTorch 框架的其他流行开源分布式训练替代方案，以及如何在 SageMaker 平台上使用它们。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Engineering data parallel training
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据并行训练工程
+- en: Engineering model parallel and hybrid training
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 模型并行与混合并行训练工程
+- en: Optimizing distributed training jobs
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化分布式训练任务
+- en: By the end of this chapter, you will have a good understanding of distributed
+    training and will have gained practical experience of how to implement various
+    types of distributed training on Amazon SageMaker.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，您将对分布式训练有一个清晰的理解，并且获得在Amazon SageMaker上实现各种类型分布式训练的实际经验。
+- en: Technical requirements
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: In this chapter, we will provide code walk-through samples, so you can develop
+    practical skills. The full code examples are available at [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章节中，我们将提供代码示例，帮助您培养实际技能。完整的代码示例可以在[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/)查看。
+- en: 'To follow along with this code, you will need to have the following:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要跟随本代码示例，您需要具备以下条件：
+- en: An AWS account and IAM user with the permissions to manage Amazon SageMaker
+    resources.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个AWS账户和具有管理Amazon SageMaker资源权限的IAM用户。
+- en: A SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker-compatible
+    environment established.
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 建立一个SageMaker笔记本，SageMaker Studio笔记本，或本地兼容SageMaker的环境。
+- en: Access to GPU training instances in your AWS account. Each example in this chapter
+    will provide a recommended instance type to use. It’s possible that you will need
+    to increase your compute quota for *SageMaker Training Job* to have GPU instances
+    enabled. In that case, please follow the instructions at [https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml).
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在您的AWS账户中访问GPU训练实例。本章节中的每个示例将提供推荐的实例类型。可能需要增加您的计算配额，以便启用GPU实例用于*SageMaker训练作业*。在这种情况下，请按照[https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml)中的说明操作。
+- en: Engineering data parallel training
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 工程数据并行训练
+- en: 'First, let’s outline some important terminology that we’ll use throughout this
+    chapter:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们概述一下在本章中将使用的一些重要术语：
+- en: '**Training process**, **trainer**, or **worker** – These terms are used interchangeably
+    to identify an independent training process in a compute cluster. For example,
+    a distributed DL training process usually runs on a single GPU device.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**训练进程**、**训练器**或**工作节点** – 这些术语交替使用，指的是计算集群中的独立训练进程。例如，分布式深度学习训练进程通常在单个GPU设备上运行。'
+- en: '**Training node**, **server**, or **host** – These terms define the server
+    in the training cluster. The server can have one or several GPU devices, which
+    means that one or several training processes can run on the same server.'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**训练节点**、**服务器**或**主机** – 这些术语定义了训练集群中的服务器。该服务器可以有一个或多个GPU设备，这意味着一个或多个训练进程可以在同一台服务器上运行。'
+- en: '**World size** – This is the number of independent training processes running
+    in the training cluster. Typically, the world size is equal to the number of GPU
+    devices that are available in your training cluster.'
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**世界大小** – 这是在训练集群中运行的独立训练进程的数量。通常，世界大小等于训练集群中可用的GPU设备数量。'
+- en: '**Rank (also global rank)** – This is a unique zero-based ID of training processes
+    running in your training cluster. For instance, if you have 4 training processes,
+    they will have the ranks of 0, 1, 2, and 3.'
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**排名（也称全局排名）** – 这是在训练集群中运行的训练进程的唯一零基ID。例如，如果您有4个训练进程，它们的排名分别为0、1、2和3。'
+- en: '**Local rank** – This is a unique zero-based ID of training processes running
+    within a single node. For example, if you have two training nodes with two GPU
+    devices each, then the local ranks will be 0 and 1, and the global ranks will
+    be 0, 1, 2, and 3.'
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**本地排名** – 这是在单个节点内运行的训练进程的唯一零基ID。例如，如果您有两个训练节点，每个节点有两个GPU设备，那么本地排名将是0和1，全局排名将是0、1、2和3。'
+- en: '**Communication backend** or **Collective communication** – These terms define
+    the mechanism and protocol for training processes to communicate and coordinate
+    computations with each other. Some popular backends are **NVIDIA NCCL**, **Gloo**,
+    and **Message passing interface** (**MPI**).'
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**通信后端**或**集体通信** – 这些术语定义了训练进程之间进行通信和协调计算的机制与协议。一些常见的后端有**NVIDIA NCCL**、**Gloo**和**消息传递接口**（**MPI**）。'
+- en: '`allreduce` operation, to aggregate and average tensors or **broadcast** to
+    send the tensor from one training process to other processes in your cluster.
+    Typically, communication backends provide the implementation of collective operations.'
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`allreduce` 操作用于聚合和平均张量或**广播**，将张量从一个训练进程发送到集群中的其他进程。通常，通信后端提供集体操作的实现。'
+- en: Now that we understand the basic terminology of distributed training, let’s
+    review data parallelism in depth.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们了解了分布式训练的基本术语，让我们深入回顾一下数据并行。
+- en: 'Data parallel distributed training is useful when you are looking to reduce
+    the training time of your model across multiple training devices. Each individual
+    training process has a copy of the global model but trains it on a unique slice
+    of data in parallel with others (hence *data parallelism*). At the end of the
+    training step, each training process exchanges with other learned gradient updates.
+    Then, the gradient updates are averaged and distributed back to all training processes
+    so that they can update their individual model copies. *Figure 6.1* illustrates
+    how data batches are distributed in a data-parallel two-node two-GPU cluster:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据并行分布式训练在你想要减少在多个训练设备上训练模型的时间时非常有用。每个训练进程都有一个全局模型的副本，但它在与其他进程并行的过程中，在独特的数据切片上进行训练（因此称为*数据并行性*）。在训练步骤结束时，每个训练进程与其他进程交换学习到的梯度更新。然后，梯度更新被平均并分发回所有训练进程，以便它们可以更新各自的模型副本。*图
+    6.1*展示了数据批次在一个数据并行的双节点双GPU集群中的分布情况：
+- en: '![Figure 6.1 – An overview of data parallelism ](img/B17519_06_001.jpg)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.1 – 数据并行概览](img/B17519_06_001.jpg)'
+- en: Figure 6.1 – An overview of data parallelism
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.1 – 数据并行概览
+- en: 'When engineering your data parallel training job, you need to be aware of several
+    key design choices to debug and optimize your training job, such as the following:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设计数据并行训练任务时，你需要注意几个关键设计选择，以便调试和优化你的训练任务，诸如以下几点：
+- en: How the coordination happens between processes
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 各个进程之间如何进行协调
+- en: How individual compute processes communicate with each other
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 各个计算进程如何相互通信
+- en: How compute processes are distributed in the training cluster
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 计算进程如何在训练集群中分布
+- en: In the following section, we will discuss these design options.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将讨论这些设计选项。
+- en: Coordination patterns – Parameter Server versus Allreduce
+  id: totrans-36
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 协调模式 – 参数服务器与Allreduce
+- en: 'There are two ways to coordinate compute processes in distributed clusters:
+    using a **dedicated centralized coordinator** and using **peer-to-peer coordination**
+    where each node communicates with one or many peers in a cluster directly. In
+    the context of data parallel training, a centralized coordination pattern is called
+    **Parameter Server** where the parameter server process coordinates the distribution
+    of gradient updates and maintains a global model copy. The peer-to-peer pattern
+    is called **Allreduce** that goes by the name of the peer-to-peer algorithm to
+    distribute gradient updates between the training processes. In *Figure 6.2*, you
+    can see the difference between the two coordination patterns:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分布式集群中协调计算进程有两种方式：使用**专用的集中式协调器**，以及使用**对等协调**，其中每个节点直接与集群中的一个或多个对等节点通信。在数据并行训练的背景下，集中式协调模式被称为**参数服务器**，其中参数服务器进程协调梯度更新的分发并维护全局模型副本。而对等模式被称为**Allreduce**，它是一种通过对等算法在训练进程之间分发梯度更新的方式。在*图
+    6.2*中，你可以看到这两种协调模式的区别：
+- en: '![Figure 6.2 – The Parameter Server (A) and Allreduce (B) coordination patterns
+    ](img/B17519_06_002.jpg)'
+  id: totrans-38
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.2 – 参数服务器 (A) 和 Allreduce (B) 协调模式](img/B17519_06_002.jpg)'
+- en: Figure 6.2 – The Parameter Server (A) and Allreduce (B) coordination patterns
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.2 – 参数服务器 (A) 和 Allreduce (B) 协调模式
+- en: 'Parameter Server is responsible for coordinating training processes in the
+    cluster, namely the following:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参数服务器负责协调集群中的训练过程，具体包括以下内容：
+- en: Allocating a unique set of data records for each training process
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为每个训练过程分配一组独特的数据记录
+- en: Receiving gradients from each individual training process
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从每个训练进程接收梯度
+- en: Aggregating gradients and updating the model weights accordingly
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 聚合梯度并相应地更新模型权重
+- en: Sending the updated model back to the training processes
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将更新后的模型发送回训练进程
+- en: Parameter Server stores a master copy of model weights. For larger DL models,
+    it’s possible that you might not be able to store the full model on Parameter
+    Server. Additionally, Parameter Server can become a network and computation bottleneck.
+    In that case, you might introduce multiple parameter servers that will store a
+    subset of model parameters to reduce the network and memory requirements. Multiple
+    parameter servers allow you to scale your distributed training for large models;
+    however, it introduces additional complexities when coordinating model updates
+    between the training processes and parameter servers and might still lead to network
+    congestion. Finding an optimal configuration between the training processes and
+    parameter servers can be a daunting task with a considerable trial-and-error effort
+    required to find the optimal configuration.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参数服务器存储模型权重的主副本。对于较大的深度学习模型，可能无法将完整的模型存储在参数服务器上。此外，参数服务器可能会成为网络和计算瓶颈。在这种情况下，你可能需要引入多个参数服务器，它们将存储模型参数的子集，从而减少网络和内存的需求。多个参数服务器允许你扩展分布式训练以处理大型模型；然而，当在训练进程和参数服务器之间协调模型更新时，它会引入额外的复杂性，并可能导致网络拥塞。找到训练进程与参数服务器之间的最佳配置可能是一个艰巨的任务，需要经过相当多的反复试验才能找到最优配置。
+- en: 'The **Allreduce** algorithm employs peer-to-peer communication when each training
+    process exchanges gradient updates with only two neighbors. A training process
+    with a rank of *i* calculates gradients for the unique data micro-batch, receives
+    gradients from process *i-1*, summarizes the received gradients with its own calculated
+    gradients, and then sends the aggregated gradients to node *i+1*. In total, each
+    process will communicate with its peers ![](img/B17519_06_F01.png) times:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**Allreduce** 算法采用点对点通信，每个训练进程仅与两个邻居交换梯度更新。一个秩为 *i* 的训练进程为独特的数据微批次计算梯度，从进程
+    *i-1* 接收梯度，并将接收到的梯度与自己计算的梯度汇总，然后将聚合后的梯度发送给节点 *i+1*。总的来说，每个进程将与它的同伴进行 ![](img/B17519_06_F01.png)
+    次通信：'
+- en: '![Figure 6.3 – The sequence of compute operations in the Allreduce algorithm
+    ](img/B17519_06_003.jpg)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.3 – Allreduce 算法中的计算操作顺序](img/B17519_06_003.jpg)'
+- en: Figure 6.3 – The sequence of compute operations in the Allreduce algorithm
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.3 – Allreduce 算法中的计算操作顺序
+- en: The Allreduce algorithm is considered bandwidth-efficient with constant communication
+    costs and avoids having communication bottlenecks such as in the case of Parameter
+    Server. Additionally, it has less complexity in operating compared to the Parameter
+    Server approach (specifically, in the case of multiple parameter server instances).
+    Therefore, many recent research papers and implementations are based on the Allreduce
+    algorithm and its modifications. The most popular implementations of the Allreduce
+    algorithm are Horovod, TensorFlow Mirror Strategy, and PyTorch **Distributed Data
+    Parallel** (**DDP**). AWS utilizes the modified Allreduce algorithm in the SDDP
+    library, too. Later in this chapter, we will develop a distributed training job
+    on SageMaker using the previously mentioned Allreduce implementations.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Allreduce 算法被认为是带宽高效的，具有恒定的通信成本，并避免了像参数服务器那样的通信瓶颈。此外，与参数服务器方法相比，它的操作复杂性较低（特别是在多个参数服务器实例的情况下）。因此，许多近期的研究论文和实现都基于
+    Allreduce 算法及其修改版。Allreduce 算法的最流行实现包括 Horovod、TensorFlow Mirror Strategy 和 PyTorch
+    **分布式数据并行**（**DDP**）。AWS 也在 SDDP 库中使用了修改后的 Allreduce 算法。稍后在本章中，我们将使用前面提到的 Allreduce
+    实现，在 SageMaker 上开发一个分布式训练任务。
+- en: Communication types – sync versus async
+  id: totrans-50
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 通信类型 – 同步与异步
+- en: 'There are two types of communication in distributed training jobs: **synchronous**
+    (**sync**) and **asynchronous** (**async**).'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分布式训练任务中有两种通信类型：**同步**（**sync**）和**异步**（**async**）。
+- en: '**Sync communication** implies that each training process will perform its
+    computations synchronously with other processes in the cluster. For instance,
+    in the case of the synchronous Allreduce algorithm, each training process will
+    wait for other processes to complete their backward and forward passes before
+    starting to exchange their gradients. This leads to situations where the cluster
+    performance on each training step is defined by the performance of the slowest
+    training process and might result in waiting for time (waste) for other training
+    processes. However, the benefits of sync communication include more stable training
+    convergence. Different implementations of the Allreduce algorithm also provide
+    optimizations to reduce waiting time.'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**同步通信**意味着每个训练进程将与集群中的其他进程同步进行计算。例如，在同步Allreduce算法的情况下，每个训练进程将在其他进程完成其反向和正向传递后，等待交换其梯度。这会导致集群在每个训练步骤上的性能由最慢的训练进程决定，并可能导致其他训练进程的等待时间（浪费）。然而，同步通信的好处包括更稳定的训练收敛。Allreduce算法的不同实现也提供了优化，以减少等待时间。'
+- en: In **async communication**, each node acts independently. It sends gradient
+    updates to other processes or centralized parameter servers and proceeds with
+    the next training iteration without waiting for results from peers. This approach
+    allows you to minimize the waiting time and maximize the throughput of each training
+    process. The disadvantage of this approach is that the training process can be
+    slow to converge and unstable due to increased stochasticity.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在**异步通信**中，每个节点独立工作。它将梯度更新发送给其他进程或集中式参数服务器，并在不等待同伴结果的情况下继续进行下一个训练迭代。这种方法可以最小化等待时间，并最大化每个训练进程的吞吐量。该方法的缺点是，由于增加了随机性，训练过程可能会变得收敛较慢且不稳定。
+- en: In practice, it’s important to balance the system throughout and training converge.
+    For this reason, sync communication is used in most implementations of distributed
+    training with a number of optimizations to increase training throughput.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，平衡系统吞吐量和训练收敛是非常重要的。为此，大多数分布式训练实现都使用同步通信，并通过多种优化来提高训练吞吐量。
+- en: Training process layouts in a cluster
+  id: totrans-55
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 集群中的训练进程布局
+- en: 'There are several ways to organize training processes in your training cluster
+    depending on your model size/architecture and training requirements (such as the
+    desired duration of training):'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据你的模型大小/架构和训练需求（例如所需的训练时长），有几种方法可以在训练集群中组织训练进程：
+- en: '`p4d.24xlarge` instance only has 8 GPU devices, which limits how much you can
+    scale your training job on a single node.'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`p4d.24xlarge`实例仅有8个GPU设备，这限制了在单节点上扩展训练任务的能力。'
+- en: '**Multiple nodes with a single GPU** – This implies that all coordination between
+    the processes happens over network communication, which can frequently be a global
+    training bottleneck. Hence, this layout is suboptimal for most training scenarios.'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**多个节点单个GPU** - 这意味着所有进程之间的协调都通过网络通信完成，这通常会成为全球训练瓶颈。因此，这种布局对于大多数训练场景来说是次优的。'
+- en: '**Multiple nodes with multiple GPUs** – This allows you to scale your training
+    job to 10s and 100s of individual training processes. When choosing this layout,
+    you need to pay attention to the network throughput between training nodes since
+    it can become a global bottleneck. SageMaker instances such as *p4d* and *p3dn*
+    provide improved network capabilities to address this issue.'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**多个节点多个GPU** - 这允许你将训练任务扩展到数十个甚至数百个独立的训练进程。在选择此布局时，你需要关注训练节点之间的网络吞吐量，因为它可能成为全球瓶颈。SageMaker实例如*p4d*和*p3dn*提供了改进的网络能力来解决这个问题。'
+- en: Now that we have the initial intuition of data parallelism, let’s gain some
+    practical experience and build data parallel distributed training jobs for the
+    TensorFlow and PyTorch frameworks. We will use both native data parallelism implementations
+    and DL frameworks, as well as the popular framework-agnostic Horovod library.
+    Then, we will learn how to use AWS’s proprietary SageMaker Data Parallel library
+    and review its benefits compared to open source implementations of data parallelism.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经对数据并行性有了初步的直觉，接下来让我们积累一些实践经验，并为TensorFlow和PyTorch框架构建数据并行分布式训练任务。我们将使用本地数据并行实现和深度学习框架，以及流行的与框架无关的Horovod库。然后，我们将学习如何使用AWS的专有SageMaker数据并行库，并与开源数据并行实现进行对比，了解其优势。
+- en: Engineering TensorFlow data parallel training
+  id: totrans-61
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 工程化TensorFlow数据并行训练
+- en: 'When designing distributed training jobs for the TensorFlow framework, you
+    have several implementations of data parallelism available:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在为 TensorFlow 框架设计分布式训练作业时，你可以使用几种数据并行实现：
+- en: The native data parallel implementation (known as “strategies”)
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 原生数据并行实现（称为“策略”）
+- en: The Horovod implementation for TensorFlow
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: TensorFlow 的 Horovod 实现
+- en: Let’s review the pros and cons of these implementations.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回顾一下这些实现的优缺点。
+- en: Using native TensorFlow strategies
+  id: totrans-66
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用原生 TensorFlow 策略
+- en: 'TensorFlow 2 significantly expanded the number of distribution strategies compared
+    to TensorFlow 1\. Note that since TensorFlow 2 has several APIs for training,
+    some APIs have limited support for distributed strategies. Please refer to *Figure
+    6.4* for the support matrix:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 TensorFlow 1 相比，TensorFlow 2 大幅扩展了分布式策略的数量。请注意，由于 TensorFlow 2 提供了多个训练 API，部分
+    API 对分布式策略的支持有限。请参见*图 6.4*中的支持矩阵：
+- en: '| **Training API** | **Mirrored Strategy** | **TPU Strategy** | **Multi Worker
+    Mirrored Strategy (MWMS)** | **Central Storage Strategy** | **Parameter Server
+    Strategy** |'
+  id: totrans-68
+  prefs: []
+  type: TYPE_TB
+  zh: '| **训练 API** | **镜像策略** | **TPU 策略** | **多工作节点镜像策略（MWMS）** | **中央存储策略** | **参数服务器策略**
+    |'
+- en: '| Keras Model.fit | Supported | Supported | Supported | Experimental support
+    | Experimental support |'
+  id: totrans-69
+  prefs: []
+  type: TYPE_TB
+  zh: '| Keras Model.fit | 支持 | 支持 | 支持 | 实验性支持 | 实验性支持 |'
+- en: '| Custom training loop | Supported | Supported | Supported | Experimental support
+    | Experimental support |'
+  id: totrans-70
+  prefs: []
+  type: TYPE_TB
+  zh: '| 自定义训练循环 | 支持 | 支持 | 支持 | 实验性支持 | 实验性支持 |'
+- en: '| Estimator API | Limited Support | Not supported | Limited Support | Limited
+    Support | Limited Support |'
+  id: totrans-71
+  prefs: []
+  type: TYPE_TB
+  zh: '| Estimator API | 支持有限 | 不支持 | 支持有限 | 支持有限 | 支持有限 |'
+- en: Figure 6.4 – TensorFlow 2 distributed strategies
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.4 – TensorFlow 2 分布式策略
+- en: '**Parameter Server Strategy** and **Central Storage Strategy** are marked as
+    **Experimental support**, which means that they are currently in active development.
+    It’s generally advised not to use experimental features in production workloads.
+    So, we will not consider them in the scope of this book.'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**参数服务器策略**和**中央存储策略**被标记为**实验性支持**，这意味着它们目前正在积极开发中。通常建议在生产工作负载中不要使用实验性功能。因此，我们不会在本书的范围内考虑它们。'
+- en: Note
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: While the Amazon SageMaker documentation states that it supports TensorFlow
+    Parameter Server, this claim is misleading. SageMaker supports TensorFlow 1 Parameter
+    Server, which is obsolete and should not be used in new development. SageMaker
+    does not directly support the TensorFlow 2 native strategies out of the box, though
+    it can support them with a few code changes, as shown next.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 Amazon SageMaker 文档声明它支持 TensorFlow 参数服务器，但这一说法具有误导性。SageMaker 支持的是 TensorFlow
+    1 参数服务器，它已经过时，不应在新开发中使用。SageMaker 并不直接支持 TensorFlow 2 的原生策略，尽管通过一些代码更改可以支持它们，接下来会展示这一过程。
+- en: '**TPU Strategy** is designed to work with Google TPU devices and, hence, is
+    not supported by Amazon SageMaker. Therefore, in this section, we will focus on
+    **Mirrored Strategy** and MWMS.'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**TPU 策略**旨在与 Google TPU 设备配合使用，因此不受 Amazon SageMaker 支持。因此，在本节中，我们将重点关注 **镜像策略**
+    和 MWMS。'
+- en: Both strategies implement the sync Allreduce algorithm for GPU devices. As their
+    names suggest, the Multi Worker strategy supports distributing training tasks
+    across multiple training nodes. For *intra-node communication*, you might choose
+    either the *NCCL backend* or the *native RING communication* backend. In the case
+    of both strategies, full model copies (known as *MirroredVariables*) are stored
+    on each training process and updated synchronously after each training step. Let’s
+    review an example of how to implement **MWMS** on the SageMaker platform.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两种策略都实现了针对 GPU 设备的同步 Allreduce 算法。顾名思义，多工作节点策略支持将训练任务分布到多个训练节点上。对于*节点内部通信*，你可以选择使用*NCCL
+    后端*或*原生 RING 通信*后端。在这两种策略中，完整的模型副本（称为*镜像变量*）存储在每个训练进程中，并在每次训练步骤后同步更新。让我们回顾一个在
+    SageMaker 平台上实现 **MWMS** 的示例。
+- en: As a test task, we will choose everyone’s favorite MNIST dataset and train a
+    small computer vision model to solve a classification task. We will use the convenient
+    **Keras API** to build and train the model and evaluate the results. An example
+    notebook with more details is available at [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_distributed_training_TF.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_distributed_training_TF.ipynb).
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为测试任务，我们将选择大家最喜爱的MNIST数据集，并训练一个小型计算机视觉模型来解决分类任务。我们将使用方便的**Keras API**来构建并训练模型，并评估结果。更多细节的示例笔记本可以在[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_distributed_training_TF.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_distributed_training_TF.ipynb)中找到。
+- en: We will start by reviewing which modifications are required to enable MWMS.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将首先回顾启用MWMS所需的修改。
+- en: Cluster configuration and setup
+  id: totrans-80
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 集群配置和设置
+- en: 'MWMS is not natively supported by Amazon SageMaker, so we need to correctly
+    configure the MWMS environment in SageMaker. TensorFlow2 uses an environment variable
+    called `tf_config` to represent the cluster configuration. This configuration
+    is then used to start the training processes. You can read about how to build
+    the `''TF_CONFIG''` variable at [https://www.tensorflow.org/guide/distributed_training#TF_CONFIG](https://www.tensorflow.org/guide/distributed_training#TF_CONFIG).
+    In the following code block, we use the `''_build_tf_config()''` method to set
+    up this variable. Note that we are using the `''SM_HOSTS''` and `''SM_CURRENT_HOST''`
+    SageMaker environment variables for it:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MWMS在Amazon SageMaker中并未原生支持，因此我们需要在SageMaker中正确配置MWMS环境。TensorFlow2使用一个名为`tf_config`的环境变量来表示集群配置。此配置随后用于启动训练过程。您可以在[https://www.tensorflow.org/guide/distributed_training#TF_CONFIG](https://www.tensorflow.org/guide/distributed_training#TF_CONFIG)了解如何构建`'TF_CONFIG'`变量。在以下代码块中，我们使用`'_build_tf_config()'`方法来设置此变量。请注意，我们在此过程中使用了`'SM_HOSTS'`和`'SM_CURRENT_HOST'`的SageMaker环境变量：
+- en: '[PRE0]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'In this example, by default, we use two `p2.xlarge` instances with a total
+    world size of just two training processes. So, `_build_tf_config()` will produce
+    the following `''TF_CONFIG''` variable in the rank=`0` node:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，默认情况下，我们使用两个`p2.xlarge`实例，训练过程的世界大小仅为两个。因此，`_build_tf_config()`将在rank=`0`节点中生成以下`'TF_CONFIG'`变量：
+- en: '[PRE1]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Once the `TF` config has been correctly set, TF2 should be able to start training
+    processes on all nodes and utilize all available GPU devices for it. This is a
+    default setting, but you can provide a list of specific GPU devices to use, too.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦`TF`配置正确设置，TF2应该能够在所有节点上启动训练过程，并利用所有可用的GPU设备。 这是默认设置，但您也可以提供要使用的特定GPU设备列表。
+- en: To complete the cluster setup, we also need to make sure that the NCCL backend
+    has been configured (please see the `_set_nccl_environment()` method) and that
+    all nodes in the cluster can communicate with each other (please see the `_dns_lookup()`
+    method). Note that these methods are required because TensorFlow 2 strategies
+    are not officially supported by SageMaker. For supported data-parallel implementations,
+    SageMaker provides these utilities out of the box and runs them as part of the
+    training cluster initiation.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要完成集群设置，我们还需要确保已经配置了NCCL后端（请参见`_set_nccl_environment()`方法），并确保集群中的所有节点可以相互通信（请参见`_dns_lookup()`方法）。请注意，这些方法是必需的，因为TensorFlow
+    2策略并未得到SageMaker的官方支持。对于受支持的数据并行实现，SageMaker提供了这些工具，并作为训练集群初始化的一部分进行运行。
+- en: Using MWMS
+  id: totrans-87
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用MWMS
+- en: 'To use MWMS, we will start by initiating a strategy object as follows. Please
+    note that, here, we explicitly set the communication backend to `AUTO`, which
+    means that TF2 will identify which backend to use. You can also define a specific
+    backend manually. `NCCL` and the custom `RING` backends are available for GPU
+    devices:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使用MWMS，我们将首先启动一个策略对象，如下所示。请注意，在这里，我们显式设置通信后端为`AUTO`，这意味着TF2将自动识别使用哪个后端。您也可以手动定义特定的后端。`NCCL`和自定义的`RING`后端可用于GPU设备：
+- en: '[PRE2]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Once the strategy has been correctly initiated, you can confirm your cluster
+    configuration by properly checking `strategy.num_replicas_in_sync`, which will
+    return your world size. It should match the number of GPUs per node multiplied
+    by the number of nodes.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦策略被正确初始化，您可以通过检查`strategy.num_replicas_in_sync`来确认集群配置，它将返回您的世界大小。它应该与每个节点的GPU数量乘以节点数量匹配。
+- en: 'In this example, we are using the Keras API, which fully supports MWMS and,
+    thus, simplifies our training script. For instance, to create model copies on
+    all workers, you just need to initiate your Keras model within `strategy.scope`,
+    as demonstrated in the following code block:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们使用的是 Keras API，它完全支持 MWMS，因此简化了我们的训练脚本。例如，要在所有工作节点上创建模型副本，你只需要在`strategy.scope`内初始化你的
+    Keras 模型，如下代码块所示：
+- en: '[PRE3]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Additionally, MWMS automatically shards your dataset based on the world size.
+    You only need to set up a proper global batch size, as shown in the following
+    code block. Note that automatic sharding can be turned on if some custom sharding
+    logic is needed:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，MWMS 会自动根据世界大小分片你的数据集。你只需要设置一个合适的全局批处理大小，如下代码块所示。请注意，如果需要某些自定义分片逻辑，可以开启自动分片功能：
+- en: '[PRE4]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The rest of the training script is like your single-process Keras training script.
+    As you can see, using MWMS is quite straightforward, and TF2 does a good job at
+    abstracting complexities from developers, but at the same time, gives you the
+    flexibility to adjust the default settings if needed.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 剩余的训练脚本与单进程 Keras 训练脚本类似。正如你所见，使用 MWMS 是相当直接的，TF2 在抽象化复杂性方面做得很好，同时，如果需要，也为你提供了调整默认设置的灵活性。
+- en: Running a SageMaker job
+  id: totrans-96
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 运行 SageMaker 任务
+- en: So far, we have discussed how to update the training script to run in a data
+    parallel way. In the source directory, you will also see the `mnist_setup.py`
+    script to download and configure the MNIST dataset. Now we are ready to run data-parallel
+    training on SageMaker.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经讨论了如何更新训练脚本以进行数据并行训练。在源目录中，你还将看到 `mnist_setup.py` 脚本，用于下载并配置 MNIST
+    数据集。现在我们已经准备好在 SageMaker 上运行数据并行训练。
+- en: 'In the following code block, we define the TF version (2.8), the Python version
+    (3.9), the instance type, and the number of instances. Additionally, we pass several
+    training hyperparameters. Since the MNIST dataset has been downloaded from the
+    internet as part of our training script, no data is passed to the `estimator_ms.fit()`
+    method:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码块中，我们定义了 TensorFlow 版本（2.8），Python 版本（3.9），实例类型以及实例的数量。此外，我们还传递了若干训练超参数。由于
+    MNIST 数据集已经作为训练脚本的一部分从互联网下载，因此无需将数据传递给 `estimator_ms.fit()` 方法：
+- en: '[PRE5]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The training job should complete within 10–12 minutes using the default settings.
+    Feel free to experiment with the number of nodes in the cluster and instance types
+    and observe any changes in `'TF_CONFIG'`, the training speed, and convergence.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用默认设置，训练任务应该在 10 到 12 分钟内完成。你可以随意尝试集群中的节点数量和实例类型，并观察 `'TF_CONFIG'`、训练速度和收敛性的变化。
+- en: In the next section, we will learn about an open source alternative for data
+    parallel – the Horovod framework.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分中，我们将学习一种数据并行的开源替代方案——Horovod 框架。
+- en: Using the Horovod framework
+  id: totrans-102
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 Horovod 框架
+- en: 'The Horovod framework provides implementations of synchronous data parallelism
+    for the most popular DL frameworks such as TensorFlow 1 and TensorFlow 2 (including
+    Keras), PyTorch, and Apache MXNet. One of the benefits of Horovod is that it requires
+    minimal modification of your training scripts to distribute training tasks, which
+    is compatible with various cluster layouts. Horovod supports several communication
+    backends: Gloo and Open MPI for CPU-based training and NCCL to run on NVIDIA GPU
+    devices.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Horovod 框架为最流行的深度学习框架提供了同步数据并行的实现，如 TensorFlow 1 和 TensorFlow 2（包括 Keras）、PyTorch
+    和 Apache MXNet。Horovod 的一个优点是，它只需要最少的修改即可分配训练任务，这兼容各种集群布局。Horovod 支持几种通信后端：Gloo
+    和 Open MPI 用于基于 CPU 的训练，NCCL 用于运行在 NVIDIA GPU 设备上的训练。
+- en: Horovod comes with a number of features to address the conceptual limitations
+    of the Allreduce algorithm, which we discussed earlier. To decrease waiting times
+    during the `allreduce` computation and to increase the utilization of training
+    devices, Horovod introduces a concept called `allreduce` and `allgather`) into
+    a hierarchy and, thus, achieve better overall performance. Additionally, Horovod
+    provides an **Autotune** utility to tune the performance of training jobs by tweaking
+    the training parameters. Note that running an Autotune job is not intended for
+    production usage.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Horovod 配备了一些功能，旨在解决我们之前讨论的 Allreduce 算法的概念限制。为了减少 `allreduce` 计算过程中的等待时间，并提高训练设备的利用率，Horovod
+    引入了一个名为 `allreduce` 和 `allgather` 的概念，并将其组织成层次结构，从而实现更好的整体性能。此外，Horovod 还提供了一个
+    **Autotune** 工具，可以通过调整训练参数来调优训练作业的性能。请注意，运行 Autotune 作业并不适合用于生产环境。
+- en: Now, let’s review how to use Horovod for TensorFlow 2 on SageMaker. Please note
+    that Horovod is natively supported for both the TensorFlow and PyTorch frameworks.
+    In this chapter, we will only review the Horovod implementation for TensorFlow
+    2 since the PyTorch variant will be very similar. We will solve the same MNIST
+    classification problem that we did earlier.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们回顾一下如何在SageMaker上使用Horovod进行TensorFlow 2的训练。请注意，Horovod原生支持TensorFlow和PyTorch框架。在本章中，我们将只回顾TensorFlow
+    2的Horovod实现，因为PyTorch的实现将非常相似。我们将解决之前提到的MNIST分类问题。
+- en: Configuring the Horovod cluster
+  id: totrans-106
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 配置Horovod集群
+- en: 'Unlike with MWMS, we don’t have to configure and set up a training cluster
+    in the training script since Horovod is supported by SageMaker. The Horovod cluster
+    configuration is done on the level of the TensorFlow Estimator API via the `distribution`
+    object, as shown in the following code block:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与MWMS不同，我们不需要在训练脚本中配置和设置训练集群，因为Horovod已被SageMaker支持。Horovod集群配置是在TensorFlow
+    Estimator API级别通过`distribution`对象完成的，如以下代码块所示：
+- en: '[PRE6]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Note the `processes_per_host` parameter, which should match the number of GPUs
+    in the chosen instance type. Additionally, you can set `custom_mpi_options` as
+    needed, which SageMaker will pass to the **mpirun** run utility. You can view
+    the list of supported MPI options at [https://www.open-mpi.org/doc/v4.0/man1/mpirun.1.php](https://www.open-mpi.org/doc/v4.0/man1/mpirun.1.php).
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意`processes_per_host`参数，它应该与所选实例类型中的GPU数量相匹配。此外，你可以根据需要设置`custom_mpi_options`，这些选项会传递给**mpirun**运行工具。你可以在[https://www.open-mpi.org/doc/v4.0/man1/mpirun.1.php](https://www.open-mpi.org/doc/v4.0/man1/mpirun.1.php)查看支持的MPI选项列表。
+- en: Developing the training script
+  id: totrans-110
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 开发训练脚本
+- en: 'You can find the full training script at [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_sources/train_hvd.py](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_sources/train_hvd.py).
+    Let’s perform the following steps:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_sources/train_hvd.py](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_sources/train_hvd.py)找到完整的训练脚本。让我们执行以下步骤：
+- en: 'We start by initiating Horovod in the training script via the `_initiate_hvd()`
+    method. We also need to associate the Horovod training processes with the available
+    GPU devices (one device per process):'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们通过`_initiate_hvd()`方法在训练脚本中启动Horovod。我们还需要将Horovod训练进程与可用的GPU设备关联起来（每个进程一个设备）：
+- en: '[PRE7]'
+  id: totrans-113
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Next, we need to shard our dataset based on the world size, so each process
+    can get a slice of data based on its global rank. For this, we use the `shard`
+    method of the TensorFlow dataset instance. Note that we are getting local and
+    global ranks of the given training process using the Horovod properties of `size()`
+    and `rank()`:'
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要根据世界大小对数据集进行切片，以便每个进程可以根据其全局排名获取数据切片。为此，我们使用TensorFlow数据集实例的`shard`方法。请注意，我们正在通过Horovod的`size()`和`rank()`属性获取给定训练进程的本地和全局排名：
+- en: '[PRE8]'
+  id: totrans-115
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Then, we use the `DistributedOptimizer` Horovod wrapper to enable the distributed
+    gradient update. Note that we are wrapping an instance of the native TF2 optimizer:'
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们使用`DistributedOptimizer` Horovod包装器来启用分布式梯度更新。请注意，我们包装的是本地TF2优化器的一个实例：
+- en: '[PRE9]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Lastly, we use special Horovod callbacks, which will be used by Keras in the
+    training loop:'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们使用特殊的Horovod回调函数，Keras将在训练循环中使用这些回调函数：
+- en: '`hvd.callbacks.BroadcastGlobalVariablesCallback(0)` to distribute initial variables
+    from the `rank=0` process to other training processes in the cluster'
+  id: totrans-119
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`hvd.callbacks.BroadcastGlobalVariablesCallback(0)`将来自`rank=0`进程的初始变量分发到集群中的其他训练进程。
+- en: '`hvd.callbacks.MetricAverageCallback()` to calculate the global average of
+    metrics across all training processes'
+  id: totrans-120
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`hvd.callbacks.MetricAverageCallback()`来计算所有训练进程的全局平均指标。
+- en: 'These callbacks are then passed to the `model.fit()` method, as follows:'
+  id: totrans-121
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这些回调函数随后将传递给`model.fit()`方法，如下所示：
+- en: '[PRE10]'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: These are the minimal additions to your training script that allow you to use
+    Horovod.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是你训练脚本中最少的改动，它们可以让你使用Horovod。
+- en: Running the SageMaker job
+  id: totrans-124
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 运行SageMaker作业
+- en: 'The SageMaker training job configuration is like the MWMS example, but we will
+    add the `distribution` parameter, which allows us to set the MPI parameters and
+    defines how many processes will be started per host:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker训练作业配置与MWMS示例类似，但我们将添加`distribution`参数，允许我们设置MPI参数并定义每个主机启动多少个进程：
+- en: '[PRE11]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Here, we implemented minimal viable examples of data parallel training jobs
+    using TensorFlow 2 MWMS and TensorFlow 2 Horovod. Now, you should have some practical
+    experience in developing baseline training jobs. There are more knobs and capabilities
+    in both Allreduce implementations, which we encourage you to explore and try in
+    your real-life use cases. The choice of specific implementations (MWMS or Horovod)
+    in many instances is use case specific without a clear-cut winner. The benefits
+    of Horovod are that it supports several DL frameworks and its maturity (specifically
+    its troubleshooting and optimization utilities). On the other hand, TensorFlow
+    2 strategies provide native integration with various TensorFlow APIs and different
+    approaches, with many of them currently in experimental mode.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们实现了使用 TensorFlow 2 MWMS 和 TensorFlow 2 Horovod 的数据并行训练任务的最小可行示例。现在，你应该已经具备了开发基准训练任务的一些实践经验。两种
+    Allreduce 实现中都有更多的调节选项和功能，我们鼓励你在实际使用案例中探索和尝试。选择具体的实现方式（MWMS 或 Horovod）在许多情况下是基于使用场景的，没有明确的优劣之分。Horovod
+    的优势在于它支持多个深度学习框架，并且其成熟性（特别是在故障排除和优化工具方面）。另一方面，TensorFlow 2 策略与各种 TensorFlow API
+    和不同的方法原生集成，其中许多目前处于实验模式。
+- en: In the next section, we will move on to the PyTorch framework and review its
+    native data parallel implementation.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将转向 PyTorch 框架，并回顾其原生数据并行实现。
+- en: Engineering PyTorch data parallel training
+  id: totrans-129
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 工程化 PyTorch 数据并行训练
+- en: PyTorch provides a native implementation of data parallelism called `torch.distributed.run`,
+    to simplify and coordinate the processes launch. Similarly to Horovod, PyTorch
+    DDP supports NCCL, Gloo, and the MPI communication backends. Additionally, PyTorch
+    DDP natively supports **mixed precision** and **Automatic Mixed Precision** (**AMP**),
+    which allows you to train your model with half-precision and minimal impact on
+    model accuracy and training convergence. The benefits of AMP include the speeding
+    up of computations and the reduction of a memory footprint.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PyTorch 提供了一个原生实现的数据并行工具 `torch.distributed.run`，用于简化和协调进程启动。与 Horovod 类似，PyTorch
+    DDP 支持 NCCL、Gloo 和 MPI 通信后端。此外，PyTorch DDP 原生支持 **混合精度** 和 **自动混合精度** (**AMP**)，这允许你以半精度训练模型，并对模型精度和训练收敛性的影响最小化。AMP
+    的好处包括加速计算并减少内存占用。
+- en: While SageMaker doesn’t support PyTorch DDP natively, it’s possible to run DDP
+    training jobs on SageMaker. Let’s review the implementation example.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 SageMaker 本身不原生支持 PyTorch DDP，但仍然可以在 SageMaker 上运行 DDP 训练任务。让我们回顾一下实现示例。
+- en: We take the pretrained CV Resnet18 model and then fine-tune it to classify ants
+    and bees. We use data parallel to distribute tasks between two `p2.xlarge` instances
+    with a single GPU device each. Feel free to change or modify the number and type
+    of instances in the training cluster and observe how this changes the training
+    speed.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们采用预训练的 CV Resnet18 模型，并对其进行微调，以便对蚂蚁和蜜蜂进行分类。我们使用数据并行来将任务分配到两台 `p2.xlarge` 实例中，每个实例有一个
+    GPU 设备。可以随意更改或修改训练集群中实例的数量和类型，并观察这如何改变训练速度。
+- en: Note that this is small-scale training and will not be indicative of training
+    efficiency in real-life tasks.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这只是小规模训练，不能代表实际任务中训练效率的表现。
+- en: Next, we will highlight key code constructs. A notebook and other code assets
+    are available at [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/2_distributed_training_PyTorch.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/2_distributed_training_PyTorch.ipynb).
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将重点介绍关键代码构建块。一个笔记本和其他代码资源可以在 [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/2_distributed_training_PyTorch.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/2_distributed_training_PyTorch.ipynb)
+    获取。
+- en: Launching training processes
+  id: totrans-135
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 启动训练进程
+- en: Amazon SageMaker has no out-of-the-box support for PyTorch DDP training. Specifically,
+    it doesn’t know how to start distributed DDP processes in the training cluster.
+    Therefore, we need to develop a launching utility to perform this function. This
+    utility is quite simple and can also be reused for any other DDP-based training
+    jobs.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Amazon SageMaker 原生不支持 PyTorch DDP 训练。具体来说，它不知道如何在训练集群中启动分布式 DDP 进程。因此，我们需要开发一个启动工具来执行此功能。这个工具非常简单，并且可以在任何其他基于
+    DDP 的训练任务中复用。
+- en: 'In the launcher script, we will use a DDP module, `torch.distributed.run`,
+    which simplifies the spawning of training processes in a cluster. As part of the
+    launcher script, we need to collect information about the training world, specifically,
+    the number of nodes and GPU devices in the cluster as well as identify the node
+    that will act as the master coordinator. Then, `torch.distributed.run` will spawn
+    multiple training processes. Please refer to *Figure 6.5* for a visual illustration:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在启动脚本中，我们将使用 DDP 模块 `torch.distributed.run`，它简化了在集群中生成训练进程的过程。作为启动脚本的一部分，我们需要收集训练世界的信息，特别是集群中的节点数量和
+    GPU 设备数量，并确定哪个节点将作为主协调者。然后，`torch.distributed.run` 会生成多个训练进程。请参考*图 6.5*以获得可视化说明：
+- en: '![Figure 6.5 – Launching PyTorch DDP training on N nodes with two GPUs  ](img/B17519_06_005.jpg)'
+  id: totrans-138
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.5 – 在 N 个节点上启动 PyTorch DDP 训练，使用两个 GPU](img/B17519_06_005.jpg)'
+- en: Figure 6.5 – Launching PyTorch DDP training on N nodes with two GPUs
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.5 – 在 N 个节点上启动 PyTorch DDP 训练，使用两个 GPU
+- en: 'Let’s highlight several key areas in our launcher script:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们突出几个启动脚本中的关键部分：
+- en: 'First, we need to collect information about the SageMaker training cluster.
+    For this, we use the environmental variables set by SageMaker automatically:'
+  id: totrans-141
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们需要收集有关 SageMaker 训练集群的信息。为此，我们使用 SageMaker 自动设置的环境变量：
+- en: '[PRE12]'
+  id: totrans-142
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Next, we need to form the command line to start `torch.distributed.run`:'
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要构建命令行以启动 `torch.distributed.run`：
+- en: '[PRE13]'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Note that we are adding `training hyperparameters` “as is” at the end of the
+    command line. These arguments are not handled by the launcher but by the training
+    script to configure training.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们在命令行末尾添加了“原样”的 `training hyperparameters`。这些参数不是由启动器处理的，而是由训练脚本来配置训练。
+- en: 'Lastly, we use Python’s `subprocess.Popen` to start the `torch.distributed.run`
+    utility as a module:'
+  id: totrans-146
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们使用 Python 的 `subprocess.Popen` 启动 `torch.distributed.run` 工具作为模块：
+- en: '[PRE14]'
+  id: totrans-147
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Note that we are copying the environment variables to subprocesses to preserve
+    all the SageMaker variables. If the spawned process returns nonzero code (an indication
+    of error), we will then raise an exception to propagate the error code to the
+    SageMaker control plane.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们将环境变量复制到子进程，以保留所有 SageMaker 变量。如果生成的进程返回非零代码（表示错误），我们将引发异常，将错误代码传播到 SageMaker
+    控制平面。
+- en: In summary, our launcher utility is responsible for collecting training cluster
+    configuration and then starting `torch.distributed.run` on each node. The utility
+    then takes care of starting multiple training processes per node.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结来说，我们的启动工具负责收集训练集群配置，然后在每个节点上启动 `torch.distributed.run`。该工具随后负责在每个节点启动多个训练进程。
+- en: Adopting the training script for DDP
+  id: totrans-150
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 为 DDP 采用训练脚本
+- en: 'To use DDP, we need to make minimal changes to our training script:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用 DDP，我们需要对训练脚本进行最小的修改：
+- en: 'First, we initialize the training process and add it to the DDP process group:'
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们初始化训练进程并将其添加到 DDP 进程组：
+- en: '[PRE15]'
+  id: totrans-153
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Since we have GPU-based instances, we use the `NCCL` communication backend.
+    Also, we utilize the environment variables set by the `torch.distributed.run`
+    module: world size and global rank.'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们使用基于 GPU 的实例，我们使用 `NCCL` 通信后端。此外，我们利用 `torch.distributed.run` 模块设置的环境变量：世界大小和全局排名。
+- en: 'Next, we need to identify which GPU device will store the model and run computations.
+    We use the `LOCAL_RANK` variable set by `torch.distributed.run` during the process
+    spawn:'
+  id: totrans-155
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要确定哪个 GPU 设备将存储模型并进行计算。我们使用 `torch.distributed.run` 在进程生成时设置的 `LOCAL_RANK`
+    变量：
+- en: '[PRE16]'
+  id: totrans-156
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Then, we wrap our regular PyTorch model with a special DDP implementation.
+    This implementation allows us to work with the PyTorch model as if it is a regular,
+    locally stored model. Under the hood, the DDP module implements gradient synchronization
+    between training processes in the process group. Also, observe that we are scaling
+    down the global batch size provided by the user based on the world size:'
+  id: totrans-157
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们将常规的 PyTorch 模型包装成一个特殊的 DDP 实现。这个实现允许我们像处理常规本地存储的模型一样使用 PyTorch 模型。在背后，DDP
+    模块实现了在进程组中各训练进程之间的梯度同步。同时，请注意，我们正在根据世界大小缩小用户提供的全局批量大小：
+- en: '[PRE17]'
+  id: totrans-158
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The last step we need to do is to modify the training data loader so that each
+    training process gets a unique slice of data during the training step. For this,
+    we use `DistributedSampler`, which samples data records based on the total number
+    of processes, and process the global rank:'
+  id: totrans-159
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们需要做的最后一步是修改训练数据加载器，以确保每个训练进程在训练步骤中获取唯一的数据切片。为此，我们使用 `DistributedSampler`，它根据进程总数采样数据记录，并处理全局排名：
+- en: '[PRE18]'
+  id: totrans-160
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: The rest of the training script is similar to *non-distributed training*. As
+    you can see, the amount of modification in the training script to make it compatible
+    with PyTorch DDP is minimal.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练脚本的其余部分与*非分布式训练*类似。如你所见，为使训练脚本兼容PyTorch DDP所做的修改非常少。
+- en: Running a SageMaker training job
+  id: totrans-162
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 运行SageMaker训练任务
+- en: 'Once the launcher and training scripts are ready, we can start the SageMaker
+    training job. Note that we identify the launcher script as an `entry_point` parameter.
+    A reference to the training script is provided along with the training hyperparameters
+    in the `hyperparameter` object:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦启动器和训练脚本准备好，我们就可以开始SageMaker训练任务。请注意，我们将启动器脚本指定为`entry_point`参数。训练脚本的引用与训练超参数一起提供，放在`hyperparameter`对象中：
+- en: '[PRE19]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: The training job should complete within 8–9 minutes. Feel free to review the
+    debug messages in the training job logs. Additionally, you can experiment with
+    other parameters such as the instance type and size, the number of epochs, the
+    batch size, and more.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练任务应在8到9分钟内完成。你可以随时查看训练任务日志中的调试信息。此外，你还可以尝试其他参数，例如实例类型和大小、训练轮次、批量大小等。
+- en: In this section, we learned how to use native data parallel implementation in
+    the PyTorch framework. In the next section, we will cover SageMaker’s proprietary
+    data parallel implementation.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们学习了如何在PyTorch框架中使用原生的数据并行实现。在下一节中，我们将介绍SageMaker的专有数据并行实现。
+- en: Engineering SageMaker’s DDP jobs
+  id: totrans-167
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 工程化SageMaker的DDP任务
+- en: The SDDP library provides a proprietary implementation of data parallelism with
+    native integration with other SageMaker capabilities. SDDP is packaged in SageMaker
+    DL containers and supports both the TensorFlow 2 and PyTorch frameworks.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDDP库提供了一个专有的数据并行实现，并与其他SageMaker功能原生集成。SDDP被打包在SageMaker DL容器中，并支持TensorFlow
+    2和PyTorch框架。
+- en: SDDP utilized MPI (like Horovod) to manage processes in the training cluster.
+    Under the hood, SDDP uses the `ml.p3.16xlarge`, `ml.p3dn.24xlarge`, and `ml.p4d.24xlarge`.
+    SDDP provides an API very similar to Horovod and PyTorch DDP, which makes it easy
+    to switch from open source implementations to it.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDDP利用MPI（类似于Horovod）来管理训练集群中的进程。在背后，SDDP使用`ml.p3.16xlarge`、`ml.p3dn.24xlarge`和`ml.p4d.24xlarge`。SDDP提供了一个与Horovod和PyTorch
+    DDP非常相似的API，这使得从开源实现切换到它变得非常容易。
+- en: 'SDDP implements a modified Allreduce algorithm with a number of optimizations
+    to improve the overall training performance and, specifically, waiting time during
+    the `allreduce` operation. As discussed earlier, in the synchronous Allreduce
+    algorithm, typically, the distributed `allreduce` operation is a bottleneck and
+    becomes even less efficient with the scaling out of the training cluster. Please
+    view *Figure 6.6*:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDDP实现了一个修改版的Allreduce算法，并进行了多项优化，以提高整体训练性能，特别是在`allreduce`操作中的等待时间。如前所述，在同步Allreduce算法中，通常分布式的`allreduce`操作是瓶颈，并且随着训练集群规模的扩大，它变得更加低效。请查看*图6.6*：
+- en: '![Figure 6.6 – Allreduce times with a cluster increase ](img/B17519_06_006.jpg)'
+  id: totrans-171
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.6 – 集群增加时的Allreduce时间](img/B17519_06_006.jpg)'
+- en: Figure 6.6 – Allreduce times with a cluster increase
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.6 – 集群增加时的Allreduce时间
+- en: 'To increase training efficiencies, specifically, in a large cluster, SDDP introduces
+    several novel optimizations:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了提高训练效率，特别是在大规模集群中，SDDP引入了几项新的优化：
+- en: SDDP utilizes GPU and CPU devices during training, so GPU devices perform forward
+    and backward passes, and CPU devices perform gradient averaging and communication
+    with other training processes during the `allreduce` stage. This approach allows
+    you to run compute operations and `allreduce` in parallel and, hence, maximize
+    utilizations.
+  id: totrans-174
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SDDP在训练过程中利用GPU和CPU设备，因此GPU设备执行前向和反向传播，CPU设备则在`allreduce`阶段执行梯度平均和与其他训练进程的通信。这种方法使得计算操作和`allreduce`能够并行运行，从而最大化资源利用率。
+- en: SDDP supports `allreduce` (such as Horovod’s Tensor Fusion feature).
+  id: totrans-175
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SDDP支持`allreduce`（例如Horovod的张量融合功能）。
+- en: 'As a result, AWS claims that SDDP provides near linear scaling of training
+    throughput with an increase in the training cluster size. AWS published the following
+    benchmarks to demonstrate the optimization gains of SDDP compared to native PyTorch
+    DDP: for 8 node clusters of `p3dn.24xl`, SSDP outperforms PyTorch DDP by 41% when
+    training the BERT model and by 13% when training the MaskRCNN model. Please refer
+    to this article for more details: [https://docs.aws.amazon.com/sagemaker/latest/dg/data-parallel-intro.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/data-parallel-intro.xhtml).'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，AWS声称SDDP随着训练集群规模的增加，训练吞吐量几乎实现线性扩展。AWS发布了以下基准测试，展示了SDDP与原生PyTorch DDP相比的优化收益：对于8节点的`p3dn.24xl`集群，在训练BERT模型时，SDDP比PyTorch
+    DDP快41%，在训练MaskRCNN模型时快13%。更多细节请参考此文献：[https://docs.aws.amazon.com/sagemaker/latest/dg/data-parallel-intro.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/data-parallel-intro.xhtml)。
+- en: 'When engineering an SDDP training job, keep the following aspects in mind:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在构建SDDP训练任务时，请牢记以下几个方面：
+- en: SDDP relies on the CPU device to perform the `allreduce` operation. Most framework
+    data loaders use CPU, too. So, make sure that you control your CPU usage to avoid
+    overutilization. In [*Chapter 7*](B17519_07.xhtml#_idTextAnchor110), *Operationalizing
+    Deep Learning Training*, we will discuss tools that you can use to control your
+    resource utilization such as SageMaker Debugger. Alternatively, you can move data
+    loading operations to GPU. However, in this case, you will have less available
+    GPU memory to load the model and run its forward and backward passes.
+  id: totrans-178
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SDDP依赖于CPU设备来执行`allreduce`操作。大多数框架的数据加载器也使用CPU。因此，请确保控制你的CPU使用，以避免过度利用。在[*第7章*](B17519_07.xhtml#_idTextAnchor110)《深度学习训练的操作化》中，我们将讨论可以用来控制资源利用的工具，例如SageMaker调试器。或者，你可以将数据加载操作转移到GPU上。然而，在这种情况下，你将有较少的GPU内存来加载模型并执行其前向和反向传递。
+- en: SDDP might not have significant or any benefits when used in small clusters
+    or on a single node, as it was designed to specifically address the bottlenecks
+    of large training clusters.
+  id: totrans-179
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在小型集群或单个节点上使用SDDP可能没有显著的效果或任何好处，因为它的设计目标是专门解决大规模训练集群的瓶颈。
+- en: Let’s review an example of an SDDP-based training job. For this, we will reuse
+    the previous PyTorch DDP and make minimal modifications to switch from PyTorch
+    DDP to the SDDP library.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回顾一下基于SDDP的训练任务示例。为此，我们将重用之前的PyTorch DDP，并做最小的修改，从PyTorch DDP切换到SDDP库。
+- en: 'As a training task, we use the same binary classification CV as in the PyTorch
+    DDP sample. Since SDDP is natively supported by SageMaker, we don’t need to develop
+    any custom launcher utilities. SDDP uses the `mpirun` utility to spawn training
+    processes in our cluster. You can use the `distribution` parameter to enable data-parallel
+    execution and provide any `mpi` options, as follows:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个训练任务，我们使用与PyTorch DDP示例中相同的二分类CV。由于SDDP本身得到了SageMaker的原生支持，我们无需开发任何自定义启动工具。SDDP使用`mpirun`工具在集群中启动训练进程。你可以使用`distribution`参数启用数据并行执行，并提供任何`mpi`选项，如下所示：
+- en: '[PRE20]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Now, let’s move on to adopting the training script.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们开始采用训练脚本。
+- en: Adopting the training script
+  id: totrans-184
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 采用训练脚本
+- en: 'SDDP’s starting version 1.4.0 is an integrated PyTorch DDP package that we
+    used in the previous example as a specific backend option. This significantly
+    reduces the changes needed to use SDDP. In fact, if you already have a DDP-enabled
+    training script, you will only need to add an import of the `torch_sddp` package
+    and use the `smddp` communication backend when initializing the process group,
+    as follows:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDDP的起始版本1.4.0是一个集成的PyTorch DDP包，我们在前面的示例中将其作为特定的后端选项使用。这样可以显著减少使用SDDP所需的更改。事实上，如果你已经有一个启用了DDP的训练脚本，你只需要添加`torch_sddp`包的导入，并在初始化进程组时使用`smddp`通信后端，如下所示：
+- en: '[PRE21]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Keep in mind that SDDP v1.4 is only available with the latest PyTorch v10 DL
+    containers. For earlier versions, the SDDP API is slightly different. For more
+    details, please refer to the official API documentation at [https://sagemaker.readthedocs.io/en/stable/api/training/distributed.xhtml#the-sagemaker-distributed-data-parallel-library](https://sagemaker.readthedocs.io/en/stable/api/training/distributed.xhtml#the-sagemaker-distributed-data-parallel-library).
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，SDDP v1.4仅在最新的PyTorch v10 DL容器中可用。对于早期版本，SDDP API略有不同。更多细节请参考官方API文档：[https://sagemaker.readthedocs.io/en/stable/api/training/distributed.xhtml#the-sagemaker-distributed-data-parallel-library](https://sagemaker.readthedocs.io/en/stable/api/training/distributed.xhtml#the-sagemaker-distributed-data-parallel-library)。
+- en: Running the SDDP SageMaker training job
+  id: totrans-188
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 运行SDDP SageMaker训练任务
+- en: 'Starting the SDDP job requires you to provide a special `distribution` object
+    with the configuration of data parallelism. Another thing to keep in mind is that
+    SDDP is only available for a limited set of multi-GPU instance types: `ml.p3.16xlarge`,
+    `ml.p3dn.24xlarge`, and `ml.p4d.24xlarge`. Take a look at the following:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启动SDDP任务时，需要提供一个特殊的`distribution`对象，并配置数据并行性。另一个需要注意的事项是，SDDP仅适用于有限的多GPU实例类型：`ml.p3.16xlarge`、`ml.p3dn.24xlarge`和`ml.p4d.24xlarge`。请参考以下内容：
+- en: '[PRE22]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Note that since we are using a small dataset, this training sample won’t be
+    indicative of any performance efficiencies of SDDP compared to the open source
+    data parallel frameworks.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，由于我们使用的是一个小型数据集，这个训练样本无法体现与开源数据并行框架相比，SDDP的任何性能优势。
+- en: Summarizing data parallelism
+  id: totrans-192
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 数据并行性的总结
+- en: So far, we have discussed how to speed up the training of DL models, which can
+    fit into the memory of an individual device. We discussed and developed training
+    scripts using native implementations as part of the DL frameworks, open source,
+    and proprietary cross-framework Allreduce implementations (Horovod and SageMaker
+    SDDP, respectively). However, we didn’t attempt to benchmark the training efficiencies
+    of the given implementation. While each use case is unique, the general recommendation
+    would be to consider SDDP as a first choice when you are dealing with large-scale
+    and lengthy training processes involving large clusters. If you have a medium-
+    or small-scale training job, you still might consider using framework-native data-parallel
+    implementations. In such cases, the SDDP performance benefits can be negligible.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们讨论了如何加速训练那些能够适配单一设备内存的深度学习模型。我们在讨论和开发训练脚本时，使用了深度学习框架的本地实现、开源解决方案以及专有的跨框架Allreduce实现（分别是Horovod和SageMaker
+    SDDP）。然而，我们并未对给定实现的训练效率进行基准测试。虽然每个使用场景都是独特的，但通常的建议是，当涉及大规模且时间较长的训练过程，尤其是需要大规模集群时，应优先考虑使用SDDP。如果你有中型或小型的训练任务，仍然可以考虑使用框架本地的数据并行实现。在这种情况下，SDDP的性能优势可能微乎其微。
+- en: In the next section, we will discuss how to optimally train models that cannot
+    fit into single GPU memory using model parallelism.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将讨论如何使用模型并行优化训练那些无法完全适配单个GPU内存的模型。
+- en: Engineering model parallel training jobs
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 工程化模型并行训练任务
+- en: 'In model parallelism, a single copy of the model is distributed across two
+    or more training devices to avoid the memory limitations of a single GPU device.
+    A simple method of model parallelism is to explicitly assign layers of the model
+    onto different devices. In this case, forward pass computations will be performed
+    on the GPU device storing the first set of layers. Then, the results will be transferred
+    to the GPU device storing the next set of layers, and so on. The handoff between
+    layers will happen in reverse order during the backward pass. This type of model
+    parallelism is known as **naïve model parallelism** or **vertical model parallelism**
+    because we split the model vertically between devices. However, this type of model
+    parallelism is inefficient, as each GPU device will wait for a significant amount
+    of time for other devices to complete their computations. A more efficient way
+    to organize model parallelism is called **Pipeline Parallelism**. This splits
+    a single data batch into a number of micro-batches and tries to minimize the waiting
+    time by overlapping the computing gradients for different **micro-batches**. See
+    a comparison of naïve model parallelism and pipeline parallelism in *Figure 6.7*:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在模型并行中，模型的单一副本会被分布到两个或更多的训练设备上，以避免单个GPU设备的内存限制。模型并行的简单方法是将模型的各层显式地分配到不同的设备上。在这种情况下，前向计算将在存储第一组层的GPU设备上进行。然后，结果将被传输到存储下一组层的GPU设备上，依此类推。在反向传递过程中，层之间的交接会按相反顺序发生。这种类型的模型并行被称为**简单模型并行**或**垂直模型并行**，因为我们将模型在设备之间进行垂直切分。然而，这种模型并行方式效率较低，因为每个GPU设备都需要等待其他设备完成计算，导致显著的时间浪费。更高效的模型并行方式叫做**流水线并行**。这种方法将单一的数据批次分成多个微批次，并通过重叠不同**微批次**的梯度计算，尽量减少等待时间。请参见*图6.7*，对比简单模型并行和流水线模型并行：
+- en: '![Figure 6 .7 – Naïve model parallelism and pipeline model parallelism ](img/B17519_06_007.jpg)'
+  id: totrans-197
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.7 – 简单模型并行和流水线模型并行](img/B17519_06_007.jpg)'
+- en: Figure 6 .7 – Naïve model parallelism and pipeline model parallelism
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.7 – 简单模型并行和流水线模型并行
+- en: Source of the figure
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图表来源
+- en: '[https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.xhtml](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.xhtml%0D)'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.xhtml](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.xhtml%0D)'
+- en: Implementing pipeline parallelism has several challenges, as you will likely
+    need to reimplement your training script to assign parts of the model to different
+    devices and reflect the new computation flow in your training loop. Also, you
+    will need to decide how to optimally place your model layers on devices within
+    the same node and across nodes. Additionally, pipeline parallel doesn’t support
+    conditional flows and requires each layer to take a tensor as input and produce
+    a tensor output. You will also need to reimplement pipeline parallelism for each
+    new model architecture. Later in this section, we’ll see how the SMDP library
+    addresses these challenges.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现流水线并行面临一些挑战，因为你可能需要重新实现训练脚本，将模型的各个部分分配到不同的设备上，并在训练循环中反映新的计算流程。此外，你还需要决定如何在同一节点内和跨节点之间优化地放置模型层。还有，流水线并行不支持条件流，并要求每一层接受一个张量作为输入并产生一个张量作为输出。你还需要为每种新的模型架构重新实现流水线并行。接下来在本节中，我们将看到SMDP库如何解决这些挑战。
+- en: 'Splitting the model vertically is one way to minimize memory footprint. Another
+    parallelization approach is called **Tensor Parallelism**. Each tensor (data inputs
+    and layer outputs) is split across multiple devices and processed in parallel.
+    Then, the individual results are aggregated. Tensor parallelism is possible as
+    many compute operations can be represented as matrix operations, which can be
+    split along the *X* or *Y* axes. Refer to *Figure 6.8* for a visual representation
+    of how tensors can be split. Tensor parallelism is also known as **horizontal
+    parallelism**:'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 垂直拆分模型是一种最小化内存占用的方法。另一种并行化方法是称为**张量并行**。每个张量（数据输入和层输出）会被拆分到多个设备上并行处理。然后，将单独的结果进行聚合。张量并行是可行的，因为许多计算操作可以表示为矩阵运算，而矩阵运算可以沿着*X*轴或*Y*轴进行拆分。请参见*图6.8*，它提供了张量如何拆分的可视化表示。张量并行也被称为**水平并行**：
+- en: '![](img/B17519_06_008.jpg)'
+  id: totrans-203
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B17519_06_008.jpg)'
+- en: Figure 6.8 – Row-wise and column-wise tensor parallelism
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.8 – 行式和列式张量并行
+- en: Source of the figure
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像来源
+- en: '[https://github.com/huggingface/transformers/blob/main/docs/source/en/perf_train_gpu_many.mdx](https://github.com/huggingface/transformers/blob/main/docs/source/en/perf_train_gpu_many.mdx)'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://github.com/huggingface/transformers/blob/main/docs/source/en/perf_train_gpu_many.mdx](https://github.com/huggingface/transformers/blob/main/docs/source/en/perf_train_gpu_many.mdx)'
+- en: 'Pipeline and tensor model parallelism can be combined. Moreover, data parallelism
+    can be added to achieve even further parallelization and a better training speed.
+    The combination of data parallelism and model parallelism is known as **hybrid
+    parallelism**. This approach is used to train most of the current large SOTA NLP
+    models such as T5 or GPT3\. Refer to *Figure 6.9*, which illustrates a combination
+    of pipeline parallelism and data parallelism:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 流水线并行和张量模型并行可以结合使用。此外，还可以加入数据并行，以实现更高的并行化和更好的训练速度。数据并行与模型并行的结合被称为**混合并行**。这种方法被用来训练当前大多数最先进的SOTA
+    NLP模型，如T5或GPT3。请参见*图6.9*，它展示了流水线并行和数据并行的结合：
+- en: '![Figure 6.9 – Combining pipeline parallelism and data parallelism ](img/B17519_06_009.jpg)'
+  id: totrans-208
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.9 – 结合流水线并行和数据并行](img/B17519_06_009.jpg)'
+- en: Figure 6.9 – Combining pipeline parallelism and data parallelism
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.9 – 结合流水线并行和数据并行
+- en: Now that we have refreshed our understanding of key model parallel approaches,
+    let’s review the SDMP library – the SageMaker proprietary implementation of model
+    parallelism.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经刷新了对关键模型并行方法的理解，接下来让我们回顾一下SDMP库——SageMaker专有的模型并行实现。
+- en: Engineering training with SDMP
+  id: totrans-211
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用SDMP进行工程训练
+- en: SDMP is a feature-rich library that implements various types of model parallelism
+    and hybrid parallelism and is optimized for the SageMaker infrastructure. It supports
+    the TensorFlow and PyTorch frameworks and allows you to automatically partition
+    models between devices with minimal code changes to your training script. Like
+    SDDP, SDMP uses MPI to coordinate tasks in the training cluster, performing forward
+    and backward computations on GPU devices and communication tasks on CPU devices.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDMP是一个功能丰富的库，能够实现各种类型的模型并行性和混合并行性，并针对SageMaker基础设施进行了优化。它支持TensorFlow和PyTorch框架，并允许你在最少的代码更改下，自动将模型划分到不同的设备。像SDDP一样，SDMP使用MPI在训练集群中协调任务，在GPU设备上进行前向和反向计算，在CPU设备上进行通信任务。
+- en: 'SDMP has a few notable features to simplify the development of model parallel
+    training jobs and optimize hardware utilization at training time:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDMP具有一些显著特点，可以简化模型并行训练作业的开发，并优化训练时硬件的利用率：
+- en: SDMP supports arbitrary model architecture and requires minimal code changes
+    to your training script. It doesn’t have any accuracy penalties.
+  id: totrans-214
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SDMP支持任意的模型架构，并且对训练脚本的修改最小，不会产生任何精度上的惩罚。
+- en: '**Automated model splitting** partitions your model between devices in the
+    training cluster. You can choose to optimize for speed and memory utilization.
+    Additionally, SDMP supports manual model splitting (however, in practice, this
+    is rarely a good approach).'
+  id: totrans-215
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**自动化模型拆分**将在训练集群中将模型划分到不同设备之间。你可以选择优化速度和内存利用率。此外，SDMP还支持手动模型拆分（然而，在实践中，这种方法通常不是一个好的选择）。'
+- en: '**Interleaved pipeline** is an improvement of simple model pipelining and allows
+    you to minimize the amount of time processing micro-batches by prioritizing backward
+    operations whenever possible:'
+  id: totrans-216
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**交错管道**是对简单模型管道的改进，允许你通过优先执行反向操作来最小化处理微批次的时间：'
+- en: '![Figure 6.10 – A comparison of simple and interleaved pipelines ](img/B17519_06_010.jpg)'
+  id: totrans-217
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.10 – 简单和交错管道的比较](img/B17519_06_010.jpg)'
+- en: Figure 6.10 – A comparison of simple and interleaved pipelines
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.10 - 简单和交错管道的比较
+- en: Source of the figure
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图的来源
+- en: '[https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.xhtml%0D)'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.xhtml%0D)'
+- en: 'While SDMP officially supports both TensorFlow 2 and PyTorch, certain optimizations
+    are only available for PyTorch. This extended support for PyTorch includes the
+    following:'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然SDMP官方支持TensorFlow 2和PyTorch，但某些优化功能仅对PyTorch可用。针对PyTorch的扩展支持包括以下内容：
+- en: '**Optimizer state sharding** allows you to split not only the model but also
+    the optimizer state between training devices in data parallel groups. This further
+    reduces the memory footprint of individual devices during training. Note that
+    optimizer state sharding adds an aggregation step (when the global optimizer state
+    is reconstructed from individual shards), which will result in additional latency.'
+  id: totrans-222
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**优化器状态分片**允许你不仅将模型分割，还可以在数据并行组的训练设备之间分割优化器状态。这进一步减少了每个设备在训练过程中的内存占用。请注意，优化器状态分片会增加一个聚合步骤（当全局优化器状态从各个分片重新构建时），这会导致额外的延迟。'
+- en: '**Tensor parallelism** in addition to pipeline and data parallelism. Tensor
+    parallelism can be specifically useful for large layers that cannot fit into a
+    single GPU device, such as embeddings.'
+  id: totrans-223
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 除了管道和数据并行性之外，**张量并行性**也非常重要。张量并行性对于那些无法完全适配到单一GPU设备的大层次（如嵌入层）尤为有效。
+- en: '**Activation checkpointing** and **activation offloading** are two other techniques
+    that further minimize the training memory footprint in exchange for some additional
+    compute time to reconstruct the training state.'
+  id: totrans-224
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**激活检查点**和**激活卸载**是另外两种技术，它们通过增加一些计算时间来重建训练状态，从而进一步减少训练内存占用。'
+- en: As using these advanced optimization features comes with a memory-compute trade-off,
+    it’s generally advised that you only use them for large models (that is, billions
+    of parameters).
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于使用这些高级优化功能需要在内存和计算之间进行权衡，通常建议仅在大型模型（即数十亿参数）上使用它们。
+- en: Now, let’s develop a hybrid parallel job using the SDMP library. We will reuse
+    the previous PyTorch example with CV models.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们使用SDMP库开发一个混合并行作业。我们将重用之前的PyTorch示例和CV模型。
+- en: Note
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: This example has an educational purpose only. Usually CV models (such as Resnet18)
+    can fit into a single GPU, and in this case, model parallelism is not required.
+    However, smaller models are easy to manage and quick to train for demo purposes.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个例子仅具有教学目的。通常，CV 模型（如 Resnet18）可以适应单个 GPU，在这种情况下，不需要模型并行。然而，对于演示目的，较小的模型更易于管理并且训练速度较快。
+- en: Configuring model and hybrid parallelism
+  id: totrans-229
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置模型和混合并行性
+- en: 'First, let’s understand how our training will be executed and how we can configure
+    parallelism. For this, we will use the distribution object of the SageMaker training
+    job. It has two key components: `model parallel` and `mpi`.'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们了解一下我们的训练将如何执行以及如何配置并行性。为此，我们将使用 SageMaker 训练作业的分发对象。它有两个关键组件：`model parallel`
+    和 `mpi`。
+- en: SageMaker relies on the `mpi` utility to run distributed computations. In the
+    following code snippet, we set it to run `8` training processes. Here, `processes_per_host`
+    defines how many training processes will be run per host, which includes both
+    processes running model parallelism, data parallelism, or tensor parallelism.
+    In most cases, the number of processes should match the number of available GPUs
+    in the node.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 依赖 `mpi` 工具来运行分布式计算。在以下代码片段中，我们设置它运行 `8` 个训练进程。这里，`processes_per_host`
+    定义了每个主机将运行多少个训练进程，这些进程包括运行模型并行、数据并行或张量并行的进程。在大多数情况下，进程数量应与节点中可用的 GPU 数量相匹配。
+- en: The `Modelparallel` object defines the configuration of the SDMP library. Then,
+    in the code snippet, we set 2-way model parallelism (the `partitions` parameter
+    is set to `2`). Also, we enable data parallelism by setting the `ddp` parameter
+    to `True`. When data parallelism has been enabled, SDMP will automatically infer
+    the data parallel size based on the number of training processes and the model
+    parallelism size. Another important parameter is `auto_partition`, so SDMP automatically
+    partitions the model between GPU devices.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Modelparallel` 对象定义了 SDMP 库的配置。然后，在代码片段中，我们设置了 2 路模型并行（`partitions` 参数设置为
+    `2`）。同时，我们通过将 `ddp` 参数设置为 `True` 来启用数据并行。当启用数据并行时，SDMP 将根据训练进程数和模型并行大小自动推断数据并行大小。另一个重要的参数是
+    `auto_partition`，因此 SDMP 会自动在 GPU 设备之间划分模型。'
+- en: 'In the following code block, we configure our training job to run on 2 instances
+    with a total of 16 GPUs in the training cluster. Our `distribution` object defines
+    2-way model parallelism. Since the total number of training processes is 16, SDMP
+    will automatically infer 8-way data parallelism. In other words, we split our
+    model between 2 GPU devices, and have a total of 8 copies of the model:'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码块中，我们配置了我们的训练作业，使其在 2 个实例上运行，总共有 16 个 GPU。我们的 `distribution` 对象定义了 2 路模型并行。由于总训练进程数为
+    16，SDMP 将自动推断出 8 路数据并行。换句话说，我们将模型划分为 2 个 GPU 设备，并且总共有 8 个模型副本：
+- en: '[PRE23]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Please note that you need to align the configuration of hybrid parallelism with
+    your cluster layout (the number of nodes and GPU devices). SageMaker Python SDK
+    provides upfront validation of the hybrid parallelism configuration; however,
+    this doesn’t guarantee that all your GPU devices will be used during the training
+    process. It’s a good idea to add debug messages to your training scripts to ensure
+    that all GPU devices are properly utilized.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您需要将混合并行的配置与集群布局（节点数和 GPU 设备数）对齐。SageMaker Python SDK 提供了混合并行配置的预验证；然而，这并不能保证在训练过程中将使用所有
+    GPU 设备。最好在训练脚本中添加调试信息，以确保所有 GPU 设备都得到正确利用。
+- en: Adopting the training scripts
+  id: totrans-236
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 采用训练脚本
+- en: 'One of the benefits of SDMP is that it requires minimal changes to your training
+    script. This is achieved by using the Python decorator to define computations
+    that need to be run in a model parallel or hybrid fashion. Additionally, SDMP
+    provides an API like other distributed libraries such as Horovod or PyTorch DDP.
+    In the following code block, we only highlight the key parts. The full source
+    is available at [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/tree/main/chapter6/4_sources](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/tree/main/chapter6/4_sources):'
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SDMP 的一个好处是它对训练脚本的改动最小。这是通过使用 Python 装饰器来定义需要以模型并行或混合方式运行的计算实现的。此外，SDMP 提供了类似
+    Horovod 或 PyTorch DDP 等其他分布式库的 API。在以下代码块中，我们仅突出显示了关键部分。完整的源代码可以在[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/tree/main/chapter6/4_sources](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/tree/main/chapter6/4_sources)找到：
+- en: 'We start by importing and initializing the SDMP library:'
+  id: totrans-238
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们从导入和初始化SDMP库开始：
+- en: '[PRE24]'
+  id: totrans-239
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Once the library has been initialized, we can use the SDMP API to check that
+    our hybrid parallelism has been correctly configured. For this, you can run the
+    following `debug` statement as part of your training script:'
+  id: totrans-240
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦库初始化完成，我们可以使用SDMP API来检查我们的混合并行是否已正确配置。为此，您可以在训练脚本中运行以下`debug`语句：
+- en: '[PRE25]'
+  id: totrans-241
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'The output will be produced in each training process. Let’s review the output
+    from global rank `0`. Here, the message prefix in brackets is provided by the
+    MPP utility, marking the unique MPI process, and `algo-1` is a reference to the
+    hostname. From the debug message, you can confirm that we have configured 2-way
+    parallelism and 8-way data parallelism. Additionally, we can observe GPU assignments
+    for the data parallel and model parallel groups:'
+  id: totrans-242
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 输出将在每个训练过程中生成。让我们查看来自全局排名`0`的输出。在这里，方括号中的消息前缀由MPP工具提供，标记了唯一的MPI进程，`algo-1`是主机名的引用。从调试信息中，您可以确认我们已经配置了2路并行和8路数据并行。此外，我们还可以观察到数据并行和模型并行组的GPU分配情况：
+- en: '[PRE26]'
+  id: totrans-243
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'SDMP manages the assignment of model partitions to the GPU device, and you
+    don’t have to explicitly move the model to a specific device (in a regular PyTorch
+    script, you need to move the model explicitly by calling the `model.to(device)`
+    method). In each training script, you need to choose a GPU device based on the
+    SMDP local rank:'
+  id: totrans-244
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: SDMP管理模型分区到GPU设备的分配，您不需要显式地将模型移动到特定设备（在常规的PyTorch脚本中，您需要通过调用`model.to(device)`方法显式移动模型）。在每个训练脚本中，您需要根据SMDP本地排名选择一个GPU设备：
+- en: '[PRE27]'
+  id: totrans-245
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Next, we need to wrap the PyTorch model and optimizers in SDMP implementations.
+    This is needed to establish communication between the model parallel and data
+    parallel groups.
+  id: totrans-246
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要将PyTorch模型和优化器包装在SDMP实现中。这是为了在模型并行和数据并行组之间建立通信。
+- en: 'Once wrapped, you will need to use SDMP-wrapped versions of the model and optimizer
+    in your training script. Note that you still need to move your input tensors (for
+    instance, data records and labels) to this device using the PyTorch `input_tensor.to(device)`
+    method:'
+  id: totrans-247
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦包装完成，您将需要在训练脚本中使用SDMP包装的模型和优化器版本。请注意，您仍然需要使用PyTorch的`input_tensor.to(device)`方法将输入张量（例如，数据记录和标签）移动到此设备：
+- en: '[PRE28]'
+  id: totrans-248
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'After that, we need to configure our data loaders. SDMP doesn’t have any specific
+    requirements for data loaders, except that you need to ensure batch size consistency.
+    It’s recommended that you use the `drop_last=True` flag to enforce it. This is
+    because, internally, SDMP breaks down the batch into a set of micro-batches to
+    implement pipelining. Hence, we need to make sure that the batch size is always
+    divisible by the micro-batch size. Note that, in the following code block, we
+    are using the SDMP API to configure a distributed sampler for data parallelism:'
+  id: totrans-249
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 之后，我们需要配置我们的数据加载器。SDMP对数据加载器没有特定要求，除了确保批次大小一致。建议您使用`drop_last=True`标志来强制执行这一点。因为在内部，SDMP将批量数据分解为一组微批次来实现流水线处理。因此，我们需要确保批次大小始终能被微批次大小整除。请注意，在下面的代码块中，我们使用SDMP
+    API配置了一个用于数据并行的分布式采样器：
+- en: '[PRE29]'
+  id: totrans-250
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Once we have our model, optimizer, and data loaders configured, we are ready
+    to write our training and validation loops. To implement model parallelism, SDMP
+    provides a `@smp.step` decorator. Any function decorated with `@smp.set` splits
+    executes internal computations in a pipelined manner. In other words, it splits
+    the batch into a set of micro-batches and coordinates the computation between
+    partitions of models across GPU devices. Here, the training and test computations
+    are decorated with `@smp.step`. Note that the training step contains both forward
+    and backward passes, so SDMP can compute gradients on all partitions. We only
+    have the forward pass in the test step:'
+  id: totrans-251
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦我们配置了模型、优化器和数据加载器，就可以编写训练和验证循环了。为了实现模型并行，SDMP提供了一个`@smp.step`装饰器。任何使用`@smp.step`装饰的函数都会以流水线方式执行内部计算。换句话说，它将批量数据拆分为一组微批次，并协调在GPU设备之间的模型分区的计算。在这里，训练和测试计算都使用了`@smp.step`装饰器。请注意，训练步骤包含了前向和反向传播，因此SDMP可以在所有分区上计算梯度。在测试步骤中只有前向传播：
+- en: '[PRE30]'
+  id: totrans-252
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Note another difference: when calculating loss, we used the `model.backward(loss)`
+    SDMP method. So, SDMP can correctly compute gradient values across model partitions.'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意另一个区别：在计算损失时，我们使用了`model.backward(loss)`的SDMP方法。因此，SDMP可以正确计算跨模型分区的梯度值。
+- en: 'We use decorated training and test steps in the outer training loop as follows.
+    The training loop construct is like a typical PyTorch training loop with one difference.
+    Since SDMP implements pipelining over micro-batches, the loss values will be calculated
+    for micro-batches, too (that is, the `loss_mb` variable). Hence, to calculate
+    the average loss across the full batch, we call the `reduce_mean()` method. Note
+    that all variables returned by the `@smp.step` decorated function are instances
+    of the class that provides a convenient API to act across mini-batches (such as
+    the `.reduce_mean()` or `.concat()` methods):'
+  id: totrans-254
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们在外部训练循环中使用了装饰过的训练和测试步骤，如下所示。训练循环的构造类似于典型的PyTorch训练循环，唯一的区别是，由于SDMP对微批次实现了流水线操作，损失值也会对微批次进行计算（即`loss_mb`变量）。因此，为了计算整个批次的平均损失，我们调用`reduce_mean()`方法。注意，所有由`@smp.step`装饰的函数返回的变量都是提供便捷API的类实例，可以跨小批次进行操作（例如`.reduce_mean()`或`.concat()`方法）：
+- en: '[PRE31]'
+  id: totrans-255
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Once training is done, we need to save our distributed model. For this, SMDP
+    provides the `smp.save()` method, which supports saving both the model and optimizer
+    states in pickle format. You can choose whether you want to persist model partitions
+    or not by using the `partial` flag. If partial saving is enabled, then the model
+    partitions are saved separately along with their model parallel ranks. In the
+    following code block, we save a single model checkpoint. Note that we are saving
+    the model in a single process based on the rank filter to avoid any conflicts:'
+  id: totrans-256
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 训练完成后，我们需要保存分布式模型。为此，SMDP提供了`smp.save()`方法，支持以pickle格式保存模型和优化器的状态。你可以通过使用`partial`标志来选择是否持久化模型分区。如果启用了部分保存，则模型分区将与其模型并行排名一起单独保存。在以下代码块中，我们保存了一个单一的模型检查点。请注意，我们基于排名过滤器在单个进程中保存模型，以避免冲突：
+- en: '[PRE32]'
+  id: totrans-257
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Once our testing is complete, SageMaker will upload the model and optimizer
+    checkpoints to the S3 location. You can use this model for inference as follows:'
+  id: totrans-258
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦我们的测试完成，SageMaker将把模型和优化器的检查点上传到S3位置。你可以按如下方式使用此模型进行推理：
+- en: '[PRE33]'
+  id: totrans-259
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'These are the minimal changes that are required in your training script to
+    make it compatible with the SDMP library to implement model or hybrid parallelism.
+    We encourage you to experiment with various SDMP configuration parameters (please
+    refer to the `distribution` object from the previous section) to develop good
+    intuition, specifically the following:'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是训练脚本中所需的最小更改，以使其与SDMP库兼容，从而实现模型并行或混合并行。我们鼓励你尝试各种SDMP配置参数（请参考前一部分中的`distribution`对象），以便培养良好的直觉，具体包括以下内容：
+- en: Change the number of model *partitions*. Our implementation has 2 partitions;
+    you might try to set 1 or 4 partitions and see how this changes the data parallel
+    and model parallel groups.
+  id: totrans-261
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 改变模型的*分区*数量。我们的实现有2个分区；你可以尝试设置1或4个分区，看看这如何改变数据并行和模型并行的分组。
+- en: Change the number of *micro-batches* and *batch size* to see how it impacts
+    training speed. In production scenarios, you will likely need to explore an upper
+    memory limit for batch size and micro-batches to improve training efficiency.
+  id: totrans-262
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 改变*微批次*和*批次大小*的数量，看看它如何影响训练速度。在生产场景中，你可能需要探索批次大小和微批次的上限，以提高训练效率。
+- en: See how the type of *pipeline implementation* – interleaved or simple – impacts
+    the training speed.
+  id: totrans-263
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查看*管道实现*的类型——交错式或简单式——如何影响训练速度。
+- en: Additional considerations
+  id: totrans-264
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 额外的考虑事项
+- en: We used relatively simple and small models such as Resnet to demonstrate how
+    to implement hybrid parallelism. However, the implementation of more complex models
+    such as GPT-n will require additional considerations. The following sections detail
+    them.
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用了相对简单和小型的模型，如Resnet，来演示如何实现混合并行。然而，像GPT-n这样的更复杂模型的实现将需要额外的考虑。以下部分将详细说明这些内容。
+- en: Tensor parallelism
+  id: totrans-266
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 张量并行
+- en: 'Tensor parallelism is only available in the PyTorch version of the SDMP library.
+    Tensor parallelism makes sense to use for scenarios when a parameter layer consumes
+    a considerable amount of GPU memory (such as embedding tables). When using tensor
+    parallelism, you need to make sure that SDMP supports the modules of your model.
+    SDMP provides distributed implementations of common modules such as `nn.Linear`,
+    `nn.Embedding`, and more. If a specific module is not supported, first, you will
+    need to implement a tensor-parallelizable version of it. Please refer to the SDMP
+    API documentation for details: [https://sagemaker.readthedocs.io/en/stable/api/training/smp_versions/latest/smd_model_parallel_pytorch_tensor_parallel.xhtml](https://sagemaker.readthedocs.io/en/stable/api/training/smp_versions/latest/smd_model_parallel_pytorch_tensor_parallel.xhtml).'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 张量并行仅在 SDMP 库的 PyTorch 版本中可用。张量并行适用于那些参数层消耗大量 GPU 内存的场景（例如嵌入表）。使用张量并行时，您需要确保
+    SDMP 支持您的模型的模块。SDMP 提供了常见模块的分布式实现，如 `nn.Linear`、`nn.Embedding` 等。如果某个特定模块不被支持，首先，您需要实现一个张量并行版本。有关详细信息，请参考
+    SDMP API 文档：[https://sagemaker.readthedocs.io/en/stable/api/training/smp_versions/latest/smd_model_parallel_pytorch_tensor_parallel.xhtml](https://sagemaker.readthedocs.io/en/stable/api/training/smp_versions/latest/smd_model_parallel_pytorch_tensor_parallel.xhtml)。
+- en: Reference implementations
+  id: totrans-268
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 参考实现
+- en: AWS provides a few example scripts to train popular large models such as GPT2,
+    GPT-J, and BERT using the SDMP library. See the official GitHub repository at
+    [https://github.com/aws/amazon-sagemaker-examples/tree/main/training/distributed_training/pytorch/model_parallel](https://github.com/aws/amazon-sagemaker-examples/tree/main/training/distributed_training/pytorch/model_parallel).
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AWS 提供了一些示例脚本，用于使用 SDMP 库训练流行的大型模型，如 GPT2、GPT-J 和 BERT。请查看官方 GitHub 仓库：[https://github.com/aws/amazon-sagemaker-examples/tree/main/training/distributed_training/pytorch/model_parallel](https://github.com/aws/amazon-sagemaker-examples/tree/main/training/distributed_training/pytorch/model_parallel)。
+- en: You can also find the reference configuration of SDMP at [https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-best-practices.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-best-practices.xhtml).
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以在 [https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-best-practices.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-best-practices.xhtml)
+    找到 SDMP 的参考配置。
+- en: So far, we have covered different ways to distribute your training job and looked
+    at sample implementations. In the next section, we will cover some parameters
+    to improve the efficiency of your distributed training job.
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经涵盖了分配训练作业的不同方式，并查看了示例实现。在接下来的部分，我们将介绍一些可以提高分布式训练作业效率的参数。
+- en: Optimizing distributed training jobs
+  id: totrans-272
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 优化分布式训练作业
+- en: In many cases, optimizing your large-scale distributed training jobs requires
+    a lot of trial and error and is very specific to the runtime environment, hardware
+    stack, model architecture, and other parameters. But there are several key knobs
+    that might help to optimize your training speed and overall efficiency.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多情况下，优化大规模分布式训练作业需要大量的试验和错误，并且非常依赖于运行时环境、硬件栈、模型架构以及其他参数。但有一些关键的调整项可以帮助优化您的训练速度和整体效率。
+- en: Cluster layout and computation affinity
+  id: totrans-274
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 集群布局与计算亲和性
+- en: When running distributed training jobs, especially model parallel or hybrid
+    parallel, it’s always a good idea to understand how different types of computation
+    are aligned with your cluster layout.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在运行分布式训练作业时，特别是模型并行或混合并行时，理解不同类型的计算如何与您的集群布局对齐始终是一个好主意。
+- en: 'Let’s consider a situation when we need to run model parallel training in the
+    cluster of two nodes with two GPU devices each. The total training processes count
+    is 4 with global ranks ranging from 0 to 3 and local ranks being 0 and 1\. We
+    assume that the model copy and gradients can fit into two devices. In this case,
+    we need to ensure that each model will be stored within each node: one model copy
+    will be placed on ranks 0 and 1 (local ranks 0 and 1), and another on ranks 2
+    and 3 (local ranks 0 and 1). This will ensure that communication between layers
+    of the model will happen over faster inter-GPU connections and won’t, typically,
+    traverse slower intra-node networks.'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们需要在一个包含两个节点、每个节点有两个 GPU 设备的集群中运行模型并行训练。总共的训练进程数为 4，全球排名从 0 到 3，局部排名为 0 和
+    1。我们假设模型副本和梯度可以适配到两个设备中。在这种情况下，我们需要确保每个模型会被存储在每个节点内：一个模型副本会放置在排名 0 和 1（局部排名 0
+    和 1）上，另一个放置在排名 2 和 3（局部排名 0 和 1）上。这将确保模型各层之间的通信通过更快的 GPU 互联连接进行，并且通常不会穿越较慢的节点内网络。
+- en: To address this situation, SDMP provides a special parameter called `placement_strategy`,
+    which allows you to control the training process’s affinity to your hardware.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，SDMP 提供了一个特殊的参数 `placement_strategy`，允许你控制训练过程与硬件的亲和性。
+- en: Communication backend
+  id: totrans-278
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 通信后端
+- en: 'In this chapter, we covered some of the most popular communication backends,
+    such as NCCL, Gloo, and MPI. The following list is a rule of thumb when choosing
+    which backend to use given your specific case:'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了一些最流行的通信后端，例如 NCCL、Gloo 和 MPI。以下列表是根据具体情况选择后端时的一个经验法则：
+- en: '**Message passing interface** (**MPI**) is a communication standard in distributed
+    computations that comes with a number of backend implementations, such as Open-MPI,
+    MVAPICH2, and more. MPI backends also support inter-GPU operations on CUDA tensors.
+    However, MPI is rarely an optimal choice for your training job if you have other
+    options.'
+  id: totrans-280
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**消息传递接口**（**MPI**）是分布式计算中的一种通信标准，具有多个后端实现，例如 Open-MPI、MVAPICH2 等。MPI 后端还支持在
+    CUDA 张量上进行 GPU 之间的操作。然而，如果你有其他选择，MPI 通常不是训练任务的最佳选择。'
+- en: '**Gloo** backends come with wide support for point-to-point and collective
+    computations between CPU devices as well as collective computations between GPU
+    devices. Gloo can be a good choice for initial debugging on CPU devices. However,
+    you should usually prefer NCCL when using GPU devices for training.'
+  id: totrans-281
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Gloo** 后端广泛支持 CPU 设备之间的点对点和集体计算，以及 GPU 设备之间的集体计算。Gloo 是在 CPU 设备上进行初步调试的不错选择。然而，通常在使用
+    GPU 设备进行训练时，你应优先选择 NCCL。'
+- en: '**NCCL** backends are provided by NVIDIA and are optimal for training jobs
+    on NVIDIA GPUs.'
+  id: totrans-282
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**NCCL** 后端由 NVIDIA 提供，最适合在 NVIDIA GPU 上进行训练任务。'
+- en: '**Custom** backends can be provided as part of the DL framework. For instance,
+    TensorFlow 2 provides a custom **RING** backend.'
+  id: totrans-283
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**自定义** 后端可以作为深度学习框架的一部分提供。例如，TensorFlow 2 提供了一个自定义的 **RING** 后端。'
+- en: Note
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: When working with a newer SOTA model, make sure that the communication backend
+    of your choice supports the collective and point-to-point operations required
+    by your model architecture.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用较新的 SOTA 模型时，确保你选择的通信后端支持模型架构所需的集体操作和点对点操作。
+- en: Training hyperparameters
+  id: totrans-286
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 训练超参数
+- en: 'There are many training hyperparameters that can impact your training efficiencies.
+    While we don’t intend to cover all of them, we have listed some hyperparameters
+    that you can tweak in your optimization efforts:'
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有许多训练超参数会影响训练效率。虽然我们不会涵盖所有的超参数，但我们列出了一些你可以在优化过程中调整的超参数：
+- en: Use **AMP** to reduce memory requirements and speed up training with minimal
+    impact on accuracy and training convergence. AMP is a popular technique that is
+    used to combine single (FP32) and half-precision (FP16) tensors during the forward,
+    backward, and update steps. Note that you will likely need to have a large batch
+    size in order to have meaningful improvements with AMP.
+  id: totrans-288
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 **AMP** 来减少内存需求，并在对准确性和训练收敛性影响最小的情况下加速训练。AMP 是一种流行的技术，它在前向、反向和更新步骤中结合了单精度（FP32）和半精度（FP16）张量。请注意，为了在使用
+    AMP 时获得显著的改进，通常需要使用较大的批量大小。
+- en: Use **hardware-optimized data types** (such as TF32, BF32, and BF16) to speed
+    up training. These data types are optimized for specific DL computations and provide
+    speed up compared to the common FP32 and FP16 types. Note that to use these types,
+    you need to ensure that your framework, model architecture, and hardware support
+    it.
+  id: totrans-289
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 **硬件优化的数据类型**（如 TF32、BF32 和 BF16）来加速训练。这些数据类型针对特定的深度学习计算进行了优化，相较于常见的 FP32
+    和 FP16 类型提供了加速效果。请注意，要使用这些类型，需确保你的框架、模型架构和硬件都支持它们。
+- en: Optimize your **global batch size** to speed up training. As you scale out your
+    training cluster, make sure that you are updating your global batch size accordingly.
+    Typically, the upper limit of local batch size is defined by available GPU memory
+    (you will likely see a *CUDA OOM* error if the local batch size cannot fit into
+    memory). Keep in mind that increasing the batch size beyond a certain threshold
+    might not increase the global training throughput either. You can find some additional
+    materials and benchmarks in the *NVIDIA* guide at [https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.xhtml#batch-size](https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.xhtml#batch-size).
+    Another thing to keep in mind is that you might need to proportionally increase
+    the learning rate with an increase in the batch size.
+  id: totrans-290
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化你的**全局批次大小**以加速训练。随着训练集群的扩展，确保相应地更新全局批次大小。通常，局部批次大小的上限由可用的GPU内存定义（如果局部批次大小无法适应内存，你可能会看到*CUDA
+    OOM*错误）。请记住，将批次大小增加到某个阈值以上，可能不会提高全局训练吞吐量。你可以在*NVIDIA*指南中找到一些额外的资料和基准测试：[https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.xhtml#batch-size](https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.xhtml#batch-size)。另一个需要记住的事项是，你可能需要随着批次大小的增加而按比例增加学习率。
+- en: Use **fused optimizers** (such as the FusedAdam optimizer) to speed up weight
+    updates using the operation fusion – combining multiple operations into one. Make
+    sure that you confirm that your DL framework and hardware support fused optimizers.
+  id: totrans-291
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用**融合优化器**（如FusedAdam优化器）通过操作融合加速权重更新——将多个操作合并为一个。确保确认你的深度学习框架和硬件支持融合优化器。
+- en: These are several common parameters that might improve the efficiency of your
+    training jobs. Note that, in many real-life use cases, you might have model- or
+    task-specific tuning parameters.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是几种可能提高训练任务效率的常见参数。请注意，在许多实际应用场景中，你可能需要根据模型或任务的特定调优参数。
+- en: Summary
+  id: totrans-293
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we focused on how to engineer large-scale data parallel, model
+    parallel, and hybrid distributed training jobs. We discussed which type of parallelism
+    to choose based on your specific use case and model architecture. Then, we reviewed
+    several popular approaches of how to organize distributed training – such as the
+    Parameter Server and Allreduce algorithms – along with various performance considerations
+    to tune distributed training jobs. You will now be able to select the correct
+    type of distributed training, technical stack, and approach to debug and tune
+    training job performance. Then, we reviewed several examples of distributed training
+    jobs in Amazon SageMaker using the popular open source and proprietary libraries
+    SDDP and SMDP.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们重点介绍了如何设计大规模数据并行、模型并行和混合分布式训练任务。我们讨论了如何根据具体的使用场景和模型架构选择并行类型。然后，我们回顾了几种常见的分布式训练组织方法——如参数服务器和Allreduce算法——以及调优分布式训练任务的各种性能考虑因素。现在，你将能够选择正确的分布式训练类型、技术栈和调试及调优训练任务性能的方法。接着，我们回顾了在Amazon
+    SageMaker中使用流行的开源和专有库SDDP和SMDP进行分布式训练任务的几个示例。
+- en: Running large-scale training jobs requires not only initial engineering efforts
+    but also the well-established operational management of your training jobs. In
+    many cases, the training job can run for days and weeks, or you will need to periodically
+    retrain your models on new data. As each long-running DL training job requires
+    considerable compute resources and associated time and cost resources, we want
+    to make sure that our training is efficient. For instance, we need to control
+    in real time whether our model is converging during training. Otherwise, we might
+    want to stop earlier and avoid wasting compute resources and time. In the next
+    chapter, we will focus on setting up an operational stack for your DL training
+    jobs.
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行大规模训练任务不仅需要初步的工程工作，还需要对训练任务进行良好的运营管理。在许多情况下，训练任务可能会持续数天甚至数周，或者你可能需要定期在新数据上重新训练模型。由于每个长期运行的深度学习训练任务都需要大量的计算资源和相应的时间及成本资源，因此我们希望确保训练过程高效。例如，我们需要实时控制模型在训练过程中是否正在收敛。否则，我们可能需要更早地停止训练，避免浪费计算资源和时间。在下一章中，我们将重点介绍如何为你的深度学习训练任务搭建一个运营栈。

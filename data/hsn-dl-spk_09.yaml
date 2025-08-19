@@ -1,0 +1,742 @@
+- en: Interpreting Neural Network Output
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 解释神经网络输出
+- en: In the previous chapter, the ability to use the DL4J UI to monitor and debug
+    a **Multilayer Neural Network** (**MNN**) was fully described. The last part of
+    the previous chapter also explained how to interpret and use the real-time visual
+    results in the UI charts to tune training. In this chapter, we will explain how
+    to evaluate the accuracy of a model after its training and before it is moved
+    to production. Several evaluation strategies exist for neural networks. This chapter
+    covers the principal ones and all their implementations, which are provided by
+    the DL4J API.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，详细描述了如何使用DL4J UI来监控和调试**多层神经网络**（**MNN**）。上一章的最后部分也解释了如何解读和使用UI图表中的实时可视化结果来调整训练。本章将解释如何在模型训练完成后、投入生产之前评估模型的准确性。对于神经网络，存在多种评估策略。本章涵盖了主要的评估策略及其所有实现，这些实现由DL4J
+    API提供。
+- en: While describing the different evaluation techniques, I have tried to reduce
+    the usage of math and formulas as much as possible and keep the focus on the Scala
+    implementation with DL4J and Spark.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在描述不同的评估技术时，我尽量减少数学和公式的使用，尽量集中讲解如何使用DL4J和Spark进行Scala实现。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将覆盖以下主题：
+- en: Interpreting the output of a neural network
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 解释神经网络的输出
+- en: 'Evaluation techniques with DL4J, including the following:'
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用DL4J的评估技术，包括以下内容：
+- en: Evaluation for classification
+  id: totrans-6
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分类评估
+- en: Evaluation for classification in a Spark context
+  id: totrans-7
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在Spark环境下的分类评估
+- en: Other types of evaluation that are supported by DL4J
+  id: totrans-8
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: DL4J支持的其他类型评估
+- en: Evaluation techniques with DL4J
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用DL4J的评估技术
+- en: At training time and before deploying a MNN, it is important to know the accuracy
+    of the model and understand its performance. In the previous chapter, we learned
+    that at the end of a training phase, the model can be saved in a ZIP archive.
+    From there, it is possible to run it and test it implementing a custom UI, like
+    that shown in *Figure 8.1* (it has been implemented using the JavaFX features;
+    the example code is part of the source code that's bundled with this book). But
+    more significant strategies can be utilized to perform an evaluation. DL4J provides
+    an API that can be used to evaluate the performance of both binary and multi-class
+    classifiers.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练时以及在部署MNN之前，了解模型的准确性并理解其性能非常重要。在上一章中，我们了解到，在训练阶段结束时，模型可以保存为ZIP归档文件。从那里，可以通过实现自定义UI来运行并测试模型，正如*图8.1*所示（它是通过JavaFX功能实现的，示例代码是本书随附的源代码的一部分）。但是，可以利用更为重要的策略来进行评估。DL4J提供了一个API，可以用来评估二分类器和多分类器的性能。
+- en: This first section and its subsections cover all the details of doing evaluation
+    for classification (DL4J and Spark), while the next section provides an overview
+    of other evaluation strategies that can be done, all of which rely on the DL4J
+    API.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节及其子节涵盖了如何进行分类评估的所有细节（DL4J和Spark），而下一节则概述了其他可以进行的评估策略，所有这些策略都依赖于DL4J API。
+- en: Evaluation for classification
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分类评估
+- en: The core DL4J class when implementing evaluations is called **evaluation** ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/eval/Evaluation.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/eval/Evaluation.html),
+    part of the DL4J NN module).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现评估时，核心的DL4J类叫做**evaluation**（[https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/eval/Evaluation.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/0.9.1/org/deeplearning4j/eval/Evaluation.html)，是DL4J
+    NN模块的一部分）。
+- en: 'The dataset that will be used for the example presented in this subsection
+    is the Iris dataset (it is available for download at [https://archive.ics.uci.edu/ml/datasets/iris](https://archive.ics.uci.edu/ml/datasets/iris)).
+    It is a multivariate dataset that was introduced in 1936 by the British statistician
+    and biologist Ronald Fisher ([https://en.wikipedia.org/wiki/Ronald_Fisher](https://en.wikipedia.org/wiki/Ronald_Fisher)).
+    It contains 150 records – 50 samples – from three species of Iris flower (Iris
+    setosa, Iris virginica, and Iris versicolor). Four attributes (features) have
+    been measured from each sample – the length and width of the sepals and petals
+    (in centimeters). The structure of this dataset was used for the example that
+    was presented in [Chapter 4](198c1dc7-bc2a-47e8-9f97-8dbe37b7a2e3.xhtml), *Streaming*,
+    in the *Streaming data with DL4J and Spark* section. Here''s a sample of the data
+    that''s contained in this set:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本小节所展示的示例所用的数据集是鸢尾花数据集（可以在 [https://archive.ics.uci.edu/ml/datasets/iris](https://archive.ics.uci.edu/ml/datasets/iris)
+    下载）。这是一个多变量数据集，由英国统计学家和生物学家 Ronald Fisher（[https://en.wikipedia.org/wiki/Ronald_Fisher](https://en.wikipedia.org/wiki/Ronald_Fisher)）于
+    1936 年引入。该数据集包含 150 条记录——来自三种鸢尾花（Iris setosa、Iris virginica 和 Iris versicolor）的
+    50 个样本。每个样本测量了四个属性（特征）——萼片和花瓣的长度和宽度（单位：厘米）。该数据集的结构在 [第 4 章](198c1dc7-bc2a-47e8-9f97-8dbe37b7a2e3.xhtml)
+    *流式数据* 的 *使用 DL4J 和 Spark 处理流式数据* 部分的示例中使用过。以下是该数据集中包含的一个样本数据：
+- en: '[PRE0]'
+  id: totrans-15
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Typically, for cases of supervised learning like this, a dataset is split into
+    two parts: 70% and 30%. The first part is for the training, while the second is
+    used to calculate the error and modify the network if necessary. This is also
+    the case for this section example – we are going to use 70% of the dataset for
+    the network training and the remaining 30% for evaluation purposes.'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，对于像这样的监督学习情况，数据集会被分为两部分：70% 用于训练，30% 用于计算误差并在必要时修改网络。这对于本节的示例也是如此——我们将使用
+    70% 的数据集进行网络训练，其余 30% 用于评估。
+- en: 'The first thing we need to do is get the dataset using a `CSVRecordReader`
+    (the input file is a list of comma-separated records):'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要做的第一件事是使用 `CSVRecordReader` 获取数据集（输入文件是一个由逗号分隔的记录列表）：
+- en: '[PRE1]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Now, we need to convert the data that''s going to be used in the neural network:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们需要将将用于神经网络的数据进行转换：
+- en: '[PRE2]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Each row of the input file contains five values – the four input features, followed
+    by an integer label (class) index. This means that the labels are the fifth value
+    (`labelIndex` is `4`). The dataset has three classes representing the types of
+    Iris flowers. They have integer values of either zero (setosa), one (versicolor),
+    or two (virginica).
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入文件的每一行包含五个值——四个输入特征，后跟一个整数标签（类别）索引。这意味着标签是第五个值（`labelIndex` 是 `4`）。数据集有三种类别，代表三种鸢尾花类型。它们的整数值分别为零（setosa）、一（versicolor）或二（virginica）。
+- en: 'As we mentioned previously, we split the dataset into two parts – 70% of the
+    data is for training, while the rest is for evaluation:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，我们将数据集分成两部分——70% 的数据用于训练，其余部分用于评估：
+- en: '[PRE3]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: The split happens through the `SplitTestAndTrain` class ([https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/SplitTestAndTrain.html](https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/SplitTestAndTrain.html))
+    of ND4J.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集的拆分通过 ND4J 的 `SplitTestAndTrain` 类 ([https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/SplitTestAndTrain.html](https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/SplitTestAndTrain.html))
+    完成。
+- en: 'We also need to normalize the input data (for both the training and evaluation
+    sets) using the ND4J `NormalizeStandardize` class ([https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/NormalizerStandardize.html](https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/NormalizerStandardize.html))
+    so that we have a zero mean and a standard deviation of one:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还需要使用 ND4J 的 `NormalizeStandardize` 类 ([https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/NormalizerStandardize.html](https://deeplearning4j.org/api/latest/org/nd4j/linalg/dataset/api/preprocessor/NormalizerStandardize.html))
+    对输入数据（包括训练集和评估集）进行归一化处理，以便我们得到零均值和标准差为一：
+- en: '[PRE4]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'We can now configure and build the model (a simple feedforward neural network):'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在可以配置并构建模型（一个简单的前馈神经网络）：
+- en: '[PRE5]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The following screenshot shows a graphical representation of the network for
+    this example:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下截图显示了本示例中网络的图形表示：
+- en: '![](img/3bed52a4-5815-453c-98df-a3fd060bd86e.png)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3bed52a4-5815-453c-98df-a3fd060bd86e.png)'
+- en: 'The MNN can be created by starting from the preceding configuration:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MNN 可以通过从前面的配置开始创建：
+- en: '[PRE6]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The training can be started if we use the portion (70%) of the input dataset
+    that has been reserved for it:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们使用为训练预留的输入数据集的部分（70%），则可以开始训练：
+- en: '[PRE7]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'At the end of training, the evaluation can be done using the reserved portion
+    (30%) of the input dataset:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练结束时，可以使用输入数据集的保留部分（30%）进行评估：
+- en: '[PRE8]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The value that''s passed to the evaluation class constructor is the number
+    of classes to account for in the evaluation – this is `3` here because we have
+    `3` classes of flowers in the dataset. The `eval` method compares the labels array
+    from the test dataset with the labels that were generated by the model. The result
+    of the evaluation is finally printed to the output:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 传递给评估类构造函数的值是评估中需要考虑的类别数——这里是`3`，因为数据集中有`3`个花卉类别。`eval`方法将测试数据集中的标签数组与模型生成的标签进行比较。评估的结果最终会打印到输出中：
+- en: '![](img/be1b6651-5593-4f76-9a37-ef49197c5fa1.png)'
+  id: totrans-38
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/be1b6651-5593-4f76-9a37-ef49197c5fa1.png)'
+- en: By default, the `stats` method of the `Evaluation` class displays the confusion
+    matrix entries (one entry per line), Accuracy, Precision, Recall, and F1 Score,
+    but other information can be displayed. Let's talk about what these `stats` are.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，`Evaluation`类的`stats`方法会显示混淆矩阵条目（每行一个条目），准确度、精确度、召回率和F1分数，但也可以显示其他信息。让我们来谈谈这些`stats`是什么。
+- en: 'The **confusion matrix** is a table that is used to describe the performance
+    of a classifier on a test dataset for which the true values are known. Let''s
+    consider the following example (for a binary classifier):'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**混淆矩阵**是用于描述分类器在测试数据集上表现的表格，其中真实值是已知的。我们来考虑以下示例（对于二分类器）：'
+- en: '| **Prediction count = 200** | **Predicted as no** | **Predicted as yes** |'
+  id: totrans-41
+  prefs: []
+  type: TYPE_TB
+  zh: '| **预测数量 = 200** | **预测为否** | **预测为是** |'
+- en: '| Actual: no | 55 | 5 |'
+  id: totrans-42
+  prefs: []
+  type: TYPE_TB
+  zh: '| 实际: 否 | 55 | 5 |'
+- en: '| Actual: yes | 10 | 130 |'
+  id: totrans-43
+  prefs: []
+  type: TYPE_TB
+  zh: '| 实际: 是 | 10 | 130 |'
+- en: 'These are the insights we can get from the preceding matrix:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是从上述矩阵中得到的见解：
+- en: There are two possible predicted classes, yes and no
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 预测类别有两种可能，“是”和“否”
+- en: The classifier made 200 predictions in total
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分类器总共做出了200个预测
+- en: Out of those 200 cases, the classifier predicted yes 135 times and no 65 times
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在这200个案例中，分类器预测为是135次，预测为否65次
+- en: In reality, 140 cases in the sample are yes and 60 are no
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实际上，样本中有140个案例是“是”，60个是“否”
+- en: 'When this is translated into proper terms, the insights are as follows:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当这些被翻译成适当的术语时，见解如下：
+- en: '**True positives** (**TP**): These are cases in which yes has been predicted
+    and it is really a yes'
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**真阳性** (**TP**)：这些是预测为“是”且实际上是“是”的情况'
+- en: '**True negatives** (**TN**): No has been predicted and it is really a no'
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**真阴性** (**TN**)：预测为否，且实际上是否'
+- en: '**False positives** (**FP**): Yes has been predicted, but really it is a no'
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**假阳性** (**FP**)：预测为是，但实际上是否'
+- en: '**False negatives** (**FN**): No has been predicted, but really it is a yes'
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**假阴性** (**FN**)：预测为否，但实际上是是'
+- en: 'Let''s consider the following example:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑以下示例：
+- en: '|  | **Predicted as no** | **Predicted as yes** |'
+  id: totrans-55
+  prefs: []
+  type: TYPE_TB
+  zh: '|  | **预测为否** | **预测为是** |'
+- en: '| Actual: no | TN | FP |'
+  id: totrans-56
+  prefs: []
+  type: TYPE_TB
+  zh: '| 实际: 否 | 真阴性 | 假阳性 |'
+- en: '| Actual: yes | FN | TP |'
+  id: totrans-57
+  prefs: []
+  type: TYPE_TB
+  zh: '| 实际: 是 | 假阴性 | 真阳性 |'
+- en: 'This is done in terms of numbers. A list of rates can be calculated from a
+    confusion matrix. With reference to the code example in this section, they are
+    as follows:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是通过数字来完成的。可以从混淆矩阵中计算出一组比率。参考本节中的代码示例，它们如下所示：
+- en: '**Accuracy**: Represents how often a classifier is correct: *(TP+TN)/total*.'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**准确度**：表示分类器正确的频率：*(TP+TN)/总数*。'
+- en: '**Precision**: Represents how often a classifier is correct when it predicts
+    a positive observation.'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**精确度**：表示分类器预测为正的观测值时，分类器的正确率。'
+- en: '**Recall**: The average recall for all classes (labels) in the evaluation dataset: *TP/TP+FN*.'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**召回率**：评估数据集中所有类别（标签）的平均召回率：*TP/（TP+FN）*。'
+- en: '**F1 Score**: This is the weighted average of precision and recall. It takes
+    into account both false positives and false negatives: *2 * TP / (2TP + FP + FN)*.'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**F1分数**：这是精确度和召回率的加权平均值。它考虑了假阳性和假阴性：*2 * TP / (2TP + FP + FN)*。'
+- en: 'The `Evaluation` class can also display other information such as the G-measure
+    or the Matthews Correlation Coefficient, and much more. The confusion matrix can
+    be also displayed in its full form:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Evaluation`类还可以显示其他信息，例如G-measure或Matthew相关系数等等。混淆矩阵也可以显示其完整形式：'
+- en: '[PRE9]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The preceding command returns the following output:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述命令返回以下输出：
+- en: '![](img/0a522cc7-b4e8-4dbe-a26f-6f6341dfcc73.png)'
+  id: totrans-66
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0a522cc7-b4e8-4dbe-a26f-6f6341dfcc73.png)'
+- en: 'The confusion matrix can be also accessed directly and converted into CSV format:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 混淆矩阵也可以直接访问并转换为 CSV 格式：
+- en: '[PRE10]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'The preceding command returns the following output:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述命令返回以下输出：
+- en: '![](img/cea6aeef-8411-4b1d-be13-4236f9ac291e.png)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/cea6aeef-8411-4b1d-be13-4236f9ac291e.png)'
+- en: 'It can also be converted into HTML:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它也可以转换为 HTML 格式：
+- en: '[PRE11]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The preceding command returns the following output:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述命令返回以下输出：
+- en: '![](img/27fed4c0-2166-4666-a7cf-d674104bd334.png)'
+  id: totrans-74
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/27fed4c0-2166-4666-a7cf-d674104bd334.png)'
+- en: Evaluation for classification – Spark example
+  id: totrans-75
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分类评估 – Spark 示例
+- en: Let's examine another example of evaluation for classification, but in a context
+    where Spark is involved too (distributed evaluation). We are going to complete
+    the example that was presented in [Chapter 5](fbec1d8a-a92f-4899-af0f-11f3d545e0eb.xhtml),
+    *Convolutional Neural Networks*, in the *Hands-on CNN with Spark* section, [Chapter
+    7](3b6f47c0-6e17-484b-ad30-b6f92eb0473c.xhtml), *Training Neural Networks with
+    Spark*, in the *CNN distributed training with Spark and DL4J* section, and [Chapter
+    8](b30120ea-bd42-4cb7-95d9-5ecaa2b7c181.xhtml), *Monitoring and Debugging Neural
+    Network Training*, in the *The DL4J Training UI and Spark* section. Remember that
+    this is an example of handwritten digits image classification that's trained on
+    the `MNIST` dataset.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看另一个分类评估的示例，但在一个涉及 Spark 的上下文中（分布式评估）。我们将完成在 [第 5 章](fbec1d8a-a92f-4899-af0f-11f3d545e0eb.xhtml)，*卷积神经网络*，在
+    *使用 Spark 的 CNN 实战* 部分，[第 7 章](3b6f47c0-6e17-484b-ad30-b6f92eb0473c.xhtml)，*使用
+    Spark 训练神经网络*，在 *使用 Spark 和 DL4J 的 CNN 分布式训练* 部分，以及 [第 8 章](b30120ea-bd42-4cb7-95d9-5ecaa2b7c181.xhtml)，*监控和调试神经网络训练*，在
+    *DL4J 训练 UI 和 Spark* 部分展示的示例。记住，这个示例是基于 `MNIST` 数据集训练的手写数字图像分类。
+- en: 'In these chapters, we used only a portion of the `MNIST` dataset for training
+    purposes, but the downloaded archive also includes a separate directory named
+    `testing`, which contains the portion of the dataset that''s reserved for evaluation
+    purposes. The evaluation dataset also needs to be vectorized, just like the training
+    dataset:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这些章节中，我们只使用了 `MNIST` 数据集的一部分进行训练，但下载的归档文件还包括一个名为 `testing` 的单独目录，包含了保留用于评估的数据集部分。评估数据集也需要像训练数据集一样进行向量化：
+- en: '[PRE12]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'We need to do this before we load it into memory at evaluation time and parallelize
+    it:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要在评估时将其加载到内存之前进行此操作，并将其并行化：
+- en: '[PRE13]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Then, the evaluation can be done through the `Evaluation` class, which is what
+    we did for the example in the previous section:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，可以通过 `Evaluation` 类进行评估，这正是我们在前一部分示例中所做的：
+- en: '[PRE14]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The produced output of the `stas` method of the `Evaluation` class is the same
+    as for any other network implementation that''s trained and evaluated through
+    DL4J. For example:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Evaluation` 类的 `stas` 方法生成的输出与通过 DL4J 训练和评估的任何其他网络实现相同。例如：'
+- en: '![](img/7244abfe-90e1-4132-92f4-3ff6806704cd.png)'
+  id: totrans-84
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7244abfe-90e1-4132-92f4-3ff6806704cd.png)'
+- en: 'It is also possible to perform multiple evaluations in the same pass using
+    the `doEvaluation` method of the `SparkDl4jMultiLayer` class. This method expects
+    three input parameters: the data to evaluate on (in the form of a `JavaRDD<org.nd4j.linalg.dataset.DataSet>`),
+    an empty `Evaluation` instance, and a integer that represents the evaluation batch
+    size. It returns the populated `Evaluation` object.'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也可以使用 `SparkDl4jMultiLayer` 类的 `doEvaluation` 方法在同一轮次中执行多次评估。该方法需要三个输入参数：要评估的数据（以
+    `JavaRDD<org.nd4j.linalg.dataset.DataSet>` 的形式），一个空的 `Evaluation` 实例，以及表示评估批量大小的整数。它返回填充后的
+    `Evaluation` 对象。
+- en: Other types of evaluation
+  id: totrans-86
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 其他类型的评估
+- en: Other evaluations are available through the DL4J API. This section lists them.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过 DL4J API 还可以进行其他评估。此部分列出了它们。
+- en: 'It is possible to evaluate a network performing regression through the `RegressionEvaluation`
+    class ([https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/1.0.0-alpha/org/deeplearning4j/eval/RegressionEvaluation.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/1.0.0-alpha/org/deeplearning4j/eval/RegressionEvaluation.html),
+    DL4J NN). With reference to the example that we used in the *Evaluation for classification* section,
+    evaluation for regression can be done the following way:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也可以通过 `RegressionEvaluation` 类评估执行回归的网络（[https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/1.0.0-alpha/org/deeplearning4j/eval/RegressionEvaluation.html](https://static.javadoc.io/org.deeplearning4j/deeplearning4j-nn/1.0.0-alpha/org/deeplearning4j/eval/RegressionEvaluation.html)，DL4J
+    NN）。参考我们在 *分类评估* 部分中使用的示例，回归评估可以按以下方式进行：
+- en: '[PRE15]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The produced output of the `stats` method includes the MSE, the MAE, the RMSE,
+    the RSE, and the R^2:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`stats`方法的输出包括MSE、MAE、RMSE、RSE和R^2：'
+- en: '![](img/1e5ef8ad-0379-460e-88ff-d21ab98964a1.png)'
+  id: totrans-91
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/1e5ef8ad-0379-460e-88ff-d21ab98964a1.png)'
+- en: '**ROC** (short for **Receiver Operating Characteristic**, [https://en.wikipedia.org/wiki/Receiver_operating_characteristic](https://en.wikipedia.org/wiki/Receiver_operating_characteristic))
+    is another commonly used metric for the evaluation of classifiers. DL4J provides
+    three different implementations for ROC:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**ROC**（即**接收者操作特征**，[https://en.wikipedia.org/wiki/Receiver_operating_characteristic](https://en.wikipedia.org/wiki/Receiver_operating_characteristic)）是另一种常用的分类器评估指标。DL4J为ROC提供了三种不同的实现：'
+- en: '`ROC`: [https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROC.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROC.html),
+    the implementation for binary classifiers'
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ROC`：[https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROC.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROC.html)，适用于二分类器的实现'
+- en: '`ROCBinary`: [https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCBinary.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCBinary.html),
+    for multi-task binary classifiers'
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ROCBinary`：[https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCBinary.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCBinary.html)，适用于多任务二分类器'
+- en: '`ROCMultiClass`: [https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCMultiClass.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCMultiClass.html),
+    for multi-class classifiers'
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ROCMultiClass`：[https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCMultiClass.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/ROCMultiClass.html)，适用于多类分类器'
+- en: 'All of the three preceding classes have the ability to calculate the area under
+    **ROC curve** (**AUROC**), through the `calculateAUC` method, and the area under
+    **Precision-Recall curve** (**AUPRC**), through the `calculateAUPRC` method. These
+    three ROC implementations support two modes of calculation:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面提到的三个类都有计算**ROC曲线**（**AUROC**）和**精确度-召回曲线**（**AUPRC**）下的面积的能力，计算方法分别是`calculateAUC`和`calculateAUPRC`。这三种ROC实现支持两种计算模式：
+- en: '**Thresholded**: It uses less memory and approximates the calculation of the
+    AUROC and AUPRC. This is suitable for very large datasets.'
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**阈值化**：它使用更少的内存，并近似计算AUROC和AUPRC。这适用于非常大的数据集。'
+- en: '**Exact**: This is the default. It is accurate, but requires more memory. This
+    is not suitable for very large datasets.'
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**精确**：这是默认设置。它精确，但需要更多的内存。不适合非常大的数据集。'
+- en: It is possible to export the AUROC and AUPRC in HTML format so that they can
+    be viewed using a web browser. The `exportRocChartsToHtmlFile` method of the `EvaluationTools`
+    class ([https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/evaluation/EvaluationTools.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/evaluation/EvaluationTools.html))
+    has to be used to do this export. It expects the ROC implementation to export
+    and a File object (the destination HTML file) as parameters. It saves both curves
+    in a single HTML file.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以将AUROC和AUPRC导出为HTML格式，以便使用网页浏览器查看。需要使用`EvaluationTools`类的`exportRocChartsToHtmlFile`方法（[https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/evaluation/EvaluationTools.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/evaluation/EvaluationTools.html)）进行此导出。此方法需要ROC实现和一个File对象（目标HTML文件）作为参数。它会将两条曲线保存在一个HTML文件中。
+- en: 'To evaluate networks with binary classification outputs, the `EvaluationBinary`
+    class ([https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationBinary.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationBinary.html))
+    is used. The typical classification metrics (Accuracy, Precision, Recall, F1 Score,
+    and so on) are calculated for each output. The following is the syntax for this
+    class:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要评估具有二分类输出的网络，可以使用`EvaluationBinary`类（[https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationBinary.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationBinary.html)）。该类为每个输出计算典型的分类指标（准确率、精确度、召回率、F1得分等）。该类的语法如下：
+- en: '[PRE16]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: What about time series evaluation (in the case of RNNs)? It is quite similar
+    to the evaluation approaches for classification that we have described so far
+    in this chapter. For time series in DL4J, the evaluation is performed on all the
+    non-masked time steps in a separate way. But what is masking for RNNs? RNNs require
+    that inputs have a fixed length. Masking is a technique that's used to handle
+    this because it marks missing time steps. The only difference between the other
+    evaluation cases that were presented previously is the optional presence of mask
+    arrays. This means that, in many time series cases, you can just use the `evaluate`
+    or `evaluateRegression` methods of the `MultiLayerNetwork` class – regardless
+    of whether mask arrays should be present, they can be properly handled by those
+    two methods.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，时间序列评估（在 RNN 的情况下）如何呢？它与我们在本章中描述的分类评估方法非常相似。对于 DL4J 中的时间序列，评估是针对所有未被掩盖的时间步进行的。那什么是
+    RNN 的掩盖？RNN 要求输入具有固定长度。掩盖是一种用于处理这种情况的技术，它标记了缺失的时间步。与之前介绍的其他评估情况的唯一区别是掩盖数组的可选存在。这意味着，在许多时间序列的情况下，你可以直接使用
+    `MultiLayerNetwork` 类的 `evaluate` 或 `evaluateRegression` 方法——无论是否存在掩盖数组，它们都能正确处理。
+- en: 'DL4J also provides a way to analyze the calibration of a classifier – the `EvaluationCalibration`
+    class ([https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationCalibration.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationCalibration.html)).
+    It provides a number of tools for this, such as the following:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DL4J 还提供了一种分析分类器校准的方法——`EvaluationCalibration` 类（[https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationCalibration.html](https://deeplearning4j.org/api/1.0.0-beta2/org/deeplearning4j/eval/EvaluationCalibration.html)）。它提供了一些工具，例如：
+- en: The counts of the number of labels and predictions for each class
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个类别的标签和预测数量
+- en: The reliability diagram ([http://www.bom.gov.au/wmo/lrfvs/reliability.shtml](http://www.bom.gov.au/wmo/lrfvs/reliability.shtml))
+  id: totrans-105
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可靠性图（[http://www.bom.gov.au/wmo/lrfvs/reliability.shtml](http://www.bom.gov.au/wmo/lrfvs/reliability.shtml)）
+- en: The residual plot ([http://www.statisticshowto.com/residual-plot/](http://www.statisticshowto.com/residual-plot/))
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 残差图（[http://www.statisticshowto.com/residual-plot/](http://www.statisticshowto.com/residual-plot/)）
+- en: Histograms of probabilities for each class
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个类别的概率直方图
+- en: The evaluation of a classifier using this class is performed in a similar manner
+    to the other evaluation classes. It is possible to export its plots and histograms
+    in HTML format through the `exportevaluationCalibrationToHtmlFile` method of the
+    `EvaluationTools` class. This method expects an `EvaluationCalibration` instance
+    and a file object (the destination HTML file) as arguments.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用此类对分类器的评估与其他评估类的方式类似。可以通过 `EvaluationTools` 类的 `exportevaluationCalibrationToHtmlFile`
+    方法将其图表和直方图导出为 HTML 格式。此方法需要传入 `EvaluationCalibration` 实例和文件对象（目标 HTML 文件）作为参数。
+- en: Summary
+  id: totrans-109
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we have learned how to programmatically evaluate a model's
+    efficiency using the different facilities that are provided by the DL4J API. We
+    have now closed the full circle in terms of the implementation, training, and
+    evaluation of MNN using DL4J and Apache Spark.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们已经学习了如何使用 DL4J API 提供的不同工具来以编程方式评估模型的效率。我们已经完整地了解了使用 DL4J 和 Apache Spark
+    实现、训练和评估 MNN 的全过程。
+- en: The next chapter will give us some insight into the deployment of a distribution
+    environment and importing and executing pre-trained Python models, as well as
+    a comparison of DL4J with some alternative DL frameworks for the Scala programming
+    language.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将为我们提供有关分发环境部署、导入和执行预训练的 Python 模型的见解，并对 DL4J 与其他 Scala 编程语言的替代深度学习框架进行比较。

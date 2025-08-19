@@ -1,0 +1,1196 @@
+- en: Model-Based RL
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基于模型的强化学习
+- en: Reinforcement learning algorithms are divided into two classes—model-free methods
+    and model-based methods. These two classes differ by the assumption made about
+    the model of the environment. Model-free algorithms learn a policy from mere interactions
+    with the environment without knowing anything about it, whereas model-based algorithms
+    already have a deep understanding of the environment and use this knowledge to
+    take the next actions according to the dynamics of the model.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强化学习算法分为两类——无模型方法和基于模型的方法。这两类的区别在于对环境模型的假设。无模型算法仅通过与环境的互动学习策略，而对环境一无所知；而基于模型的算法已经对环境有深入的理解，并利用这些知识根据模型的动态来采取下一步行动。
+- en: In this chapter, we'll give you a comprehensive overview of model-based approaches,
+    highlighting their advantages and disadvantages vis-à-vis model-free approaches,
+    and the differences that arise when the model is known or has to be learned. This
+    latter division is important because it influences how problems are approached
+    and the tools used to solve them. After this introduction, we'll talk about more
+    advanced cases where model-based algorithms have to deal with high-dimensional
+    observation spaces such as images.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将为你提供一个全面的基于模型方法的概述，突出其与无模型方法相比的优缺点，以及当模型已知或需要学习时产生的差异。后者的划分很重要，因为它影响了问题的处理方式和用于解决问题的工具。在这段介绍之后，我们将讨论一些更为复杂的案例，其中基于模型的算法必须处理高维度的观察空间，比如图像。
+- en: Furthermore, we'll look at a class of algorithms that combine both model-based
+    and model-free methods to learn both a model and a policy in high dimensional
+    spaces. We'll learn their inner workings and give the reasons for using such methods.
+    Then, to deepen our understanding of model-based algorithms, and especially of
+    algorithms that combine both model-based and model-free approaches, we'll develop
+    a state-of-the-art algorithm called **model-ensemble trust region policy optimization**
+    (**ME-TRPO**) and apply it to a continuous inverted pendulum.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们还将讨论一种结合了基于模型和无模型方法的算法类，用于在高维空间中学习模型和策略。我们将深入了解其内部工作原理，并解释为何使用这种方法。然后，为了加深我们对基于模型的算法，特别是结合基于模型和无模型方法的算法的理解，我们将开发一种最先进的算法，叫做**模型集成信任区域策略优化**（**ME-TRPO**），并将其应用于连续倒立摆问题。
+- en: 'The following topics will be covered in this chapter:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: Model-based methods
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于模型的方法
+- en: Combining model-based with model-free learning
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将基于模型与无模型学习结合
+- en: ME-TRPO applied to an inverted pendulum
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将 ME-TRPO 应用到倒立摆问题
+- en: Model-based methods
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基于模型的方法
+- en: Model-free algorithms are a formidable kind of algorithm that have the ability
+    to learn very complex policies and accomplish objectives in complicated and composite
+    environments. As demonstrated in the latest works by OpenAI ([https://openai.com/five/](https://openai.com/five/))
+    and DeepMind ([https://deepmind.com/blog/article/alphastar-mastering-real-time-strategy-game-starcraft-ii](https://deepmind.com/blog/article/alphastar-mastering-real-time-strategy-game-starcraft-ii)),
+    these algorithms can actually show long-term planning, teamwork, and adaptation
+    to unexpected situations in challenge games such as StarCraft and Dota 2.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无模型算法是一种强大的算法类型，能够学习非常复杂的策略并在复杂和多样化的环境中完成目标。正如OpenAI的最新工作所展示的（[https://openai.com/five/](https://openai.com/five/)）和DeepMind的工作（[https://deepmind.com/blog/article/alphastar-mastering-real-time-strategy-game-starcraft-ii](https://deepmind.com/blog/article/alphastar-mastering-real-time-strategy-game-starcraft-ii)），这些算法实际上能够在《星际争霸》和《Dota
+    2》等挑战性游戏中展示长期规划、团队合作以及对意外情况的适应能力。
+- en: Trained agents have been able to beat top professional players. However, the
+    biggest downside is in the huge number of games that need to be played in order
+    to train agents to master these games. In fact, to achieve these results, the
+    algorithms have been scaled massively to let the agents play hundreds of years'
+    worth of games against themselves. But, what's the problem with this approach?
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练过的智能体已经能够击败顶级职业玩家。然而，最大的问题在于需要进行大量游戏才能训练智能体掌握这些游戏。实际上，为了取得这些结果，算法已经被大规模扩展，允许智能体与自己对战，进行数百年的游戏。但，这种方法到底有什么问题呢？
+- en: Well, until you are training an agent for a simulator, you can gather as much
+    experience as you want. The problem arises when you are running the agents in
+    an environment as slow and complex as the world you live in. In this case, you
+    cannot wait hundreds of years before seeing some interesting capabilities. So,
+    can we develop an algorithm that uses fewer interactions with the real environment?
+    Yes. And, as you probably remember, we already tackled this question in model-free
+    algorithms.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好吧，直到你为一个模拟器训练一个智能体，你可以收集你想要的任何经验。当你在一个像你生活的世界一样缓慢而复杂的环境中运行智能体时，问题就出现了。在这种情况下，你不能等上几百年才看到一些有趣的能力。那么，我们能否开发出一种与现实环境互动较少的算法？可以。正如你可能还记得的，我们已经在无模型算法中探讨过这个问题。
+- en: The solution was to use off-policy algorithms. However, the gains were relatively
+    marginal and not substantial enough for many real-world problems.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决方案是使用脱离策略的算法。然而，收效甚微，对于许多现实世界问题来说，其增益并不显著。
+- en: As you might expect, the answer (or at least one possible answer) is in model-based
+    reinforcement learning algorithms. You have already developed a model-based algorithm.
+    Do you remember which one? In [Chapter 3](f2414b11-976a-4410-92d8-89ee54745d99.xhtml),
+    *Solving Problems with Dynamic Programming*, we used a model of the environment
+    in conjunction with dynamic programming to train an agent to navigate a map with
+    pitfalls. And because DP uses a model of the environment, it is considered a model-based
+    algorithm.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你可能预料的那样，答案（或至少一个可能的答案）就在基于模型的强化学习算法中。你已经开发了一种基于模型的算法。你还记得是哪一种吗？在[第3章](f2414b11-976a-4410-92d8-89ee54745d99.xhtml)中，*使用动态规划解决问题*，我们将环境模型与动态规划结合起来，训练智能体在有陷阱的地图上导航。由于动态规划使用了环境模型，因此它被视为一种基于模型的算法。
+- en: Unfortunately, DP isn't usable in moderate or complex problems. So, we need
+    to explore other types of model-based algorithms that can scale up and be useful
+    in more challenging environments.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，动态规划（DP）无法应用于中等或复杂的问题。所以，我们需要探索其他类型的基于模型的算法，这些算法能够扩展并在更具挑战性的环境中发挥作用。
+- en: A broad perspective on model-based learning
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基于模型的学习的广泛视角
+- en: Let's first remember what a model is. A model consists of the transition dynamics
+    and rewards of an environment. Transition dynamics are a mapping from a state, *s,* and
+    an action*,* *a,* to the next state*,* *s'*.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们首先回顾一下什么是模型。模型由环境的转移动态和奖励组成。转移动态是一个从状态 *s* 和动作 *a* 映射到下一个状态 *s'* 的过程。
+- en: Having this information, the environment is fully represented by the model that
+    can be used in its place. And if an agent has access to it, then the agent has
+    the ability to predict its own future.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这些信息，环境就可以通过模型完全表示，并且可以用模型代替环境。如果智能体能访问该模型，那么它就有能力预测自己的未来。
+- en: In the following sections, we'll see that a model can be either known or unknown.
+    In the former case, the model is used as it is to exploit the dynamics of the
+    environment; that is, the model provides a representation that is used in place
+    of the environment. In the latter case, where the model of the environment is
+    unknown, it can be learned by direct interaction with the environment. But since,
+    in most cases, only an approximation of the environment is learned*,* additional
+    factors have to be taken into account when using it.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将看到模型可以是已知的或未知的。在已知模型的情况下，模型直接用来利用环境的动态；也就是说，模型提供了一个表示，用来代替环境。在环境模型未知的情况下，模型可以通过直接与环境互动来学习。但由于在大多数情况下，我们只学到环境的一个近似模型，因此在使用时必须考虑额外的因素。
+- en: Now that we have explained what a model is, we can see how can we use one and
+    how it can help us to reduce the number of interactions with the environment. The
+    way in which a model is used depends on two very important factors—the model itself
+    and the way in which actions are chosen.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经解释了什么是模型，我们可以看看如何使用模型，以及它如何帮助我们减少与环境的互动次数。模型的使用方式取决于两个非常重要的因素——模型本身以及选择动作的方式。
+- en: Indeed, as we just noted, the model can be known or unknown, and actions can
+    be planned or chosen by a learned policy. The algorithms vary a lot depending
+    on each case, so let's first elaborate on the approaches used when the model is
+    known (meaning that we already have the transition dynamics and rewards of the
+    environment).
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确实，正如我们刚才提到的，模型可以是已知的或未知的，行动可以通过一个学习到的策略来规划或选择。算法会根据具体情况有所不同，因此让我们首先详细说明在模型已知的情况下使用的方式（即我们已经拥有环境的转移动态和奖励）。
+- en: A known model
+  id: totrans-21
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 一个已知的模型
+- en: When a model is known, it can be used to simulate complete trajectories and
+    compute the return for each of them. Then, the actions that yield the highest
+    reward are chosen. This process is called **planning**, and the model of the environment
+    is indispensable as it provides the information required to produce the next state
+    (given a state and an action) and reward.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当模型已知时，可以用它来模拟完整的轨迹，并计算每条轨迹的回报。然后，选择那些能够带来最高回报的动作。这个过程被称为**规划**，而环境模型是不可或缺的，因为它提供了生成下一个状态（给定一个状态和一个动作）和回报所需的信息。
+- en: Planning algorithms are used everywhere, but the ones we are interested in differ
+    from the type of action space on which they operate. Some of them work with discrete
+    actions, others with continuous actions.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 规划算法在各个领域都有应用，但我们关注的算法与它们操作的动作空间类型不同。有些算法处理离散动作，其他则处理连续动作。
+- en: 'Planning algorithms for discrete actions are usually search algorithms that
+    build a decision tree, such as the one illustrated in the following diagram:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 针对离散动作的规划算法通常是搜索算法，它们构建决策树，例如下面图示的那种：
+- en: '![](img/6dd2283d-42c8-433b-b2dd-00a51f1b619b.png)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/6dd2283d-42c8-433b-b2dd-00a51f1b619b.png)'
+- en: The current state is the root, the possible actions are represented by the arrows,
+    and the other nodes are the states that are reached following a sequence of actions.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前状态是根节点，可能的动作由箭头表示，其他节点是通过一系列动作达到的状态。
+- en: You can see that by trying every possible sequence of actions, you'll eventually
+    find the optimal one. Unfortunately, in most problems, this procedure is intractable
+    as the number of possible actions increases exponentially. Planning algorithms
+    used for complex problems adopt strategies that allow planning by relying on a
+    limited number of trajectories.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，通过尝试每一个可能的动作序列，最终会找到最优的那个。不幸的是，在大多数问题中，这个过程是不可行的，因为可能的动作数量呈指数级增长。复杂问题中使用的规划算法采用一些策略，通过依赖有限数量的轨迹来实现规划。
+- en: An algorithm of these, adopted also in AlphaGo, is called Monte Carlo Tree Search
+    (MCTS). MCTS iteratively builds a decision tree by generating a finite series
+    of simulated games, while sufficiently exploring parts of the tree that haven't
+    been visited yet. Once a simulated game or trajectory reaches a leaf (that is,
+    it ends the game), it backpropagates the results on the states visited and updates
+    the information of win/loss or reward held by the nodes. Then, the action that
+    yields to the next state with the higher win/loss ratio or reward is taken.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中一个算法，也被AlphaGo采用，叫做蒙特卡洛树搜索（MCTS）。MCTS通过生成一系列有限的模拟游戏，迭代构建决策树，同时充分探索那些尚未访问的树枝。一旦一个模拟游戏或轨迹达到叶节点（即游戏结束），它会将结果反向传播到访问过的状态，并更新节点所持有的胜/负或回报信息。然后，选择能够带来更高胜/负比或回报的动作。
+- en: On the opposite side, planning algorithms that operate with continuous actions
+    involve trajectory optimization techniques. These are much more difficult to solve
+    than their counterpart with discrete actions, as they deal with an infinite-dimensional
+    optimization problem.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相对的，处理连续动作的规划算法涉及轨迹优化技术。这些算法比其离散动作的对手更难解决，因为它们需要处理一个无限维的优化问题。
+- en: Furthermore, many of them require the gradient of the model. An example is Model
+    Predictive Control (MPC), which optimizes for a finite time horizon, but instead
+    of executing the trajectory found, it only executes the first action. Doing so,
+    MPC has a faster response compared to other methods with infinite time horizon
+    planning.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，许多算法需要模型的梯度。例如，模型预测控制（MPC）会对有限时间范围进行优化，但它并不执行找到的完整轨迹，而只执行第一步动作。通过这样做，MPC与其他具有无限时间范围规划的方法相比，响应速度更快。
+- en: Unknown model
+  id: totrans-31
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 未知模型
+- en: What should you do when the model of the environment is unknown? Learn it! Almost
+    everything we have seen so far involves learning. So, is it the best approach?
+    Well, if you actually want to use a model-based approach, the answer is yes, and
+    soon we'll see how to do it. However, this isn't always the best way to proceed.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当环境的模型未知时应该怎么办？学习它！到目前为止，我们所见的一切几乎都涉及学习。那么，这是否是最佳方法呢？嗯，如果你确实想使用基于模型的方法，答案是肯定的，稍后我们将看到如何做到这一点。然而，这并不总是最佳的做法。
+- en: In reinforcement learning, the end goal is to learn an optimal policy for a
+    given task. Previously in this chapter, we said that the model-based approach
+    is primarily used to reduce the number of interactions with the environment, but
+    is this always true? Imagine your goal is to prepare an omelet. Knowing the exact
+    breaking point of the egg isn't useful at all; you just need to know approximately
+    how to break it. Thus, in this situation, a model-free algorithm that doesn't
+    deal with the exact structure of the egg is more appropriate.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在强化学习中，最终目标是为给定任务学习一个最优策略。在本章之前，我们提到过基于模型的方法主要用于减少与环境的互动次数，但这总是成立吗？假设你的目标是做一个煎蛋卷。知道鸡蛋的确切断裂点完全没有用；你只需要大致知道如何打破它。因此，在这种情况下，不涉及鸡蛋结构的无模型算法更为合适。
+- en: However, this shouldn't lead you to think that model-based algorithms are not
+    worth it. For example, model-based approaches outweigh model-free approaches in
+    situations where the model is much easier to learn than the policy.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这不应该让你认为基于模型的算法不值得使用。例如，当模型比策略更容易学习时，基于模型的方法在某些情况下优于无模型的方法。
+- en: 'The only way to learn a model is (unfortunately) through interactions with
+    the environment. This is an obligatory step, as it allows us to acquire and create
+    a dataset about the environment. Usually, the learning process takes place in
+    a supervised fashion, where a function approximator (such as a deep neural network)
+    is trained to minimize a loss function, such as the mean squared error loss between
+    the transitions obtained from the environment and the prediction. An example of
+    this is shown in the following diagram, where a deep neural network is trained
+    to model the environment by predicting the next state, *s''*, and the reward,
+    *r*, from a state, *s* and an action, *a*:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习一个模型的唯一方式是（不幸的是）通过与环境的互动。这是一个必经步骤，因为它让我们能够获取并创建关于环境的数据集。通常，学习过程是以监督方式进行的，其中一个函数逼近器（如深度神经网络）被训练以最小化损失函数，例如环境获得的转移和预测之间的均方误差损失。以下图示展示了这一过程，其中一个深度神经网络被训练来通过预测下一个状态*s'*和奖励*r*，从状态*s*和动作*a*来建模环境：
+- en: '![](img/a8af758b-2245-4228-8c7a-0558afd1e0c6.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a8af758b-2245-4228-8c7a-0558afd1e0c6.png)'
+- en: There are other options besides neural networks, such as Gaussian processes,
+    and Gaussian mixture models. In particular, Gaussian processes have the particularity
+    of taking into account the uncertainty of the model and are regarded as being
+    very data efficient. In fact, until the advent of deep neural networks, they were
+    the most popular choice.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了神经网络，还有其他选择，如高斯过程和高斯混合模型。特别是，高斯过程的特点是能够考虑到模型的不确定性，并且被认为具有很高的数据效率。事实上，在深度神经网络出现之前，它们是最受欢迎的选择。
+- en: However, the main drawback of Gaussian processes is that they are slow with
+    large datasets. Indeed, to learn more complex environments (thereby requiring
+    bigger datasets), deep neural networks are preferred. Furthermore, deep neural
+    networks can learn models of environments that have images as observations.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，高斯过程的主要缺点是它们在处理大型数据集时比较慢。实际上，要学习更复杂的环境（从而需要更大的数据集），更倾向使用深度神经网络。此外，深度神经网络能够学习那些将图像作为观测的环境模型。
+- en: 'There are two main ways to learn a model of the environment; one in which the
+    model is learned once and then kept fixed, and one in which the model is learned
+    at the beginning but retrained once the plan or policy has changed. The two options
+    are illustrated in the following diagram:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两种主要的学习环境模型的方法；一种是模型一旦学习完毕就固定不变，另一种是在开始时学习模型，但一旦计划或策略发生变化，就重新训练模型。以下图示展示了这两种选择：
+- en: '![](img/b5b6d82e-746e-4ab5-b6c3-281f1a5f0c17.png)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/b5b6d82e-746e-4ab5-b6c3-281f1a5f0c17.png)'
+- en: In the top half of the diagram, a sequential model-based algorithm is shown,
+    where the agent interacts with the environment only before learning the model.
+    In the bottom half, a cyclic approach to model-based learning is shown, where
+    the model is refined with additional data from a different policy.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在图示的上半部分，展示了一种顺序的基于模型的算法，其中智能体仅在学习模型之前与环境进行互动。在下半部分，展示了一种基于模型的学习的循环方法，其中模型通过来自不同策略的额外数据进行改进。
+- en: To understand how an algorithm can benefit from the second option, we have to
+    define a key concept. In order to collect the dataset for learning the dynamics
+    of the environment, you need a policy that lets you navigate it. But in the beginning,
+    the policy may be deterministic or completely random. Thus, with a limited number
+    of interactions, the space explored will be very restricted.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解算法如何从第二种选择中受益，我们必须定义一个关键概念。为了收集用于学习环境动态的数据集，你需要一个能够让你导航的策略。但在开始时，该策略可能是确定性的或完全随机的。因此，在有限的交互次数下，所探索的空间将非常有限。
+- en: This precludes the model from learning those parts of the environment that are
+    needed to plan or learn optimal trajectories. But if the model is retrained with
+    new interactions coming from a newer and better policy, it will iteratively adapt
+    to the new policy and capture all the parts of the environment (from a policy
+    perspective) that haven't been visited yet. This is called data aggregation.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这使得模型无法学习到那些用于规划或学习最优轨迹的环境部分。但是，如果模型通过来自更新和更好的策略的新交互进行再训练，它将逐步适应新策略，并捕捉到所有尚未访问的环境部分（从策略角度来看）。这就是数据聚合。
+- en: 'In practice, in most cases, the model is unknown and is learned using data
+    aggregation methods to adapt to the new policy produced. However, learning a model
+    can be challenging, and the potential problems are the following:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实践中，在大多数情况下，模型是未知的，并通过数据聚合方法来适应新产生的策略。然而，学习模型可能是具有挑战性的，潜在的问题如下：
+- en: '**Overfitting the model**: The learned model overfits on a local region of
+    the environment, missing its global structure.'
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型过拟合**：学到的模型在环境的局部区域上过拟合，忽略了它的全局结构。'
+- en: '**Inaccurate model**: Planning or learning a policy on top of an imperfect
+    model may induce a cascade of errors with potentially catastrophic conclusions.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**不准确的模型**：在一个不完美的模型上进行规划或学习策略可能会引发一连串的错误，导致潜在的灾难性结论。'
+- en: Good model-based algorithms that learn a model have to deal with those problems.
+    A potential solution may be to use algorithms that estimate the uncertainty, such
+    as Bayesian neural networks, or by using an ensemble of models.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优秀的基于模型的算法，能够学习模型，必须处理这些问题。一个潜在的解决方案是使用能够估算不确定性的算法，如贝叶斯神经网络，或通过使用模型集成。
+- en: Advantages and disadvantages
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 优势和劣势
+- en: 'When developing a reinforcement learning algorithm (all kinds of RL algorithms),
+    there are three basic aspects to consider:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开发强化学习算法（各种RL算法）时，有三个基本方面需要考虑：
+- en: '**Asymptotical performance**: This is the maximum performance that an algorithm
+    can achieve if it has infinite resources available in terms of both time and hardware.'
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**渐近性能**：这是指如果算法拥有无限的时间和硬件资源时，它可以达到的最大性能。'
+- en: '**Wall clock time**: This is the learning time required for an algorithm to
+    reach a given performance with a given computational power.'
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**实际时间**：这是指算法在给定计算能力下，达到特定性能所需的学习时间。'
+- en: '**Sample efficiency**: This is the number of interactions with the environment
+    to reach a given performance.'
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**样本效率**：这是指与环境交互的次数，以达到给定的性能。'
+- en: We already explored sample efficiency in both model-free and model-based RL,
+    and we saw how the latter is much more sample efficient. But what about wall clock
+    time and performance? Well, model-based algorithms usually have lower asymptotic performance
+    and are slower to train than model-free algorithms. Generally, higher data efficiency
+    occurs to the detriment of performance and speed.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经探讨了在无模型和基于模型的强化学习中样本效率的差异，且发现后者的样本效率要高得多。那么，实际时间和性能呢？其实，基于模型的算法通常具有较低的渐近性能，且训练速度较慢，相比之下，无模型算法的训练速度较快。通常，较高的数据效率往往会以牺牲性能和速度为代价。
+- en: One of the reasons behind the lower performance of model-based learning can
+    be attributed to model inaccuracies (if it's learned) that introduce additional
+    errors into the policies. The higher learning wall clock time is due to the slowness
+    of the planning algorithm or to the higher number of interactions needed to learn
+    the policy in an inaccurate learned environment. Furthermore, planning model-based
+    algorithms experience slower inference time due to the high computational cost
+    of planning, which still has to be done on each step.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于模型学习性能较低的一个原因可以归因于模型的不准确性（如果是通过学习得到的），这种不准确性会为策略引入额外的误差。较长的学习时钟时间是由于规划算法的缓慢，或者是由于在不准确的学习环境中需要更多的交互才能学习到策略。此外，基于模型的规划算法由于规划的高计算成本，推理时间较慢，仍然需要在每一步进行规划。
+- en: In conclusion, you have to take into account the extra time required to train
+    a model-based algorithm and recognize the lower asymptotical performance of these
+    approaches. However, model-based learning is extremely useful when the model is
+    easier to learn than the policy itself and when interactions with the environment
+    are costly or slow.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结来说，您必须考虑训练基于模型的算法所需的额外时间，并认识到这些方法的渐近性能较低。然而，当模型比策略本身更容易学习，并且与环境的交互代价较高或较慢时，基于模型的学习是极其有用的。
+- en: From the two sides, we have model-free learning and model-based learning, both
+    with compelling characteristics but distinct disadvantages. Can we take the best
+    from both worlds?
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从两个方面来看，我们有无模型学习和基于模型的学习，它们各自有引人注目的特点，但也有明显的缺点。我们能否从两者中各取所长？
+- en: Combining model-based with model-free learning
+  id: totrans-57
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将基于模型的学习与无模型学习结合
+- en: We just saw how planning can be computationally expensive both during training
+    and runtime, and how, in more complex environments, planning algorithms aren't
+    able to achieve good performances. The other strategy that we briefly hinted at
+    is to learn a policy. A policy is certainly much faster in inference as it doesn't
+    have to plan at each step.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们刚刚看到，规划在训练和运行时都可能计算开销较大，并且在更复杂的环境中，规划算法无法实现良好的性能。我们简要提到的另一种策略是学习策略。策略在推理时无疑要快得多，因为它不需要在每一步进行规划。
+- en: A simple, yet effective, way to learn a policy is to combine model-based with
+    model-free learning. With the latest innovations in model-free algorithms, this
+    combination has gained in popularity and is the most common approach to date.
+    The algorithm we'll develop in the next section, ME-TRPO, is one such method.
+    Let's dive further into these algorithms.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种简单而有效的学习策略的方法是将基于模型的学习与无模型学习相结合。随着无模型算法的最新创新，这种结合方法越来越流行，成为迄今为止最常见的方法。我们将在下一节开发的算法——ME-TRPO，就是这种方法之一。让我们深入探讨这些算法。
+- en: A useful combination
+  id: totrans-60
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 一种有用的结合方式
+- en: As you know, model-free learning has good asymptotic performance but poor sample
+    complexity. On the other side, model-based learning is efficient from a data standpoint,
+    but struggles when it comes to more complex tasks. By combining model-based and
+    model-free approaches, it is possible to reach a smooth spot where sample complexity
+    decreases consistently, while achieving the high performance of model-free algorithms.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所知，无模型学习具有良好的渐近性能，但样本复杂度较高。另一方面，基于模型的学习从数据的角度来看是高效的，但在处理更复杂任务时存在困难。通过结合基于模型和无模型的方法，有可能找到一个平衡点，在保持无模型算法高性能的同时，持续降低样本复杂度。
+- en: There are many ways to integrate both worlds, and the algorithms that propose
+    to do it are very different from one another. For example, when the model is given
+    (as they are in the games of Go and Chess), search tree and value-based algorithms
+    can help each other to produce a better action value estimate.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有很多方法可以将这两个领域结合起来，提出这样的方法的算法之间差异很大。例如，当模型已经给定（如围棋和国际象棋中的模型），搜索树和基于价值的算法可以相互帮助，从而更好地估算行动价值。
+- en: Another example is to combine the learning of the environment and the policy
+    directly in a deep neural network architecture so that the learned dynamics can
+    contribute to the planning of a policy. Another strategy used by a fair number
+    of algorithms is to use a learned model of the environment to generate additional
+    samples to optimize the policy.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个例子是将环境和策略的学习直接结合到深度神经网络架构中，以便学习到的动态能够为策略的规划提供帮助。许多算法使用的另一种策略是使用学习到的环境模型生成额外的样本，以优化策略。
+- en: 'To put it in another way, the policy is trained by playing simulated games
+    inside the learned model. This can be done in multiple ways, but the main recipe
+    is shown in the pseudocode that follows:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，策略是通过在学习到的模型中进行模拟游戏来训练的。这可以通过多种方式实现，但主要的步骤如下所示：
+- en: '[PRE0]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: This blueprint involves two cycles. The outermost cycle collects data from the
+    real environment to train the model, while, in the innermost cycle, the model
+    generates simulated samples that are used to optimize the policy using model-free
+    algorithms. Usually, the dynamics model is trained to minimize the MSE loss in
+    a supervised fashion. The more precise the predictions made by the model, the
+    more accurate the policy can be.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个蓝图涉及两个循环。最外层的循环收集来自真实环境的数据用于训练模型，而最内层的循环中，模型生成的模拟样本用于使用无模型算法优化策略。通常，动态模型是通过监督学习方式训练，以最小化均方误差（MSE）损失。模型的预测越精确，策略就越准确。
+- en: 'In the innermost cycle, either full or fixed-length trajectories can be simulated.
+    In practice, the latter option can be adopted to mitigate the imperfections of
+    the model. Furthermore, the trajectories can start from a random state sampled
+    from the buffer that contains real transitions or from an initial state. The former
+    option is preferred in situations where the model is inaccurate, because that
+    prevents the trajectory from diverging too much from the real one. To illustrate
+    this situation, take the following diagram. The trajectories that have been collected
+    in the real environment are colored black, while those simulated are colored blue:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在最内层的循环中，可以模拟完整的轨迹或固定长度的轨迹。实际上，为了减轻模型的不完美，后者选项可以被采用。此外，轨迹可以从包含真实转换的缓冲区中随机抽取初始状态，或从初始状态开始。前者在模型不准确时更为偏好，因为这可以防止轨迹与真实轨迹的偏差过大。为了说明这种情况，考虑以下图示。真实环境中收集到的轨迹为黑色，而模拟的轨迹为蓝色：
+- en: '![](img/64607389-0e90-4fd1-a6f7-6114bf729bee.png)'
+  id: totrans-68
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/64607389-0e90-4fd1-a6f7-6114bf729bee.png)'
+- en: You can see that the trajectories that start from an initial state are longer,
+    and thus will diverge more rapidly as the errors of the inaccurate model propagate
+    in all the subsequent predictions.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，从初始状态开始的轨迹变得更长，因此，随着不准确模型的误差在随后的预测中传播，它们会更快地发散。
+- en: Note that you could do only a single iteration of the main cycle and gather
+    all the data required to learn a decent approximated model of the environment.
+    However, for the reasons outlined previously, it's better to use iterative data
+    aggregation methods to cyclically retrain the model with transitions that come
+    from the newer policy.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，你只进行主循环的一次迭代，并收集所有学习到的环境模型所需的数据也是可以的。然而，基于之前提到的原因，使用迭代数据聚合方法通过新的策略周期性地重新训练模型会更好。
+- en: Building a model from images
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从图像构建模型
+- en: The methods seen so far that combine model-based and model-free learning have
+    been designed especially to work with low-dimensional state spaces. So, how do
+    we deal with high-dimensional observation spaces as images?
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，结合基于模型和无模型学习的方法，特别设计用于处理低维状态空间。那么，如何处理高维观测空间（如图像）呢？
+- en: 'One choice is to learn in latent space. Latent space is a low-dimensional representation,
+    also called embedding, *g(s),* of a high-dimensional input, *s*, such as an image.
+    It can be produced by neural networks such as autoencoders. An example of an autoencoder
+    is shown in the following diagram:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种选择是学习潜在空间。潜在空间是高维输入（例如图像）的一种低维表示，也叫做嵌入，*g(s)*。它可以通过神经网络如自编码器生成。以下图示展示了自编码器的一个例子：
+- en: '![](img/16988e27-a6a1-409a-acbc-515b9fc29e61.png)'
+  id: totrans-74
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/16988e27-a6a1-409a-acbc-515b9fc29e61.png)'
+- en: It comprises an encoder that maps the image to a small latent space, *g(s),* and
+    the decoder that maps the latent space to the reconstructed image. As a result
+    of the autoencoder, the latent space should represent the main features of an
+    image in a constrained space so that two similar images are also similar in latent
+    space.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它包括一个编码器，将图像映射到一个小的潜在空间，*g(s)*，以及解码器，将潜在空间映射回重建的图像。通过自编码器的作用，潜在空间应该在一个受限空间内表示图像的主要特征，使得两个相似的图像在潜在空间中也相似。
+- en: In RL, the autoencoder may be trained to reconstruct the input, *S*, or trained
+    to predict the next frame observation, *S',* (along with the reward, if needed).
+    Then, we can use the latent space to learn both the dynamic model and the policy. The
+    main benefit arising from this approach is the big gain in speed due to the smaller
+    representation of the image. However, the policy learned in the latent space may
+    suffer from severe deficits when the autoencoder isn't able to recover the right
+    representation.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在强化学习中，自编码器可以被训练来重建输入，*S*，或者训练来预测下一个帧的观测值，*S'*，（如果需要的话，还包括奖励）。然后，我们可以利用潜在空间来学习动态模型和策略。这个方法的主要好处是由于图像的表示更小，从而大大提高了速度。然而，当自编码器无法恢复正确的表示时，潜在空间中学到的策略可能会出现严重的缺陷。
+- en: Model-based learning on high-dimensional spaces is still a very active area
+    of research.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高维空间的基于模型的学习仍然是一个非常活跃的研究领域。
+- en: If you are interested in model-based algorithms that learn from image observation,
+    you may find the paper entitled *Model-Based Reinforcement Learning for Atari*,
+    by Kaiser, quite interesting ([https://arxiv.org/pdf/1903.00374.pdf](https://arxiv.org/pdf/1903.00374.pdf)).
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你对从图像观测中学习的基于模型的算法感兴趣，Kaiser的论文《*基于模型的Atari强化学习*》可能会引起你的兴趣（[https://arxiv.org/pdf/1903.00374.pdf](https://arxiv.org/pdf/1903.00374.pdf)）。
+- en: So far, we have covered model-based learning and its combination with model-free
+    learning in a more figurative and theoretical way. Although it's indispensable
+    in terms of understanding these paradigms, we want to put them into practice.
+    So, without further ado, let's focus on the details and implementation of our
+    first model-based algorithm.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经从更具象征性和理论化的角度讨论了基于模型的学习及其与无模型学习的结合。虽然这些对理解这些范式是不可或缺的，但我们希望将其付诸实践。因此，事不宜迟，让我们专注于第一个基于模型的算法的细节和实现。
+- en: ME-TRPO applied to an inverted pendulum
+  id: totrans-80
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: ME-TRPO 应用于倒立摆
+- en: Many variants exist of the vanilla model-based and model-free algorithms introduced
+    in the pseudocode in the *A useful combination* section. Pretty much all of them
+    propose different ways to deal with the imperfections of the model of the environment.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多变种的基于模型和无模型的算法存在于*有用的组合*部分的伪代码中。几乎所有这些变种都提出了不同的方式来处理环境模型的不足之处。
+- en: This is a key problem to address in order to reach the same performance as model-free
+    methods. Models learned from complex environments will always have some inaccuracies.
+    So, the main challenge is to estimate or control the uncertainty of the model
+    to stabilize and accelerate the learning process.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个关键问题，需要解决以达到与无模型方法相同的性能。从复杂环境中学到的模型总是会有一些不准确性。因此，主要的挑战是估计或控制模型的不确定性，以稳定和加速学习过程。
+- en: ME-TRPO proposes the use of an ensemble of models to maintain the model uncertainty
+    and regularize the learning process. The models are deep neural networks with
+    different weight initialization and training data. Together, they provide a more
+    robust general model of the environment that is less prone to exploit regions
+    where insufficient data is available.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ME-TRPO 提出了使用一个模型集来保持模型不确定性并正则化学习过程。这些模型是具有不同权重初始化和训练数据的深度神经网络。它们共同提供了一个更加稳健的环境通用模型，能够避免在数据不足的区域产生过拟合。
+- en: Then, the policy is learned from trajectories simulated with the ensemble. In
+    particular, the algorithm chosen to learn the policy is **trust region policy
+    optimization** (**TRPO**), which was explained in [Chapter 7](4148a47d-a2c7-44da-ba6d-76ae4d8bec2c.xhtml),
+    *TRPO and PPO Implementation*.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，从使用这些模型集模拟的轨迹中学习策略。特别地，选择用来学习策略的算法是**信任域策略优化**（**TRPO**），该算法在[第7章](4148a47d-a2c7-44da-ba6d-76ae4d8bec2c.xhtml)中有详细解释，标题为*TRPO和PPO实现*。
+- en: Understanding ME-TRPO
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解 ME-TRPO
+- en: In the first part of ME-TRPO, the dynamics of the environment (that is, the
+    ensemble of models) are learned. The algorithm starts by interacting with the
+    environment with a random policy, ![](img/df3fb161-2261-4a34-a110-c8d0c8a18390.png), to
+    collect a dataset of transitions, ![](img/69af50a2-9788-4b93-a702-0f8ba8f22be9.png).
+    This dataset is then used to train all the dynamic models, ![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png),
+    in a supervised fashion. The models, ![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png),
+    are initialized with different random weights and are trained with different mini-batches.
+    To avoid overfitting issues, a validation set is created from the dataset. Also, a
+    mechanism of *early stopping* (a regularization technique widely used in machine
+    learning) interrupts the training process whenever the loss on the validation
+    set stops improving.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在ME-TRPO的第一部分，环境的动态（即模型集）被学习。算法首先通过与环境的随机策略互动，![](img/df3fb161-2261-4a34-a110-c8d0c8a18390.png)，来收集转移数据集，![](img/69af50a2-9788-4b93-a702-0f8ba8f22be9.png)。然后，这个数据集被用来以监督方式训练所有动态模型，![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png)。这些模型，![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png)，是通过不同的随机权重初始化并使用不同的小批量进行训练的。为了避免过拟合问题，从数据集中创建了一个验证集。此外，当验证集上的损失不再改善时，一种*早停*机制（在机器学习中广泛使用的正则化技术）会中断训练过程。
+- en: In the second part of the algorithm, the policy is learned with TRPO. Specifically,
+    the policy is trained on the data gathered from the learned models, which we'll
+    also call the *simulated environment,* instead of the real environment. To avoid
+    the policy exploiting inaccurate regions of a single learned model, the policy, ![](img/5fcbff6e-968d-4c05-b106-3241552c4c7c.png),
+    is trained using the predicted transitions from the whole ensemble of models, ![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png).
+    In particular, the policy is trained on the simulated dataset composed of transitions
+    acquired from the models, ![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png), randomly
+    chosen among the ensemble. During training, the policy is monitored constantly,
+    and the process stops as soon as the performance stops improving.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在算法的第二部分，策略是通过TRPO进行学习的。具体而言，策略是在从已学习模型中收集的数据上进行训练，我们也称之为*模拟环境*，而不是实际环境。为了避免策略利用单个学习模型的不准确区域，策略，![](img/5fcbff6e-968d-4c05-b106-3241552c4c7c.png)，是通过整个模型集的预测转移来训练的，![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png)。特别地，策略是在由模型集中的随机选择的转移组成的模拟数据集上进行训练的，![](img/2b5b58c7-fe8c-47f9-8939-26fc497f4355.png)。在训练过程中，策略会不断被监控，一旦性能停止提升，训练过程就会停止。
+- en: 'Finally, the cycle constituted by the two parts is repeated until convergence.
+    However, at each new iteration, the data from the real environment is collected
+    by running the newly learned policy, ![](img/5fcbff6e-968d-4c05-b106-3241552c4c7c.png),
+    and the data collected is aggregated with the dataset of the previous iterations.
+    The ME-TRPO algorithm is briefly summarized in the following pseudocode:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，由这两个部分构成的循环会一直重复，直到收敛。然而，在每次新迭代时，都会通过运行新学习到的策略，![](img/5fcbff6e-968d-4c05-b106-3241552c4c7c.png)，来收集来自实际环境的数据，并将收集到的数据与前几次迭代的数据集进行汇总。ME-TRPO算法的简要伪代码总结如下：
+- en: '[PRE1]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: An important note to make here is that, unlike most model-based algorithms,
+    the reward is not embedded in the model of the environment. Therefore, ME-TRPO
+    assumes that the reward function is known.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里需要特别注意的是，与大多数基于模型的算法不同，奖励并未嵌入到环境模型中。因此，ME-TRPO假设奖励函数是已知的。
+- en: Implementing ME-TRPO
+  id: totrans-91
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现ME-TRPO
+- en: The code of ME-TRPO is quite long and, in this section, we won't give you the
+    full code. Also, many parts are not interesting, and all the code concerning TRPO
+    has already been discussed in [Chapter 7](4148a47d-a2c7-44da-ba6d-76ae4d8bec2c.xhtml),
+    *TRPO and PPO Implementation*. However, if you are interested in the complete
+    implementation, or if you want to play with the algorithm, the full code is available
+    in the GitHub repository of this chapter.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ME-TRPO的代码非常长，在这一部分我们不会给出完整的代码。此外，很多部分并不有趣，所有与TRPO相关的代码已经在[第7章](4148a47d-a2c7-44da-ba6d-76ae4d8bec2c.xhtml)，*TRPO与PPO实现*中讨论过。然而，如果你对完整的实现感兴趣，或者想要尝试算法，完整的代码可以在本章的GitHub仓库中找到。
+- en: 'Here, we''ll provide an explanation and the implementation of the following:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将提供以下内容的解释和实现：
+- en: The inner cycle, where the games are simulated and the policy is optimized
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 内部循环，其中模拟游戏并优化策略
+- en: The function that trains the models
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练模型的函数
+- en: The remaining code is very similar to that of TRPO.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 剩下的代码与TRPO的代码非常相似。
+- en: 'The following steps will guide us through the process of building and implementing
+    the core of ME-TRPO:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下步骤将指导我们完成构建和实现ME-TRPO核心的过程：
+- en: '**Changing the policy**: The only change in the interaction procedure with
+    the real environment is the policy. In particular, the policy will act randomly
+    on the first episode but, on the others, it will sample the actions from a Gaussian
+    distribution with a random standard deviation fixed at the start of the algorithm.
+    This change is done by replacing the line, `act, val = sess.run([a_sampl, s_values],
+    feed_dict=``{obs_ph:[env.n_obs]})`, in the TRPO implementation with the following
+    lines of code:'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**改变策略**：与真实环境的交互过程中唯一的变化是策略。具体来说，策略在第一轮中会随机执行，但在接下来的轮次中，它会从一个标准差随机设定的高斯分布中采样动作，这个标准差在算法开始时就已固定。这个变化是通过用以下代码行替换TRPO实现中的`act,
+    val = sess.run([a_sampl, s_values], feed_dict=``{obs_ph:[env.n_obs]})`来完成的：'
+- en: '[PRE2]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '**Fitting the deep neural networks,** ![](img/70ab6f5a-ae81-47f0-8607-637f56ff429a.png): The
+    neural networks learn the model of the environment with the dataset acquired in
+    the preceding step. The dataset is divided into a training and a validation set,
+    wherein the validation set is used by the early stopping technique to determine
+    whether it is worth continuing with the training:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**拟合深度神经网络，** ![](img/70ab6f5a-ae81-47f0-8607-637f56ff429a.png)：神经网络通过前一步获得的数据集学习环境模型。数据集被分为训练集和验证集，其中验证集通过早停技术来判断是否值得继续训练：'
+- en: '[PRE3]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '`model_buffer` is an instance of the `FullBuffer` class that contains the samples
+    generated by the environment, and `generate_random_dataset` creates two partitions
+    for training and validation, which are then returned by calling `get_training_batch`
+    and `get_valid_batch`.'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`model_buffer`是`FullBuffer`类的一个实例，包含了由环境生成的样本，而`generate_random_dataset`则会创建用于训练和验证的两个数据集，之后通过调用`get_training_batch`和`get_valid_batch`返回。'
+- en: In the next lines, each model is trained with the `train_model` function by
+    passing the datasets, the current number of steps, and the index of the model
+    that has to be trained. `num_ensemble_models` is the total number of models that
+    populate the ensemble. In the ME-TRPO paper, it is shown that 5 to 10 models are
+    sufficient. The argument, `i`, establishes which model of the ensemble has to
+    be optimized.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的代码中，每个模型都通过`train_model`函数进行训练，传递数据集、当前步骤数以及需要训练的模型索引。`num_ensemble_models`是集成中模型的总数。在ME-TRPO论文中，显示5到10个模型就足够了。参数`i`决定了集成中哪个模型需要被优化。
+- en: '**Generating fictitious trajectories in the simulated environments and fitting
+    the policy**:'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**在模拟环境中生成虚拟轨迹并拟合策略**：'
+- en: '[PRE4]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: This is repeated 80 times or at least until the policy continues improving.
+    `simulate_environment` collects a dataset (constituted by observations, actions,
+    advantages, values, and return values) by rolling the policy in the simulated
+    environment (represented by the learned models). In our case, the policy is represented
+    by the function, `action_op_noise`, which, when given a state, returns an action
+    following the learned policy. Instead, the environment, `sim_env`, is a model
+    of the environment, ![](img/70ab6f5a-ae81-47f0-8607-637f56ff429a.png), chosen
+    randomly at each step among those in the ensemble. The last argument passed to
+    the `simulated_environment` function is `simulated_steps`, which establishes the
+    number of steps to take in the fictitious environments.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一过程会重复80次，或者至少直到策略继续改进为止。`simulate_environment`通过在模拟环境中（由学习到的模型表示）执行策略来收集数据集（包括观察、动作、优势、值和回报值）。在我们的例子中，策略由函数`action_op_noise`表示，给定一个状态时，它返回一个遵循学习到的策略的动作。相反，环境`sim_env`是环境的一个模型，![](img/70ab6f5a-ae81-47f0-8607-637f56ff429a.png)，在每一步中随机从集成中选择。传递给`simulated_environment`函数的最后一个参数是`simulated_steps`，它设定了在虚拟环境中执行的步数。
+- en: Ultimately, the `policy_update` function does a TRPO step to update the policy
+    with the data collected in the fictitious environments.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终，`policy_update`函数执行一个TRPO步骤，利用在虚拟环境中收集的数据来更新策略。
+- en: 'Implementing the early step mechanism and evaluating the policy: The early
+    stopping mechanism prevents the policy from overfitting on the models of the environment.
+    It works by monitoring the performance of the policy on each separate model. If
+    the percentage of models on which the policy improved exceeds a certain threshold,
+    then the cycle is terminated. This should be a good indication of whether the
+    policy has started to overfit. Note that, unlike the training, during testing, the
+    policy is tested on one model at a time. During training, each trajectory is produced
+    by all the learned models of the environment:'
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 实现早停机制并评估策略：早停机制防止策略在环境模型上过拟合。它通过监控策略在每个独立模型上的表现来工作。如果策略改善的模型所占比例超过某个阈值，则终止该周期。这应该能很好地指示策略是否已经开始过拟合。需要注意的是，与训练不同，在测试过程中，策略是一次在一个模型上进行测试的。在训练过程中，每条轨迹都是由所有学习过的环境模型生成的：
+- en: '[PRE5]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The evaluation of the policy is done every five training iterations. For each
+    model of the ensemble, a new object of the `NetworkEnv` class is instantiated.
+    It provides the same functionalities of a real environment but, under the hood,
+    it returns transitions from a learned model of the environment. `NetworkEnv` does
+    this by inheriting `Gym.wrapper` and overriding the `reset` and `step` functions.
+    The first parameter of the constructor is a real environment that is used merely
+    to get a real initial state, while `model_os` is a function that, when given a
+    state and action, produces the next state. Lastly, `pendulum_reward` and `pendulum_done` are
+    functions that return the reward and the done flag. These two functions are built
+    around the particular functionalities of the environment.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 策略评估在每五次训练迭代后进行。对于集成中的每个模型，都会实例化一个新的`NetworkEnv`类对象。它提供了与真实环境相同的功能，但在后台，它返回来自环境学习模型的过渡。`NetworkEnv`通过继承`Gym.wrapper`并重写`reset`和`step`函数来实现这一点。构造函数的第一个参数是一个真实环境，仅用于获取真实的初始状态，而`model_os`是一个函数，当给定一个状态和动作时，它会生成下一个状态。最后，`pendulum_reward`和`pendulum_done`是返回奖励和完成标志的函数。这两个函数围绕环境的特定功能构建。
+- en: '**Training the dynamic model**: The `train_model` function optimizes a model
+    to predict the future state. It is very simple to understand. We used this function
+    in step 2, when we were training the ensemble of models. `train_model` is an inner
+    function and takes the arguments that we saw earlier. On each ME-TRPO iteration
+    of the outer loop, we retrain all the models, that is, we train the models starting
+    from their random initial weights; we don''t resume from the preceding optimization.
+    Hence, every time `train_model` is called and before the training takes place,
+    we restore the initial random weights of the model. The following code snippet
+    restores the weights and computes the loss before and after this operation:'
+  id: totrans-111
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**训练动态模型**：`train_model`函数优化一个模型以预测未来的状态。这个过程非常简单易懂。我们在步骤2中使用了这个函数，当时我们正在训练多个模型的集成。`train_model`是一个内部函数，接受我们之前看到的参数。在外部循环的每次ME-TRPO迭代中，我们会重新训练所有模型，也就是说，我们从它们的随机初始权重开始训练模型；我们不会从之前的优化继续。因此，每次调用`train_model`并在训练开始之前，我们都会恢复模型的初始随机权重。以下代码片段在执行此操作之前恢复权重并计算训练前后的损失：'
+- en: '[PRE6]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '`run_model_loss` returns the loss of the current model, and `model_assign`
+    restores the parameters that are in `initial_variables_models[model_idx].`'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`run_model_loss`返回当前模型的损失，`model_assign`恢复`initial_variables_models[model_idx]`中的参数。'
+- en: 'We then train the model, as long as the loss on the validation set improved
+    in the last `model_iter` iterations. But because the best model may not be the
+    last one, we keep track of the best one and restore its parameters at the end
+    of the training. We also randomly shuffle the dataset and divide it into mini-batches.
+    The code is as follows:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们训练模型，只要在最后`model_iter`次迭代中验证集上的损失有所改善。但由于最佳模型可能不是最后一个模型，我们会追踪最佳模型，并在训练结束时恢复其参数。我们还会随机打乱数据集并将其分成小批次。代码如下：
+- en: '[PRE7]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: '`run_model_opt_loss` is a function that executes the optimizer of the model
+    with the `model_idx` index.'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`run_model_opt_loss`是一个函数，它执行具有`model_idx`索引的模型的优化器。'
+- en: This concludes the implementation of ME-TRPO. In the next section, we'll see
+    how it performs.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就完成了ME-TRPO的实现。在下一节中，我们将看到它的表现。
+- en: Experimenting with RoboSchool
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在RoboSchool上进行实验
+- en: 'Let''s test ME-TRPO on **RoboSchoolInvertedPendulum**, a continuous inverted
+    pendulum environment similar to the well-known discrete control counterpart, CartPole.
+    A screenshot of **RoboSchoolInvertedPendulum-v****1** is shown here:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在**RoboSchool倒立摆**上测试ME-TRPO，这是一种与著名的离散控制环境CartPole相似的连续倒立摆环境。**RoboSchool倒立摆-v1**的截图如下：
+- en: '![](img/71ea6457-3ae9-4e07-931d-c24748beabda.png)'
+  id: totrans-120
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/71ea6457-3ae9-4e07-931d-c24748beabda.png)'
+- en: The goal is to keep the pole upright by moving the cart. A reward of +1 is obtained
+    for every step that the pole points upward.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目标是通过移动小车保持杆子直立。每当杆子指向上方时，都会获得+1的奖励。
+- en: 'Considering that ME-TRPO needs the reward function and, consequently, a `done`
+    function, we have to define both for this task. To this end, we defined `pendulum_reward`,
+    which returns 1 no matter what the observation and actions are:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑到ME-TRPO需要奖励函数，因此也需要`done`函数，我们必须为此任务定义两者。为此，我们定义了`pendulum_reward`，无论观察和动作是什么，它都返回1：
+- en: '[PRE8]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '`pendulum_done` returns `True` if the absolute value of the angle of the pole
+    is higher than a fixed threshold. We can retrieve the angle directly from the
+    state. In fact, the third and fourth elements of the state are the cosine and
+    sine of the angle, respectively. We can then arbitrarily choose one of the two
+    to compute the angle. Hence, `pendulum_done` is as follows:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`pendulum_done`当杆的角度绝对值大于固定阈值时返回`True`。我们可以直接从状态中获取角度。实际上，状态的第三和第四个元素分别是角度的余弦和正弦。然后，我们可以任意选择其中一个来计算角度。因此，`pendulum_done`如下所示：'
+- en: '[PRE9]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Besides the usual hyperparameters of TRPO that remain almost unchanged compared
+    to the ones used in [Chapter 7](4148a47d-a2c7-44da-ba6d-76ae4d8bec2c.xhtml), *TRPO
+    and PPO Implementation*, ME-TRPO asks for the following:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了TRPO的常规超参数外，这些超参数几乎与[第7章](4148a47d-a2c7-44da-ba6d-76ae4d8bec2c.xhtml)中使用的保持不变，*TRPO与PPO实现*，ME-TRPO还要求以下超参数：
+- en: The learning rate of the dynamic models' optimizer, `mb_lr`
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 动态模型优化器的学习率，`mb_lr`
+- en: The mini-batch size, `model_batch_size`, which is used to train the dynamic
+    models
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于训练动态模型的最小批次大小，`model_batch_size`
+- en: The number of simulated steps to execute on each iteration, `simulated_steps`
+    (this is also the batch size used to train the policy)
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每次迭代中执行的模拟步数，`simulated_steps`（这也是用于训练策略的批次大小）
+- en: The number of models that constitute the ensemble, `num_ensemble_models`
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构成集成的模型数量，`num_ensemble_models`
+- en: The number of iterations to wait before interrupting the `model_iter` training of
+    the model if the validation hasn't decreased
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果验证结果没有下降，等待中断`model_iter`训练的迭代次数
+- en: 'The values of these hyperparameters used in this environment are as follows:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个环境中使用的这些超参数值如下：
+- en: '| **Hyperparameters** | **Values** |'
+  id: totrans-133
+  prefs: []
+  type: TYPE_TB
+  zh: '| **超参数** | **值** |'
+- en: '| Learning rate (`mb_lr`) | 1e-5 |'
+  id: totrans-134
+  prefs: []
+  type: TYPE_TB
+  zh: '| 学习率（`mb_lr`） | 1e-5 |'
+- en: '| Model batch size (`model_batch_size`) | 50 |'
+  id: totrans-135
+  prefs: []
+  type: TYPE_TB
+  zh: '| 模型批次大小（`model_batch_size`） | 50 |'
+- en: '| Number of simulated steps (`simulated_steps`) | 50000 |'
+  id: totrans-136
+  prefs: []
+  type: TYPE_TB
+  zh: '| 模拟步数（`simulated_steps`） | 50000 |'
+- en: '| Number of models (`num_ensemble_models`) | 10 |'
+  id: totrans-137
+  prefs: []
+  type: TYPE_TB
+  zh: '| 模型数量（`num_ensemble_models`） | 10 |'
+- en: '| Early stopping iterations (`model_iter`) | 15 |'
+  id: totrans-138
+  prefs: []
+  type: TYPE_TB
+  zh: '| 提前停止迭代次数（`model_iter`） | 15 |'
+- en: Results on RoboSchoolInvertedPendulum
+  id: totrans-139
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: RoboSchool倒立摆的结果
+- en: 'The performance graph is shown in the following diagram:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能图表如下所示：
+- en: '![](img/edef2f65-2ce0-4389-b722-16b62f80a031.png)'
+  id: totrans-141
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/edef2f65-2ce0-4389-b722-16b62f80a031.png)'
+- en: The reward is plotted as a function of the number of interactions with the real
+    environment. After 900 steps and about 15 games, the agent achieves the top performance
+    of 1,000\. The policy updated itself 15 times and learned from 750,000 simulated
+    steps. From a computational point of view, the algorithm trained for about 2 hours
+    on a mid-range computer.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 奖励与与真实环境交互的步数之间的关系。经过900步和大约15场游戏后，智能体达到了1000的最佳性能。策略更新了15次，并从750,000个模拟步数中学习。从计算角度看，该算法在中端计算机上训练了大约2小时。
+- en: We noted that the results have very high variability and, if trained with different
+    random seeds, you can obtain very different performance curves. This is also true
+    for model-free algorithms, but here, the differences are more acute. One reason
+    for this may be the different data collected in the real environment.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们注意到，结果具有很高的变异性，如果使用不同的随机种子进行训练，可能会得到非常不同的性能曲线。这对于无模型算法也是如此，但在这里，差异更加明显。造成这种情况的一个原因可能是实际环境中收集的数据不同。
+- en: Summary
+  id: totrans-144
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, we took a break from model-free algorithms and started discussing
+    and exploring algorithms that learn from a model of the environment. We looked
+    at the key reasons behind the change of paradigm that inspired us to develop this
+    kind of algorithm. We then distinguished two main cases that can be found when
+    dealing with a model, the first in which the model is already known, and the second
+    in which the model has to be learned.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们暂时从无模型算法中休息，开始讨论和探索从环境模型中学习的算法。我们分析了激发我们开发这种算法的范式转变背后的关键原因。然后，我们区分了处理模型时可能遇到的两种主要情况：第一种情况是模型已知，第二种情况是模型需要被学习。
+- en: Moreover, we learned how the model can either be used to plan the next actions
+    or to learn a policy. There's no fixed rule to choose one over the other, but
+    generally, it is related to the complexity of the action and observation space
+    and the inference speed. We then investigated the advantages and disadvantages
+    of model-free algorithms and deepened our understanding of how to learn a policy
+    with model-free algorithms by combining them with model-based learning. This revealed
+    a new way to use models in very high-dimensional observation spaces such as images.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们学习了如何利用模型来规划下一步的动作或学习策略。选择使用其中之一没有固定的规则，但通常与动作和观察空间的复杂性以及推理速度相关。我们随后研究了基于模型和无模型算法的优缺点，并通过将无模型算法与基于模型的学习结合，加深了我们对如何用无模型算法学习策略的理解。这揭示了一种在高维观察空间（如图像）中使用模型的新方式。
+- en: Finally, to better grasp all the material related to model-based algorithms,
+    we developed ME-TRPO. This proposed dealing with the uncertainty of the model
+    by using an ensemble of models and trust region policy optimization to learn the
+    policy. All the models are used to predict the next states and thus create simulated
+    trajectories on which the policy is learned. As a consequence, the policy is trained
+    entirely on the learned model of the environment.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，为了更好地掌握与基于模型的算法相关的所有材料，我们开发了ME-TRPO。该方法通过使用模型集成和信任域策略优化来应对模型的不确定性，从而学习策略。所有模型都用于预测下一个状态，从而创建模拟的轨迹，基于这些轨迹学习策略。因此，策略完全基于环境的学习模型进行训练。
+- en: This chapter concludes the arguments about model-based learning and, in the
+    next one, we'll introduce new genera of learning. We'll talk about algorithms
+    that learn by imitation. Moreover, we'll develop and train an agent that, by following
+    the behavior of an expert, will be able to play FlappyBird.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章总结了关于基于模型学习的讨论，在下一章中，我们将介绍新的学习范式。我们将讨论通过模仿学习的算法。此外，我们将开发并训练一个代理，通过跟随专家的行为，能够玩FlappyBird。
+- en: Questions
+  id: totrans-149
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Would you use a model-based or a model-free algorithm if you had only 10 games
+    in which to train your agent to play checkers?
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果你只有10局游戏时间来训练代理玩跳棋，你会选择基于模型的算法还是无模型的算法？
+- en: What are the disadvantages of model-based algorithms?
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 基于模型的算法有什么缺点？
+- en: If a model of the environment is unknown, how can it be learned?
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果环境的模型未知，如何学习它？
+- en: Why are data aggregation methods used?
+  id: totrans-153
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么要使用数据聚合方法？
+- en: How does ME-TRPO stabilize training?
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: ME-TRPO是如何稳定训练的？
+- en: How does using an ensemble of models improve policy learning?
+  id: totrans-155
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用模型集成如何改善策略学习？
+- en: Further reading
+  id: totrans-156
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: To expand your knowledge of model-based algorithms that learn policies from
+    image observations, read the paper *Model-Based Reinforcement Learning for Atari*: [https://arxiv.org/pdf/1903.00374.pdf](https://arxiv.org/pdf/1903.00374.pdf).
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要扩展你对从图像观察中学习策略的基于模型的算法的了解，请阅读论文《*基于模型的Atari强化学习*》：[https://arxiv.org/pdf/1903.00374.pdf](https://arxiv.org/pdf/1903.00374.pdf)。
+- en: To read the original paper relating to ME-TRPO, follow this link: [https://arxiv.org/pdf/1802.10592.pdf](https://arxiv.org/pdf/1802.10592.pdf).
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要阅读与ME-TRPO相关的原始论文，请点击此链接：[https://arxiv.org/pdf/1802.10592.pdf](https://arxiv.org/pdf/1802.10592.pdf)。

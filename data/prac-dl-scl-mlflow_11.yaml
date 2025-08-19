@@ -1,0 +1,1460 @@
+- en: '*Chapter 7*: Multi-Step Deep Learning Inference Pipeline'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '*第7章*：多步骤深度学习推理管道'
+- en: Now that we have successfully run **HPO** (**Hyperparameter Optimization**)
+    and produced a well-tuned DL model that meets the business requirements, it is
+    time to move to the next step towards using this model for prediction. This is
+    where the model inference pipeline comes into play, where the model is used for
+    predicting or scoring real-world data in production, either in real time or batch
+    mode. However, an inference pipeline usually does not just rely on a single model
+    but needs preprocessing and postprocessing logic that is not necessarily seen
+    during the model development stage. Examples of preprocessing steps include detecting
+    the language locale (English or some other languages) before passing the input
+    data to the model for scoring. Postprocessing could include enriching the predicted
+    labels with additional metadata to meet the business application's requirements.
+    There are also patterns of ML/DL inference pipelines that could even involve an
+    ensemble of models to solve a real-world business problem. Many ML projects often
+    underestimate the efforts needed to implement a production inference pipeline,
+    which could result in degradation of the model's performance in production or
+    in the worst case, failure of the entire project. Thus, it is important to learn
+    how to recognize the pattern of different inference pipelines and implement them
+    properly before we deploy the model into production.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经成功运行了**HPO**（**超参数优化**），并生成了一个经过良好调优、满足业务需求的深度学习模型，是时候迈向下一步，开始使用这个模型进行预测。此时，模型推理管道便发挥了作用，模型将用于在生产环境中预测或评分真实数据，无论是实时模式还是批处理模式。然而，推理管道通常不仅仅依赖单一模型，还需要一些在模型开发阶段可能未见过的预处理和后处理逻辑。预处理步骤的例子包括在将输入数据传递给模型进行评分之前，检测语言区域（英语或其他语言）。后处理可能包括用额外的元数据来丰富预测标签，以满足业务应用的需求。还有一些深度学习推理管道模式，甚至可能涉及多个模型的集成，以解决现实世界中的业务问题。许多机器学习项目往往低估了实现生产环境推理管道所需的工作，这可能导致模型在生产环境中的性能下降，甚至在最糟糕的情况下，整个项目失败。因此，在将模型部署到生产环境之前，了解如何识别不同推理管道的模式并正确实现它们是非常重要的。
+- en: By the end of this chapter, you will be able to use MLflow to confidently implement
+    preprocessing and postprocessing steps for a multi-step inference pipeline that
+    is ready to be used in production in future chapters.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将能够使用MLflow自信地实现多步骤推理管道中的预处理和后处理步骤，并为将来章节中的生产环境使用做好准备。
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主要内容：
+- en: Understanding patterns of DL inference pipelines
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解深度学习推理管道的模式
+- en: Understanding the MLflow Model Python Function API
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解MLflow模型Python函数API
+- en: Implementing a custom MLflow Python model
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现自定义MLflow Python模型
+- en: Implementing preprocessing and postprocessing steps in a DL inference pipeline
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在深度学习推理管道中实现预处理和后处理步骤
+- en: Implementing an inference pipeline as a new entry point in the main ML project
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将推理管道作为主机器学习项目中的新入口点进行实现
+- en: Technical requirements
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'The following are the technical requirements for this chapter:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的技术要求如下：
+- en: 'The GitHub code for this chapter: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter07](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter07)'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 本章的GitHub代码：[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter07](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter07)
+- en: A full-fledged local MLflow tracking server, as described in [*Chapter 3*](B18120_03_ePub.xhtml#_idTextAnchor040),
+    *Tracking Models, Parameters, and Metrics*.
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 完整的本地MLflow跟踪服务器，如在[*第3章*](B18120_03_ePub.xhtml#_idTextAnchor040)《跟踪模型、参数和指标》中所述，*跟踪模型、参数和指标*。
+- en: Understanding patterns of DL inference pipelines
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解深度学习推理管道的模式
+- en: 'As the model development enters the stage of implementing an inference pipeline
+    for the upcoming production usage, it is important to understand that having a
+    well-tuned and trained DL model is only half the success story for business AI
+    strategy. The other half includes deploying, serving, monitoring, and continuously
+    improving the model after it goes into production. Designing and implementing
+    a DL inference pipeline is the initial step toward the second half of the story.
+    While the model has been trained, tuned, and tested on curated offline datasets,
+    now it needs to handle prediction in two ways:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着模型开发进入为即将到来的生产使用实现推理管道的阶段，必须理解，拥有一个调优良好的深度学习模型只是商业AI战略成功的一半。另一半包括部署、服务、监控以及模型投入生产后的持续改进。设计和实现深度学习推理管道是迈向故事第二阶段的第一步。尽管模型已经在精心挑选的离线数据集上进行了训练、调优和测试，现在它需要以两种方式处理预测：
+- en: '**Batch inference**: This usually requires some scheduled or ad hoc execution
+    of an inference pipeline for some offline batch of observational data. The turnaround
+    time for producing prediction results is daily, weekly, or other schedules.'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**批量推理**：这通常需要定期或临时执行推理管道，针对一些离线批量的观察数据。生成预测结果的周转时间通常为每天、每周或其他预定的时间安排。'
+- en: '**Online inference**: This usually requires a web service for real-time execution
+    of an inference pipeline that produces prediction results for input data in under
+    a second or even less than 100 milliseconds depending on the user scenarios.'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**在线推理**：这通常需要一个Web服务来实时执行推理管道，为输入数据在不到一秒钟，甚至少于100毫秒的时间内生成预测结果，具体取决于用户场景。'
+- en: Note that because the execution environment and data characteristics could be
+    different from the offline training and testing environment, there will be additional
+    preprocessing or postprocessing steps around the core model logic developed during
+    the model training and tuning steps. While it should be emphasized that any sharable
+    data preprocessing steps should be used in both the training pipeline and inference
+    pipeline, it is unavoidable that some business logic will come into play, which
+    will allow the inference pipeline to have additional preprocessing and postprocessing
+    logic. For example, a very common step in a DL inference pipeline is to use caching
+    to store and return prediction results based on a recently seen input so that
+    an expensive model evaluation does not need to be invoked. This step is not needed
+    for a training/testing pipeline during the model development stage.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，由于执行环境和数据特征可能与离线训练和测试环境不同，因此在核心模型逻辑周围会有额外的预处理或后处理步骤，这些逻辑是在模型训练和调优步骤中开发出来的。需要强调的是，任何可以共享的数据预处理步骤应该同时在训练管道和推理管道中使用，但不可避免地，一些业务逻辑将会介入，这会使推理管道具备额外的预处理和后处理逻辑。例如，在深度学习推理管道中，一个非常常见的步骤是使用缓存来存储并返回基于最近输入的预测结果，这样就不必每次都调用昂贵的模型评估过程。在模型开发阶段，训练/测试管道不需要此步骤。
+- en: 'While the pattern for inference pipelines is still emerging, it is now commonly
+    known that there are at least four patterns in a real-world production environment:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管推理管道的模式仍在不断发展，但现在已经普遍认为，现实生产环境中至少有四种模式：
+- en: '**Multi-step pipeline**: This is the most typical usage of the model in production,
+    which includes a linear workflow of preprocessing steps before the model logic
+    is invoked and some postprocessing steps after the model evaluation results are
+    returned. While this is conceptually simple, the implementation can still be varied.
+    We will see how we can do this efficiently in this chapter using MLflow.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**多步骤管道**：这是该模型在生产中最典型的使用方式，包括在调用模型逻辑之前的一系列预处理步骤，以及在模型评估结果返回之后的一些后处理步骤。虽然从概念上看这很简单，但实现方式仍然可以有所不同。本章将展示如何使用MLflow高效地完成这项工作。'
+- en: '**Ensemble of models**: This is a more complex scenario where multiple different
+    models can be used. These could be the same types of models with different versions
+    for A/B testing purposes or different types of models. For example, for a complex
+    conversational AI chatbot scenario, an intent classification model of the user
+    query to classify user intents into a specific category is required. Then a content
+    relevance model is also required to retrieve relevant answers to present to the
+    user based on the detected user intent.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型集成**：这是一个更复杂的场景，其中可以使用多个不同的模型。这些模型可以是相同类型的模型，只是版本不同，用于A/B测试，或者是不同类型的模型。例如，在复杂的对话AI聊天机器人场景中，需要一个意图分类模型来将用户查询的意图分类到特定类别中。然后，还需要一个内容相关性模型，根据检测到的用户意图检索相关答案并呈现给用户。'
+- en: '**Business logic and model**: This usually involves additional business logic
+    on how and where the input to the model should come from, such as querying from
+    an enterprise database for user information and validation or retrieving precomputed
+    additional features from a feature store before invoking a model. In addition,
+    postprocessing business logic could also transform the prediction results into
+    some application-specific logic and store the results in some backend storage.
+    While this could be as simple as a linear multi-step pipeline, it can also quickly
+    become a **DAG** (**Directed Acyclic Graph**) with multiple fan-in and fan-out
+    parallel tasks before and after the model has been invoked.'
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**业务逻辑和模型**：这通常涉及如何以及从哪里获取模型输入的额外业务逻辑，例如从企业数据库查询用户信息和验证，或者在调用模型之前从特征库中检索预先计算的额外特征。此外，后处理业务逻辑还可以将预测结果转化为某些特定应用的逻辑，并将结果存储在后台存储中。虽然这可以是一个简单的线性多步骤管道，但它也可以迅速变成一个**DAG**（**有向无环图**），在模型调用前后具有多个并行的fan-in和fan-out任务。'
+- en: '**Online learning**: This is one of the most complex inference tasks in production
+    where a model is constantly learning and updating its parameters such as reinforcement
+    learning.'
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**在线学习**：这是生产中最复杂的推理任务之一，其中模型会不断地学习并更新其参数，例如强化学习。'
+- en: While it is necessary to understand the big picture of the complexity of inference
+    pipelines in production, the purpose of this chapter is to learn how we can create
+    reusable building blocks of inference pipelines that could be used in multiple
+    scenarios through the powerful and generic MLflow Model API, which can encapsulate
+    preprocessing and postprocessing steps alongside a trained model. Interested readers
+    are encouraged to learn more about the model pattern in production from this post
+    ([https://www.anyscale.com/blog/serving-ml-models-in-production-common-patterns](https://www.anyscale.com/blog/serving-ml-models-in-production-common-patterns))
+    and other references in the *Further reading* section.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然理解生产环境中推理管道复杂性的全局图景是必要的，但本章的目的是学习如何通过强大且通用的MLflow模型API创建可重用的推理管道构建块，这些构建块可以在多个场景中使用，并能封装预处理和后处理步骤与训练好的模型。感兴趣的读者可以通过这篇文章（[https://www.anyscale.com/blog/serving-ml-models-in-production-common-patterns](https://www.anyscale.com/blog/serving-ml-models-in-production-common-patterns)）和*进一步阅读*部分中的其他参考资料，深入了解生产中的模型模式。
+- en: So, what's the MLflow Model API and how do you use that to implement preprocessing
+    and postprocessing logic for a multi-step inference pipeline? Let's find out in
+    the next section.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，什么是MLflow模型API，如何使用它来实现多步骤推理管道的预处理和后处理逻辑呢？让我们在下一节中了解。
+- en: Multi-Step Inference Pipeline as an MLflow Model
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为MLflow模型的多步骤推理管道
+- en: Previously, in [*Chapter 3*](B18120_03_ePub.xhtml#_idTextAnchor040), *Tracking
+    Models, Parameters, and Metrics*, we introduced the flexible loosely coupled multi-step
+    pipeline implementation using MLflow **MLproject** so that we could execute and
+    track a multi-step training pipeline explicitly in MLflow. However, during inference
+    time, it is desirable to implement lightweight preprocessing and postprocessing
+    logic alongside a trained model that's already logged in the model repository.
+    The MLflow Model API provides a mechanism to wrap a trained model with preprocessing
+    and postprocessing logic and then save the newly wrapped model as a new model
+    that encapsulates the inference pipeline logic. This unifies the way to load an
+    original model or an inference pipeline model using MLflow Model APIs. This is
+    critical for flexible deployment using MLflow and opens doors for creative inference
+    pipeline building.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在之前的[*第3章*](B18120_03_ePub.xhtml#_idTextAnchor040)中，*跟踪模型、参数和指标*，我们介绍了使用MLflow
+    **MLproject**的灵活松耦合多步骤管道实现，使我们能够在MLflow中显式地执行和跟踪多步骤训练管道。然而，在推理时，希望在已记录的模型库中的训练模型旁边实现轻量级的预处理和后处理逻辑。MLflow模型API提供了一种机制，将训练好的模型与预处理和后处理逻辑封装起来，然后将新封装的模型保存为一个新模型，封装了推理管道逻辑。这统一了使用MLflow模型API加载原始模型或推理管道模型的方式。这对于使用MLflow进行灵活部署至关重要，并为创造性推理管道的构建打开了大门。
+- en: Understanding the MLflow Model Python Function API
+  id: totrans-27
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 了解MLflow模型Python函数API
+- en: 'The MLflow Model ([https://www.mlflow.org/docs/latest/models.html#id25](https://www.mlflow.org/docs/latest/models.html#id25))
+    is one of the core components provided by MLflow to load, save, and log models
+    in different flavors (for example, a `MLmodel` file:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MLflow模型（[https://www.mlflow.org/docs/latest/models.html#id25](https://www.mlflow.org/docs/latest/models.html#id25)）是MLflow提供的核心组件之一，用于加载、保存和记录不同类型的模型（例如，`MLmodel`文件：
+- en: '![Figure 7.1 – MLmodel content for a fine-tuned PyTorch model'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.1 – 微调PyTorch模型的MLmodel内容'
+- en: '](img/B18120_07_01.jpg)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_01.jpg)'
+- en: Figure 7.1 – MLmodel content for a fine-tuned PyTorch model
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.1 – 微调PyTorch模型的MLmodel内容
+- en: 'As can be seen from *Figure 7.1*, the flavor of this model is PyTorch. There
+    are also a few other metadata about the model, such as the conda environment,
+    which defines the dependencies for running the model, and many others. Given this
+    self-contained information, it should be enough to allow MLflow to load the model
+    back using the `mlflow.pytorch.load_model` API as follows:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从*图7.1*可以看到，该模型的类型是PyTorch。还有一些关于模型的其他元数据，例如conda环境，它定义了运行该模型的依赖项，以及许多其他内容。凭借这些自包含的信息，应该足以使MLflow通过`mlflow.pytorch.load_model`
+    API如下所示加载该模型：
+- en: '[PRE0]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'This will allow loading the model that was logged by an MLflow run with `run_id`
+    back to memory and doing inference. Now imagine we have the following scenario
+    where we need to add some preprocessing logic to check the language type of the
+    input text. This requires loading a language detector model ([https://amitness.com/2019/07/identify-text-language-python/](https://amitness.com/2019/07/identify-text-language-python/))
+    such as the **FastText** language detector ([https://fasttext.cc/](https://fasttext.cc/)),
+    or Google''s **Compact Language Detector v3** ([https://pypi.org/project/gcld3/](https://pypi.org/project/gcld3/)).
+    Additionally, we also want to check whether there is any cached prediction for
+    the exact same input. If it exists, then we should just return the cached result
+    without invoking the expensive model prediction part. This is very typical preprocessing
+    logic. For postprocessing, a common scenario is to return the prediction along
+    with some metadata about the model URIs so that we can debug any potential prediction
+    issue in production. Given this preprocessing and postprocessing logic, the inference
+    pipeline now looks like the following figure:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将允许将通过`run_id`记录的MLflow运行模型加载回内存并进行推理。现在假设我们有以下场景，需要添加一些预处理逻辑来检查输入文本的语言类型。这需要加载一个语言检测模型（[https://amitness.com/2019/07/identify-text-language-python/](https://amitness.com/2019/07/identify-text-language-python/)），例如**FastText**语言检测器（[https://fasttext.cc/](https://fasttext.cc/)）或谷歌的**Compact
+    Language Detector v3**（[https://pypi.org/project/gcld3/](https://pypi.org/project/gcld3/)）。此外，我们还希望检查是否存在完全相同输入的缓存预测。如果存在，则应该直接返回缓存结果，而不调用耗时的模型预测部分。这是非常典型的预处理逻辑。对于后处理，一个常见的场景是返回预测结果以及有关模型URI的一些元数据，以便我们可以调试生产中的任何潜在预测问题。基于这些预处理和后处理逻辑，推理管道现在看起来如下图所示：
+- en: '![Figure 7.2 – Multi-step inference pipeline'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.2 – 多步骤推理管道'
+- en: '](img/B18120_07_02.jpg)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_02.jpg)'
+- en: Figure 7.2 – Multi-step inference pipeline
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.2 – 多步骤推理管道
+- en: 'As can be seen from *Figure 7.2*, these five steps include the following:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从*图 7.2*可以看出，这五个步骤包括以下内容：
+- en: One original fine-tuned model for prediction (a PyTorch DL model)
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个原始的、经过微调的预测模型（一个 PyTorch 深度学习模型）
+- en: One additional language detection model that was not part of our previous training
+    pipeline
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个额外的语言检测模型，这个模型并未包含在我们之前的训练流程中
+- en: Cache operations (check cache and store to cache) for improving response performance
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 缓存操作（检查缓存并存储到缓存中）以提高响应性能
+- en: One response message composition step
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个响应消息组成步骤
+- en: 'Rather than splitting these five steps into five different entry points in
+    an **ML project** (recall that an entry point in an **ML project** can be arbitrary
+    execution code in Python or other executables), it is much more elegant to compose
+    this multi-step inference pipeline in a single entry point, since these steps
+    are closely related to the model''s prediction step. In addition, the advantage
+    of encapsulating these closely related steps into a single inference pipeline
+    is that we can save and load the inference pipeline as an MLmodel artifact. MLflow
+    provides a generic way to implement this multi-step inference pipeline as a new
+    Python model, without losing the flexibility of adding additional preprocessing
+    and postprocessing capability if needed as shown in the following figure:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其将这五个步骤拆分成五个不同的入口点放入**机器学习项目**中（回想一下，**机器学习项目**中的入口点可以是 Python 中的任意执行代码或其他可执行文件），将这多步骤推理管道组合成一个入口点显得更为优雅，因为这些步骤与模型的预测步骤紧密相关。此外，将这些紧密相关的步骤封装成一个推理管道的优点是，我们可以将推理管道保存并作为
+    MLmodel 工件加载。MLflow 提供了一种通用方法，将这个多步骤推理管道实现为一个新的 Python 模型，同时不会失去在需要时添加额外预处理和后处理功能的灵活性，正如下面的图所示：
+- en: '![ Figure 7.3 – Encapsulate the multi-step preprocessing and postprocessing
+    logic into'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![ 图 7.3 – 将多步骤的预处理和后处理逻辑封装到'
+- en: a new MLflow Python model
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个新的 MLflow Python 模型
+- en: '](img/B18120_07_03.jpg)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_03.jpg)'
+- en: Figure 7.3 – Encapsulate the multi-step preprocessing and postprocessing logic
+    into a new MLflow Python model
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.3 – 将多步骤的预处理和后处理逻辑封装到一个新的 MLflow Python 模型中
+- en: As can be seen from *Figure 7.3*, if we encapsulate the preprocessing and postprocessing
+    logic into a new MLflow model called `inference_pipeline_model`, then we can load
+    this entire inference pipeline as if it is just another model. This will also
+    allow us to formalize the input and output format (called **Model Signature**)
+    for the inference pipeline so that whoever wants to consume this inference pipeline
+    will not need to guess what the format of the input and output is.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从*图 7.3*可以看出，如果我们将预处理和后处理逻辑封装成一个新的 MLflow 模型，称为 `inference_pipeline_model`，那么我们可以像加载其他模型一样加载整个推理管道。这还允许我们规范化推理管道的输入和输出格式（称为**模型签名**），这样任何想要使用这个推理管道的人都不需要猜测输入和输出的格式是什么。
+- en: 'The mechanism to implement this at a high level is as follows:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在高层次上实现此机制的方式如下：
+- en: First, create a custom MLflow `pyfunc` (Python function) model ([https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#creating-custom-pyfunc-models](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#creating-custom-pyfunc-models))
+    to wrap the existing trained model. Specifically, we need to go beyond the built-in
+    model flavors ([https://www.mlflow.org/docs/latest/models.html#built-in-model-flavors](https://www.mlflow.org/docs/latest/models.html#built-in-model-flavors))
+    provided by MLflow and implement a new Python class that inherits from `mlflow.pyfunc.PythonModel`
+    ([https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel)),
+    defining `predict()` and, optionally, the `load_context()` methods in this new
+    Python class.
+  id: totrans-50
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，创建一个自定义的 MLflow `pyfunc`（Python 函数）模型（[https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#creating-custom-pyfunc-models](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#creating-custom-pyfunc-models)）来包装现有的训练模型。具体来说，我们需要超越
+    MLflow 提供的内置模型类型（[https://www.mlflow.org/docs/latest/models.html#built-in-model-flavors](https://www.mlflow.org/docs/latest/models.html#built-in-model-flavors)），实现一个新的
+    Python 类，继承自 `mlflow.pyfunc.PythonModel`（[https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel)），并在这个新的
+    Python 类中定义 `predict()` 和（可选的）`load_context()` 方法。
+- en: In addition, we can specify the **Model Signature** ([https://mlflow.org/docs/latest/models.html#model-signature](https://mlflow.org/docs/latest/models.html#model-signature))
+    by defining the schema of a model's inputs and outputs. These schemas can be either
+    column-based or tensor-based. It is highly recommended to implement these schemas
+    for automatic input validation and model diagnosis in a production environment.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们可以通过定义模型输入和输出的模式来指定**模型签名**（[https://mlflow.org/docs/latest/models.html#model-signature](https://mlflow.org/docs/latest/models.html#model-signature)）。这些模式可以是基于列的，也可以是基于张量的。强烈建议在生产环境中实现这些模式，以便进行自动输入验证和模型诊断。
+- en: Then implement the preprocessing and postprocessing logic within this MLflow
+    `pyfunc`. These could include caching, language detection, a response message,
+    and any other logic that's needed.
+  id: totrans-52
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，在此MLflow `pyfunc`中实现预处理和后处理逻辑。这些逻辑可能包括缓存、语言检测、响应消息以及其他所需的逻辑。
+- en: Finally, implement the entry point in the ML project for the inference pipeline
+    so that we can invoke the inference pipeline as if it is a single model artifact.
+  id: totrans-53
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，在ML项目中实现推理流水线的入口点，以便我们可以像调用单一模型工件一样调用推理流水线。
+- en: Now that we understand the fundamentals of MLflow's custom Python model to represent
+    a multi-step inference pipeline, let's see how we can implement it for our NLP
+    sentiment classification model with the preprocessing and postprocessing steps
+    described in *Figure 7.3* in the following sections.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经理解了MLflow自定义Python模型的基本原理，来表示一个多步骤的推理流水线，接下来让我们看看如何为我们的NLP情感分类模型实现它，预处理和后处理步骤在下文的*图7.3*中进行了描述。
+- en: Implementing a custom MLflow Python model
+  id: totrans-55
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现自定义MLflow Python模型
+- en: 'Let''s first describe the steps to implement a custom MLflow Python model without
+    any extra preprocessing and postprocessing logic:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们描述实现一个自定义MLflow Python模型的步骤，而不包含任何额外的预处理和后处理逻辑：
+- en: 'First, make sure we have a trained DL model that''s ready to be used for inference
+    purposes. For the sake of learning in this chapter, we include the training pipeline
+    `README` file in this chapter''s GitHub repository and *set up the environment
+    variables* accordingly ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/README.md](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/README.md)).
+    Then, in the command line, run the following command to generate a fine-tuned
+    model in the local MLflow tracking server:'
+  id: totrans-57
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，确保我们有一个训练好的深度学习模型，准备好用于推理。在本章的学习中，我们将本章的训练流水线`README`文件包含在GitHub仓库中，并*设置相应的环境变量*（[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/README.md](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/README.md)）。然后，在命令行中运行以下命令，在本地MLflow跟踪服务器上生成一个微调后的模型：
+- en: '[PRE1]'
+  id: totrans-58
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Once this is done, you will have a fine-tuned DL model logged in the MLflow
+    tracking server. Now, we will use the logged model URI as the input for the inference
+    pipeline since we will wrap it and save it as a new MLflow model. The logged model
+    URI is something like the following, where the long random alphanumeric string
+    is the `run_id` of the `fine_tuning_model` MLflow run, which you can find in the
+    MLflow tracking server:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成后，您将在MLflow跟踪服务器中记录一个微调的深度学习模型。现在，我们将使用记录的模型URI作为推理流水线的输入，因为我们将把它封装起来并保存为一个新的MLflow模型。记录的模型URI类似于以下内容，其中长的随机字母数字字符串是`fine_tuning_model`
+    MLflow运行的`run_id`，您可以在MLflow跟踪服务器中找到：
+- en: '[PRE2]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Once you have a trained/fine-tuned model, we are ready to implement a new custom
+    MLflow Python model as follows. You may want to check out the `basic_custom_dl_model.py`
+    in the GitHub repo ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/basic_custom_dl_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/basic_custom_dl_model.py))
+    to follow through the steps outlined here:'
+  id: totrans-61
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦您有了训练/微调后的模型，我们就准备好按如下方式实现一个新的自定义MLflow Python模型。您可以查看GitHub仓库中的`basic_custom_dl_model.py`（[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/basic_custom_dl_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/basic_custom_dl_model.py)），以跟随这里概述的步骤：
+- en: '[PRE3]'
+  id: totrans-62
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Let''s see what we have implemented. First, the `InferencePipeline` class inherits
+    from the `MLflow.pyfunc.PythonModel` module, and implements four methods as follows:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看我们已经实现了什么。首先，`InferencePipeline`类继承自`MLflow.pyfunc.PythonModel`模块，并实现了如下四个方法：
+- en: '`predict`: This is a method that''s required by `mlflow.pyfunc.PythonModel`,
+    which returns the prediction result. Here, the `model_input` parameter is a `pandas`
+    DataFrame, which contains a column with input text that needs to be classified.
+    We leverage the `pandas` DataFrame''s `apply` method to run a `sentiment_classifier`
+    method to score each row of the DataFrame''s text and the result is a DataFrame
+    with each row being the predicted label. Since our original fine-tuned model does
+    not accept a `pandas` DataFrame as input (it accepts a list of text strings as
+    input), we need to implement a new classifier as a wrapper to the original model.
+    That''s the `sentiment_classifier` method. The other `context` parameter is the
+    MLflow context to describe where the model artifact is stored. Since we will pass
+    an MLflow logged model URI, this `context` parameter is not used in our implementation,
+    as the logged model URI contains everything MLflow needs to load a model.'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`predict`：这是`mlflow.pyfunc.PythonModel`要求的方法，用于返回预测结果。在这里，`model_input`参数是一个`pandas`
+    DataFrame，其中包含一个需要分类的输入文本列。我们利用`pandas` DataFrame的`apply`方法来运行`sentiment_classifier`方法，对每一行的文本进行评分，结果是一个DataFrame，其中每一行都是预测标签。由于我们原始的微调模型不接受`pandas`
+    DataFrame作为输入（它接受的是文本字符串的列表），我们需要实现一个新的分类器，作为原始模型的封装器。这就是`sentiment_classifier`方法。另一个`context`参数是MLflow上下文，用于描述模型工件存储的位置。由于我们将传递一个MLflow记录的模型URI，因此`context`参数在我们的实现中没有使用，因为记录的模型URI包含了加载模型所需的所有信息。'
+- en: '`sentiment_classifier`: This is a wrapper method to allow each row of the input
+    `pandas` DataFrame to be scored by calling the fine-tuned DL model''s prediction
+    function. Note that we are wrapping the first element of the row into a list so
+    that the DL model can correctly use it as an input.'
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`sentiment_classifier`：这是一个封装方法，允许通过调用微调后的DL模型的预测函数来为输入的每一行`pandas` DataFrame评分。请注意，我们将行的第一个元素包装成一个列表，以便DL模型可以正确地将其用作输入。'
+- en: '`init`: This is a standard Python constructor method. Here, we use it to pass
+    in a previously fine-tuned DL model URI, `finetuned_model_uri`, so that we can
+    load it in the `load_context` method. Note that we do not want to directly load
+    the model in the `init` method since it will cause a serialization issue (if you
+    want to try, you will find out serializing a DL model naively is not a fun experience).
+    Since the fine-tuned DL model is already serialized and deserialized through the
+    `mlflow.pytorch` APIs, we should not reinvent the wheel here. The recommended
+    way is to load the model in the `load_context` method.'
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`init`：这是一个标准的Python构造方法。在这里，我们使用它来传入一个之前微调的DL模型URI，`finetuned_model_uri`，以便我们可以在`load_context`方法中加载它。请注意，我们不希望直接在`init`方法中加载模型，因为那样会导致序列化问题（如果你尝试，你会发现直接序列化DL模型并不是一件轻松的事情）。由于微调后的DL模型已经通过`mlflow.pytorch`
+    API进行了序列化和反序列化，我们不需要在这里重新发明轮子。推荐的方法是在`load_context`方法中加载模型。'
+- en: '`load_context`: This method is called when loading an MLflow model with the
+    `mlflow.pyfunc.load_model` API. This is executed immediately after the Python
+    model is constructed. Here, we load the fine-tuned DL model by using the `mlflow.pytorch.load_model`
+    API. Note that whatever models are loaded in this method can use their corresponding
+    deserializing methods. This will open doors for loading other models such as a
+    language detection model, which could contain native code (for example, C++ code)
+    that cannot be serialized using Python serialization protocols. This is one of
+    the nice features provided by the MLflow model API framework.'
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`load_context`：此方法在使用`mlflow.pyfunc.load_model` API加载MLflow模型时调用。在构建Python模型后立即执行。在这里，我们通过`mlflow.pytorch.load_model`
+    API加载微调后的DL模型。请注意，在此方法中加载的任何模型都可以使用相应的反序列化方法。这将为加载其他模型提供可能性，例如语言检测模型，它可能包含不能通过Python序列化协议进行序列化的本地代码（例如，C++代码）。这是MLflow模型API框架提供的一个优点。'
+- en: 'Now that we have an MLflow custom model that can accept a column-based input,
+    we can also define the model signature as follows:'
+  id: totrans-68
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们有了一个可以接受基于列输入的MLflow自定义模型，我们还可以按如下方式定义模型签名：
+- en: '[PRE4]'
+  id: totrans-69
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: This signature defines an input format with one named column called `text` with
+    a datatype of `string`, and an output format with one named column called `text`
+    with a datatype of `string`. The `mlflow.models.ModelSignature` class is used
+    to create this `signature` object. This will be used when we log the new custom
+    model in MLflow, as we will see in the next step.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个签名定义了一个输入格式，其中包含一个名为`text`的列，数据类型为`string`，以及一个输出格式，其中包含一个名为`text`的列，数据类型为`string`。`mlflow.models.ModelSignature`类用于创建这个`signature`对象。当我们在MLflow中记录新的自定义模型时，将使用此签名对象，正如我们将在下一步中看到的。
+- en: 'Next, we can log this new custom model in MLflow as if this is a generic MLflow
+    `pyfunc` model using the `mlflow.pyfunc.log_model` API as follows:'
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们可以像使用通用的MLflow `pyfunc`模型一样，使用`mlflow.pyfunc.log_model` API将这个新的自定义模型记录到MLflow中，代码如下：
+- en: '[PRE5]'
+  id: totrans-72
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The preceding code will log a model in the MLflow tracking server with a top-level
+    folder named `inference_pipeline_model`, since we define the `MODEL_ARTIFACT_PATH`
+    variable with this string value and assign this value to the `artifact_path` parameter
+    of the `mlflow.pyfunc.log_model` method. The other three parameters we assign
+    are the following:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述代码将把模型记录到MLflow跟踪服务器中，根文件夹名为`inference_pipeline_model`，这是因为我们定义了`MODEL_ARTIFACT_PATH`变量并将其值分配给`mlflow.pyfunc.log_model`方法的`artifact_path`参数。我们分配给的其他三个参数如下：
+- en: '`conda_env`: This is to define the conda environment where this custom model
+    will run. Here, we can pass the absolute path of the `conda.yaml` file in the
+    root folder of this chapter defined by the `CONDA_ENV` variable (details of this
+    variable can be found in the source code of this `basic_custom_dl_model.py` notebook
+    on GitHub).'
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`conda_env`：这是定义此自定义模型运行的conda环境。在这里，我们可以传递`conda.yaml`文件的绝对路径，该文件位于本章根文件夹中，由`CONDA_ENV`变量定义（此变量的详细信息可以在GitHub上找到`basic_custom_dl_model.py`笔记本的源代码中）。'
+- en: '`python_model`: Here, we call the new `InferencePipeline` class we just implemented
+    and pass in the parameter of `finetuned_model_uri`. This way, the inference pipeline
+    will load the correct fine-tuned model for prediction purposes.'
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`python_model`：在这里，我们调用了刚刚实现的新的`InferencePipeline`类，并传入了`finetuned_model_uri`参数。这样，推理管道就会加载正确的微调模型进行预测。'
+- en: '`signature`: We also pass the signature for both input and output we just defined
+    and assign it to the signature parameter so that model input and output schema
+    can be logged and enforced for validation purposes.'
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`signature`：我们还传递了刚刚定义的输入和输出的签名，并将其分配给signature参数，以便可以记录模型的输入输出架构并进行验证。'
+- en: As a reminder, make sure you replace the `'runs:/1290f813d8e74a249c86eeab9f6ed24e/model'`
+    value for the `finetuned_model_uri` variable with your own fine-tuned model URI
+    generated in *step 1* so that the code will correctly load the original fine-tuned
+    model.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提醒一下，确保你将`'runs:/1290f813d8e74a249c86eeab9f6ed24e/model'`值替换为你在*步骤 1*中生成的自己的微调模型URI，这样代码才能正确加载原始的微调模型。
+- en: 'If you follow through the `basic_custom_dl_model.py` and run it cell by cell
+    up to *step 4*, you should be able to find a newly logged model in the **Artifacts**
+    section of the MLflow tracking server as shown in the following screenshot:'
+  id: totrans-78
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果你按照`basic_custom_dl_model.py`逐步执行，直到*步骤 4*，你应该能够在MLflow跟踪服务器的**Artifacts**部分找到一个新记录的模型，正如下面截图所示：
+- en: '![Figure 7.4 – Inference MLflow model with model schema and a root folder of
+    inference_pipeline_model'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.4 – 推理MLflow模型，带有模型架构和根文件夹inference_pipeline_model'
+- en: '](img/B18120_07_04.jpg)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_04.jpg)'
+- en: Figure 7.4 – Inference MLflow model with model schema and a root folder of inference_pipeline_model
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.4 – 推理MLflow模型，带有模型架构和名为inference_pipeline_model的根文件夹
+- en: 'As can be seen from *Figure 7.4*, the root folder name (top left of the screenshot)
+    is `inference_pipeline_model`, which is the `artifact_path` parameter''s assigned
+    value when calling `mlflow.pyfunc.log_model`. Note, if we do not specify the `artifact_path`
+    parameter, by default it will be just `model`. You can confirm this by just looking
+    at *Figure 7.1* earlier in this chapter. Also note that now there is a `MLmodel`
+    file under the `inference_pipeline_model` folder, we can see the full content
+    as follows:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如*图 7.4*所示，根文件夹的名称（截图左上角）是`inference_pipeline_model`，这是调用`mlflow.pyfunc.log_model`时`artifact_path`参数的指定值。请注意，如果我们没有指定`artifact_path`参数，默认情况下它的值将是`model`。你可以通过查看本章早些时候的*图
+    7.1*来确认这一点。还要注意，现在在`inference_pipeline_model`文件夹下有一个`MLmodel`文件，我们可以看到其完整内容如下：
+- en: '![Figure 7.5 – The content of inference_pipeline_model''s MLmodel file'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.5 – 推理模型inference_pipeline_model的MLmodel文件内容'
+- en: '](img/B18120_07_05.jpg)'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_05.jpg)'
+- en: Figure 7.5 – The content of inference_pipeline_model's MLmodel file
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.5 – `inference_pipeline_model`的MLmodel文件内容
+- en: As can be seen from *Figure 7.5*, the content of the `signature` section near
+    the bottom, a new section compared with *Figure 7.1*. However, there are some
+    more important differences in terms of the model flavor. The flavor of `inference_pipeline_model`
+    is a generic `mlflow.pyfunc.model` model, not a `mlflow.pytorch` model anymore.
+    In fact, if you compare *Figure 7.5* with *Figure 7.1*, which is our PyTorch fine-tuned
+    DL model, there is a section about `pytorch` and its `model_data` and `pytorch_version`,
+    which has now completely disappeared in *Figure 7.5*. For MLflow, it has no knowledge
+    of the original model, which is a PyTorch model, but just a generic MLflow `pyfunc`
+    model as the newly wrapped model. This is great news since now we only need one
+    generic MLflow `pyfunc` API to load the model, regardless of how complex the wrapped
+    model is and how many more preprocessing and postprocessing steps are inside this
+    generic `pyfunc` model when we implement it in the next section.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从*图 7.5*中可以看到，在底部附近的`signature`部分是一个新的部分，相较于*图 7.1*有所不同。然而，在模型类型方面还有一些更重要的区别。`inference_pipeline_model`的类型是通用的`mlflow.pyfunc.model`模型，不再是`mlflow.pytorch`模型。事实上，如果你将*图
+    7.5*与*图 7.1*进行对比，后者是我们的PyTorch微调的深度学习模型，你会发现其中有关于`pytorch`及其`model_data`和`pytorch_version`的部分，而这些在*图
+    7.5*中已经完全消失。对于MLflow来说，它并不了解原始的PyTorch模型，而只是将其作为新封装的通用MLflow `pyfunc`模型。这是一个好消息，因为现在我们只需要一个通用的MLflow
+    `pyfunc` API来加载模型，无论封装的模型多复杂，或者这个通用的`pyfunc`模型中包含多少额外的预处理和后处理步骤，当我们在下一节中实现时都不成问题。
+- en: 'We now can load `inference_pipeline_model` using the generic `mlflow.pyfunc.load_model`
+    to load the model and do prediction with an input `pandas` DataFrame as follows:'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在可以使用通用的`mlflow.pyfunc.load_model`来加载`inference_pipeline_model`并使用输入的`pandas`数据框进行预测，如下所示：
+- en: '[PRE6]'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Here, `inference_pipeline_uri` is the URI produced in *step 4* as the unique
+    identifier for `inference_pipeline_model`. For example, an `inference_pipeline_uri`
+    value could look as follows:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`inference_pipeline_uri`是*步骤 4*中生成的URI，作为`inference_pipeline_model`的唯一标识符。例如，`inference_pipeline_uri`的值可能如下所示：
+- en: '[PRE7]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Once the model is loaded, we can just call the `predict` function to score
+    the `input_df` DataFrame. This calls the `predict` function of our newly implemented
+    `InferencePipleine` class, as described in *step 2*. The results will look something
+    like the following:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦模型加载完成，我们只需调用`predict`函数对`input_df`数据框进行评分。这会调用我们新实现的`InferencePipleine`类的`predict`函数，如*步骤
+    2*中所述。结果将类似如下：
+- en: '![Figure 7.6 – Output of the inference pipeline in a pandas DataFrame format'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.6 – 推理管道在pandas数据框格式中的输出]'
+- en: '](img/B18120_07_06.jpg)'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_06.jpg)'
+- en: Figure 7.6 – Output of the inference pipeline in a pandas DataFrame format
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.6 – 推理管道在pandas数据框格式中的输出
+- en: If you see the prediction results like in *Figure 7.6*, then you should feel
+    proud that you have just implemented a working custom MLflow Python model that
+    has enormous flexibility and power to enable us to implement preprocessing and
+    postprocessing logic without changing any of the logging and loading model parts,
+    as we will see in the next section.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你看到像*图 7.6*中的预测结果，那么你应该为自己感到骄傲，因为你刚刚实现了一个功能强大的自定义MLflow Python模型，这个模型具有巨大的灵活性和能力，使我们能够在不更改任何日志记录和加载模型部分的情况下，实施预处理和后处理逻辑，正如我们将在下一节中看到的那样。
+- en: Creating a New Flavor of MLflow Custom Model
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建一个新的MLflow自定义模型类型
+- en: 'As shown in this chapter, we can build a wrapped MLflow custom model using
+    an already trained model for inference purposes. It should be noted that it is
+    also possible to build an entirely new flavor of MLflow custom model for training
+    purposes. This is needed when you have a model that''s not yet supported by the
+    built-in MLflow model flavors. For example, if you want to train a brand new **FastText**
+    model based on your own corpus but as of MLflow version 1.23.1, there is no **FastText**
+    MLflow model flavor yet, then you can build a new **FastText** MLflow model flavor
+    (see reference: [https://medium.com/@pennyqxr/how-save-and-load-fasttext-model-in-mlflow-format-37e4d6017bf0](mailto:https://medium.com/@pennyqxr/how-save-and-load-fasttext-model-in-mlflow-format-37e4d6017bf0)).
+    Interested readers can also find more references in the *Further reading* section
+    at the end of this chapter.'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如本章所示，我们可以使用已经训练好的模型构建一个封装的 MLflow 自定义模型进行推理。需要注意的是，也可以为训练目的构建一个全新的 MLflow
+    自定义模型版本。这在你有一个尚未被内置 MLflow 模型版本支持的模型时是必要的。例如，如果你想基于自己的语料库训练一个全新的 **FastText**
+    模型，但截至 MLflow 1.23.1 版本，还没有 **FastText** 的 MLflow 模型版本，那么你可以构建一个新的 **FastText**
+    MLflow 模型版本（参见参考：[https://medium.com/@pennyqxr/how-save-and-load-fasttext-model-in-mlflow-format-37e4d6017bf0](mailto:https://medium.com/@pennyqxr/how-save-and-load-fasttext-model-in-mlflow-format-37e4d6017bf0)）。有兴趣的读者还可以在本章末尾的*进一步阅读*部分找到更多参考资料。
+- en: Implementing preprocessing and postprocessing steps in a DL inference pipeline
+  id: totrans-98
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在深度学习推理管道中实现预处理和后处理步骤
+- en: Now that we have a basic generic MLflow Python model that can do prediction
+    on an input `pandas` DataFrame and produce output in another `pandas` DataFrame,
+    we are ready to tackle the multi-step inference scenario described before. Note
+    that while the initial implementation in the previous section might not look earth-shaking,
+    this opens doors for implementing preprocessing and postprocessing logic that
+    was not possible before while maintaining the capability of using the generic
+    `mlflow.pyfunc.log_model` and `mlflow.pyfunc.load_model` to treat the entire inference
+    pipeline as a generic `pyfunc` model, regardless of how complex the original DL
+    model is and how many additional preprocessing and postprocessing steps there
+    are. Let's see how we can do this in this section. You may want to check out the
+    VS Code notebook for `multistep_inference_model.py` from GitHub ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/multistep_inference_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/multistep_inference_model.py))
+    to follow through the steps in this section.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了一个基本的通用 MLflow Python 模型，可以对输入的 `pandas` DataFrame 进行预测，并在另一个 `pandas`
+    DataFrame 中生成输出，我们已经准备好处理之前提到的多步骤推理场景。请注意，尽管上一节中的初始实现看起来可能没有什么突破性，但它为实现之前无法实现的预处理和后处理逻辑打开了大门，同时仍然保持使用通用的
+    `mlflow.pyfunc.log_model` 和 `mlflow.pyfunc.load_model` 将整个推理管道视为一个通用的 `pyfunc`
+    模型的能力，无论原始的深度学习模型有多复杂，或者有多少额外的预处理和后处理步骤。让我们在本节中看看如何做到这一点。你可能想查看 GitHub 上的 VS Code
+    笔记本中的 `multistep_inference_model.py` 来跟随本节中的步骤：[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/multistep_inference_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/multistep_inference_model.py)。
+- en: In *Figure 7.3*, we depicted two preprocessing steps prior to the model prediction,
+    and two postprocessing steps after the model prediction. So where and how do we
+    add the preprocessing and postprocessing logic while keeping this entire inference
+    pipeline as a single MLflow model? It turns out the main changes will happen in
+    the `InferencePipeline` class implemented in the previous section. Let's walk
+    through the implementation and changes step by step in the following subsections.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*图 7.3*中，我们描述了模型预测之前的两个预处理步骤，以及模型预测之后的两个后处理步骤。那么，在保持整个推理管道作为单个 MLflow 模型的同时，在哪里以及如何添加预处理和后处理逻辑呢？事实证明，主要的改动会发生在上一节实现的
+    `InferencePipeline` 类中。让我们在以下小节中一步步梳理实现和变化。
+- en: Implementing language detection preprocessing logic
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现语言检测预处理逻辑
+- en: 'Let''s first implement the language detection preprocessing logic:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先让我们实现语言检测的预处理逻辑：
+- en: 'To detect the language type of the input text, we can use Google''s `pyfunc`
+    model. The good news is that MLflow''s `load_context` method allows us to load
+    this model without worrying about serialization and deserialization. We only need
+    to add two lines of code in the `load_context` method in the `InferencePipeline`
+    class as follows to load the language detector model:'
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为了检测输入文本的语言类型，我们可以使用Google的`pyfunc`模型。好消息是，MLflow的`load_context`方法允许我们加载此模型，而无需担心序列化和反序列化。我们只需在`InferencePipeline`类的`load_context`方法中添加两行代码，如下所示，以加载语言检测器模型：
+- en: '[PRE8]'
+  id: totrans-104
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: The preceding two lines are added into the `load_context` method, along with
+    the preexisting statement that loads the fine-tuned DL model for sentiment classification.
+    This will allow the language detector to be loaded as soon as the initialization
+    of the `InferencePipeline` class is done. This language detector will use up to
+    the first 1,000 bytes of the input to determine the language type. Once this language
+    detector is loaded, then we can use it to detect the language in a preprocessing
+    method.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述两行代码被添加到了`load_context`方法中，此外还有先前用于加载情感分类微调深度学习模型的语句。这样，语言检测器将在`InferencePipeline`类初始化完成后立即加载。该语言检测器将使用输入的前1,000个字节来确定语言类型。一旦语言检测器加载完成，我们就可以在预处理方法中使用它来检测语言。
+- en: 'In a preprocessing method for language detection, we will accept each row of
+    the input text, detect the language, and return the language type as a `string`
+    as follows:'
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在语言检测的预处理方法中，我们将接受每一行输入文本，检测语言，并返回语言类型作为`string`，如下所示：
+- en: '[PRE9]'
+  id: totrans-107
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The implementation is straightforward. We also add a printout to see if we see
+    any non-English text in the input to the console. If your business logic requires
+    you to implement any preemptive actions when dealing with some specific language,
+    then you can add more logic in this method. Here, we just return the language
+    type detected.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现非常直接。我们还添加了一个打印语句，用于查看是否有非英语文本输入到控制台。如果您的业务逻辑需要在处理某些特定语言时执行预防性操作，您可以在此方法中添加更多逻辑。在这里，我们只是返回检测到的语言类型。
+- en: 'Then, in the `sentiment_classifier` method that scores each row of the input,
+    we can just add one line prior to the prediction to first detect the language
+    as follows:'
+  id: totrans-109
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，在`sentiment_classifier`方法中，为每一行输入打分，我们可以在预测之前添加一行代码，首先检测语言，如下所示：
+- en: '[PRE10]'
+  id: totrans-110
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Later, we pass along the `language_detected` variable to the response as we
+    will see in the postprocessing logic implementation.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将`language_detected`变量传递给响应，如我们将在后处理逻辑实现中看到的那样。
+- en: And that's all it takes to implement the language detection as a preprocessing
+    step in the inference pipeline.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是将语言检测作为推理管道中的预处理步骤实现的全部过程。
+- en: 'Now let''s see how to implement the other step: cache, which requires both
+    preprocessing (detecting if there are any preexisting matched prediction results
+    for the same input) and postprocessing (storing a key-value pair of input and
+    prediction results in the cache).'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看如何实现另一个步骤：缓存，这需要同时进行预处理（检测是否存在任何预先匹配的预测结果）和后处理（将输入和预测结果的键值对存储到缓存中）。
+- en: Implementing caching preprocessing and postprocessing logic
+  id: totrans-114
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现缓存的预处理和后处理逻辑
+- en: 'Let''s see how we can implement caching in the `InferencePipeline` class:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何在`InferencePipeline`类中实现缓存：
+- en: 'We can add a new statement to initialize the cache store in the `init` method,
+    as this has no problem being serialized or deserialized:'
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以添加一个新语句，在`init`方法中初始化缓存存储，因为它没有问题被序列化或反序列化：
+- en: '[PRE11]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: This will initialize a Least Recently Used cache with 100 objects stored.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将初始化一个带有100个对象的最近最少使用（LRU）缓存。
+- en: 'Next, we will add a preprocessing method to detect if any input is in the cache:'
+  id: totrans-119
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将添加一个预处理方法来检测输入是否在缓存中：
+- en: '[PRE12]'
+  id: totrans-120
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: If it finds the exact input row as a key already in the cache, then it returns
+    the cached value.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果它在缓存中找到与输入行完全匹配的键，那么它将返回缓存的值。
+- en: 'In the `sentiment_classifier` method, we can add the preprocessing step to
+    check the cache and if it finds the cache, then it will immediately return the
+    cached response without invoking the expensive DL model classifier:'
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`sentiment_classifier`方法中，我们可以添加预处理步骤来检查缓存，如果找到缓存，它将立即返回缓存的响应，而无需调用昂贵的深度学习模型分类器：
+- en: '[PRE13]'
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: This preprocessing step should be placed as the first step in the `sentiment_classifier`
+    method, before doing language detection and model prediction. This can significantly
+    speed up real-time prediction responses when there are many duplicated inputs.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个预处理步骤应该作为 `sentiment_classifier` 方法中的第一步，在进行语言检测和模型预测之前放置。当输入中有大量重复项时，这可以显著加快实时预测响应的速度。
+- en: 'Also in the `sentiment_classifier` method, we need to add a postprocessing
+    step to store new input and prediction responses in the cache:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 同样在 `sentiment_classifier` 方法中，我们需要添加一个后处理步骤，将新的输入和预测响应存储在缓存中：
+- en: '[PRE14]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: That's it. We have successfully added caching as a preprocessing and postprocessing
+    step in the `InferencePipeline` class.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样。我们已经成功地将缓存添加为 `InferencePipeline` 类中的预处理和后处理步骤。
+- en: Implementing response composition postprocessing logic
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现响应组成的后处理逻辑
+- en: 'Now let''s see how we can implement the response composition logic as a postprocessing
+    step after the original DL model prediction is invoked and the result is returned.
+    Just returning a prediction label of `positive` or `negative` usually is not enough,
+    as we would like to know which version of the model was used and what language
+    was detected for debugging and diagnosis in the production environment. The response
+    to the caller of the inference pipeline will no longer be a plain string, but
+    rather a serialized JSON string. Follow these steps to implement this postprocessing
+    logic:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看如何在原始深度学习模型预测被调用并返回结果后，作为后处理步骤实现响应组成逻辑。仅仅返回 `positive` 或 `negative` 的预测标签通常是不够的，因为我们希望知道使用的是哪个版本的模型，以及在生产环境中进行调试和诊断时检测到的语言。推理管道对调用者的响应将不再是简单的字符串，而是一个序列化的
+    JSON 字符串。按照以下步骤实现这个后处理逻辑：
+- en: 'In the `init` method of the `InferencePipeline` class, we need to add a new
+    `inference_pipeline_uri` parameter, so that we can capture this generic MLflow
+    `pyfunc` model''s reference for provenance tracking purposes. Both the `finetuned_model_uri`
+    and `inference_pipeline_uri` parameters will be part of the response''s JSON object.
+    The `init` method now looks like the following:'
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在 `InferencePipeline` 类的 `init` 方法中，我们需要添加一个新的 `inference_pipeline_uri` 参数，以便捕获该通用
+    MLflow `pyfunc` 模型的引用，进行溯源跟踪。`finetuned_model_uri` 和 `inference_pipeline_uri`
+    两个参数将成为响应 JSON 对象的一部分。`init` 方法现在看起来如下：
+- en: '[PRE15]'
+  id: totrans-131
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'In the `sentiment_classifier` method, add a new postprocessing statement to
+    compose a new response based on the language detected, predicted label, and the
+    model metadata including both `finetuned_model_uri` and `inference_pipeline_uri`:'
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在 `sentiment_classifier` 方法中，添加一个新的后处理语句，以根据检测到的语言、预测标签以及包含 `finetuned_model_uri`
+    和 `inference_pipeline_uri` 的模型元数据来组成新的响应：
+- en: '[PRE16]'
+  id: totrans-133
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Note that we use `json.dumps` to encode a nested Python string object into a
+    JSON formatted string, so that the caller can easily parse out the response using
+    JSON tools.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们使用 `json.dumps` 将嵌套的 Python 字符串对象编码为 JSON 格式的字符串，以便调用者可以轻松地使用 JSON 工具解析响应。
+- en: 'In the `mlflow.pyfunc.log_model` statement, we need to add a new `inference_pipeline_uri`
+    parameter when calling the `InferencePipeline` class:'
+  id: totrans-135
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在 `mlflow.pyfunc.log_model` 语句中，我们需要在调用 `InferencePipeline` 类时添加一个新的 `inference_pipeline_uri`
+    参数：
+- en: '[PRE17]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: This will log a new inference pipeline model with all the additional processing
+    logic we implemented. This completes the implementation of the multi-step inference
+    pipeline depicted in *Figure 7.3*.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将记录一个新的推理管道模型，包含我们实现的所有附加处理逻辑。这完成了图 *7.3* 中描述的多步骤推理管道的实现。
+- en: 'Note that once the model is logged with all these new steps, to consume this
+    new inference pipeline, that''s to say, to load this model, requires zero code
+    changes. We can load the newly logged model the same way as before:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，一旦模型记录了所有这些新步骤，要使用这个新的推理管道，即加载这个模型，不需要任何代码修改。我们可以像以前一样加载新记录的模型：
+- en: '[PRE18]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'If you have followed through the steps up until now, you should also run the
+    VS Code notebook for `multistep_inference_model.py` cell by cell up to *step 3*
+    described in this subsection. Now we can try to use this new multi-step inference
+    pipeline to test it out. We can prepare a new set of input data where there are
+    duplicates and a non-English text string as follows:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你已经按照步骤进行到现在，你应该也逐步运行了 `multistep_inference_model.py` 的 VS Code notebook，直到本小节描述的*第
+    3 步*。现在我们可以尝试使用这个新的多步骤推理管道进行测试。我们可以准备一组新的输入数据，其中包含重复项和一个非英语文本字符串，如下所示：
+- en: '[PRE19]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'This input includes two duplicated entries (`Great movie`) and one Chinese
+    text string (the last element in the input list, where the meaning of the Chinese
+    text is the same as `Great Movie`). Now we can just load the model and call `results
+    = loaded_model.predict(input_df)` as before. And during the execution of this
+    predict statement, you should see the following two statements in the console
+    output:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个输入包含了两个重复项（`Great movie`）和一个中文文本字符串（输入列表中的最后一个元素，其中文本含义与`Great Movie`相同）。现在我们只需要加载模型并像之前一样调用`results
+    = loaded_model.predict(input_df)`。在执行该预测语句时，你应该能在控制台输出中看到以下两条语句：
+- en: '[PRE20]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: This means that our caching and language detector works!
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着我们的缓存和语言检测器工作正常！
+- en: 'We can also print out the results to double-check whether our multi-step pipeline
+    works or not using the following code:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们也可以通过以下代码打印输出结果，以便再次检查我们的多步骤管道是否正常工作：
+- en: '[PRE21]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'This will print out the full content for each row of the response. Here, we
+    display the output for the last one (which has the Chinese text) as an example:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将打印出响应中每一行的完整内容。在这里，我们以最后一行（包含中文文本）作为示例进行展示：
+- en: '![Figure 7.7 – JSON response for the Chinese text string input using the multi-step
+    inference pipeline'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.7 – 使用多步骤推理管道处理中文文本字符串输入的JSON响应'
+- en: '](img/B18120_07_07.jpg)'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_07.jpg)'
+- en: Figure 7.7 – JSON response for the Chinese text string input using the multi-step
+    inference pipeline
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.7 – 使用多步骤推理管道处理中文文本字符串输入的JSON响应
+- en: As can be seen in *Figure 7.7*, `prediction_label` is included in the response
+    (which is `negative`). Since we have been using `language_detected` field under
+    the `metadata` section in the JSON response, we see the string `"zh"`, which represents
+    the Chinese language. This is what the language detector produced in the preprocessing
+    step. Additionally, the `model_metadata` section includes both the original `finetuned_model_uri`
+    and `inference_pipeline_model_uri`. These are MLflow tracking server-specific
+    URIs that we can use to uniquely trace and identify which fine-tuned model and
+    inference pipeline was used for this prediction result. This is very important
+    for provenance tracking and diagnosis analysis in the production environment.
+    Comparing this complete JSON output with the earlier prediction label output in
+    *Figure 7.6*, this has much richer contextual information for the consumer of
+    the inference pipeline to use.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如*图 7.7*所示，`prediction_label`包含在响应中（其值为`negative`）。由于我们在JSON响应中的`metadata`部分使用了`language_detected`字段，我们看到了字符串`"zh"`，表示中文。这是语言检测器在预处理步骤中生成的结果。此外，`model_metadata`部分包括了原始的`finetuned_model_uri`和`inference_pipeline_model_uri`。这些是与MLflow追踪服务器相关的URI，我们可以用它们来唯一地追踪和识别使用了哪个微调模型和推理管道来进行此预测结果。这对于生产环境中的溯源跟踪和诊断分析非常重要。将这个完整的JSON输出与*图
+    7.6*中的早期预测标签输出进行比较，可以看出它为推理管道的使用者提供了更丰富的上下文信息。
+- en: If you see the JSON output in your notebook run like *Figure 7.7*, give yourself
+    a round of applause, because you have just completed a big milestone in implementing
+    a multi-step inference pipeline that can be reused and deployed into production
+    for realistic business scenarios.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在笔记本中看到类似*图 7.7*的JSON输出，给自己鼓掌，因为你刚刚完成了实现一个可以重用并部署到生产环境中的多步骤推理管道的重大里程碑，适用于现实的商业场景。
+- en: Implementing an inference pipeline as a new entry point in the main MLproject
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将推理管道作为新入口点实现到主MLproject中
+- en: Now that we have successfully implemented a multi-step inference pipeline as
+    a new custom MLflow model, we can go one step further by incorporating this as
+    a new entry point in the main **MLproject** so that we can run the following entire
+    pipeline end to end (*Figure 7.8*). Check out this chapter's code from GitHub
+    to follow through and run the pipeline in your local environment.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经成功地将多步骤推理管道作为新的自定义MLflow模型实现，我们可以更进一步，将其作为主**MLproject**中的一个新入口点，这样我们就可以运行整个管道的端到端流程（*图
+    7.8*）。请查看本章代码，访问GitHub以在本地环境中运行管道。
+- en: '![Figure 7.8 – End-to-end pipeline using MLproject'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.8 – 使用MLproject的端到端管道'
+- en: '](img/B18120_07_08.jpg)'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_08.jpg)'
+- en: Figure 7.8 – End-to-end pipeline using MLproject
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.8 – 使用MLproject的端到端管道
+- en: 'We can add the new entry point `inference_pipeline_model` into the `MLproject`
+    file. You can check out this file on the GitHub repository ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/MLproject](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/MLproject)):'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以将新的入口点`inference_pipeline_model`添加到`MLproject`文件中。你可以在GitHub仓库中查看这个文件（[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/MLproject](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/MLproject)）：
+- en: '[PRE22]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'This entry point or step can be invoked either standalone or as part of the
+    entire pipeline depicted in *Figure 7.8*. As a reminder, make sure you have set
+    up the environment variables as described in the `README` file of this chapter
+    for the MLflow tracking server and backend storage URIs before you execute the
+    MLflow `run` commands. This step logs and registers a new `inference_pipeline_model`,
+    which itself contains multi-step preprocessing and postprocessing logic. The following
+    command can be used to run this step at the root level of the `chapter07` folder,
+    if you know the `finetuned_model_run_id`:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个入口点或步骤可以独立调用，也可以作为整个管道的一部分，如*图7.8*所示。提醒一下，执行MLflow `run`命令之前，请确保按照本章`README`文件中所述，已设置MLflow跟踪服务器和后端存储URI的环境变量。此步骤会记录并注册一个新的`inference_pipeline_model`，该模型本身包含多步预处理和后处理逻辑。如果你知道`finetuned_model_run_id`，可以使用以下命令在`chapter07`文件夹的根目录下运行此步骤：
+- en: '[PRE23]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This will not only log a new `inference_pipeline_model` in the MLflow tracking
+    server but will also register a new version of `inference_pipeline_model` in the
+    MLflow model registry. You can find the registered `inference_pipeline_model`
+    in your local MLflow server with the following link:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这不仅会在MLflow跟踪服务器中记录一个新的`inference_pipeline_model`，还会在MLflow模型注册表中注册一个新的`inference_pipeline_model`版本。你可以通过以下链接在本地MLflow服务器中找到注册的`inference_pipeline_model`：
+- en: '[PRE24]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'As an example, a registered `inference_pipeline_model` version 6 is shown in
+    the following screenshot:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为示例，以下截图展示了注册的`inference_pipeline_model`版本6：
+- en: '![Figure 7.9 – A registered inference_pipeline_model at version 6'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图7.9 – 注册的`inference_pipeline_model`，版本6'
+- en: '](img/B18120_07_09.jpg)'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18120_07_09.jpg)'
+- en: Figure 7.9 – A registered inference_pipeline_model at version 6
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图7.9 – 注册的`inference_pipeline_model`，版本6
+- en: 'You can also run the entire end-to-end pipeline depicted in *Figure 7.8* as
+    follows:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以按如下方式运行整个端到端管道，如*图7.8*所示：
+- en: '[PRE25]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: This will run all the steps in this end-to-end pipeline and finish with a logged
+    and registered `inference_pipeline_model` in the model registry.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将执行这个端到端管道中的所有步骤，并最终在模型注册表中记录并注册`inference_pipeline_model`。
+- en: 'The implementation of the Python code for `inference_pipeline_model.py`, which
+    is executed when the entry point `inference_pipeline_model` is invoked, is basically
+    copying the `InferencePipeline` class we implemented in the VS Code notebook for
+    `multistep_inference_model.py` with a couple of small changes as follows:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`inference_pipeline_model.py`的Python代码实现，在调用入口点`inference_pipeline_model`时执行，基本上是复制了我们在VS
+    Code笔记本中为`multistep_inference_model.py`实现的`InferencePipeline`类，并进行了一些小的修改，具体如下：'
+- en: 'Adding a task function to be executed as a parameterized entry point for this
+    step:'
+  id: totrans-172
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 添加一个任务函数，作为此步骤的参数化入口点执行：
+- en: '[PRE26]'
+  id: totrans-173
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: What this function does is starting a new MLflow run to log and register a new
+    inference pipeline model.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数的作用是启动一个新的MLflow运行，以记录和注册一个新的推理管道模型。
+- en: 'Turning on the model registration while logging as follows:'
+  id: totrans-175
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过如下方式启用在记录时的模型注册：
+- en: '[PRE27]'
+  id: totrans-176
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Note that we assign to `registered_model_name` the value of `MODEL_ARTIFACT_PATH`,
+    which is `inference_pipeline_model`. This enables the model to be registered under
+    this name in the MLflow model registry, as seen in *Figure 7.9*.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们将`MODEL_ARTIFACT_PATH`的值（即`inference_pipeline_model`）分配给`registered_model_name`。这使得模型可以在MLflow模型注册表中以这个名字注册，如*图7.9*所示。
+- en: 'The complete code for this new entry point can be found in the GitHub repository:
+    [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/pipeline/inference_pipeline_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/pipeline/inference_pipeline_model.py).'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个新入口点的完整代码可以在GitHub仓库中找到：[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/pipeline/inference_pipeline_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/pipeline/inference_pipeline_model.py)。
+- en: 'Note that we also need to add a new section in the `main.py` file to allow
+    the `inference_pipeline_model` entry point to also be callable from within the
+    `main` entry point. The implementation is straightforward, just like adding other
+    steps previously as described in [*Chapter 4*](B18120_04_ePub.xhtml#_idTextAnchor050),
+    *Tracking Code and Data Versioning*. Interested readers should check out the `main.py`
+    file from GitHub to take a look at the implementation: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/main.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/main.py).'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们还需要在 `main.py` 文件中添加一个新部分，以便 `inference_pipeline_model` 入口点也可以从 `main`
+    入口点内调用。实现方法非常简单，类似于之前在 [*第4章*](B18120_04_ePub.xhtml#_idTextAnchor050) *追踪代码和数据版本控制*
+    中描述的添加其他步骤。感兴趣的读者可以查看 GitHub 上的 `main.py` 文件，了解实现细节：[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/main.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/main.py)。
+- en: This concludes the implementation of adding a new entry point in the **MLproject**
+    so that we can run the multi-step inference pipeline creation, logging, and registering
+    using the MLflow run command tool.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章完成了在 **MLproject** 中添加一个新入口点的实现，以便我们可以使用 MLflow run 命令工具运行多步骤的推理管道创建、日志记录和注册。
+- en: Summary
+  id: totrans-181
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we covered a very important topic on creating a multi-step
+    inference pipeline using MLflow's custom Python model approach, namely `mlflow.pyfunc.PythonModel`.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了使用 MLflow 的自定义 Python 模型方法（即 `mlflow.pyfunc.PythonModel`）创建多步骤推理管道这一非常重要的主题。
+- en: We discussed four patterns of inference workflow in production where usually
+    a single trained model is not enough to complete the business application requirements.
+    It is highly likely some preprocessing and postprocessing logic is not seen during
+    the model training and development stage. That's why MLflow's `pyfunc` approach
+    is an elegant approach to implementing a custom MLflow model that can wrap a trained
+    DL model with additional preprocessing and postprocessing logic.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们讨论了生产环境中四种推理工作流模式，其中通常单一的训练模型不足以完成业务应用需求。很有可能在模型训练和开发阶段没有看到一些预处理和后处理逻辑。这就是为什么
+    MLflow 的 `pyfunc` 方法是一种优雅的方式，能够实现一个自定义的 MLflow 模型，该模型可以在训练好的深度学习模型之外，加入额外的预处理和后处理逻辑。
+- en: We successfully implemented an inference pipeline model that wraps our DL sentiment
+    classifier with language detection using Google's Compact Language Detector, caching,
+    and additional model metadata in addition to the prediction label. We went one
+    step further to incorporate the inference pipeline model creation step into the
+    end-to-end model development workflow so that we can produce a registered inference
+    pipeline model with one MLflow run command.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们成功实现了一个推理管道模型，它将我们的深度学习情感分类器与谷歌的紧凑型语言检测器（Compact Language Detector）、缓存以及除预测标签外的其他模型元数据结合。我们更进一步，将推理管道模型的创建步骤融入到端到端的模型开发工作流中，以便通过一个
+    MLflow run 命令生成一个注册的推理管道模型。
+- en: The skills and lessons learned in this chapter will be critical for anyone who
+    wants to implement a real-world inference pipeline using the MLflow `pyfunc` approach.
+    This also opens doors for supporting flexible and powerful deployment into production
+    scenarios, which we will cover in the next chapter.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中学习的技能和课程对任何希望使用 MLflow `pyfunc` 方法实现真实推理管道的人来说都至关重要。这也为支持灵活且强大的生产环境部署打开了大门，相关内容将在下一章中讨论。
+- en: Further reading
+  id: totrans-186
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 进一步阅读
+- en: '*MLflow Models* (MLflow documentation): [https://www.mlflow.org/docs/latest/models.html#](https://www.mlflow.org/docs/latest/models.html#)'
+  id: totrans-187
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*MLflow 模型*（MLflow 文档）：[https://www.mlflow.org/docs/latest/models.html#](https://www.mlflow.org/docs/latest/models.html#)'
+- en: '*Implementing the statsmodels flavor in MLflow*: [https://blog.stratio.com/implementing-the-statsmodels-flavor-in-mlflow/](https://blog.stratio.com/implementing-the-statsmodels-flavor-in-mlflow/)'
+  id: totrans-188
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*在 MLflow 中实现 statsmodels 模型类型*：[https://blog.stratio.com/implementing-the-statsmodels-flavor-in-mlflow/](https://blog.stratio.com/implementing-the-statsmodels-flavor-in-mlflow/)'
+- en: '*InferLine: ML inference Pipeline Composition Framework*: [https://www2.eecs.berkeley.edu/Pubs/TechRpts/2018/EECS-2018-76.pdf](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2018/EECS-2018-76.pdf)'
+  id: totrans-189
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*InferLine: ML 推理管道构建框架*：[https://www2.eecs.berkeley.edu/Pubs/TechRpts/2018/EECS-2018-76.pdf](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2018/EECS-2018-76.pdf)'
+- en: '*Batch Inference vs Online Inference*: [https://mlinproduction.com/batch-inference-vs-online-inference/](https://mlinproduction.com/batch-inference-vs-online-inference/)'
+  id: totrans-190
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*批量推理与在线推理*： [https://mlinproduction.com/batch-inference-vs-online-inference/](https://mlinproduction.com/batch-inference-vs-online-inference/)'
+- en: '*Lessons from building a small MLOps pipeline*: [https://www.nestorsag.com/blog/lessons-from-building-a-small-ml-ops-pipeline/](https://www.nestorsag.com/blog/lessons-from-building-a-small-ml-ops-pipeline/)'
+  id: totrans-191
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*构建小型MLOps流水线的经验教训*： [https://www.nestorsag.com/blog/lessons-from-building-a-small-ml-ops-pipeline/](https://www.nestorsag.com/blog/lessons-from-building-a-small-ml-ops-pipeline/)'
+- en: '*Text summarizer on Hugging Face with MLflow*: [https://vishsubramanian.me/hugging-face-with-mlflow/](https://vishsubramanian.me/hugging-face-with-mlflow/)'
+  id: totrans-192
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*在Hugging Face上使用MLflow的文本摘要器*： [https://vishsubramanian.me/hugging-face-with-mlflow/](https://vishsubramanian.me/hugging-face-with-mlflow/)'

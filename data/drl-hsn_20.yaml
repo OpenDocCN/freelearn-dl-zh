@@ -1,0 +1,2247 @@
+- en: '20'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '20'
+- en: AlphaGo Zero and MuZero
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: AlphaGo Zero 和 MuZero
+- en: Model-based methods allow us to decrease the amount of communication with the
+    environment by building a model of the environment and using it during training.
+    In this chapter, we take a look at model-based methods by exploring cases where
+    we have a model of the environment, but this environment is being used by two
+    competing parties. This situation is very common in board games, where the rules
+    of the game are fixed and the full position is observable, but we have an opponent
+    who has the primary goal of preventing us from winning the game.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于模型的方法通过建立环境模型并在训练过程中使用它，帮助我们减少与环境的通信量。在本章中，我们通过探讨在我们拥有环境模型，但这个环境被两个竞争方使用的情况，来了解基于模型的方法。这种情况在棋类游戏中非常常见，游戏规则固定且整个局面可观察，但我们有一个对手，其主要目标是阻止我们赢得比赛。
+- en: A few years ago, DeepMind proposed a very elegant approach to solving such problems.
+    No prior domain knowledge is required, but the agent improves its policy only
+    via self-play. This method is called AlphaGo Zero and was introduced in 2017\.
+    Later, in 2020, they extended this method by removing the requirement for an environment
+    model, which allowed it to apply to a much wider range of RL problems (including
+    Atari games). The method is called MuZero and we will also look at this in detail.
+    As you’ll see in this chapter, MuZero is more general than AlphaGo Zero, which
+    comes with the price of more networks to be trained and might lead to longer training
+    times and worse results. From that perspective, we’ll discuss both methods in
+    detail, as AlphaGo Zero may be more applicable in some situations.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几年前，DeepMind 提出了一个非常优雅的解决此类问题的方法。该方法不需要任何先前的领域知识，且智能体仅通过自我对弈来改善其策略。这个方法被称为 AlphaGo
+    Zero，并在 2017 年推出。随后，在 2020 年，他们通过去除对环境模型的要求，扩展了该方法，使其能够应用于更广泛的强化学习问题（包括 Atari
+    游戏）。这个方法叫做 MuZero，我们也将详细探讨它。正如你将在本章中看到的，MuZero 比 AlphaGo Zero 更通用，但也伴随着更多需要训练的网络，可能导致更长的训练时间和更差的结果。从这个角度来看，我们将详细讨论这两种方法，因为在某些情况下，AlphaGo
+    Zero 可能更具应用价值。
+- en: 'In this chapter, we will:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将：
+- en: Discuss the structure of the AlphaGo Zero method
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 讨论 AlphaGo Zero 方法的结构
+- en: Implement the method for playing Connect 4
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现连接 4（Connect 4）游戏的玩法方法
+- en: Implement MuZero and compare it to AlphaGo Zero
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 实现 MuZero 并与 AlphaGo Zero 进行比较
+- en: Comparing model-based and model-free methods
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 比较基于模型和非基于模型的方法
+- en: 'In Chapter [4](ch008.xhtml#x1-740004), we saw several different ways in which
+    we can classify RL methods. We distinguished three main categories:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第[4](ch008.xhtml#x1-740004)章中，我们看到了几种不同的方式来分类强化学习方法。我们区分了三大类：
+- en: Value-based and policy-based
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于价值和基于策略
+- en: On-policy and off-policy
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于策略和离策略
+- en: Model-free and model-based
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非基于模型和基于模型
+- en: So far, we have covered enough examples of methods of both types in the first
+    and second categories, but all the methods that we have covered so far have been
+    100% model-free. However, this doesn’t mean that model-free methods are more important
+    or better than their model-based counterparts. Historically, due to their sample
+    efficiency, model-based methods have been used in the robotics field and for other
+    industrial controls. This has also happened because of the cost of the hardware
+    and the physical limitations of samples that can be obtained from a real robot.
+    Robots with a large degree of freedom are not widely accessible, so RL researchers
+    are more focused on computer games and other environments where samples are relatively
+    cheap. However, ideas from robotics are infiltrating RL, so, who knows, maybe
+    the model-based methods will become more of a focus quite soon. To begin, let’s
+    discuss the difference between the model-free approach that we have used in the
+    book and model-based methods, including their strong and weak points and where
+    they might be applicable.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经涵盖了第一类和第二类中方法的足够示例，但我们迄今为止讨论的所有方法都是 100% 非基于模型的。然而，这并不意味着非基于模型的方法比基于模型的方法更重要或更好。从历史上看，由于样本效率高，基于模型的方法一直被应用于机器人领域和其他工业控制中。这也部分是因为硬件的成本以及从真实机器人中获得的样本的物理限制。具有较大自由度的机器人并不容易获得，因此强化学习研究者更专注于计算机游戏和其他样本相对便宜的环境。然而，机器人学的理念正渗透到强化学习中，因此，谁知道呢，也许基于模型的方法很快会成为关注的重点。首先，让我们讨论一下我们在本书中使用的非基于模型方法与基于模型方法的区别，包括它们的优缺点以及它们可能的应用场景。
+- en: In the names of both classes, “model” means the model of the environment, which
+    could have various forms, for example, providing us with a new state and reward
+    from the current state and action. All the methods covered so far put zero effort
+    into predicting, understanding, or simulating the environment. What we were interested
+    in was proper behavior (in terms of the final reward), specified directly (a policy)
+    or indirectly (a value) given the observation. The source of the observations
+    and reward was the environment itself, which in some cases could be very slow
+    and inefficient.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两种方法的名称中，“模型”指的是环境的模型，它可以有多种形式，例如，通过当前状态和动作为我们提供新的状态和奖励。迄今为止涵盖的所有方法都没有做出任何努力去预测、理解或模拟环境。我们感兴趣的是正确的行为（以最终奖励为准），无论是直接指定（策略）还是间接指定（价值），这些都是基于观察得出的。观察和奖励的来源是环境本身，在某些情况下可能非常缓慢和低效。
+- en: In a model-based approach, we’re trying to learn the model of the environment
+    to reduce this “real environment” dependency. At a high level, the model is some
+    kind of black box that approximates the real environment that we talked about
+    in Chapter [1](ch005.xhtml#x1-190001). If we have an accurate environment model,
+    our agent can produce any number of trajectories that it needs simply by using
+    this model instead of executing the actions in the real world.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基于模型的方法中，我们试图学习环境模型，以减少对“真实环境”的依赖。总体而言，模型是一种黑箱，近似我们在第[1](ch005.xhtml#x1-190001)章中讨论过的真实环境。如果我们有一个准确的环境模型，我们的智能体可以通过使用这个模型，而非在现实世界中执行动作，轻松地产生它所需的任何轨迹。
+- en: 'To some degree, the common playground of RL research is also just models of
+    the real world; for example, MuJoCo and PyBullet are simulators of physics used
+    so we don’t need to build real robots with real actuators, sensors, and cameras
+    to train our agents. The story is the same with Atari games or TORCS (The Open
+    Racing Car Simulator): we use computer programs that model some processes, and
+    these models can be executed quickly and cheaply. Even our CartPole example is
+    a simplified approximation of a real cart with a stick attached. (By the way,
+    in PyBullet and MuJoCo, there are more realistic CartPole versions with 3D actions
+    and more accurate simulation.)'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某种程度上，强化学习研究的常见试验场也是现实世界的模型；例如，MuJoCo和PyBullet是物理模拟器，用来避免我们需要构建拥有真实驱动器、传感器和摄像头的真实机器人来训练我们的智能体。这个故事在Atari游戏或TORCS（开放赛车模拟器）中也是一样：我们使用模拟某些过程的计算机程序，这些模型可以快速而廉价地执行。即使是我们的CartPole例子，也是对一个附有杆的真实小车的简化近似。（顺便提一句，在PyBullet和MuJoCo中，还有更真实的CartPole版本，具备3D动作和更精确的模拟。）
+- en: 'There are two motivations for using the model-based approach as opposed to
+    model-free:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用基于模型的方法而非无模型方法有两个动机：
+- en: The first and the most important one is sample efficiency caused by less dependency
+    on the real environment. Ideally, by having an accurate model, we can avoid touching
+    the real world and use only the trained model. In real applications, it is almost
+    never possible to have a precise model of the environment, but even an imperfect
+    model can significantly reduce the number of samples needed.
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一个也是最重要的原因是样本效率，源于对真实环境的依赖较少。理想情况下，通过拥有一个精确的模型，我们可以避免接触真实世界，仅使用训练好的模型。在实际应用中，几乎不可能拥有一个精确的环境模型，但即便是一个不完美的模型，也能显著减少所需样本的数量。
+- en: For example, in real life, you don’t need an absolutely precise mental picture
+    of some action (such as tying shoelaces or crossing the road), but this picture
+    helps you plan and predict the outcome.
+  id: totrans-19
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 例如，在现实生活中，你不需要对某个动作（如系鞋带或过马路）有绝对精确的心理图像，但这个图像有助于你进行规划和预测结果。
+- en: The second reason for a model-based approach is the transferability of the environment
+    model across goals. If you have a good model for a robot manipulator, you can
+    use it for a wide variety of goals without retraining everything from scratch.
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于模型方法的第二个原因是环境模型在不同目标之间的可转移性。如果你拥有一个优秀的机器人操控臂模型，你可以在不重新训练的情况下，利用它完成各种不同的目标。
+- en: There are a lot of details in this class of methods, but the aim of this chapter
+    is to give you an overview and take a closer look at the model-based approach
+    applied to board games.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这类方法有很多细节，但本章的目的是为你提供一个概览，并更深入地探讨应用于棋盘游戏的基于模型的方法。
+- en: Model-based methods for board games
+  id: totrans-22
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基于模型的方法在棋盘游戏中的应用
+- en: Most board games provide a setup that is different from an arcade scenario.
+    The Atari game suite assumes that one player is making decisions in some environment
+    with complex dynamics. By generalizing and learning from the outcome of their
+    actions, the player improves their skills, increasing their final score. In a
+    board game setup, however, the rules of the game are usually quite simple and
+    compact. What makes the game complicated is the number of different positions
+    on the board and the presence of an opponent with an unknown strategy who tries
+    to win the game.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数棋类游戏提供了与街机场景不同的设定。Atari 游戏系列假设一个玩家在某个环境中做决策，该环境具有复杂的动态。通过从他们的行动结果中进行泛化和学习，玩家能够提升技能，增加最终得分。然而，在棋类游戏的设定中，游戏规则通常非常简单和紧凑。使游戏复杂的因素是棋盘上不同位置的数量，以及存在一个对手，他有着未知的策略，试图赢得比赛。
+- en: With board games, the ability to observe the game state and the presence of
+    explicit rules opens up the possibility of analyzing the current position, which
+    isn’t the case for Atari. This analysis means taking the current state of the
+    game, evaluating all the possible moves that we can make, and then choosing the
+    best move as our action. To be able to evaluate all the moves, we need some kind
+    of model of the game, capturing the game rules.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于棋类游戏，观察游戏状态的能力和明确规则的存在使得分析当前局势成为可能，这在 Atari 游戏中并不适用。这种分析意味着我们需要获取当前的游戏状态，评估我们可以进行的所有可能动作，然后选择最好的行动作为我们的动作。为了能够评估所有可能的动作，我们需要某种游戏模型来捕捉游戏规则。
+- en: The simplest approach to evaluation is to iterate over the possible actions
+    and recursively evaluate the position after the action has been taken. Eventually,
+    this process will lead us to the final position, when no more moves are possible.
+    By propagating the game result back, we can estimate the expected value of any
+    action in any position. One possible variation of this method is called minimax,
+    which is when we are trying to make the strongest move, but our opponent is trying
+    to make the worst move for us, so we are iteratively minimizing and maximizing
+    the final game objective of walking down the tree of game states (which will be
+    described in detail later).
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 评估的最简单方法是遍历所有可能的动作，并在执行动作后递归地评估该位置。最终，这个过程将引导我们到达最终位置，届时将不再有可能的移动。通过将游戏结果反向传播，我们可以估算任何位置上任何动作的预期值。这种方法的一种变体叫做极小极大法（minimax），它的核心是在我们试图做出最强的移动时，对手则试图为我们做出最坏的移动，因此我们在游戏状态树中迭代地最小化和最大化最终的游戏目标（该过程将在后面详细描述）。
+- en: If the number of different positions is small enough to be analyzed entirely,
+    like in the tic-tac-toe game (which has only 138 terminal states), it’s not a
+    problem to walk down this game tree from any state that we have and figure out
+    the best move to make. Unfortunately, this brute-force approach doesn’t work even
+    for medium-complexity games, as the number of configurations grows exponentially.
+    For example, in the game of draughts (also known as checkers), the total game
+    tree has 5 ⋅ 10^(20) nodes, which is quite a challenge even for modern hardware.
+    In the case of more complex games, like Chess or Go, this number is much larger,
+    so it’s just not possible to analyze all the positions reachable from every state.
+    To handle this, usually some kind of approximation is used, where we analyze the
+    tree up to some depth. With a combination of careful search and stop criteria,
+    called tree pruning, and the smart predefined evaluation of positions, we can
+    make a computer program that plays complex games at a fairly good level.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不同位置的数量足够小，可以完全分析，比如井字游戏（只有 138 个终局状态），那么从我们当前拥有的任何状态出发，遍历这个游戏树并找出最佳行动并不成问题。不幸的是，这种暴力破解方法即使对于中等复杂度的游戏也不可行，因为配置数量呈指数增长。例如，在跳棋游戏中，整个游戏树有
+    5 ⋅ 10^(20) 个节点，这对于现代硬件来说是一个相当大的挑战。在更复杂的游戏中，比如国际象棋或围棋，这个数字更大，因此完全分析从每个状态可以到达的所有位置几乎是不可能的。为了解决这个问题，通常会使用某种近似方法，在某个深度上分析游戏树。通过结合精心的搜索和停止标准（称为树剪枝）以及智能的预定义位置评估，我们可以制作一个能在相当高水平上进行复杂游戏的计算机程序。
+- en: The AlphaGo Zero method
+  id: totrans-27
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: AlphaGo Zero 方法
+- en: In late 2017, DeepMind published an article titled Mastering the game of Go
+    without human knowledge in the journal Nature by Silver et al. [[SSa17](#)] presenting
+    a novel approach called AlphaGo Zero, which was able to achieve a superhuman level
+    of playing complex games, like Go and chess, without any prior knowledge except
+    the rules. The agent was able to improve its policy by constantly playing against
+    itself and reflecting on the outcomes. No large game databases, handmade features,
+    or pretrained models were needed. Another nice property of the method is its simplicity
+    and elegance.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2017年底，DeepMind在《自然》杂志上发表了由Silver等人撰写的文章《无须人类知识的围棋游戏掌握》[[SSa17](#)]，介绍了一种名为AlphaGo
+    Zero的新方法，该方法能够在没有任何先验知识（除了规则）的情况下，达到超越人类的水平来玩复杂的游戏，如围棋和国际象棋。该代理能够通过不断自我对弈并反思结果来改进其策略。不需要大型的游戏数据库、手工特征或预训练的模型。该方法的另一个优点是其简洁性和优雅性。
+- en: In the example of this chapter, we will try to understand and implement this
+    approach for the game Connect 4 (also known as “four in a row” or “four in a line”)
+    to evaluate it ourselves.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的示例中，我们将尝试理解并实现这种方法，应用于游戏“连接四”（也叫“四连棋”或“直线四”），以便自行评估其效果。
+- en: First, we will discuss the structure of the method. The whole system contains
+    several parts that need to be understood before we can implement them.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将讨论该方法的结构。整个系统包含几个部分，在我们实现它们之前，需要先理解这些部分。
+- en: Overview
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 概述
+- en: 'At a high level, the method consists of three components, all of which will
+    be explained in detail later, so don’t worry if something is not completely clear
+    from this section:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从高层次来看，该方法由三个组件组成，所有这些将在后面详细解释，因此如果这一部分没有完全清楚，不必担心：
+- en: We constantly traverse the game tree using the Monte Carlo tree search (MCTS)
+    algorithm, the core idea of which is to semi-randomly walk down the game states,
+    expanding them and gathering statistics about the frequency of moves and underlying
+    game outcomes. As the game tree is huge, both in terms of the depth and width,
+    we don’t try to build the full tree; we just randomly sample its most promising
+    paths (that’s the source of the method’s name).
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们不断地使用蒙特卡罗树搜索（MCTS）算法遍历游戏树，其核心思想是半随机地走过游戏状态，扩展它们并收集关于每一步动作和潜在游戏结果的统计数据。由于游戏树庞大，深度和宽度都非常大，我们并不尝试构建完整的树，而是随机抽样其最有前景的路径（这就是该方法名称的来源）。
+- en: 'At every moment, we have the current best player, which is the model used to
+    generate the data via self-play (this concept will be discussed in detail later,
+    but for now it is enough for you to know that it refers to the usage of the same
+    model against itself). Initially, this model has random weights, so it makes moves
+    randomly, like a four-year-old learning how chess pieces move. However, over time,
+    we replace this best player with better variations of it, which generate more
+    and more meaningful and sophisticated game scenarios. Self-play means that the
+    same current best model is used on both sides of the board. This might not look
+    very useful, as having the same model play against itself has an approximately
+    50% chance outcome, but that’s actually what we need: samples of the games where
+    our best model can demonstrate its best skills. The analogy is simple: it’s usually
+    not very interesting to watch a match between the outsider and the leader; the
+    leader will win easily. What is much more fun and intriguing to see is when players
+    of roughly equal skill compete. That’s why the final in any championship attracts
+    much more attention than the preceding matches: both teams or players in the final
+    usually excel in the game, so they will need to play their best game to win.'
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在每一时刻，我们都有当前最强的玩家，这是通过自我对弈生成数据的模型（这一概念将在后面详细讨论，但现在你只需要知道它指的是同一个模型与自己对弈）。最初，这个模型具有随机的权重，因此它的行动是随机的，就像一个四岁的孩子在学习棋子如何移动。然而，随着时间的推移，我们用它的更好变种替换这个最强的玩家，生成越来越有意义和复杂的游戏场景。自我对弈意味着同一个当前最强的模型在棋盘的两边同时使用。这看起来可能没什么用处，因为让同一个模型与自己对弈的结果大约是50%的概率，但实际上这正是我们所需要的：我们的最佳模型能够展示其最佳技能的游戏样本。这个类比很简单：通常看外围选手与领头选手的比赛并不特别有趣；领头选手会轻松获胜。更有趣、更吸引人的情景是大致相等技能的选手对抗。因此，任何锦标赛的决赛总是比之前的比赛更受关注：决赛中的两个队伍或选手通常都擅长比赛，因此他们需要发挥出最佳水平才能获胜。
+- en: The third component in the method is the training process of the apprentice
+    model, which is trained on the data gathered by the best model during self-play.
+    This model can be likened to a kid sitting and constantly analyzing the chess
+    games played by two adults. Periodically, we play several matches between this
+    trained model and our current best model. When the trainee is able to beat the
+    best model in the majority of games, we announce the trained model as the new
+    best model and the process continues.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 方法中的第三个组成部分是学徒模型的训练过程，该模型是在最佳模型通过自我对弈所收集的数据上训练的。这个模型可以比作一个孩子，坐在旁边不断分析两位成年人下的棋局。定期地，我们会进行几场这位训练模型与我们当前最佳模型的比赛。当学徒能够在大多数游戏中击败最佳模型时，我们宣布该训练模型为新的最佳模型，然后继续这一过程。
+- en: Despite the simplicity and even naïvety of this, AlphaGo Zero was able to beat
+    all the previous AlphaGo versions and became the best Go player in the world,
+    without any prior knowledge except the rules. After the paper by Silver et al.
+    [[SSa17](#)] was published, DeepMind adapted the method for chess and published
+    the paper called Mastering chess and shogi by self-play with a general reinforcement
+    learning algorithm [[Sil+17](#)], where the model trained from scratch beat Stockfish,
+    which was the best chess program at the time and took more than a decade for human
+    experts to develop.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管这看起来简单甚至有些天真，AlphaGo Zero仍然能够击败所有之前的AlphaGo版本，成为世界上最强的围棋玩家，且没有任何先验知识，只有规则。Silver等人发布的论文[[SSa17](#)]之后，DeepMind将该方法适应于国际象棋，并发布了名为《通过自我对弈和通用强化学习算法掌握国际象棋和将棋》的论文[[Sil+17](#)]，其中从零开始训练的模型击败了当时最强的国际象棋程序Stockfish，而Stockfish是经过十多年人类专家开发的。
+- en: Now, let’s take a look at all three components of the method in detail.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们详细了解该方法的三个组成部分。
+- en: MCTS
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MCTS
+- en: To understand what MCTS does, let’s consider a simple subtree of the tic-tac-toe
+    game, as shown in Figure [20.1](#x1-369002r1). At the beginning, the game field
+    is empty and the cross player (X) needs to choose where to move. There are nine
+    different options for the first move, so our root state has nine different branches
+    leading to the corresponding states.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解MCTS的工作原理，我们来考虑井字游戏的一个简单子树，如图[20.1](#x1-369002r1)所示。开始时，游戏场地为空，交叉玩家（X）需要选择一个位置。第一次移动有九个不同的选择，所以我们的根节点有九个不同的分支，指向相应的状态。
+- en: '![u×p-left ×up-mid ⋅⋅⋅ ×down-mid d×own -right ](img/B22150_20_01.png)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![u×p-left ×up-mid ⋅⋅⋅ ×down-mid d×own -right ](img/B22150_20_01.png)'
+- en: 'Figure 20.1: The game tree of tic-tac-toe'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 20.1：井字游戏的游戏树
+- en: The number of possible actions at any game state is called the branching factor,
+    and it shows the bushiness of the game tree. In general, this is not constant
+    and may vary, as some moves are not always doable. In the case of tic-tac-toe,
+    the number of available actions could vary from nine at the beginning of the game
+    to zero at the leaf nodes. The branching factor allows us to estimate how quickly
+    the game tree grows, as every available action leads to another set of actions
+    that could be taken.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在任何游戏状态下的可选动作数量称为分支因子，它展示了游戏树的分支密度。一般来说，这个值不是常数，可能会有所变化，因为并不是所有的动作都是可行的。在井字游戏的情况下，可用的动作数量可能从游戏开始时的九个变化到叶节点时的零个。分支因子可以帮助我们估计游戏树的增长速度，因为每一个可用动作都会导致下一层的可执行动作。
+- en: For our example, after the cross player has made their move, the nought (0)
+    has eight alternatives at every nine positions, which makes 9 × 8 total positions
+    at the second level of the tree. The total number of nodes in the tree can be
+    up to 9! = 362880, but the actual number is less, as not all the games could be
+    played to the maximum depth.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们的例子，在交叉玩家（X）走完一步后，零（0）在每个九个位置上有八个选择，这使得在树的第二层共有9 × 8个位置。树中节点的总数最多可达9! =
+    362880，但实际数量较少，因为并非所有的游戏都会走到最大深度。
+- en: Tic-tac-toe is tiny, but if we consider larger games and, for example, think
+    about the number of first moves that white could make at the beginning of a chess
+    game (which is 20) or the number of spots that the white stone could be placed
+    at in Go (361 in total for a 19 × 19 game field), the number of game positions
+    in the complete tree quickly becomes enormous. With every new level, the number
+    of states is multiplied by the average number of actions that we can perform on
+    the previous level.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 井字游戏虽然很简单，但如果我们考虑更复杂的游戏，比如思考一下在国际象棋游戏开始时白方的第一步可以走的数量（是20），或者在围棋中白方棋子可以放置的位置数量（19
+    × 19棋盘上总共有361个位置），整个树中游戏位置的数量迅速变得庞大。每新增一层，状态数量就会被上一层的平均动作数所乘。
+- en: 'To deal with this combinatorial explosion, random sampling comes into play.
+    In a general MCTS, we perform many iterations of depth-first search, starting
+    at the current game state and either selecting the actions randomly or with some
+    strategy, which should include enough randomness in its decisions. Every search
+    is continued until the end state of the game, and then it is followed by updating
+    the weights of the visited tree branches according to the game’s outcome. This
+    process is similar to the value iteration method, when we played the episodes
+    and the final step of the episode influenced the value estimation of all the previous
+    steps. This is a general MCTS, and there are many variants of this method related
+    to expansion strategy, branch selection policy, and other details. In AlphaGo
+    Zero, a variant of MCTS is used. For every edge (representing the move from some
+    position), this set of statistics is stored:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了应对这种组合爆炸，随机采样开始发挥作用。在一般的MCTS中，我们进行多次深度优先搜索，从当前游戏状态开始，随机选择动作或使用某些策略，策略中应该包含足够的随机性。每次搜索都继续进行，直到达到游戏的结束状态，然后根据游戏的结果更新访问过的树分支的权重。这个过程类似于值迭代方法，当我们玩过回合后，回合的最后一步会影响所有前面步骤的值估计。这是一个通用的MCTS方法，还有许多与扩展策略、分支选择策略及其他细节相关的变种。在AlphaGo
+    Zero中，使用的是MCTS的变种。对于每个边（表示从某个位置的走法），这组统计信息被存储：
+- en: A prior probability, P(s,a), of the edge
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 边的先验概率，P(s,a)
+- en: A visit count, N(s,a)
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个访问计数，N(s,a)
+- en: An action value, Q(s,a)
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个动作值，Q(s,a)
+- en: Each search starts from the root state following the most promising actions,
+    selected using the utility value, U(s,a), proportional to
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次搜索从根状态开始，沿着最有前途的动作前进，这些动作是根据效用值U(s,a)选择的，效用值与
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq73.png)'
+  id: totrans-50
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq73.png)'
+- en: 'Randomness is added to the selection process to ensure enough exploration of
+    the game tree. Every search could end up with two outcomes: the end state of the
+    game is reached, or we face a state that hasn’t been explored yet (in other words,
+    has no known values). In the latter case, the policy neural network (NN) is used
+    to obtain the prior probabilities and the value of the state estimation, and the
+    new tree node with N(s,a) ← 0, P(s,a) ←p[net] (which is a probability of the move
+    returned by the network) and Q(s,a) ← 0 is created. Besides the prior probability
+    of the actions, the network returns the estimation of the game’s outcome (or the
+    value of the state) as seen from the current player.'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择过程中加入随机性，以确保足够探索游戏树。每次搜索可能会有两种结果：游戏的最终状态被达成，或者我们遇到一个尚未探索的状态（换句话说，尚未有已知的值）。在后一种情况下，策略神经网络（NN）用于获得先验概率和状态估计值，然后创建一个新的树节点，其中N(s,a)
+    ← 0，P(s,a) ← p[net]（这是网络返回的走法概率），且Q(s,a) ← 0。除了动作的先验概率外，网络还返回游戏结果的估计值（或从当前玩家视角来看状态的价值）。
+- en: Once we have obtained the value (by reaching the final game state or by expanding
+    the node using the NN), a process called the backup of value is performed. During
+    the process, we traverse the game path and update statistics for every visited
+    intermediate node; in particular, the visit count, N(s,a), is incremented by one
+    and Q(s,a) is updated to include the game’s outcome from the perspective of the
+    current state. As two players are exchanging moves, the final game outcome changes
+    the sign in every backup step.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们获得了该值（通过达到最终游戏状态或通过使用神经网络扩展节点），会执行一个叫做值备份的过程。在此过程中，我们遍历游戏路径并更新每个访问过的中间节点的统计信息；特别地，访问计数N(s,a)会增加1，Q(s,a)会更新为当前状态下游戏结果的值。由于两个玩家交替进行操作，最终的游戏结果会在每次备份步骤中改变符号。
+- en: This search process is performed several times (in AlphaGo Zero’s case, 1,000-2,000
+    searches are performed), gathering enough statistics about the action to use the
+    N(s,a) counter as an action probability to be taken in the root node.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个搜索过程会进行多次（在AlphaGo Zero中，进行1,000到2,000次搜索），收集足够的关于动作的统计信息，以便在根节点使用N(s,a)计数器作为选择的动作概率。
+- en: Self-play
+  id: totrans-54
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 自对弈
+- en: 'In AlphaGo Zero, the NN is used to approximate the prior probabilities of the
+    actions and evaluate the position, which is very similar to the advantage actor-critic
+    (A2C) two-headed setup. In the input of the network, we pass the current game
+    position (augmented with several previous positions) and return two values:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在AlphaGo Zero中，神经网络用于近似动作的先验概率并评估位置，这与优势演员-评论员（A2C）双头设置非常相似。在网络的输入中，我们传入当前的游戏位置（并加入若干个先前的局面），并返回两个值：
+- en: The policy head returns the probability distribution over the actions.
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 策略头返回行动的概率分布。
+- en: The value head estimates the game outcome as seen from the player’s perspective.
+    This value is undiscounted, as moves in Go are deterministic. Of course, if you
+    have stochasticity in a game, like in backgammon, some discounting should be used.
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 值头估算从玩家视角看待的游戏结果。这个值是未折扣的，因为围棋中的每一步都是确定性的。当然，如果在某个游戏中存在随机性，比如在西洋双陆棋中，就应该使用折扣。
+- en: As has already been described, we’re maintaining the current best network, which
+    constantly self-plays to gather the training data for our apprentice network.
+    Every step in each self-play game starts with several MCTSs from the current position
+    to gather enough statistics about the game subtree to select the best action.
+    The selection depends on the move and our settings. For self-play games, which
+    are supposed to produce enough variance in the training data, the first moves
+    are selected in a stochastic way. However, after some number of steps (which is
+    a hyperparameter in the method), action selection becomes deterministic, and we
+    select the action with the largest visit counter, N(s,a). In evaluation games
+    (when we check the network being trained versus the current best model), all the
+    steps are deterministic and selected solely on the largest visit counter.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，我们保持当前最优网络，该网络不断进行自对弈以收集用于训练学徒网络的数据。每一步自对弈游戏都从当前状态开始，执行多次蒙特卡洛树搜索（MCTS），以收集足够的游戏子树统计信息来选择最佳行动。选择依赖于当前的棋步和设置。对于自对弈游戏，为了在训练数据中产生足够的方差，初始几步的选择是随机的。然而，在经过一定数量的步骤后（这也是方法中的超参数），行动选择变得确定性，并且我们选择访问计数最大的行动，N(s,a)。在评估游戏中（当我们对训练中的网络与当前最优模型进行对比时），所有步骤都是确定性的，仅根据最大访问计数来选择行动。
+- en: Once the self-play game has been finished and the final outcome has become known,
+    every step of the game is added to the training dataset, which is a list of tuples
+    (s[t],π[t],r[t]), where s[t] is the game state, π[t] is the action probabilities
+    calculated from MCTS sampling, and r[t] is the game’s outcome from the perspective
+    of the player at step t.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦自对弈游戏结束并且最终结果已知，游戏的每一步都会被加入到训练数据集中，数据集是一个元组列表（s[t],π[t],r[t]），其中s[t]是游戏状态，π[t]是通过MCTS采样计算的行动概率，r[t]是玩家在步骤t时的游戏结果。
+- en: Training and evaluation
+  id: totrans-60
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练与评估
+- en: The self-play process between two clones of the current best network provides
+    us with a stream of training data consisting of states, action probabilities,
+    and position values obtained from the self-play games. With this at hand, for
+    training we sample mini-batches from the replay buffer of training examples and
+    minimize the mean squared error (MSE) between the value head prediction and the
+    actual position value, as well as the cross-entropy loss between predicted probabilities
+    and sampled probabilities, π.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前最优网络的两个克隆之间的自对弈过程为我们提供了一系列训练数据，这些数据包含了通过自对弈游戏获得的状态、行动概率和位置值。凭借这些数据，在训练过程中，我们从重放缓冲区中抽取小批量的训练样本，并最小化值头预测与实际位置值之间的均方误差（MSE），以及预测概率与采样概率之间的交叉熵损失，π。
+- en: As mentioned earlier, once in several training steps the trained network is
+    evaluated, which consists of playing several games between the current best and
+    trained networks. Once the trained network becomes significantly better than the
+    current best network, we copy the trained network into the best network and continue
+    the process.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，在几个训练步骤后，训练好的网络会被评估，这包括当前最优网络与训练网络之间的多轮对弈。一旦训练网络的表现显著优于当前最优网络，我们将训练网络复制到最优网络中，并继续该过程。
+- en: Connect 4 with AlphaGo Zero
+  id: totrans-63
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 用AlphaGo Zero玩“连接四”
+- en: To see the method in action, let’s implement AlphaGo Zero for a relatively simple
+    game, Connect 4\. The game is for two players with a field size of 6 × 7\. Each
+    player has disks of a certain color, which they drop in turn into any of the seven
+    columns. The disks fall to the bottom, stacking vertically. The game objective
+    is to be the first to form a horizontal, vertical, or diagonal line of four disks
+    of the same color. To illustrate the game, two positions are shown in Figure [20.2](#x1-372003r2).
+    In the first situation, the first player has just won, while in the second, the
+    second player is going to form a group.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了观察该方法的实际应用，我们可以为一个相对简单的游戏——Connect 4 实现 AlphaGo Zero。这个游戏是两人对战，棋盘大小为 6 × 7。每位玩家有不同颜色的棋盘，轮流将棋子放入七列中的任何一列。棋子会下落到最底部，垂直堆叠。游戏的目标是率先形成一条水平、垂直或对角线，由四个相同颜色的棋子组成。为了展示游戏，图
+    [20.2](#x1-372003r2) 中显示了两个位置。在第一种情况下，第一位玩家刚刚获胜，而在第二种情况下，第二位玩家即将形成一组。
+- en: '![PIC](img/file305.png)'
+  id: totrans-65
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file305.png)'
+- en: 'Figure 20.2: Two game positions in Connect 4'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 20.2：Connect 4 中的两个游戏位置
+- en: 'Despite its simplicity, this game has ≈ 4.5 ⋅ 10^(12) different game states,
+    which is challenging for computers to solve with brute force. This example consists
+    of several tools and library modules:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管游戏简单，但它大约有 4.5 × 10^(12) 种不同的游戏状态，这对于计算机来说，使用暴力破解是具有挑战性的。这个示例由几个工具和库模块组成：
+- en: 'Chapter20/lib/game.py: A low-level game representation that contains functions
+    for making moves, encoding and decoding the game state, and other game-related
+    utilities.'
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Chapter20/lib/game.py：一个低级别的游戏表示，包含用于执行移动、编码和解码游戏状态以及其他与游戏相关的功能。
+- en: 'Chapter20/lib/mcts.py: The MCTS implementation that allows GPU-accelerated
+    expansion of leaves and node backup. The central class here is also responsible
+    for keeping the game node statistics, which are reused between the searches.'
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Chapter20/lib/mcts.py：MCTS 实现，支持 GPU 加速扩展叶节点和节点备份。这里的核心类还负责保持游戏节点统计数据，这些数据在搜索过程中会被重复使用。
+- en: 'Chapter20/lib/model.py: The NN and other model-related functions, such as the
+    conversion between game states and the model’s input and the playing of a single
+    game.'
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Chapter20/lib/model.py：神经网络及其他与模型相关的功能，例如游戏状态与模型输入之间的转换，以及单局游戏的进行。
+- en: 'Chapter20/train.py: The main training utility that glues everything together
+    and produces the model checkpoints of the new best networks.'
+  id: totrans-71
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Chapter20/train.py：将所有内容连接起来的主要训练工具，并生成新最佳网络的模型检查点。
+- en: 'Chapter20/play.py: The tool that organizes the automated tournament between
+    the model checkpoints. This accepts several model files and plays the given number
+    of games against each other to form a leaderboard.'
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Chapter20/play.py：组织模型检查点之间自动化比赛的工具。它接受多个模型文件，并进行一定数量的对局，以形成排行榜。
+- en: 'Chapter20/telegram-bot.py: The bot for the Telegram chat platform that allows
+    the user to play against any model file and keep a record of the statistics. This
+    bot was used for human verification of the example’s results.'
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Chapter20/telegram-bot.py：这是一个用于 Telegram 聊天平台的机器人，允许用户与任何模型文件对战并记录统计数据。此机器人曾用于示例结果的人类验证。
+- en: Now let’s discuss the core of our game – the game model.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们讨论一下游戏的核心——游戏模型。
+- en: The game model
+  id: totrans-75
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 游戏模型
+- en: The whole approach is based on our ability to predict the outcome of our actions;
+    in other words, we need to be able to get the resulting game state after we execute
+    a move. This is a much stronger requirement than we had in the Atari environments
+    and Gym in general, where you can’t specify a state that you want to act from.
+    So, we need a model of the game that encapsulates the game’s rules and dynamics.
+    Luckily, most board games have a simple and compact set of rules, which makes
+    the model implementation a straightforward task.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 整个方法依赖于我们预测行动结果的能力；换句话说，我们需要能够在执行一步之后，得到最终的游戏状态。这比我们在 Atari 环境和 Gym 中遇到的要求要强得多，因为在这些环境中，你无法指定一个想要从其进行行动的状态。因此，我们需要一个包含游戏规则和动态的模型。幸运的是，大多数棋盘游戏都有简单且紧凑的规则集，这使得模型实现变得直截了当。
+- en: In our case, the full game state of Connect 4 is represented by the state of
+    the 6 × 7 game field cells and the indicator of who is going to move. What is
+    important for our example is to make the game state representation occupy as little
+    memory as possible, but still allow it to work efficiently. The memory requirement
+    is dictated by the necessity of storing large numbers of game states during the
+    MCTS. As our game tree is huge, the more nodes we’re able to keep during the MCTS,
+    the better our final approximation of move probabilities will be. So, potentially,
+    we’d like to be able to keep millions, or maybe even billions, of game states
+    in memory.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的示例中，Connect 4 的完整游戏状态由 6 × 7 游戏场地单元的状态和谁将要移动的指示符表示。对我们的示例来说，重要的是使游戏状态表示占用尽可能少的内存，同时仍能高效工作。内存需求由在
+    MCTS（蒙特卡洛树搜索）过程中存储大量游戏状态的必要性决定。由于我们的游戏树非常庞大，在 MCTS 过程中能够保持的节点越多，最终对移动概率的近似就越准确。因此，理论上，我们希望能够在内存中保留数百万甚至数十亿个游戏状态。
+- en: With this in mind, the compactness of the game state representation could have
+    a huge impact on memory requirements and the performance of our training process.
+    However, the game state representation has to be convenient to work with, for
+    example, when checking the board for a winning position, making a move, or finding
+    all the valid moves from some state.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑到这一点，游戏状态表示的紧凑性可能会对内存需求和训练过程的性能产生巨大影响。然而，游戏状态表示必须便于操作，例如，在检查棋盘是否有获胜位置、进行操作或从某个状态找到所有有效的操作时。
+- en: 'To keep this balance, two representations of the game field were implemented
+    in Chapter20/lib/game.py:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了保持这一平衡，两个游戏场地的表示在 Chapter20/lib/game.py 中实现：
+- en: The first encoded form is very memory-efficient and takes only 63 bits to encode
+    the full field, which makes it extremely fast and lightweight, as it fits in a
+    machine world on 64-bit architectures.
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一个编码形式非常节省内存，只需 63 位即可编码完整的场地，这使得它在 64 位架构的机器中非常快速且轻量。
+- en: Another decoded game field representation has the form of a list with a length
+    of 7, where each entry is a list of integers representing the disks in a particular
+    column. This form takes much more memory, but it is convenient to work with.
+  id: totrans-81
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另一种解码后的游戏场地表示形式是一个长度为 7 的列表，每个条目是一个表示某列磁盘的整数列表。这种形式需要更多内存，但操作起来很方便。
+- en: 'I’m not going to show the full code of Chapter20/lib/game.py, but if you need
+    it, it’s available in the repository. Here, let’s just take a look at the list
+    of the constants and functions that it provides:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我不会展示 Chapter20/lib/game.py 的完整代码，但如果需要，可以在仓库中找到。这里，我们只需快速查看它提供的常量和函数列表：
+- en: '[PRE0]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The first two constants in the preceding code define the dimensionality of the
+    game field and are used everywhere in the code, so you can try to change them
+    and experiment with larger or smaller game variants. The BITS_IN_LEN value is
+    used in state encoding functions and specifies how many bits are used to encode
+    the height of the column (the number of disks present). In the 6 × 7 game, we
+    could have up to six disks in every column, so three bits is enough to keep values
+    from zero to seven. If you change the number of rows, you will need to adjust
+    BITS_IN_LEN accordingly.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面代码中的前两个常量定义了游戏场地的维度，并且在代码中到处使用，因此你可以尝试更改它们，实验更大或更小的游戏变体。BITS_IN_LEN 值用于状态编码函数，并指定用于编码列高度（即当前磁盘数）的位数。在
+    6 × 7 的游戏中，每列最多可以有六个磁盘，因此三个位足以表示从零到七的值。如果更改了行数，您需要相应地调整 BITS_IN_LEN。
+- en: The PLAYER_BLACK and PLAYER_WHITE values define the values used in the decoded
+    game representation and, finally, COUNT_TO_WIN sets the length of the group that
+    needs to be formed to win the game. So, in theory, you can try to experiment with
+    the code and train the agent for, say, five in a row on a 20 × 40 field by just
+    changing four numbers in game.py.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PLAYER_BLACK 和 PLAYER_WHITE 值定义了在解码游戏表示中使用的值，最后，COUNT_TO_WIN 设置了获胜所需形成的连线长度。因此，理论上你可以通过在
+    game.py 中更改四个数字，尝试修改代码并训练代理进行例如在 20 × 40 场地上五子连珠的游戏。
+- en: The INITIAL_STATE value contains the encoded representation for an initial game
+    state, which has GAME_COLS empty lists.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: INITIAL_STATE 值包含了一个初始游戏状态的编码表示，其中 GAME_COLS 为空列表。
+- en: 'The rest of the code is made up of functions. Some of them are used internally,
+    but some make an interface of the game used everywhere in the example. Let’s list
+    them quickly:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 剩下的代码由函数组成。其中一些是内部使用的，但有些则提供了一个在示例中到处使用的游戏接口。让我们快速列出它们：
+- en: 'encode_lists(state_lists): This converts from a decoded to an encoded representation
+    of the game state. The argument has to be a list of GAME_COLS lists, with the
+    contents of the column specified in bottom-to-top order. In other words, to drop
+    a new disk at the top of the stack, we just need to append it to the corresponding
+    list. The result of the function is an integer with 63 bits representing the game
+    state.'
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: encode_lists(state_lists)：此函数将游戏状态从解码表示转换为编码表示。参数必须是一个包含 GAME_COLS 列表的列表，每个列的内容按从底到顶的顺序指定。换句话说，要将新棋子放置在堆栈的顶部，我们只需要将其附加到相应的列表中。该函数的结果是一个具有
+    63 位的整数，表示游戏状态。
+- en: 'decode_binary(state_int): This converts the integer representation of the field
+    back into the list form.'
+  id: totrans-89
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: decode_binary(state_int)：此函数将字段的整数表示转换回列表形式。
+- en: 'possible_moves(state_int): This returns a list with indices of columns that
+    can be used for moving from the given encoded game state. The columns are numbered
+    from zero to six, left to right.'
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: possible_moves(state_int)：此函数返回一个列表，其中包含可用于从给定编码游戏状态移动的列的索引。列从左到右编号，从零到六。
+- en: 'move(state_int, col, player): The central function of the file, which provides
+    game dynamics combined with a win/lose check. In arguments, it accepts the game
+    state in the encoded form, the column to place the disk in, and the index of the
+    player that moves. The column index has to be valid (that is, be present in the
+    result of possible_moves(state_int)), otherwise an exception will be raised. The
+    function returns a tuple with two elements: a new game state in the encoded form
+    after the move has been performed and a Boolean indicating the move leading to
+    the win of the player. As a player can win only after their move, a single Boolean
+    is enough. Of course, there is a chance of getting a draw state (when nobody has
+    won, but there are no possible moves remaining). Such situations have to be checked
+    by calling the possible]_moves() function after the move() function.'
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: move(state_int, col, player)：文件中的核心函数，结合游戏动态和胜负检查。在参数中，它接受编码形式的游戏状态、放置棋子的列以及当前移动的玩家索引。列索引必须有效（即存在于
+    possible_moves(state_int) 的结果中），否则会引发异常。该函数返回一个包含两个元素的元组：执行移动后的新编码游戏状态以及一个布尔值，表示该移动是否导致玩家获胜。由于玩家只能在自己移动后获胜，因此一个布尔值足够了。当然，也有可能出现平局状态（当没有人获胜，但没有剩余的有效移动时）。此类情况需要在调用
+    move() 函数后，调用 possible_moves() 函数进行检查。
+- en: 'render(state_int): This returns a list of strings representing the field’s
+    state. This function is used in the Telegram bot to send the field state to the
+    user.'
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: render(state_int)：此函数返回一个字符串列表，表示字段的状态。该函数在 Telegram 机器人中用于将字段状态发送给用户。
+- en: Implementing MCTS
+  id: totrans-93
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现 MCTS
+- en: MCTS is implemented in Chapter20/lib/mcts.py and represented by a single class,
+    MCTS, which is responsible for performing a batch of MCTSs and keeping the statistics
+    gathered during it. The code is not very large, but it still has several tricky
+    pieces, so let’s check it in detail.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MCTS 在 Chapter20/lib/mcts.py 中实现，并由一个名为 MCTS 的类表示，该类负责执行一批 MCTS 并保持在过程中收集的统计数据。代码不算很大，但仍有一些棘手的部分，所以让我们仔细检查一下。
+- en: 'The constructor has no arguments except the c_puct constant, which is used
+    in the node selection process. Silver et al. [[SSa17](#)] mentioned that it could
+    be tweaked to increase exploration, but I’m not redefining it anywhere and haven’t
+    experimented with it. The body of the constructor creates an empty container to
+    keep statistics about the states:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构造函数没有任何参数，除了 c_puct 常量，它在节点选择过程中使用。Silver 等人 [[SSa17](#)] 提到过可以调整它以增加探索性，但我并没有在任何地方重新定义它，也没有对此进行实验。构造函数的主体创建了一个空容器，用于保存有关状态的统计信息：
+- en: '[PRE1]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The key in all the dicts is the encoded game state (an integer), and values
+    are lists, keeping the various parameters of actions that we have. The comments
+    above every container have the same notations of values as in the AlphaGo Zero
+    paper.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有字典中的关键字都是编码后的游戏状态（整数），值是列表，保存我们拥有的各种动作参数。每个容器上方的注释使用的值符号与 AlphaGo Zero 论文中的符号相同。
+- en: 'The clear() method clears the state without destroying the MCTS object, which
+    happens when we switch the current best model to the new one and the gathered
+    statistics become obsolete:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: clear() 方法清除状态，但不会销毁 MCTS 对象。当我们将当前最佳模型切换为新模型时，收集的统计数据会变得过时，从而触发这一过程：
+- en: '[PRE2]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'The find_leaf() method is used during the search to perform a single traversal
+    of the game tree, starting from the root node given by the state_int argument
+    and continuing to walk down until one of the following two situations has been
+    faced: we reach the final game state or an as yet unexplored leaf has been found.
+    During the search, we keep track of the visited states and the executed actions
+    so we can update the nodes’ statistics later:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`find_leaf()` 方法在搜索过程中使用，用于对游戏树进行单次遍历，从由 `state_int` 参数提供的根节点开始，一直向下遍历，直到遇到以下两种情况之一：到达最终游戏状态或发现一个尚未探索的叶节点。在搜索过程中，我们会跟踪访问过的状态和执行过的动作，以便稍后更新节点的统计信息：'
+- en: '[PRE3]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Every iteration of the loop processes the game state that we’re currently at.
+    For this state, we extract the statistics that we need to make the decision about
+    the action:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次循环迭代都处理我们当前所在的游戏状态。对于该状态，我们提取做出决策所需的统计信息：
+- en: '[PRE4]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'The decision about the action is based on the action utility, which is a sum
+    of Q(s,a) and the prior probabilities scaled to the visit count. The root node
+    of the search process has extra noise added to the probabilities to improve the
+    exploration of the search process. As we perform the MCTS from different game
+    states along the self-play trajectories, this extra Dirichlet noise (according
+    to the parameters used in the paper) ensures that we have tried different actions
+    along the path:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 动作的决策基于动作效用（action utility），它是 Q(s,a) 和根据访问次数缩放的先验概率的和。搜索过程的根节点会向概率中添加额外的噪声，以提高搜索过程的探索性。当我们从不同的游戏状态执行
+    MCTS 时，这种额外的 Dirichlet 噪声（根据论文中使用的参数）确保我们沿路径尝试了不同的动作：
+- en: '[PRE5]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'As we have calculated the score for the actions, we need to mask invalid actions
+    for the state. (For example, when the column is full, we can’t place another disk
+    on the top.) After that, the action with the maximum score is selected and recorded:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们计算出动作的得分后，我们需要为该状态屏蔽无效的动作。（例如，当列已满时，我们不能在顶部再放一个棋盘。）之后，选择得分最高的动作并记录下来：
+- en: '[PRE6]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'To finish the loop, we ask our game engine to make the move, returning the
+    new state and the indication of whether the player won the game. The final game
+    states (win, lose, or draw) are never added to the MCTS statistics, so they will
+    always be leaf nodes. The function returns the game’s value for the leaf player
+    (or None if the final state hasn’t been reached), the current player at the leaf
+    state, the list of states we have visited during the search, and the list of the
+    actions taken:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了结束循环，我们请求游戏引擎进行一步操作，返回新的状态以及玩家是否赢得游戏的标识。最终的游戏状态（胜、负或平）不会被添加到 MCTS 统计信息中，因此它们将始终是叶节点。该函数返回叶节点玩家的游戏值（如果尚未到达最终状态，则为
+    None）、叶节点状态下的当前玩家、搜索过程中访问过的状态列表以及所执行的动作列表：
+- en: '[PRE7]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The main entry point to the MCTS class is the search_batch() function, which
+    performs several batches of searches. Every search consists of finding the leaf
+    of the tree, optionally expanding the leaf, and doing backup. The main bottleneck
+    here is the expand operation, which requires the NN to be used to get the prior
+    probabilities of the actions and the estimated game value. To make this expansion
+    more efficient, we use mini-batches when we search for several leaves, but then
+    perform expansion in a single NN execution. This approach has one disadvantage:
+    as several MCTSs are performed in one batch, we don’t get the same outcome as
+    when they are executed serially.'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MCTS 类的主要入口点是 `search_batch()` 函数，该函数执行多个批次的搜索。每个搜索包括找到树的叶节点、可选地扩展叶节点以及进行回溯。这里的主要瓶颈是扩展操作，这需要使用神经网络（NN）来获取动作的先验概率和估计的游戏值。为了提高扩展的效率，我们在搜索多个叶节点时使用小批量（mini-batch）方法，但然后在一次神经网络执行中进行扩展。这种方法有一个缺点：由于在一个批次中执行多个
+    MCTS，我们得到的结果与串行执行时的结果不同。
+- en: Indeed, initially, when we have no nodes stored in the MCTS class, our first
+    search will expand the root node, the second will expand some of its child nodes,
+    and so on. However, one single batch of searches can expand only one root node
+    at first. Of course, later, individual searches in the batch could follow the
+    different game paths and expand more, but at first, mini-batch expansion is much
+    less efficient in terms of exploration than a sequential MCTS.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确实，最初当我们在 MCTS 类中没有存储任何节点时，我们的第一次搜索将扩展根节点，第二次搜索将扩展它的一些子节点，依此类推。然而，单个搜索批次最初只能扩展一个根节点。当然，后来批次中的单独搜索可以沿着不同的游戏路径进行扩展，但最初，mini-batch
+    扩展在探索方面远不如顺序 MCTS 高效。
+- en: 'To compensate for this, I still use mini-batches, but perform several of them:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了补偿这一点，我仍然使用小批量，但执行几个小批量：
+- en: '[PRE8]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'In the mini-batch search, we first perform the leaf search, starting from the
+    same state. If the search has found a final game state (in that case, the returned
+    value will not be equal to None), no expansion is required and we save the result
+    for a backup operation. Otherwise, we store the leaf for later expansion:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在小批量搜索中，我们首先执行叶节点搜索，从相同的状态开始。如果搜索已找到最终的游戏状态（此时返回值不等于None），则不需要扩展，并且我们将结果保存用于备份操作。否则，我们存储叶节点以便稍后扩展：
+- en: '[PRE9]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'To expand, we convert the states into the form required by the model (there
+    is a special function in the model.py library) and ask our network to return the
+    prior probabilities and values for the batch of states. We will use those probabilities
+    to create nodes, and the values will be backed up in a final statistics update:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了扩展，我们将状态转换为模型所需的形式（在model.py库中有一个特殊的函数），并请求我们的网络返回该批状态的先验概率和值。我们将使用这些概率创建节点，并将在最终的统计更新中备份这些值。
+- en: '[PRE10]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Node creation is just storing zeros for every action in the visit count and
+    action values (total and average). In prior probabilities, we store values obtained
+    from the network:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点创建仅仅是为每个动作在访问计数和动作值（总值和平均值）中存储零。在先验概率中，我们存储从网络中获得的值：
+- en: '[PRE11]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The backup operation is the core process in MCTS, and it updates the statistics
+    for a state visited during the search. The visit count of the taken actions is
+    incremented, the total values are summed, and the average values are normalized
+    using visit counts.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份操作是MCTS中的核心过程，它在搜索过程中更新已访问状态的统计数据。所采取动作的访问计数会递增，总值会相加，并且通过访问计数对平均值进行归一化。
+- en: 'It’s very important to properly track the value of the game during the backup
+    because we have two opponents, and in every turn, the value changes the sign (because
+    a winning position for the current player is a losing game state for the opponent):'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在备份过程中正确跟踪游戏的价值非常重要，因为我们有两个对手，并且在每一轮中，价值的符号都会发生变化（因为当前玩家的胜利位置对对手来说是一个失败的游戏状态）：
+- en: '[PRE12]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'The final function in the class returns the probability of actions and the
+    action values for the game state, using the statistics gathered during the MCTS:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类中的最终函数返回动作的概率和游戏状态的动作值，使用在MCTS过程中收集的统计数据：
+- en: '[PRE13]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Here, there are two modes of probability calculation, specified by the τ parameter.
+    If it equals zero, the selection becomes deterministic, as we select the most
+    frequently visited action. In other cases, the distribution given by
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，有两种概率计算模式，由τ参数指定。如果τ等于零，选择变得确定性，因为我们选择访问频率最高的动作。在其他情况下，使用的分布为
+- en: '![π (a |s) = P[At = a|St = s] ](img/eq74.png)'
+  id: totrans-126
+  prefs: []
+  type: TYPE_IMG
+  zh: '![π (a |s) = P[At = a|St = s] ](img/eq74.png)'
+- en: is used, which, again, improves exploration.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用了该方法，这同样提高了探索性。
+- en: The model
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 模型
+- en: The NN used is a residual convolutional network with six layers, which is a
+    simplified version of the network used in the original AlphaGo Zero method. For
+    the input, we pass the encoded game state, which consists of two 6 × 7 channels.
+    The first channel contains the places with the current player’s disks, and the
+    second channel has a value of 1.0 where the opponent has their disks. This representation
+    allows us to make the network player invariant and analyze the position from the
+    perspective of the current player.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用的神经网络是一个残差卷积网络，具有六层，是原始AlphaGo Zero方法中使用的网络的简化版。对于输入，我们传递编码后的游戏状态，该状态由两个6
+    × 7的通道组成。第一个通道包含当前玩家的棋子位置，第二个通道在对手的棋子位置处值为1.0。这样的表示方式使我们能够使网络对于玩家不变，并从当前玩家的视角分析局面。
+- en: The network consists of the common body with residual convolution filters. The
+    features produced by them are passed to the policy and the value heads, which
+    are a combination of a convolution layer and a fully connected layer. The policy
+    head returns the logits for every possible action (the column in which a disk
+    is dropped) and a single-value float. The details are available in the lib/model.py
+    file.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络由常见的主体部分与残差卷积滤波器组成。由它们产生的特征被传递到策略头和价值头，这两个部分是卷积层和全连接层的结合。策略头返回每个可能动作（放置棋子的列）的logits和一个单一的浮动值。详细内容请见lib/model.py文件。
+- en: 'Besides the model, this file contains two functions. The first, with the name
+    state_lists_to_batch(), converts the batch of game states represented in lists
+    into the model’s input form. This function uses a utility function, _encode_list_state,
+    which converts the states into a NumPy array:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了模型外，这个文件还包含两个函数。第一个名为state_lists_to_batch()，它将以列表形式表示的游戏状态批次转换为模型的输入格式。此函数使用一个辅助函数
+    _encode_list_state，它将状态转换为NumPy数组：
+- en: '[PRE14]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The second method is called play_game and is very important for both the training
+    and testing processes. Its purpose is to simulate the game between two NNs, perform
+    the MCTS, and optionally store the taken moves in a replay buffer:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种方法叫做play_game，对于训练和测试过程都非常重要。它的目的是模拟两个神经网络（NNs）之间的游戏，执行MCTS，并可选地将采取的步骤存储在回放缓冲区中：
+- en: '[PRE15]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'As you can see in the preceding code, the function accepts a lot of parameters:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您在前面的代码中看到的，函数接受许多参数：
+- en: The MCTS class instance, which could be a single instance, a list of two instances,
+    or None. We need to be flexible there to cover different usages of this function.
+  id: totrans-136
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MCTS类实例，它可以是单个实例、两个实例的列表或None。我们需要在这里保持灵活性，以适应此函数的不同用途。
+- en: An optional replay buffer.
+  id: totrans-137
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个可选的回放缓冲区。
+- en: NNs to be used during the game.
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在游戏中使用的神经网络（NNs）。
+- en: The number of game steps that need to be taken before the parameter used for
+    the action probability calculation will be changed from 1 to 0.
+  id: totrans-139
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在进行行动概率计算的参数从1更改为0之前，需要进行的游戏步骤数。
+- en: The number of MCTSs to perform.
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要执行的MCTS数量。
+- en: The MCTS batch size.
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MCTS批量大小。
+- en: Which player acts first.
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 哪个玩家先行动。
+- en: 'Before the game loop, we initialize the game state and select the first player.
+    If there is no information given about who will make the first move, this is chosen
+    randomly:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在游戏循环之前，我们初始化游戏状态并选择第一个玩家。如果没有提供谁先行动的信息，则随机选择：
+- en: '[PRE16]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'In every turn, we perform the MCTS to populate the statistics and then obtain
+    the probability of actions, which will be sampled to get the action:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每一回合，我们执行MCTS以填充统计数据，然后获取行动的概率，随后通过采样得到行动：
+- en: '[PRE17]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Then, the game state is updated using the function in the game engine module,
+    and the handling of different end-of-game situations (such as a win or a draw)
+    is performed:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，使用游戏引擎模块中的函数更新游戏状态，并处理不同的游戏结束情况（如胜利或平局）：
+- en: '[PRE18]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'At the end of the function, we populate the replay buffer with probabilities
+    for the action and the game result from the perspective of the current player.
+    This data will be used to train the network:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在函数的末尾，我们将从当前玩家的视角填充回放缓冲区，记录行动的概率和游戏结果。这些数据将用于训练网络：
+- en: '[PRE19]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Training
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练
+- en: 'With all those functions in hand, the training process is a simple combination
+    of them in the correct order. The training program is available in train.py, and
+    it has logic that has already been described: in the loop, our current best model
+    constantly plays against itself, saving the steps in the replay buffer. Another
+    network is trained on this data, minimizing the cross-entropy between the probabilities
+    of actions sampled from MCTS and the result of the policy head. MSE between the
+    value head predictions, about the game and the actual game result, is also added
+    to the total loss.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拥有所有这些功能后，训练过程只需将它们按正确顺序组合。训练程序可以在train.py中找到，里面包含的逻辑已经描述过：在循环中，我们当前最好的模型不断地与自己对弈，将步骤保存到回放缓冲区。另一个网络使用这些数据进行训练，最小化从MCTS采样的行动概率和策略头结果之间的交叉熵。同时，价值头预测的均方误差（MSE），即游戏结果与实际游戏结果之间的误差，也会加入到总损失中。
+- en: Periodically, the network being trained and the current best network play 100
+    matches, and if the current network is able to win in more than 60% of them, the
+    network’s weights are synced. This process continues infinitely, hopefully, finding
+    models that are more and more proficient at the game.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定期地，正在训练的网络和当前最佳网络进行100场比赛，如果当前网络能够赢得其中超过60%的比赛，则会同步网络的权重。这个过程会不断重复，最终希望找到越来越精通游戏的模型。
+- en: Testing and comparison
+  id: totrans-154
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 测试与比较
+- en: During the training process, the model’s weights are saved every time the current
+    best model is replaced with the trained model. As a result, we get multiple agents
+    of various strengths. In theory, the later models should be better than the preceding
+    ones, but we would like to check this ourselves. To do this, there is a tool,
+    play.py, that takes several model files and plays a tournament in which every
+    model plays a specified number of rounds with all the others. The results table,
+    with the number of wins achieved by every model, will represent the relative model’s
+    strength.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，每当当前最佳模型被训练好的模型替换时，都会保存模型的权重。因此，我们得到了多个强度不同的智能体。从理论上讲，后来的模型应该比前面的模型更好，但我们希望亲自验证这一点。为此，有一个工具
+    play.py，它接受多个模型文件，并进行锦标赛，每个模型与其他所有模型进行指定回合数的比赛。每个模型的获胜次数将代表该模型的相对强度。
+- en: Results
+  id: totrans-156
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果
+- en: To make the training fast, I intentionally set the hyperparameters of the training
+    process to small values. For example, at every step of the self-play process,
+    only 10 MCTSs were performed, each with a mini-batch size of eight. This, in combination
+    with efficient mini-batch MCTS and the fast game engine, made training very fast.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了加快训练速度，我故意将训练过程中的超参数设置为较小的值。例如，在自对弈的每一步中，只执行了10次MCTS，每次使用一个批量大小为8的小批次。这与高效的小批次MCTS和快速的游戏引擎相结合，使得训练非常迅速。
+- en: Basically, after just one hour of training and 2,500 games played in self-play
+    mode, the produced model was sophisticated enough to be enjoyable to play against.
+    Of course, the level of its play was well below even a child’s level, but it showed
+    some rudimentary strategies and made mistakes in only every other move, which
+    was good progress.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基本上，在仅仅进行了一小时的训练和2,500场自对弈比赛后，产生的模型已经足够复杂，可以让人享受对战的乐趣。当然，它的水平远低于一个孩子的水平，但它展现出一些基本的策略，而且每隔一回合才犯一次错误，这已经是很好的进步。
+- en: 'I’ve done two rounds of training, the first with a learning rate of 0.1 and
+    the second with a learning rate of 0.001\. Every experiment was trained for 10
+    hours and 40K game rounds. In Figure [20.3](#x1-378002r3), you can see charts
+    with the win ratio (win/loss for the current evaluated policy versus the current
+    best policy). As you can see, both learning rate values are oscillating around
+    0.5, sometimes spiking to 0.8-0.9:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我已经进行了两轮训练，第一次学习率为0.1，第二次学习率为0.001。每个实验训练了10小时，进行了40K场游戏。在图 [20.3](#x1-378002r3)
+    中，您可以看到关于胜率的图表（当前评估策略与当前最佳策略的胜负比）。如您所见，两个学习率值都在0.5附近波动，有时会激增到0.8-0.9：
+- en: '![PIC](img/B22150_20_03.png)'
+  id: totrans-160
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_20_03.png)'
+- en: 'Figure 20.3: The win ratio for training with two learning rates; learning rate=0.1
+    (left) and learning rate=0.001 (right)'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 20.3：使用两种学习率进行训练的胜率；学习率=0.1（左）和学习率=0.001（右）
+- en: Figure [20.4](#x1-378004r4) shows the total loss for both experiments, and there
+    is no clear trend. This is due to constant switches of the current best policy,
+    which leads to constant retraining of the trained model.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 [20.4](#x1-378004r4) 显示了两次实验的总损失情况，没有明显的趋势。这是由于当前最佳策略的不断切换，导致训练好的模型不断被重新训练。
+- en: '![PIC](img/B22150_20_04.png)'
+  id: totrans-163
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_20_04.png)'
+- en: 'Figure 20.4: The total loss for training with two learning rates; learning
+    rate=0.1 (left) and learning rate=0.001 (right)'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 20.4：使用两种学习率进行训练的总损失；学习率=0.1（左）和学习率=0.001（右）
+- en: 'The tournament verification was complicated by the number of different models,
+    as several games needed to be played by each pair to estimate their strength.
+    At the beginning, I ran 10 rounds for each model stored during every experiment
+    (separately). To do this, you can run the play.py utility like this:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锦标赛验证因模型种类繁多而变得复杂，因为每对模型需要进行若干场比赛以评估它们的强度。一开始，我为每个在每次实验中存储的模型运行了10轮（分别进行）。为此，您可以像这样运行
+    play.py 工具：
+- en: '[PRE20]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: But for 100 models, it will take a while, as every model plays 10 rounds with
+    all the other models.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是对于100个模型来说，可能需要一些时间，因为每个模型需要与其他所有模型进行10回合的比赛。
+- en: 'After all the testing, the utility prints on the console the result of all
+    the games and the leaderboard of models. The following is the top 10 for experiment
+    1 (learning rate=0.1):'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有测试结束后，该工具会在控制台上打印所有比赛的结果以及模型的排行榜。以下是实验1（学习率=0.1）的前10名：
+- en: '[PRE21]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Here’s the top 10 for experiment 2 (learning rate=0.001):'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是实验2（学习率=0.001）的前10名：
+- en: '[PRE22]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: To check that our training generates better models, I have plotted the win ratio
+    of the models versus their index in Figure [20.5](#x1-378027r5). The Y axis is
+    the relative win ratio and the X axis is the index (which is increased during
+    training). As you can see, the quality of models in each experiment is increased,
+    but experiments with smaller learning rates have more consistent behavior.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了检查我们的训练是否生成了更好的模型，我在图[20.5](#x1-378027r5)中绘制了模型的胜率与其索引的关系。Y轴是相对胜率，X轴是索引（训练过程中索引会增加）。如你所见，每个实验中的模型质量都在提高，但学习率较小的实验有更一致的表现。
+- en: '![PIC](img/B22150_20_05.png)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/B22150_20_05.png)'
+- en: 'Figure 20.5: Win ratio for best models during the training, learning rate=0.1
+    (left) and learning rate=0.001 (right)'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图20.5：训练过程中最佳模型的胜率，学习率=0.1（左）和学习率=0.001（右）
+- en: I haven’t done much hyperparameter tuning of the training, so they definitely
+    could be improved. You can try experimenting with this yourself.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我没有对训练做太多的超参数调优，所以它们肯定可以改进。你可以自己尝试实验一下。
+- en: 'It was also interesting to compare the results with different learning rates.
+    To do that, I’ve taken 10 best models for each experiment and run 10 rounds of
+    games. Here is the top 10 leaderboard for this tournament:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将结果与不同学习率进行比较也很有趣。为此，我选取了每个实验中的10个最佳模型，并进行了10轮比赛。以下是该比赛的前10名排行榜：
+- en: '[PRE23]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: As you can see, models trained with a learning rate of 0.001 are winning in
+    the joint tournament by a significant margin.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，使用学习率为 0.001 的模型在联合比赛中领先，优势明显。
+- en: MuZero
+  id: totrans-179
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MuZero
+- en: 'The successor of AlphaGo Zero (published in 2017) was a method called MuZero,
+    described by Schrittwieser et al. from DeepMind in the paper Mastering Atari,
+    Go, chess and shogi by planning with a learned model [[Sch+20](#)] published in
+    2020\. In this method, the authors made an attempt to generalize the method by
+    removing the requirement of the precise game model, but still keeping the method
+    in the model-based family. As we saw in the description of Alpha Go Zero, the
+    game model is heavily used during the training process: in the MCTS phase, we
+    use the game model to obtain the available actions in the current state and the
+    new state of the game after applying the action. In addition, the game model provides
+    the final game outcome: whether we have won or lost the game.'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AlphaGo Zero（2017年发布）的继任者是MuZero，这一方法由DeepMind的Schrittwieser等人在2020年发布的论文《通过学习的模型规划掌握Atari、围棋、国际象棋和将棋》[[Sch+20](#)]中描述。在该方法中，作者尝试通过去除对精确游戏模型的需求来泛化该方法，但仍将其保持在基于模型的范畴内。正如我们在AlphaGo
+    Zero的描述中所见，游戏模型在训练过程中被广泛使用：在MCTS阶段，我们使用游戏模型来获取当前状态下的可用动作以及应用该动作后的新游戏状态。此外，游戏模型还提供了最终的游戏结果：我们是赢了还是输了游戏。
+- en: At first glance, it looks almost impossible to get rid of the model from the
+    training process, but MuZero not only demonstrated how it could be done, but has
+    also beaten the previous AlphaGo Zero records in Go, chess, and shogi, and established
+    state-of-the-art results in 57 Atari games.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 乍一看，似乎几乎不可能从训练过程中去除模型，但MuZero不仅展示了如何做到这一点，而且还打破了先前AlphaGo Zero在围棋、国际象棋和将棋中的记录，并在57个Atari游戏中建立了最先进的成果。
+- en: In this part of the chapter, we’ll discuss the method in detail, implement it,
+    and compare it to AlphaGo Zero using Connect 4.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的这一部分，我们将详细讨论该方法，实现它，并与使用Connect 4的AlphaGo Zero进行比较。
+- en: High-level model
+  id: totrans-183
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 高级模型
+- en: First, let’s take a look at MuZero from a high level. As in AlphaGo Zero, the
+    core is MCTS, which is performed many times to calculate statistics about possible
+    future outcomes of the game state we currently have at the root of the tree. After
+    this search, we calculate visit counters, indicating how frequently the actions
+    have been executed.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们从高层次来看MuZero。与AlphaGo Zero一样，核心是MCTS，它会被多次执行，用于计算关于当前位于树根的游戏状态可能未来结果的统计数据。在这个搜索之后，我们计算访问计数器，指示动作执行的频率。
+- en: 'But instead of using the game model to answer the question “what state do I
+    get if I execute this action from this state?”, MuZero introduces two extra neural
+    networks:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但与其使用游戏模型来回答“如果我从这个状态执行这个动作，我会得到什么状态？”这个问题，MuZero引入了两个额外的神经网络：
+- en: 'representation h[𝜃](o) →s: To compute the hidden state of the game observation'
+  id: totrans-186
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 表示 h[𝜃](o) →s：计算游戏观察的隐藏状态
+- en: 'dynamics g[𝜃](s,a) →r,s′: To apply the action a to the hidden state s, transforming
+    it into the next state s′ (and obtaining the immediate reward r)'
+  id: totrans-187
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 动力学 g[𝜃](s,a) →r,s′：将动作 a 应用于隐藏状态 s，将其转化为下一个状态 s′（并获得即时奖励 r）
+- en: As you may remember, in AlphaGo Zero, only one network f[𝜃](s) →π,v was used,
+    which predicted the policy π and the value v of the current state s. MuZero uses
+    three networks for its operation, which are trained simultaneously. I’ll explain
+    how the training is done a bit later, but for now let’s focus on MCTS.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所记得，在AlphaGo Zero中，只使用了一个网络f[𝜃](s) →π,v，它预测了当前状态s的策略π和值v。MuZero的操作使用了三个网络，它们同时进行训练。我稍后会解释训练是如何进行的，但现在我们先集中讨论MCTS。
+- en: In Figure [20.6](#x1-380006r6), the MCTS process is shown schematically, indicating
+    the values we compute using our neural networks. As the first step, we compute
+    the hidden state s⁰ for the current game observation o using our representation
+    network h[𝜃].
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在图[20.6](#x1-380006r6)中，MCTS过程以示意图的方式展示，指明了我们使用神经网络计算的值。作为第一步，我们使用表示网络h[𝜃]，计算当前游戏观察o的隐藏状态s⁰。
+- en: Having the hidden state, we can use the network f[𝜃] to compute the policy π⁰
+    and values v⁰ of this state – quantities that indicate what action we should take
+    (π⁰) and the expected outcome of those actions (v⁰).
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 得到隐藏状态后，我们可以使用网络f[𝜃]来计算该状态的策略π⁰和值v⁰——这些量表示我们应该采取的动作（π⁰）以及这些动作的预期结果（v⁰）。
+- en: We use the policy and the value (with visit count statistics for the actions)
+    to compute the utility value for the action U(s,a) in a similar way to in AlphaGo
+    Zero. Then, the action with the maximum utility value is selected for the tree
+    descent. If it is the first time we select this action from this state node (in
+    other words, the node has not been expanded yet), we use the neural network g[𝜃](s⁰,a)
+    →r¹,s¹ to obtain immediate reward r¹ and the next hidden state s¹.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用策略和价值（结合动作的访问计数统计）来计算该动作的效用值U(s,a)，与AlphaGo Zero中的方法类似。然后，选择具有最大效用值的动作进行树的下降。如果这是我们第一次从此状态节点选择该动作（换句话说，该节点尚未展开），我们使用神经网络g[𝜃](s⁰,a)
+    →r¹,s¹来获得即时奖励r¹和下一个隐藏状态s¹。
+- en: '![×oshπfsgπfb0𝜃0𝜃1𝜃1𝜃s(,(s(,(seo)v0sv1r0)01)v,aat1io)n → or1,s1 ](img/B22150_20_06.png)'
+  id: totrans-192
+  prefs: []
+  type: TYPE_IMG
+  zh: '![×oshπfsgπfb0𝜃0𝜃1𝜃1𝜃s(,(s(,(seo)v0sv1r0)01)v,aat1io)n → or1,s1 ](img/B22150_20_06.png)'
+- en: 'Figure 20.6: Monte-Carlo Tree Search in MuZero'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图20.6：MuZero中的蒙特卡洛树搜索
+- en: This process is repeated over and over again hundreds of times, accumulating
+    visit counters for actions, expanding more and more nodes in the tree. In every
+    node expansion, the value of the node, obtained from f[𝜃], is added to all the
+    nodes along the search path until the tree’s root. In the AlphaGo Zero paper,
+    this process was called “backup,” while in the MuZero paper, the term “backpropagation”
+    was used. But essentially, the meaning is the same – adding value from the expanded
+    node to the root of the tree, altering the sign.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个过程会一遍又一遍地重复数百次，累积动作的访问计数器，不断扩展树中的节点。在每次节点扩展时，从f[𝜃]获得的节点值会被添加到沿着搜索路径的所有节点中，直到树的根部。在AlphaGo
+    Zero的论文中，这个过程被称为“备份”，而在MuZero的论文中则使用了“反向传播”这个术语。但本质上，含义是相同的——将扩展节点的值添加到树的根部，改变符号。
+- en: After some time (800 searches in the original MuZero method), the actions’ visit
+    counts are accurate enough (or we believe they are accurate enough) to be used
+    as an approximation of the policy for the action selection and for the training.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经过一段时间（在原始MuZero方法中是800次搜索），动作的访问次数已经足够准确（或者我们认为它们足够准确），可以用作选择动作和训练时策略的近似值。
+- en: Training process
+  id: totrans-196
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练过程
+- en: MCTS, as described above, is used for the single game state (at the root of
+    the tree). After all the search rounds, we select the action from this root state
+    based on the frequency of actions performed during the search. Then, the selected
+    action is executed in the environment and the next state and the reward are obtained.
+    After that, another MCTS is performed using the next state as the root of the
+    search tree.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如上所述，MCTS用于单一的游戏状态（位于树的根部）。在所有搜索轮次结束后，我们根据搜索过程中执行的动作频率，从该根状态中选择一个动作。然后，在环境中执行选定的动作，获得下一个状态和奖励。之后，使用下一个状态作为搜索树的根，执行另一个MCTS。
+- en: 'This process allows us to generate episodes. We’re storing them in the replay
+    buffer and using them for the training. To prepare the training batch, we sample
+    an episode from the replay buffer and randomly select an offset in the episode.
+    Then, starting from this position in the episode, we unroll the episode to the
+    fixed number of steps (in the MuZero paper, a five-step unroll was used). On every
+    step of unroll, the following data is accumulated:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个过程允许我们生成回合。我们将它们存储在回放缓存中并用于训练。为了准备训练批次，我们从回放缓存中抽取一个回合并随机选择回合中的偏移量。然后，从回合中的这个位置开始，我们展开回合直到固定的步数（在
+    MuZero 论文中，使用的是五步展开）。在展开的每个步骤中，以下数据会被累积：
+- en: Action frequencies from MCTS are used as policy targets (trained using cross-entropy
+    loss).
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从 MCTS 获取的动作频率作为策略目标（使用交叉熵损失训练）。
+- en: A discounted sum of rewards until the end of the episode is used as a value
+    target (trained with MSE loss).
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 到回合结束为止的折扣奖励和奖励总和被用作价值目标（使用均方误差损失训练）。
+- en: Immediate rewards are used as targets for the reward value predicted by the
+    dynamics network (also trained with MSE loss).
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 即时奖励被用作动态网络预测的奖励值的目标（同样使用均方误差损失进行训练）。
+- en: Besides that, we remember the action taken in every unroll step, which will
+    be used as input for the dynamics network, g[𝜃](s,a) →r,s′.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除此之外，我们记住在每个展开步骤中采取的动作，这将作为动态网络的输入，g[𝜃](s,a) →r,s′。
+- en: Once the batch is generated, we apply the representation network h[𝜃](o) to
+    the game observations (the first step of the unrolled episode’s segments). Then,
+    we repeat the unrolling by computing the policy π and the value v from the current
+    hidden state, compute their loss, and perform the dynamics network step to obtain
+    the next hidden state. This process is repeated for five steps (the length of
+    the unroll). Schrittwieser et al. used gradient scaling by a factor of 0.5 for
+    unrolled steps, but in my implementation, I just multiplied the loss with this
+    constant to get the same effect.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦批次生成，我们将表示网络 h[𝜃](o) 应用到游戏观察值（展开回合的第一个步骤）。然后，我们通过计算当前隐藏状态下的策略 π 和价值 v 来重复展开过程，计算它们的损失，并执行动态网络步骤以获得下一个隐藏状态。这个过程会重复五步（展开的长度）。Schrittwieser
+    等人通过将梯度按 0.5 的比例缩放来处理展开的步骤，但在我的实现中，我只是将损失乘以这个常数来获得相同的效果。
+- en: Connect 4 with MuZero
+  id: totrans-204
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 MuZero 的 Connect 4
+- en: 'Now that we have discussed the method, let’s check its implementation and the
+    results in Connect 4\. The implementaton consists of several modules:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经讨论了方法，接下来让我们查看其在 Connect 4 中的实现及结果。实现由几个模块组成：
+- en: 'lib/muzero.py: Contains MCTS data structures and functions, neural networks,
+    and batch generation logic'
+  id: totrans-206
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: lib/muzero.py：包含 MCTS 数据结构和函数、神经网络和批次生成逻辑
+- en: 'train-mu.py: The training loop, implementing self-play for episode generation,
+    training, and periodic validation of the currently trained model versus the best
+    model (the same as the AlphaGo Zero method)'
+  id: totrans-207
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: train-mu.py：训练循环，实现自我对弈以生成回合，训练，并定期验证当前训练的模型与最佳模型的对比（与 AlphaGo Zero 方法相同）。
+- en: 'play-mu.py: Performs a series of games between the list of models to get their
+    rankings'
+  id: totrans-208
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: play-mu.py：执行一系列模型对战，以获得它们的排名
+- en: Hyperparameters and MCTS tree nodes
+  id: totrans-209
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 超参数和 MCTS 树节点
+- en: 'Most MuZero hyperparameters are put in a separate dataclass to simplify passing
+    them around the code:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大部分 MuZero 超参数被放入一个单独的数据类中，以简化在代码中传递它们：
+- en: '[PRE24]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: I’m not going to explain these parameters here. I will do that when we discuss
+    the relevant pieces of the code.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我不会在这里解释这些参数。我们在讨论相关代码片段时会进行解释。
+- en: MCTS for MuZero is implemented differently than the AlphaGo Zero implementation.
+    In our AlphaGo Zero implementation, every MCTS node had a unique identifier of
+    the game state, which was an integer. As a result, we kept the whole tree in several
+    dictionaries, mapping the game state to the node’s attributes, such as visit counters,
+    the states of the child nodes, and so on. Every time we saw the game state, we
+    simply updated those dictionaries.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MuZero 的 MCTS 实现与 AlphaGo Zero 的实现有所不同。在我们的 AlphaGo Zero 实现中，每个 MCTS 节点都有一个唯一的游戏状态标识符，这个标识符是一个整数。因此，我们将整个树保存在多个字典中，将游戏状态映射到节点的属性，比如访问计数器、子节点的状态等等。每次看到游戏状态时，我们只需更新这些字典。
+- en: 'However, in MuZero, every MCTS node is now identified by a hidden state, which
+    is a list of floats (since the hidden state is produced by the neural network).
+    As a result, we cannot compare two hidden states to check whether they are the
+    same or not. To get around this, we’re now storing the tree “properly” – as nodes
+    referencing child nodes, which is less efficient from a memory point of view.
+    The following is the core MCTS data structure: an object representing a tree node.
+    For the constructor, we just create an empty unexpanded node:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在MuZero中，每个MCTS节点现在由一个隐藏状态标识，该隐藏状态是一个浮点数列表（因为隐藏状态是由神经网络生成的）。因此，我们无法直接比较两个隐藏状态以检查它们是否相同。为了解决这个问题，我们现在以“正确”的方式存储树——作为引用子节点的节点，这从内存的角度来看效率较低。以下是核心MCTS数据结构：表示树节点的对象。对于构造函数，我们只需创建一个空的未展开节点：
+- en: '[PRE25]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'The expansion of the node is implemented in the expand_node method, which will
+    be shown later, after introducing the models. For now, the node is expanded if
+    it has child nodes (actions) and has a hidden state, policy, and value calculated
+    using NNs. The value of the node is computed as the sum of all the values from
+    the children divided by the number of visits:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点的扩展在expand_node方法中实现，这将在介绍模型之后展示。现在，如果节点有子节点（动作），并且通过神经网络计算出了隐藏状态、策略和价值，则节点会被扩展。节点的价值是通过将所有子节点的价值求和并除以访问次数得到的：
+- en: '[PRE26]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'The select_child method performs the action selection during the MCTS search.
+    This is done by selecting the child with the largest value returned by the ucb_value
+    function, which will be shown shortly:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: select_child方法在MCTS搜索过程中执行动作选择。这个选择通过选择由ucb_value函数返回的最大值对应的子节点来完成，这个函数将在稍后展示：
+- en: '[PRE27]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'The ucb_value method implements the Upper Confidence Bound (UCB) calculation
+    for the node, and it is very similar to the formula we discussed for AlphaGo Zero.
+    The UCB is calculated from the node’s value and the prior multiplied by a coefficient:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ucb_value方法实现了节点的上置信界（UCB）计算，它与我们为AlphaGo Zero讨论的公式非常相似。UCB是从节点的价值和先验乘以一个系数计算得到的：
+- en: '[PRE28]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Another method of the MCTSNode class is get_act_probs(), which returns approximated
+    probabilities from visit counters. Those probabilities are used as targets for
+    the policy network training. This method has a special “temperature coefficient”
+    that allows us to vary the entropy in different stages of training: if the temperature
+    is close to zero, we assign a higher probability to the action with the highest
+    number of visits. If the temperature is high, the distribution becomes more uniform:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MCTSNode类的另一个方法是get_act_probs()，它返回从访问计数器获得的近似概率。这些概率作为策略网络训练的目标。这个方法有一个特殊的“温度系数”，允许我们在训练的不同阶段调整熵：如果温度接近零，我们会将较高的概率分配给访问次数最多的动作。如果温度较高，分布会变得更加均匀：
+- en: '[PRE29]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'The last method of MCTSNode is select_action(), which uses the get_act_probs()
+    method to select the action, handling several corner cases as follows:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MCTSNode的最后一个方法是select_action()，它使用get_act_probs()方法来选择动作，并处理以下几种特殊情况：
+- en: If we have no children in the node, the action is done randomly
+  id: totrans-225
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果节点中没有子节点，则动作是随机执行的
+- en: If the temperature coefficient is too small, we take the action with the largest
+    visit count
+  id: totrans-226
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果温度系数太小，我们选择访问次数最多的动作
+- en: Otherwise, we use get_act_probs() to get the probabilities for every action
+    based on the temperature coefficient and select the action based on those probabilities
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 否则，我们使用get_act_probs()根据温度系数获取每个动作的概率，并根据这些概率选择动作
+- en: '[PRE30]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: The preceding code might look tricky and non-relevant, but it will fit together
+    when we discuss the MuZero models and the MCTS search procedure.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码可能看起来有点复杂且与当前内容无关，但当我们讨论MuZero模型和MCTS搜索过程时，它会变得更加清晰：
+- en: Models
+  id: totrans-230
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 模型
+- en: As we have mentioned, MuZero uses three NNs for various purposes. Let’s take
+    a look at them. You’ll find all the code in the GitHub repository in the lib/muzero.py
+    module.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们之前提到的，MuZero使用了三个神经网络（NN）用于不同的目的。让我们来看看它们。你可以在GitHub的lib/muzero.py模块中找到所有相关代码。
+- en: 'The first model is the representation model, h[𝜃](o) →s, which maps game observations
+    into the hidden state. The observations are exactly the same as in the AlphaGo
+    Zero code – we have a tensor of size 2 × 6 × 7, where 6 × 7 is the board size
+    and two planes are the one-hot encoded position of the current player’s and the
+    opponent’s disks. The dimension of the hidden state is given by the HIDDEN_STATE_SIZE=64
+    hyperparameter:'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个模型是表示模型，h[𝜃](o) →s，它将游戏观测映射到隐藏状态。观测与AlphaGo Zero代码中的完全相同——我们有一个2 × 6 × 7大小的张量，其中6
+    × 7是棋盘的大小，两个平面分别是当前玩家和对手棋子的独热编码位置。隐藏状态的维度由超参数HIDDEN_STATE_SIZE=64给出：
+- en: '[PRE31]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: The structure of the network is almost the same as in the AlphaGo Zero example,
+    with the difference that it returns a hidden state vector instead of the policy
+    and values.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络的结构几乎与AlphaGo Zero示例中的相同，唯一的区别是它返回隐藏状态向量，而不是策略和价值。
+- en: 'As the network blocks are residual, special handling of every layer is required:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于网络块是残差的，每一层需要特殊处理：
+- en: '[PRE32]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'The second model is the prediction model, f[𝜃](s) →π,v, which takes the hidden
+    state and returns the policy and the value. In my example, I used two-layer heads
+    for the policy and the value:'
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个模型是预测模型，f[𝜃](s) →π,v，它接受隐藏状态并返回策略和值。在我的示例中，我为策略和值使用了两层头：
+- en: '[PRE33]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The third model we have is the dynamics model, g[𝜃](s,a) →r,s′, which takes
+    the hidden state and one-hot encoded actions and returns the immediate reward
+    and the next state:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的第三个模型是动态模型，g[𝜃](s,a) →r,s′，它接受隐藏状态和独热编码的动作，并返回即时奖励和下一个状态：
+- en: '[PRE34]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'For convenience, all three networks are kept in the MuZeroModels class, which
+    provides the required functionality:'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了方便起见，所有三个网络都保存在MuZeroModels类中，它提供了所需的功能：
+- en: '[PRE35]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: The class provides methods for syncing networks from the other instance. We
+    will use it to store the best model after validation.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该类提供了从其他实例同步网络的方法。我们将使用它来存储验证后的最佳模型。
+- en: 'In addition, there are two methods for storing and loading the networks’ weights:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，还有两个方法用于存储和加载网络的权重：
+- en: '[PRE36]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: Now that we’ve seen the models, we’re ready to get to the functions that implement
+    the MCTS logic and the gameplay loop.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经了解了模型，接下来就可以进入实现MCTS逻辑和游戏循环的函数。
+- en: MCTS search
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MCTS搜索
+- en: 'First, we have two functions doing similar tasks, but in different situations:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们有两个执行类似任务的函数，但在不同的情况下：
+- en: make_expanded_root() creates the MCTS tree root from the given game state. For
+    the root, we have no parent node, so we don’t need to apply the dynamic NN; instead,
+    we obtain the node hidden state from the encoded game observation with the representation
+    network.
+  id: totrans-249
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: make_expanded_root()从给定的游戏状态创建MCTS树的根节点。对于根节点，我们没有父节点，因此不需要应用动态神经网络；相反，我们通过表示网络从编码的游戏观测中获取节点的隐藏状态。
+- en: expand_node() expands the non-root MCTS node. In this case, we perform the dynamics
+    step using the NN to take the parent’s hidden state and generate the hidden state
+    for the child node.
+  id: totrans-250
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: expand_node()扩展非根MCTS节点。在这种情况下，我们使用神经网络通过父节点的隐藏状态生成子节点的隐藏状态。
+- en: 'At the beginning of the first function, we create a new MCTSNode, decode the
+    game state into a list representation, and convert it into a tensor. Then, the
+    representation network is used to obtain the node’s hidden state:'
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第一个函数的开始，我们创建一个新的MCTSNode，将游戏状态解码为列表表示，并将其转换为张量。然后，使用表示网络获取节点的隐藏状态：
+- en: '[PRE37]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Using the hidden state, we get the policy and the value of the node and convert
+    the policy logits into probabilities, after which some random noise is added to
+    increase exploration:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用隐藏状态，我们获得节点的策略和价值，并将策略的对数值转化为概率，然后添加一些随机噪声以增加探索性：
+- en: '[PRE38]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'As we’ve got probabilities, we create child nodes and backpropagate the value
+    of the node. The backpropagate() method will be discussed a bit later; it adds
+    the node value along the search path. For the root node, our search path has only
+    the root, so it will be just one step (in the next method, expand_node(), the
+    path could be much longer):'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们得到了概率，我们创建了子节点并反向传播节点的价值。反向传播（backpropagate()）方法稍后会进行讨论；它会沿着搜索路径增加节点的价值。对于根节点，我们的搜索路径只有根节点，所以只有一步（在下一个方法expand_node()中，路径可能会更长）：
+- en: '[PRE39]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'The expand_node() method is similar, but is used for non-root nodes, so it
+    performs the dynamics step using the parent’s hidden state:'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: expand_node()方法类似，但用于非根节点，因此它使用父节点的隐藏状态执行动态步骤：
+- en: '[PRE40]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'The rest of the logic is the same, with the exception that noise is not added
+    to the non-root nodes:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其余的逻辑相同，唯一不同的是非根节点没有添加噪声：
+- en: '[PRE41]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'The backpropagate() function is used to add discounted values to the nodes
+    along the search path. The signs of the values are changed at every level to indicate
+    that player’s turn is changing. So, a positive value for us means a negative value
+    for the opponent and vice versa:'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`backpropagate()`函数用于将折扣值添加到搜索路径上的节点。每个级别的值符号会发生变化，以表明玩家的回合正在变化。所以，我们的正值意味着对手的负值，反之亦然：'
+- en: '[PRE42]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: The instance of the MinMaxStats class is used to keep the minimal and maximal
+    value for the tree during the search. Then, those extremes are used to normalize
+    the resulting values.
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MinMaxStats`类的实例用于在搜索过程中保存树的最小值和最大值。然后，这些极值被用来规范化结果值。'
+- en: 'With all those functions, let’s now look at the logic of actual MCTS search.
+    At first, we create a root node, then perform several search rounds. In every
+    round, we traverse the tree by following the UCB value function. When we find
+    a node that is not expanded, we expand it and backpropagate the value to the root
+    of the tree:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这些函数，让我们现在来看一下实际的MCTS搜索逻辑。首先，我们创建一个根节点，然后执行几轮搜索。在每一轮中，我们通过跟随UCB值函数来遍历树。当我们找到一个未展开的节点时，我们展开它，并将值回传到树的根节点。
+- en: '[PRE43]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: As you can see, this implementation uses NNs without processing nodes in batches.
+    The problem with the MuZero MCTS process is that the search process is deterministic
+    and driven by nodes’ values (which are updated when a node is expanded) and visit
+    counters. As a result, batching has no effect because repeating the search without
+    expanding the node will lead to the same path in the tree, so expansions have
+    to be done one by one. This is a very inefficient way of using NNs, which negatively
+    impacts the overall performance. Here, my intention was not to implement the most
+    efficient possible version of MuZero, but rather to demonstrate a working prototype
+    for you, so I did no optimization. As an exercise, you can change the implementation
+    to perform MCTS searches in parallel from several processes. As an alternative
+    (or in addition), you could add noise during the MCTS search and use batching
+    similarly to when we discussed AlphaGo Zero.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，这个实现使用了神经网络，但没有对节点进行批处理。MuZero的MCTS过程的问题在于搜索过程是确定性的，并且由节点的值（当节点被展开时更新）和访问计数器驱动。因此，批处理没有效果，因为如果不展开节点，重复搜索将导致树中的相同路径，因此必须一个个地展开。这是使用神经网络的一个非常低效的方式，负面地影响了整体性能。在这里，我的目的不是实现MuZero的最优版本，而是为你展示一个可行的原型，所以我没有进行优化。作为一个练习，你可以修改实现，使得多个进程并行进行MCTS搜索。作为另一种选择（或者附加功能），你可以在MCTS搜索过程中添加噪声，并像我们讨论AlphaGo
+    Zero时那样使用批处理。
+- en: Training data and gameplay
+  id: totrans-267
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练数据和游戏过程
+- en: 'To store the data for training, we have the Episode class, which keeps the
+    sequence of EpisodeStep objects with additional information:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了存储训练数据，我们有一个`Episode`类，它保存一系列`EpisodeStep`对象，并附带额外的信息：
+- en: '[PRE44]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Now, let’s take a look at the play_game() function, which uses MCTS search
+    several times to play the full episode. At the beginning of the function, we create
+    the game state and the required objects:'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们来看一下`play_game()`函数，它使用MCTS搜索多次来玩完整的一局游戏。在函数的开始部分，我们创建游戏状态和所需的对象：
+- en: '[PRE45]'
+  id: totrans-271
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'At the beginning of the game loop, we check if the game is a draw and then
+    run the MCTS search to accumulate statistics. After that, we select an action
+    using random sampling from the actions’ frequencies (not UCB values):'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在游戏循环的开始，我们检查游戏是否平局，然后运行MCTS搜索以积累统计数据。之后，我们使用从动作频率（而不是UCB值）中随机采样来选择一个动作：
+- en: '[PRE46]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Once the action has been selected, we perform a move in our game environment
+    and check for win/lose situations. Then, the process is repeated:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦选择了动作，我们就会在游戏环境中执行一个动作，并检查是否有胜负情况。然后，过程会重复：
+- en: '[PRE47]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: Finally, we have the method that samples the batch of training data from the
+    replay buffer (which is a list of Episode objects). If you remember, the training
+    data is created by unrolling from a random position in a random episode. This
+    is needed to apply the dynamics network and optimize it with actual data. So,
+    our batch is not a tensor, but a list of tensors, where every tensor is a step
+    in the unroll process.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们有一个方法从回放缓冲区中抽取一批训练数据（回放缓冲区是一个`Episode`对象的列表）。如果你记得，训练数据是通过从一个随机位置开始展开随机回合来创建的。这是为了应用动态网络并用实际数据优化它。因此，我们的批量数据不是一个张量，而是一个张量的列表，每个张量都是展开过程中一个步骤的表示。
+- en: 'In preparation for the batch sampling, we create empty lists of the required
+    size:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了准备批量采样，我们创建了所需大小的空列表：
+- en: '[PRE48]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'Then we sample a random episode and select an offset in this episode:'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们随机抽取一个回合，并在这个回合中选择一个偏移位置：
+- en: '[PRE49]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'After that, the unroll for a specific number of steps (five, as in the paper)
+    is performed. At every step, we remember the action, the immediate reward, and
+    the actions’ probabilities. After that, we compute the value target by summing
+    the discounted rewards until the end of the episode:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，我们会展开一个特定步数（本文中为五步）。在每一步，我们记住动作、即时奖励和动作的概率。之后，我们通过对直到回合结束的折扣奖励求和来计算值目标：
+- en: '[PRE50]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'With this preparation data aggregated, we convert it into tensors. Actions
+    are one-hot encoded using the eye() NumPy function with indexing:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在数据准备好后，我们将其转换为张量。动作使用eye() NumPy函数和索引进行独热编码：
+- en: '[PRE51]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'I’m not going to show the full training loop here; we perform the self-play
+    with the current best model to populate the replay buffer. The full training code
+    is in the train-mu.py module. The following code optimizes the network:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我这里不打算展示完整的训练循环；我们使用当前最佳模型进行自我对弈，以填充回放缓冲区。完整的训练代码在train-mu.py模块中。以下代码用于优化网络：
+- en: '[PRE52]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: MuZero results
+  id: totrans-287
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MuZero结果
+- en: 'I ran the training for 15 hours and it played 3,400 episodes (you see, the
+    training is not very fast). The policy and value losses are shown in Figure [20.7](#x1-387002r7)
+    . As often happens with self-play training, the charts have no obvious trend:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我进行了15小时的训练，进行了3400个回合（你看，训练速度并不快）。策略和价值损失如图[20.7](#x1-387002r7)所示。正如自我对弈训练中常见的那样，图表没有明显的趋势：
+- en: '![PIC](img/B22150_20_07.png)'
+  id: totrans-289
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_20_07.png)'
+- en: 'Figure 20.7: Policy (left) and value (right) losses for the MuZero training'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图20.7：MuZero训练的策略（左）和值（右）损失
+- en: 'During the training, almost 200 current best models were stored, which I checked
+    in tournament mode using the play-mu.py script. Here are the top 10 models:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，存储了近200个当前最好的模型，我通过使用play-mu.py脚本在比赛模式下进行检查。以下是前10个模型：
+- en: '[PRE53]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: As you can see, the best models are models stored at the beginning of the training,
+    which might be an indication of bad convergence (as I haven’t tuned the hyperparameters
+    much).
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，最佳模型是训练初期存储的模型，这可能表明了收敛性不良（因为我并没有调节很多超参数）。
+- en: 'Figure [20.8](#x1-387013r8) shows the plot with the model’s winning ratio versus
+    the model index, and this plot correlates a lot with policy loss, which is understandable
+    because lower policy loss should lead to better gameplay:'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图[20.8](#x1-387013r8)展示了模型胜率与模型索引的关系图，这个图与策略损失有很大关联，这是可以理解的，因为较低的策略损失应当带来更好的游戏表现：
+- en: '![PIC](img/B22150_20_08.png)'
+  id: totrans-295
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](img/B22150_20_08.png)'
+- en: 'Figure 20.8: Winning ratio of the best models stored during the training'
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图20.8：训练过程中存储的最佳模型的胜率
+- en: MuZero and Atari
+  id: totrans-297
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MuZero与Atari
+- en: In our example, we used Connect 4, which is a two-player board game, but we
+    shouldn’t miss the fact that MuZero’s generalization (usage of hidden state) makes
+    it possible to apply it to more classical RL scenarios. In the paper by Schrittwieser
+    et al. [[Sch+20](#)], the authors successfully applied the method to 57 Atari
+    games. Of course, the method requires tuning and adaptation to such scenarios,
+    but the core is the same. This has been left as an exercise for you to try by
+    yourself.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的示例中，我们使用了“连接4”这款两人棋盘游戏，但我们不应忽视MuZero的泛化能力（使用隐藏状态），使得它能够应用于更经典的强化学习场景。在Schrittwieser等人[[Sch+20](#)]的论文中，作者成功地将这一方法应用于57款Atari游戏。当然，这个方法需要针对这些场景进行调优和适配，但核心思想是相同的。这部分留给你作为练习，自己尝试。
+- en: Summary
+  id: totrans-299
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we implemented the AlphaGo Zero and MuZero model-based methods,
+    which were created by DeepMind to solve board games. The primary point of this
+    method is to allow agents to improve their strength via self-play, without any
+    prior knowledge from human games or other data sources. This family of methods
+    has real-world applications in several domains, such as healthcare (protein folding),
+    finance, and energy management. In the next chapter, we will discuss another direction
+    of practical RL: discrete optimization problems, which play an important role
+    in various real-life problems, from schedule optimization to protein folding.'
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章节中，我们实现了由DeepMind创建的AlphaGo Zero和MuZero基于模型的方法，这些方法旨在解决棋类游戏。该方法的核心思想是通过自我对弈来提升智能体的实力，而无需依赖于人类游戏或其他数据源的先验知识。这类方法在多个领域具有实际应用，如医疗（蛋白质折叠）、金融和能源管理。在下一章中，我们将讨论另一种实际RL方向：离散优化问题，它在各种现实问题中发挥着重要作用，从调度优化到蛋白质折叠。
+- en: Join our community on Discord
+  id: totrans-301
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 加入我们的Discord社区
+- en: Read this book alongside other users, Deep Learning experts, and the author
+    himself. Ask questions, provide solutions to other readers, chat with the author
+    via Ask Me Anything sessions, and much more. Scan the QR code or visit the link
+    to join the community. [https://packt.link/rl](https://packt.link/rl)
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其他用户、深度学习专家以及作者本人一起阅读本书。提出问题，为其他读者提供解决方案，通过“问我任何问题”环节与作者互动，还有更多内容。扫描二维码或访问链接加入社区。[https://packt.link/rl](https://packt.link/rl)
+- en: '![PIC](img/file1.png)'
+  id: totrans-303
+  prefs: []
+  type: TYPE_IMG
+  zh: '![PIC](img/file1.png)'

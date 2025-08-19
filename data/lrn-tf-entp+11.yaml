@@ -1,0 +1,3442 @@
+- en: 'Chapter 7:'
+  id: totrans-0
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第七章：
+- en: Model Optimization
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 模型优化
+- en: In this chapter, we will learn about the concept of model optimization through
+    a technique known as quantization. This is important because even though capacity,
+    such as compute and memory, are less of an issue in a cloud environment, latency
+    and throughput are always a factor in the quality and quantity of the model's
+    output. Therefore, model optimization to reduce latency and maximize throughput
+    can help reduce the compute cost. In the edge environment, many of the constraints
+    are related to resources such as memory, compute, power consumption, and bandwidth.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将通过量化技术了解模型优化的概念。这一点很重要，因为即使在云环境中，计算和内存等容量问题不那么突出，但延迟和吞吐量始终是影响模型输出质量和数量的因素。因此，优化模型以减少延迟和最大化吞吐量有助于降低计算成本。在边缘环境中，许多约束与内存、计算、电力消耗和带宽等资源相关。
+- en: 'In this chapter, you will learn how to make your model as lean and mean as
+    possible, with acceptable or negligible changes in the model''s accuracy. In other
+    words, we will reduce the model size so that we can have the model running on
+    less power and fewer compute resources without overly impacting its performance.
+    In this chapter, we are going to take a look at recent advances and a method available
+    for TensorFlow: TFLite Quantization.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，你将学习如何使你的模型尽可能精简且高效，同时确保模型精度的变化在可接受范围内。换句话说，我们将减少模型的大小，以便让模型在更少的电力和计算资源下运行，而不会对其性能产生过大影响。在本章中，我们将探讨最近的进展和一种适用于TensorFlow的方法：TFLite量化。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论以下主题：
+- en: Understanding the quantization concept
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解量化概念
+- en: Preparing a full original model for scoring
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为评分准备完整的原始模型
+- en: Converting a full model to a reduced float16 model
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将完整模型转换为减少的float16模型
+- en: Converting a full model to a reduced hybrid quantization model
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将完整模型转换为减少的混合量化模型
+- en: Converting a full model to an integer quantization model
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将完整模型转换为整数量化模型
+- en: Technical requirements
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: You will find all the source code in [https://github.com/PacktPublishing/learn-tensorflow-enterprise.git](https://github.com/PacktPublishing/learn-tensorflow-enterprise.git).
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在[https://github.com/PacktPublishing/learn-tensorflow-enterprise.git](https://github.com/PacktPublishing/learn-tensorflow-enterprise.git)找到所有源代码。
+- en: 'You may clone it with a `git` command in your command terminal:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在命令终端使用`git`命令克隆它：
+- en: '[PRE0]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: All the resources for this chapter are available in the `chapter_07` folder
+    in the GitHub link for the book.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的所有资源都可以在GitHub链接中的`chapter_07`文件夹中找到。
+- en: Understanding the quantization concept
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 理解量化概念
+- en: Quantization is a technique whereby the model size is reduced and its efficiency
+    therefore improved. This technique is helpful in building models for mobile or
+    edge deployment, where compute resources or power supply are constrained. Since
+    our aim is to make the model run as efficiently as possible, we are also accepting
+    the fact that the model has to become smaller and therefore less precise than
+    the original model. This means that we are transforming the model into a lighter
+    version of its original self, and that the transformed model is an approximation
+    of the original one.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 量化是一种将模型大小减小并因此提高其效率的技术。这项技术对于构建适用于移动设备或边缘部署的模型非常有用，因为这些场景下计算资源或电源供应是有限的。由于我们的目标是使模型尽可能高效运行，我们也接受这样一个事实：模型必须变得更小，因此精度也会比原始模型低。这意味着我们正在将模型转化为其原始版本的轻量化形式，而转化后的模型是原始模型的近似值。
+- en: 'Quantization may be applied to a trained model. This is known as a post-training
+    quantization API. Within this type of quantization, there are three approaches:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 量化可以应用于已训练的模型。这称为后训练量化API。在这种类型的量化中，有三种方法：
+- en: '`float 32 bits` ops to `float 16` ops.'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将`float 32位`操作转换为`float 16`操作。
+- en: '`8 bits`, while keeping biases and activation as `32 bits` ops.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`8位`，同时保持偏差和激活为`32位`操作。'
+- en: '`8 bits`, while biases and activations may be `8` or `16 bits`.'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`8位`，而偏差和激活可能是`8`或`16位`。'
+- en: The preceding approaches are applicable to a TensorFlow model that was built
+    and trained using traditional means. Another approach is to train the model while
+    performing optimization. This is known as **quantization-aware training**, in
+    which we apply the API to emulate the quantization operations during the forward
+    pass of the deep learning training.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述方法适用于使用传统手段构建和训练的TensorFlow模型。另一种方法是在执行优化的同时训练模型。这被称为**量化感知训练**，在此过程中，我们应用API来模拟在深度学习训练的前向传播阶段进行的量化操作。
+- en: 'The result model contains quantized values. This is relatively new and only
+    an integer quantization API is available. Quantization-aware training currently
+    only works for custom built models, not models from TensorFlow Hub, which are
+    pre-trained. If you wish to use a quantized version of those famous pre-trained
+    models, you can find these models here: [https://www.tensorflow.org/lite/guide/hosted_models](https://www.tensorflow.org/lite/guide/hosted_models).'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果模型包含量化值。这是相对较新的，且目前只有整数量化API可用。量化感知训练目前只适用于自定义构建的模型，而不适用于来自TensorFlow Hub的模型（这些模型是预训练的）。如果你希望使用这些著名的预训练模型的量化版本，可以在此处找到这些模型：[https://www.tensorflow.org/lite/guide/hosted_models](https://www.tensorflow.org/lite/guide/hosted_models)。
+- en: Training a baseline model
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练基准模型
+- en: 'Let''s begin start by training an image classification model with five classes
+    of flowers. We will leverage a pre-trained ResNet feature vector hosted in TensorFlow
+    Hub ([https://tfhub.dev/google/imagenet/resnet_v2_50/feature_vector/4](https://tfhub.dev/google/imagenet/resnet_v2_50/feature_vector/4))
+    and you can download the flower images in TFRecord format from here: [https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/1ECTVN](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/1ECTVN).'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始训练一个包含五类花卉的图像分类模型。我们将利用TensorFlow Hub上托管的预训练ResNet特征向量（[https://tfhub.dev/google/imagenet/resnet_v2_50/feature_vector/4](https://tfhub.dev/google/imagenet/resnet_v2_50/feature_vector/4)），你可以从这里下载TFRecord格式的花卉图像：[https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/1ECTVN](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/1ECTVN)。
+- en: Alternatively, if you cloned the repository for this book, the source code and
+    TFRecord dataset for training a baseline model can be found at [https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model).
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果你克隆了本书的代码库，训练基准模型的源代码和TFRecord数据集可以在[https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model)找到。
+- en: 'The following is a training script `default_trainer.py` file that trains this
+    model with the TFRecord dataset:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一个训练脚本`default_trainer.py`文件，用于使用TFRecord数据集训练此模型：
+- en: 'We start this training script with an `import` statement for all the libraries
+    we will require:'
+  id: totrans-27
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们通过一个`import`语句开始这个训练脚本，导入我们所需的所有库：
+- en: '[PRE1]'
+  id: totrans-28
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: A `Absl` is a useful library. In this library, the `flags` API is used to define
+    user input. This is especially handy because we invoke this script through a user
+    command instead of running it as a notebook.
+  id: totrans-29
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`Absl`是一个有用的库。在这个库中，`flags` API用于定义用户输入。这特别方便，因为我们通过用户命令调用此脚本，而不是以笔记本的形式运行它。'
+- en: 'Equipped with a `flags` API in the `import` statement, we will define a short-hand
+    alias for `flags.FLAGS`, and then define a series of user inputs that we will
+    pass to the script. This is accomplished with the help of the `tf.compat.v1.flags`
+    API. Notice that we can define a data type for user inputs and provide a default
+    value so that users do not have to specify every input:'
+  id: totrans-30
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 配备了`flags` API的`import`语句后，我们将为`flags.FLAGS`定义一个简短的别名，并定义一系列我们将传递给脚本的用户输入。这是通过`tf.compat.v1.flags`
+    API实现的。请注意，我们可以为用户输入定义数据类型，并提供默认值，以便用户无需指定每个输入：
+- en: '[PRE2]'
+  id: totrans-31
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: There are a couple of user flags that are worthy of further explanation. The
+    `data-dir` flag defines the file path for training data. In this case, it is pointing
+    to a folder path, `tf_datasets/flower_photos`, from the current directory, `train_base_model`.
+    The other user flag is `cache_dir`. This is the path to our downloaded ResNet
+    feature vector model. While we can access the TensorFlow Hub directly through
+    the internet, there are occasions where connectivity may be an issue. Therefore,
+    downloading the model and putting it in a local environment is a good idea.
+  id: totrans-32
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 有一些用户标志值得进一步解释。`data-dir`标志定义了训练数据的文件路径。在这种情况下，它指向当前目录`train_base_model`下的文件夹路径`tf_datasets/flower_photos`。另一个用户标志是`cache_dir`，它是我们下载的ResNet特征向量模型的路径。尽管我们可以通过互联网直接访问TensorFlow
+    Hub，但在某些情况下，网络连接可能会出现问题。因此，下载模型并将其放在本地环境中是个不错的选择。
+- en: 'We may wrap the model architecture and compilation in the following function:'
+  id: totrans-33
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可能会在以下函数中封装模型架构和编译过程：
+- en: '[PRE3]'
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This function is responsible for building the model and compiling it with proper
+    `optimizer` and `loss` functions. It returns a model object for training.
+  id: totrans-35
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这个函数负责构建模型并使用合适的`optimizer`和`loss`函数进行编译。它返回一个用于训练的模型对象。
+- en: 'As for the image data''s input pipeline, the pipeline needs to handle data
+    parsing. This is accomplished with the following function:'
+  id: totrans-36
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 至于图像数据的输入管道，这个管道需要处理数据解析。可以通过以下函数来实现：
+- en: '[PRE4]'
+  id: totrans-37
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: As the function's name suggests, this function takes a sample that is stored
+    in TFRecord. It is parsed with a feature description and the sample image (which
+    is a `byte string`) decoded as a JPEG image. As for the image label, the function
+    also parses the label name (`image`/`class`/`text`) and converts it into a one-hot
+    vector. The jpeg image is resized to `224` by `224`. As a result, this function
+    returns a tuple. This tuple consists of one resized image and its label.
+  id: totrans-38
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 正如函数名所示，这个函数接收一个存储在TFRecord中的样本。它通过特征描述解析，并且样本图像（这是一个`byte string`）会解码为JPEG图像。至于图像标签，函数也会解析标签名称（`image`/`class`/`text`），并将其转换为独热向量。JPEG图像会被调整为`224`
+    x `224`的大小。因此，这个函数返回一个元组。该元组包含一个调整大小后的图像及其标签。
+- en: 'We also need to normalize the image pixel value to a range of [0, 1.0]. This
+    is done through the following function:'
+  id: totrans-39
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还需要将图像像素值归一化到[0, 1.0]的范围内。可以通过以下函数来实现：
+- en: '[PRE5]'
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: In the `normalize` function, a JPEG image, represented as a NumPy array, is
+    normalized to a range of `[0, 1.0]`. At the same time, although we are not doing
+    anything with the label, it is a good idea to pass the label along with the image
+    and return them as a tuple so that you keep track of the image and label together.
+  id: totrans-41
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在`normalize`函数中，一个表示为NumPy数组的JPEG图像会被归一化到`[0, 1.0]`的范围。同时，尽管我们没有对标签做任何处理，但最好将标签与图像一起传递，并将它们作为元组返回，以便你能够将图像和标签一起追踪。
+- en: 'Then we apply shuffle and batch ops to the training data in the following function:'
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们在以下函数中对训练数据应用洗牌和批处理操作：
+- en: '[PRE6]'
+  id: totrans-43
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: This function returns a dataset with shuffle, repeat, batch, and prefetch ops
+    attached. This is a standard approach for getting the dataset ready for training.
+  id: totrans-44
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这个函数返回一个附带了洗牌、重复、批处理和预取操作的数据集。这是为训练准备数据集的标准方法。
+- en: 'Now we come to the main driver of this code:'
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们来到了这段代码的主要驱动部分：
+- en: '[PRE7]'
+  id: totrans-46
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: In this section of the `main()` function, we provide the logic for a distributed
+    training strategy.
+  id: totrans-47
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在`main()`函数的这一部分，我们提供了分布式训练策略的逻辑。
+- en: 'Continuing with `main()`, the data paths are identified and handled by the
+    `tf.data` API:'
+  id: totrans-48
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接着在`main()`中，数据路径通过`tf.data` API进行识别和处理：
+- en: '[PRE8]'
+  id: totrans-49
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: With the preceding code, all three data sources – training, validation, and
+    testing – are identified and referenced. Recall that the wildcard symbol, `*`,
+    in the filename pattern helps this pipeline to be scalable. It doesn't matter
+    how many TFRecord data parts you have; this pipeline can handle it.
+  id: totrans-50
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，所有三个数据源——训练、验证和测试——都被标识并引用。回想一下，文件名模式中的通配符符号`*`帮助这个管道具有可扩展性。无论你有多少个TFRecord数据部分，这个管道都能处理。
+- en: 'Continuing with `main()`, now we need to apply feature engineering and normalization
+    functions to every sample in the training and validation datasets. This is done
+    through the `map` function:'
+  id: totrans-51
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续在`main()`函数中，现在我们需要对训练和验证数据集中的每个样本应用特征工程和归一化函数。通过`map`函数来完成：
+- en: '[PRE9]'
+  id: totrans-52
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Training and validation datasets are batched according to the respective user
+    flags. If none are given, default values are used.
+  id: totrans-53
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 根据相应的用户标志，训练和验证数据集会被批处理。如果没有给定标志，则使用默认值。
+- en: 'Now we need to set up some parameters for training and validation:'
+  id: totrans-54
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们需要为训练和验证设置一些参数：
+- en: '[PRE10]'
+  id: totrans-55
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: In the preceding code, we set the number of classes and image size in variables
+    to be passed into the model training process. Then we determine the number of
+    steps for each epoch of training and cross-validation.
+  id: totrans-56
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们将类别数和图像大小设置为变量，并将其传递到模型训练过程中。然后我们确定每个训练周期和交叉验证的步骤数。
+- en: 'Continuing with `main()`, we can now create the model by invoking the `model_default`
+    function:'
+  id: totrans-57
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续使用`main()`，我们现在可以通过调用`model_default`函数来创建模型：
+- en: '[PRE11]'
+  id: totrans-58
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: In the preceding code, we invoke the `model_default` function to build and compile
+    our model. We also set up callbacks for the training checkpoint.
+  id: totrans-59
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们调用`model_default`函数来构建和编译我们的模型。我们还为训练检查点设置了回调。
+- en: 'Continuing with `main()`, we can now launch the training process:'
+  id: totrans-60
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续使用`main()`，我们现在可以启动训练过程：
+- en: '[PRE12]'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: In the preceding code, we pass the training and validation datasets into the
+    `fit` function. The number of epochs is determined by the user input. If none
+    is given, then the default value is used.
+  id: totrans-62
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们将训练集和验证集传递给`fit`函数。训练周期数由用户输入决定。如果没有提供，则使用默认值。
+- en: 'Continuing with `main()`, we may log output as `STDOUT` in the terminal where
+    this script is executed:'
+  id: totrans-63
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 继续使用`main()`，我们可以在执行此脚本的终端中将输出记录为`STDOUT`：
+- en: '[PRE13]'
+  id: totrans-64
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: In the preceding code, we also leverage a timestamp value to build a folder
+    name, where the models built each time may be saved according to the time of training
+    completion.
+  id: totrans-65
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们还利用了时间戳值来构建文件夹名称，其中每次构建的模型可能会根据训练完成的时间保存。
+- en: 'This concludes `main()`. The model is saved in `model_save_dir`. To invoke
+    this script, you simply have to run the following command in your Python environment:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这标志着`main()`的结束。模型保存在`model_save_dir`中。要调用此脚本，你只需在你的Python环境中运行以下命令：
+- en: '[PRE14]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '[PRE15]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[PRE18]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '[PRE19]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '[PRE20]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '[PRE21]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'From the directory where this script is stored, you will find a subfolder with
+    the prefix name `trained_resnet_vector`, followed by a date and time stamp such
+    as `20200910-213303`. This subfolder contains the saved model. We will use this
+    model as our baseline model. Once training is complete, you will find the saved
+    model in the following directory:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从存储此脚本的目录中，你会找到一个以`trained_resnet_vector`为前缀的子文件夹，后面跟着一个日期和时间戳，如`20200910-213303`。该子文件夹包含保存的模型。我们将使用此模型作为我们的基准模型。训练完成后，你会在以下目录中找到保存的模型：
+- en: '`trained_resnet_vector-20200910-213303/save_model/assets`'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`trained_resnet_vector-20200910-213303/save_model/assets`'
+- en: This saved model is in the same directory where `default_trainer.py` is stored.
+    Now that we have a trained TensorFlow model, in the next section, we are going
+    score our test data with the trained model.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个保存的模型与`default_trainer.py`文件存储在同一目录下。现在我们有了一个训练好的TensorFlow模型，在下一节中，我们将用训练好的模型对测试数据进行评分。
+- en: Preparing a full original model for scoring
+  id: totrans-78
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备一个完整的原始模型进行评分
+- en: After training for a full model is complete, we will use a `Scoring` Jupyter
+    notebook in this repository to demonstrate scoring with a full model. This notebook
+    can be found in [https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_07/train_base_model/Scoring.ipynb](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_07/train_base_model/Scoring.ipynb).
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成完整模型的训练后，我们将在本仓库中使用一个`Scoring` Jupyter笔记本演示如何使用完整模型进行评分。这个笔记本可以在[https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_07/train_base_model/Scoring.ipynb](https://github.com/PacktPublishing/learn-tensorflow-enterprise/blob/master/chapter_07/train_base_model/Scoring.ipynb)找到。
+- en: 'For the original model, it is stored in the `savedModel` Protobuf format. We
+    need to load it as follows:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于原始模型，它以`savedModel` Protobuf 格式存储。我们需要按照以下方式加载它：
+- en: '[PRE22]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '[PRE23]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '[PRE25]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: '[PRE27]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'The full model we just trained is now loaded in our Jupyter notebook''s runtime
+    as `trained_model`. For scoring, a few more steps are required. We have to find
+    the model signature for prediction:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们刚刚训练的完整模型现在已加载到Jupyter笔记本的运行时中，命名为`trained_model`。对于评分，还需要做一些额外的步骤。我们必须找到用于预测的模型签名：
+- en: '[PRE29]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: '[PRE30]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'It shows that there is only one signature in this list:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它显示此列表中只有一个签名：
+- en: '[PRE31]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'We will create an `infer` wrapper function and pass the signature into it:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将创建一个`infer`包装函数并将签名传递给它：
+- en: '[PRE32]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Here, `signature_list[0]` is equivalent to `serving_default`. Now let''s print
+    the output:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`signature_list[0]`等同于`serving_default`。现在让我们打印输出：
+- en: '[PRE33]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'Let''s take a look at the output of the preceding function:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看前面函数的输出：
+- en: '[PRE34]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: The output is a NumPy array of `shape=(None, 5)`. This array will hold the probability
+    of classes predicted by the model.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出是一个`shape=(None, 5)`的NumPy数组。这个数组将保存模型预测的类别概率。
+- en: Now let's work on the test data. The test data provided in this case is in TFRecord
+    format. We are going to convert it to a batch of images expressed as a NumPy array
+    in the dimensions of `[None, 224, 224, 3]`.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们处理测试数据。此处提供的测试数据是TFRecord格式。我们将其转换为形状为 `[None, 224, 224, 3]` 的NumPy数组形式的图像批次。
+- en: Preparing test data
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 准备测试数据
+- en: This part is very similar to what we saw in [*Chapter 6*](B16070_06_Final_JM_ePub.xhtml#_idTextAnchor177),
+    *Hyperparameter Tuning*, where we used TFRecord extensively as the input format
+    for model training. The TFRecord used here is available in [https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets/flower_photos](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets/flower_photos).
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这部分与我们在[*第6章*](B16070_06_Final_JM_ePub.xhtml#_idTextAnchor177)中看到的非常相似，*超参数调优*，在那时我们广泛使用TFRecord作为模型训练的输入格式。这里使用的TFRecord可以在[https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets/flower_photos](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets/flower_photos)找到。
+- en: Loading test data
+  id: totrans-103
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 加载测试数据
+- en: 'Let''s start by loading the TFRecord data:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从加载TFRecord数据开始：
+- en: '[PRE35]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'We will check the sample size of the image with the following code:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用以下代码检查图像的样本大小：
+- en: '[PRE40]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '[PRE42]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '[PRE43]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'Here is the output:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是输出结果：
+- en: '[PRE44]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: This shows that we have 50 samples in our test data.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这表明我们在测试数据中有50个样本。
+- en: 'There are `50` images in this test dataset. We will reuse the helper function
+    from [*Chapter 6*](B16070_06_Final_JM_ePub.xhtml#_idTextAnchor177), *Hyperparameter
+    Tuning*, to decode the TFRecord and the metadata within and then normalize the
+    pixel values:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个测试数据集中有 `50` 张图像。我们将重用来自[*第6章*](B16070_06_Final_JM_ePub.xhtml#_idTextAnchor177)的辅助函数，*超参数调优*，来解码TFRecord及其中的元数据，然后对像素值进行归一化处理：
+- en: '[PRE45]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '[PRE46]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: '[PRE48]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: '[PRE50]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '[PRE51]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '[PRE53]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '[PRE54]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '[PRE55]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: '[PRE56]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '[PRE57]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '[PRE58]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: '[PRE59]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '[PRE60]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '[PRE61]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '[PRE64]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[PRE65]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: '[PRE68]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '[PRE69]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: The `decode_and_resize` function parses an image, resizes it to `224` by `224`
+    pixels, and, at the same time, one-hot encodes the image's label. `decode_and_resize`
+    then returns the image and corresponding label as a tuple, so that the image and
+    label are always kept together.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`decode_and_resize` 函数解析图像，将其调整为 `224` x `224` 像素，同时对图像的标签进行一热编码。`decode_and_resize`
+    然后返回图像和对应标签作为一个元组，确保图像和标签始终一起处理。'
+- en: The `normalize` function divides the image pixel value by `255` in order to
+    bring the pixel range to `[0, 1.0]`. And even though nothing is done in relation
+    to the label, it is necessary to keep track of the image and label as a tuple
+    so that they are always kept together.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`normalize` 函数通过将图像像素值除以 `255`，将像素范围归一化到 `[0, 1.0]`。尽管标签本身没有做任何处理，但必须将图像和标签一起跟踪，确保它们始终一起存在。'
+- en: 'Now we may apply the preceding helper functions to decode, standardize, and
+    normalize images in the TFRecord dataset:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以应用前述的辅助函数来解码、标准化和归一化TFRecord数据集中的图像：
+- en: '[PRE71]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: '[PRE72]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'Notice that we introduced an additional dimension as the first dimension through
+    `np.expand_dims`. This extra dimension is intended for the variable batch size:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们通过 `np.expand_dims` 在第一个维度引入了一个额外的维度。这个额外的维度是为了变量批大小的需要：
+- en: '[PRE73]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '[PRE74]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: '[PRE75]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '[PRE76]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[PRE77]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '[PRE78]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: '[PRE79]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: '[PRE80]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: The test data is now in NumPy format with standardized dimensions, pixel values
+    between `0` and `1`, and is batched, as are the labels.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在测试数据已经是NumPy格式，具有标准化的维度，像素值在 `0` 到 `1` 之间，并且进行了批处理，标签也是如此。
+- en: 'We will now inspect these images. In order to do so, we may display the NumPy
+    array, `np_img_holder`, as images with the following code in Figure 7.1:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们现在将检查这些图像。为此，我们可以使用以下代码，在图7.1中将NumPy数组 `np_img_holder` 作为图像显示：
+- en: '[PRE81]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '[PRE84]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '[PRE86]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'In the preceding code snippet, we iterate through our image array and place
+    each image in one of the subplots. There are 50 images (10 rows, with each row
+    having five subplots), as can be seen in the following figure:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在之前的代码片段中，我们遍历图像数组，并将每张图像放置在子图中的一个位置。共有50张图像（10行，每行5个子图），如下图所示：
+- en: '![Figure 7.1 – 50 images within the test dataset of five flower classes'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.1 – 测试数据集中五种花卉类别的50张图像'
+- en: '](img/image0013.jpg)'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image0013.jpg)'
+- en: Figure 7.1 – 50 images within the test dataset of five flower classes
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.1 – 测试数据集中五种花卉类别的50张图像
+- en: Scoring a single image with a full model
+  id: totrans-171
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用完整模型评分单张图像
+- en: 'Let''s now take a look at the shape of the test data, and understand what it
+    takes to transform test data into the shape expected by the model:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们来看一下测试数据的形状，并理解将测试数据转换为模型所需的形状的过程：
+- en: 'We will first test our scoring routine with just a single image. Just like
+    how we created an image batch by adding a new dimension as the first dimension,
+    we will do the same to create an image batch with a sample size of `1`:'
+  id: totrans-173
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将首先使用一张图像测试我们的评分流程。就像我们通过在第一维添加一个新维度来创建图像批次一样，我们也将通过相同的方式创建一个样本大小为`1`的图像批次：
+- en: '[PRE87]'
+  id: totrans-174
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: 'Now the dimension is correct, which is a batch of one image. Let''s convert
+    this to a tensor with a type of `float32`:'
+  id: totrans-175
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在维度是正确的，这是一个包含一张图像的批次。我们将其转换为`float32`类型的张量：
+- en: '[PRE88]'
+  id: totrans-176
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: 'Then, pass this to the `infer` function for scoring:'
+  id: totrans-177
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后，将此传递给`infer`函数进行评分：
+- en: '[PRE89]'
+  id: totrans-178
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: You will recall that the last layer of our model is a dense layer named `custom_class`.
+    With five nodes, and softmax as the activation function in each node, we will
+    get the probability for each of the five classes.
+  id: totrans-179
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 你会记得，我们模型的最后一层是一个名为`custom_class`的全连接层，包含五个节点，并且每个节点的激活函数都是softmax，这样我们就可以得到五个类别的概率。
+- en: 'We will now inspect the content of the prediction:'
+  id: totrans-180
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将检查预测的内容：
+- en: '[PRE90]'
+  id: totrans-181
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: 'The output should appear similar to this:'
+  id: totrans-182
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出结果应类似于以下内容：
+- en: '[PRE91]'
+  id: totrans-183
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: These values in the array represent probability. Each position in the array
+    represents a class of flower type. As you can see, the highest probability is
+    in the very last position of the array; the index corresponding to this position
+    is `4`. We need to map `4` to the plaintext name.
+  id: totrans-184
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 数组中的这些值代表概率。数组中的每个位置代表一种花卉类型的类别。如你所见，最高的概率位于数组的最后一个位置；与这个位置对应的索引是`4`。我们需要将`4`映射到纯文本名称。
+- en: 'Now we will convert it to a NumPy array so that we may find the index where
+    the maximum probability is predicted:'
+  id: totrans-185
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在我们将其转换为NumPy数组，以便我们可以找到预测最大概率的位置：
+- en: '[PRE92]'
+  id: totrans-186
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'The fourth position index is where maximum probability is predicted. Now we
+    need to know what this represents by mapping this index to a label. We need to
+    create a reverse lookup dictionary to map probability back to the label. We just
+    found the index where the maximum probability is located. The next step is to
+    map `idx` to the correct flower type. In order to do this, we need to extract
+    this information from TFRecord:'
+  id: totrans-187
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第四个位置的索引是预测最大概率的位置。现在我们需要通过将此索引映射到标签来了解它代表的是什么。我们需要创建一个反向查找字典，将概率映射回标签。我们刚刚找到了最大概率所在的索引。接下来的步骤是将`idx`映射到正确的花卉类型。为此，我们需要从TFRecord中提取该信息：
+- en: '[PRE93]'
+  id: totrans-188
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: In the preceding code, we used the same feature description (`feature_description`)
+    to parse `test_all_ds`. Once it is parsed using `_parse_function`, we iterate
+    through the entire test dataset. The information we want is in `image/class/label`
+    and `image/class/text`.
+  id: totrans-189
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用了相同的特征描述符（`feature_description`）来解析`test_all_ds`。一旦通过`_parse_function`进行解析，我们遍历整个测试数据集。我们需要的信息位于`image/class/label`和`image/class/text`中。
+- en: 'We simply create a dictionary, where the key is `label_idx` and the value is
+    `label_str`. The result is `val_label_map`. If we inspect it as follows:'
+  id: totrans-190
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们简单地创建一个字典，其中键是`label_idx`，值是`label_str`。结果是`val_label_map`。如果我们按如下方式检查它：
+- en: '[PRE94]'
+  id: totrans-191
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: 'The output is as follows:'
+  id: totrans-192
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出结果如下：
+- en: '[PRE95]'
+  id: totrans-193
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: 'Then we evaluate `idx`:'
+  id: totrans-194
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后我们评估`idx`：
+- en: '[PRE96]'
+  id: totrans-195
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: 'Here is the output:'
+  id: totrans-196
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这是输出结果：
+- en: '[PRE97]'
+  id: totrans-197
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: This maps our image to the `tulip` class.
+  id: totrans-198
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将我们的图像映射到`tulip`类别。
+- en: Scoring batch images with a full model
+  id: totrans-199
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用完整模型对批量图像进行评分
+- en: 'In the previous section, we looked at how to score one image. Now we want to
+    score a batch of images. In our test data, there are 50 images:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们查看了如何对单张图像进行评分。现在我们想对一批图像进行评分。在我们的测试数据中，有50张图像：
+- en: 'In the previous section, we created the image batch in the proper shape of
+    `[50, 224, 224, 3]`. This is ready for scoring:'
+  id: totrans-201
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们创建了正确形状的图像批次，形状为`[50, 224, 224, 3]`。现在可以进行评分了：
+- en: '[PRE98]'
+  id: totrans-202
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: 'Let''s create a function that assists in looking up the label name when given
+    a NumPy array and a lookup dictionary:'
+  id: totrans-203
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 让我们创建一个函数，帮助在给定NumPy数组和查找字典时查找标签名称：
+- en: '[PRE99]'
+  id: totrans-204
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: This function takes a NumPy array, maps the position where the maximum value
+    exists, and then maps that position with a dictionary.
+  id: totrans-205
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该函数接受一个NumPy数组，映射出最大值的位置，然后通过字典将该位置映射到标签。
+- en: 'This is a list holding our ground truth labels as indicated by `np_lbl_holder`:'
+  id: totrans-206
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这是一个包含我们真实标签的列表，如`np_lbl_holder`所示：
+- en: '[PRE100]'
+  id: totrans-207
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: '`actual` holds the actual plaintext labels of all 50 test samples.'
+  id: totrans-208
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`actual`包含所有50个测试样本的真实标签（纯文本格式）。'
+- en: 'This is how we can get a list holding the predicted label:'
+  id: totrans-209
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这是我们如何获得包含预测标签的列表：
+- en: '[PRE101]'
+  id: totrans-210
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: '`predicted_label` holds the predictions for all 50 test samples in plaintext
+    because we leverage the `lookup` function to map the probability to the flower
+    type name.'
+  id: totrans-211
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`predicted_label`包含所有50个测试样本的预测结果，以纯文本形式存储，因为我们利用`lookup`函数将概率映射到花卉类型名称。'
+- en: 'We will compare `predicted_label` and `actual` to get the accuracy of the model:'
+  id: totrans-212
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将比较`predicted_label`和`actual`来计算模型的准确率：
+- en: '[PRE102]'
+  id: totrans-213
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: This shows that our full model's accuracy is 82%. This is simply done by comparing
+    `actual` with `predicted_label` using the `accuracy_score` API from `sklearn`.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这表明我们完整模型的准确率为82%。这是通过使用`sklearn`中的`accuracy_score` API，简单地将`actual`与`predicted_label`进行比较得出的。
+- en: Note
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: It's expected that your model accuracy will be slightly different from the nominal
+    value printed here. Every time a base model is trained, the model accuracy will
+    not be identical. However, it should not be too dissimilar to the nominal value.
+    Another factor that impacts reproducibility in terms of model accuracy is the
+    number of epochs used in training; in this case, only five epochs for demonstration
+    and didactic purposes. More training epochs will give you a better and tighter
+    variance in terms of model accuracy.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预计你的模型准确率会略有不同于这里打印的名义值。每次训练基础模型时，模型的准确率都不会完全相同。然而，它不应该与名义值相差太多。影响模型准确率重现性的另一个因素是训练时使用的迭代次数；在本例中，为了演示和教学目的，仅进行了五个epoch。更多的训练epoch将使你的模型准确率更好，方差更小。
+- en: Converting a full model to a reduced float16 model
+  id: totrans-217
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将完整模型转换为减少版的`float16`模型
+- en: 'In this section, we are going to load the model we just trained and quantize
+    it into a reduced `float16` model. For the convenience of step-by-step explanations
+    and your learning experience, it is recommended that you use JupyterLab or Jupyter
+    Notebook to follow along with the explanation here:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将加载我们刚刚训练的模型，并将其量化为一个减少版的`float16`模型。为了方便逐步讲解和提升你的学习体验，建议你使用 JupyterLab
+    或 Jupyter Notebook 跟随本文的说明：
+- en: 'Let''s start by loading the trained model:'
+  id: totrans-219
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们首先加载训练好的模型：
+- en: '[PRE103]'
+  id: totrans-220
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: The `tf.saved_model.load` API helps us to load the saved model we built and
+    trained.
+  id: totrans-221
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`tf.saved_model.load` API 帮助我们加载我们已构建并训练好的保存模型。'
+- en: 'Then we will create a `converter` object to refer to the `savedModel` directory
+    with the following line of code:'
+  id: totrans-222
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们将创建一个`converter`对象，使用以下代码来引用`savedModel`目录：
+- en: '[PRE104]'
+  id: totrans-223
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: 'For the `converter` object, we will select the `DEFAULT` optimization strategy
+    for the converter to best improve model size and latency:'
+  id: totrans-224
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于`converter`对象，我们将选择`DEFAULT`优化策略，以最佳方式提高模型的大小和延迟：
+- en: '[PRE105]'
+  id: totrans-225
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: The alternatives are `OPTIMIZE_FOR_LATENCY` or `OPTIMIZE_FOR_SIZE`. Refer to
+    [https://www.tensorflow.org/api_docs/python/tf/lite/Optimize](https://www.tensorflow.org/api_docs/python/tf/lite/Optimize)
+    for information.
+  id: totrans-226
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 替代方案包括`OPTIMIZE_FOR_LATENCY`或`OPTIMIZE_FOR_SIZE`。有关详细信息，请参阅 [https://www.tensorflow.org/api_docs/python/tf/lite/Optimize](https://www.tensorflow.org/api_docs/python/tf/lite/Optimize)。
+- en: 'Next, we will set `float16` as the target type for the model parameters and
+    start the conversion process:'
+  id: totrans-227
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将设置`float16`作为模型参数的目标类型，并开始转换过程：
+- en: '[PRE106]'
+  id: totrans-228
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: 'We will set up a directory designation for saving the quantized model using
+    the following code:'
+  id: totrans-229
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们将使用以下代码设置目录路径来保存量化后的模型：
+- en: '[PRE107]'
+  id: totrans-230
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: 'Now, we will create a `pathlib` object to represent the directory where we
+    want to save our quantized model:'
+  id: totrans-231
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们将创建一个`pathlib`对象来表示我们想要保存量化模型的目录：
+- en: '[PRE108]'
+  id: totrans-232
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: 'Let''s create the directory for saving the quantized model:'
+  id: totrans-233
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 让我们创建一个目录来保存量化后的模型：
+- en: '[PRE109]'
+  id: totrans-234
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: 'We will now create a `pathlib` object, `tgt`, to represent the quantized model
+    file:'
+  id: totrans-235
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在将创建一个`pathlib`对象`tgt`来表示量化模型文件：
+- en: '[PRE110]'
+  id: totrans-236
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: 'We will now write the quantized model using the `pathlib` object, `tgt`:'
+  id: totrans-237
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们现在将使用`pathlib`对象`tgt`来写入量化后的模型：
+- en: '[PRE111]'
+  id: totrans-238
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: 'This will show the output in terms of the size of bytes written:'
+  id: totrans-239
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将显示以字节为单位写入的输出大小：
+- en: '[PRE112]'
+  id: totrans-240
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: With the last command, you will see that the quantized model size is slightly
+    more than `47` MB, at exactly `47,487,392` Bytes. Go to the following directory:`../trained_resnet_vector-unquantized/save_model/variables.`
+  id: totrans-241
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 使用最后一条命令，你将看到量化后的模型大小略大于`47` MB，具体为`47,487,392`字节。请前往以下目录：`../trained_resnet_vector-unquantized/save_model/variables.`
+- en: 'This shows that the original model''s weight and bias file is slightly more
+    than 95 MB (results may vary and won''t be exactly the same if you train it again;
+    however, it should be very close to 95 MB) as shown in the following figure:'
+  id: totrans-242
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这显示了原始模型的权重和偏差文件稍微超过95 MB（结果可能有所不同，如果你重新训练，它可能不会完全相同；但是，它应该非常接近95 MB），如以下图所示：
+- en: '![Figure 7.2 – Original model’s weight and bias file size'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 7.2 – 原始模型的权重和偏差文件大小'
+- en: '](img/image0032.jpg)'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image0032.jpg)'
+- en: Figure 7.2 – Original model's weight and bias file size
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7.2 – 原始模型的权重和偏差文件大小
+- en: The quantized model is about half the size of the original model. This is as
+    expected, as the model was converted from `float32` to `float16` format. Next,
+    we are going to score our test data with the reduced `float16` model.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 量化模型的大小约为原始模型的一半。这是预期中的结果，因为该模型是从 `float32` 格式转换为 `float16` 格式的。接下来，我们将使用降低为
+    `float16` 的模型对测试数据进行评分。
+- en: Preparing the reduced float16 model for scoring
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 准备减小的 float16 模型进行评分
+- en: 'In this section, we will use the quantized model (reduced `float16`) to score
+    the same test dataset used in the previous section. We will execute scoring (inferencing)
+    with the TensorFlow Lite interpreter interface:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将使用量化后的模型（降低为`float16`）来对上一节中使用的相同测试数据集进行评分。我们将通过 TensorFlow Lite 解释器接口执行评分（推理）：
+- en: 'We will load the quantized model from the file path represented by `tflite_models_dir`.
+    In the previous section, we created a `pathlib` object, `tgt`, to represent the
+    quantized model file:'
+  id: totrans-249
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将从由`tflite_models_dir`表示的文件路径加载量化模型。在上一节中，我们创建了一个`pathlib`对象` tgt` 来表示量化模型文件：
+- en: '[PRE113]'
+  id: totrans-250
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: 'Then we need to get the `input_details` and `output_details` tensors:'
+  id: totrans-251
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接着我们需要获取`input_details`和`output_details`张量：
+- en: '[PRE114]'
+  id: totrans-252
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: 'From these tensors, we will inspect the shape of the NumPy arrays in both the
+    input and output:'
+  id: totrans-253
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从这些张量中，我们将检查输入和输出中 NumPy 数组的形状：
+- en: '[PRE115]'
+  id: totrans-254
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: We verified that the model input and output are expected to be a batch because
+    there are four dimensions in these tensors. Next, we are going to see how well
+    this model performs by scoring the test data.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们验证了模型的输入和输出应该是一个批量，因为这些张量中有四个维度。接下来，我们将通过对测试数据进行评分来查看这个模型的表现如何。
+- en: Scoring a single image with a quantized model
+  id: totrans-256
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用量化模型对单张图像进行评分
+- en: 'Now we may start the scoring process with a TFLite quantized model. In the
+    following steps, we first expand the sample to include a dimension for the batch,
+    pass the input data to the interpreter, perform scoring of input data, and then
+    get the output of the prediction:'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以开始使用 TFLite 量化模型进行评分。在接下来的步骤中，我们首先扩展样本，包含一个批量维度，将输入数据传递给解释器，进行输入数据的评分，然后获取预测结果的输出：
+- en: '[PRE116]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: '[PRE117]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: '[PRE118]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: '[PRE119]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: '[PRE120]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: 'Here is the output:'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出如下：
+- en: '[PRE121]'
+  id: totrans-264
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: 'To map `output_data` back to the original labels, execute the following command:'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将`output_data`映射回原始标签，请执行以下命令：
+- en: '[PRE122]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: 'Here is the output:'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出如下：
+- en: '[PRE123]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: Scoring a batch image with a quantized model
+  id: totrans-269
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用量化模型对批量图像进行评分
+- en: 'Currently, batch scoring in the TFLite model is supported through the iterative
+    scoring process of a single image. For our example of 50 test images, we may create
+    a helper function to encapsulate the entire single image scoring process:'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前，TFLite 模型的批量评分是通过单张图像的迭代评分过程来实现的。对于我们包含 50 张测试图像的示例，我们可以创建一个辅助函数来封装整个单张图像评分过程：
+- en: 'This is a function that handles batch scoring:'
+  id: totrans-271
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这是一个处理批量评分的函数：
+- en: '[PRE124]'
+  id: totrans-272
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: This function expands raw image dimensions to batches, and then passes the batched
+    image to the interpreter for scoring. The interpreter's output is then mapped
+    to a plaintext name by means of the `lookup` function and the plaintext is returned
+    as the predicted label.
+  id: totrans-273
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这个函数将原始图像维度扩展为批量，然后将批量图像传递给解释器进行评分。解释器的输出通过`lookup`函数映射为明文名称，返回的明文即为预测标签。
+- en: 'Next, we will iterate through our test data to call on `batch_predict`:'
+  id: totrans-274
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将遍历测试数据，调用`batch_predict`：
+- en: '[PRE125]'
+  id: totrans-275
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: The result is stored in the `batch_quantized_prediction` list.
+  id: totrans-276
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 结果存储在`batch_quantized_prediction`列表中。
+- en: 'And just like how we measure the prediction accuracy of our original model,
+    we may use `accuracy_score` to get the accuracy of the TFLite quantized model:'
+  id: totrans-277
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 就像我们衡量原始模型预测准确性一样，我们也可以使用`accuracy_score`来获取 TFLite 量化模型的准确性：
+- en: '[PRE126]'
+  id: totrans-278
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: 'The output is as follows:'
+  id: totrans-279
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出如下：
+- en: '[PRE127]'
+  id: totrans-280
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: The output here is shown to also be 82%. Results may vary if you retrained the
+    model, but in my experience, it is identical to the accuracy of the base model.
+  id: totrans-281
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这里的输出显示也是 82%。如果你重新训练了模型，结果可能会有所不同，但根据我的经验，它与基础模型的准确性完全相同。
+- en: Note
+  id: totrans-282
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 注意
+- en: It's expected that your model accuracy will be slightly different from the nominal
+    value printed here. Every time a base model is trained, the model accuracy will
+    not be identical. However, it should not be too dissimilar to the nominal value.
+    Another factor that impacts reproducibility in terms of model accuracy is the
+    number of epochs used in training; in this case, only five epochs for demonstration
+    and didactic purposes. More training epochs will give you a better and tighter
+    variance in terms of model accuracy.
+  id: totrans-283
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 预计你的模型精度会与此处打印的名义值略有不同。每次训练基础模型时，模型精度不会完全相同。然而，它不应该与名义值相差太大。另一个影响模型精度可重复性的因素是训练时使用的周期数；在这种情况下，仅使用了五个周期作为演示和教学目的。更多的训练周期会为你提供更好、更精确的模型精度。
+- en: The functions, routines, and workflow developed up to this point will be used
+    in the remaining sections of this chapter to demonstrate the process and outcome
+    of model optimization. We have learned how to score the original model, convert
+    the original model to the TFLite quantized model, and score the quantized model.
+    Next, we will convert the original model to different formats using the same conversion
+    and evaluation processes.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止开发的函数、例程和工作流程将在本章剩余部分中用于演示模型优化的过程和结果。我们已经学会了如何对原始模型进行评分，将原始模型转换为TFLite量化模型并对量化模型进行评分。接下来，我们将使用相同的转换和评估过程将原始模型转换为不同的格式。
+- en: Converting a full model to a reduced hybrid quantization model
+  id: totrans-285
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将完整模型转换为减少的混合量化模型
+- en: In the previous section, we converted a full model into a reduced `float16`
+    TFLite model, and demonstrated its scoring and evaluation processes. Now we will
+    try the second type of supported quantization, which is a hybrid approach.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一部分中，我们将一个完整模型转换为一个减少的`float16` TFLite模型，并演示了其评分和评估过程。现在我们将尝试第二种支持的量化类型，即混合方法。
+- en: Hybrid quantization optimizes the model by converting the model to 8-bit integer
+    weights, 32-bit float biases, and activations. Since it contains both integer
+    and floating-point computations, it is known as hybrid quantization. This is intended
+    for a trade-off between accuracy and optimization.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 混合量化通过将模型转换为8位整数权重、32位浮动偏置和激活来优化模型。由于它同时包含整数和浮点计算，因此被称为混合量化。这是为了在准确性和优化之间做出权衡。
+- en: 'There is only one small difference that we need to make for hybrid quantization.
+    There is only one line of difference, as explained below. In the previous section,
+    this is how we quantized the full model to a reduced `float16` TFLite model:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于混合量化，我们需要做一个小的修改。只有一行的区别，如下所述。在上一部分中，这是我们如何将完整模型量化为一个减少的`float16` TFLite模型：
+- en: '[PRE128]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: '[PRE129]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: '[PRE130]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: 'For hybrid quantization, we will simply remove the middle line about `supported_types`:'
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于混合量化，我们只需删除关于`supported_types`的中间一行：
+- en: '[PRE131]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: '[PRE132]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: 'Everything else remains pretty much the same. Following is the complete notebook
+    for hybrid quantization and scoring:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他部分基本保持不变。以下是混合量化和评分的完整笔记本：
+- en: 'As usual, we will specify the necessary libraries and path to the model:'
+  id: totrans-296
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 和往常一样，我们将指定必要的库和模型路径：
+- en: '[PRE133]'
+  id: totrans-297
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: Now, the path to the model is specified in `saved_model_dir`.
+  id: totrans-298
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，模型的路径已在`saved_model_dir`中指定。
+- en: 'Then we create a `converter` object for `saved_model_dir` and use it to convert
+    our model:'
+  id: totrans-299
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们为`saved_model_dir`创建一个`converter`对象，并用它来转换我们的模型：
+- en: '[PRE134]'
+  id: totrans-300
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: Now, the converter converts the full model to a hybrid quantization model.
+  id: totrans-301
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，转换器将完整模型转换为混合量化模型。
+- en: 'Now we will save our hybrid quantization model:'
+  id: totrans-302
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将保存我们的混合量化模型：
+- en: '[PRE135]'
+  id: totrans-303
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: 'The output shows the model size in bytes:'
+  id: totrans-304
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出显示模型的大小，以字节为单位：
+- en: '[PRE136]'
+  id: totrans-305
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: This is significantly smaller than the 95 MB of the original base model. Next,
+    let's see how well this smaller, hybrid quantized model performs with test data.
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这比原始基础模型的95MB小得多。接下来，让我们看看这个更小的混合量化模型在测试数据上的表现如何。
+- en: Preparing test data for scoring
+  id: totrans-307
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 准备测试数据进行评分
+- en: 'We will begin by loading the test data, as we did with the reduced `float16`
+    model:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将像处理减少的`float16`模型一样开始加载测试数据：
+- en: 'We can load TFRecord data, as we have done previously:'
+  id: totrans-309
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以加载TFRecord数据，就像我们之前做的那样：
+- en: '[PRE137]'
+  id: totrans-310
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: Now, `test_all_ds` represents the dataset object that points to the path of
+    our test data.
+  id: totrans-311
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，`test_all_ds`表示指向我们测试数据路径的数据集对象。
+- en: 'We may determine sample size by iterating through the dataset and keeping track
+    of the sample count:'
+  id: totrans-312
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以通过遍历数据集并跟踪样本数量来确定样本大小：
+- en: '[PRE138]'
+  id: totrans-313
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: This will show the sample size as `50`.
+  id: totrans-314
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将显示样本大小为`50`。
+- en: 'We use the same helper functions seen in the reduced `float16` model section
+    to standardize the image size and pixel values:'
+  id: totrans-315
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用在简化的 `float16` 模型部分中看到的相同辅助函数来标准化图像大小和像素值：
+- en: '[PRE139]'
+  id: totrans-316
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: The `decode_and_resize` function parses an image, resizes it to `224` by `224`
+    pixels, and, at the same time, one-hot encodes the image's label. `decode_and_resize`
+    then returns the image and corresponding label as a tuple, so that the image and
+    label are always kept together.
+  id: totrans-317
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`decode_and_resize` 函数解析一张图像，将其调整为 `224` x `224` 像素，并同时对图像的标签进行独热编码。`decode_and_resize`
+    然后返回图像和对应标签作为一个元组，以确保图像和标签始终一起保存。'
+- en: The `normalize` function divides the image pixel value by `255` in order to
+    bring the pixel range to `[0, 1.0]`. And even though nothing is done in relation
+    to the label, it is necessary to keep track of the image and label as a tuple
+    so that they are always kept together.
+  id: totrans-318
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`normalize` 函数将图像像素值除以 `255`，以将像素范围调整为 `[0, 1.0]`。尽管标签本身没有做任何处理，但仍有必要将图像和标签作为元组跟踪，以确保它们始终一起保存。'
+- en: 'Next, we will apply the transformation with the following helper functions:'
+  id: totrans-319
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将使用以下辅助函数应用转换：
+- en: '[PRE140]'
+  id: totrans-320
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE140]'
+- en: 'Let''s convert TFRecord to a NumPy array for scoring:'
+  id: totrans-321
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们将 TFRecord 转换为 NumPy 数组进行评分：
+- en: '[PRE141]'
+  id: totrans-322
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE141]'
+- en: Now, all test images are in NumPy format with standard `(224, 224, 3)` dimensions,
+    the pixel values are between `0` and `1`, and images are batched. Labels are batched
+    as well.
+  id: totrans-323
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，所有测试图像都已是 NumPy 格式，具有标准的 `(224, 224, 3)` 维度，像素值介于 `0` 和 `1` 之间，图像是批处理的，标签也以批次形式存在。
+- en: 'We now need to extract the ground truth labels so that we can measure our prediction
+    accuracy:'
+  id: totrans-324
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们现在需要提取真实标签，以便我们能够衡量预测的准确性：
+- en: '[PRE142]'
+  id: totrans-325
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE142]'
+- en: In the preceding code, `actual` is a list that contains class names for each
+    test image.
+  id: totrans-326
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，`actual` 是一个包含每个测试图像类名的列表。
+- en: 'We may inspect the NumPy array, `np_img_holder`, as images with the following
+    code, and this will produce the images seen in *Figure 7.1*:'
+  id: totrans-327
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以使用以下代码检查 NumPy 数组 `np_img_holder` 中的图像，产生如 *图 7.1* 中所示的图像：
+- en: '[PRE143]'
+  id: totrans-328
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE143]'
+- en: In the preceding code snippet, we iterate through our image array, and place
+    each in one of the subplots, while there are 50 images (10 rows, with each row
+    having 5 subplots). The output images should appear in 10 rows with 5 images in
+    each row, as seen in *Figure 7.1*.
+  id: totrans-329
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码片段中，我们遍历图像数组，将每张图像放入子图中，同时有 50 张图像（10 行，每行 5 个子图）。输出图像应以 10 行显示，每行有 5
+    张图像，正如 *图 7.1* 中所示。
+- en: For single test file scoring, we need to add a dimension to a sample. Since
+    a given image is of the shape `(224, 224, 3)`, we need to make it into `(1, 224,
+    224, 3)` so that it will be accepted by the model for scoring. This is why we
+    used `np.expand_dim` when we converted TFRecord to NumPy. As the model is built
+    to handle batch scoring, it is expecting four dimensions with the first dimension
+    being the sample size.
+  id: totrans-330
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于单个测试文件评分，我们需要为样本添加一个维度。由于给定的图像形状为 `(224, 224, 3)`，我们需要将其转换为 `(1, 224, 224,
+    3)`，以便模型能够接受并进行评分。这就是我们在将 TFRecord 转换为 NumPy 时使用 `np.expand_dim` 的原因。由于模型是为批量评分设计的，因此它期望四个维度，第一个维度是样本大小。
+- en: Mapping a prediction to a class name
+  id: totrans-331
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将预测映射到类别名称
+- en: From TFRecord, we need to create a reverse lookup dictionary to map probability
+    back to the label. In other words, we need to find the index where maximum probability
+    is positioned in the array. We will then map this position index to the flower
+    type.
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 TFRecord 中，我们需要创建一个反向查找字典，将概率映射回标签。换句话说，我们需要找到数组中最大概率所对应的索引。然后，我们将这个位置索引映射到花卉种类。
+- en: 'To create the lookup dictionary, we will parse the TFRecord with feature descriptions
+    to extract the label indices and names as shown in the following code:'
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了创建查找字典，我们将解析带有特征描述的 TFRecord 文件，提取标签索引和名称，如下代码所示：
+- en: '[PRE144]'
+  id: totrans-334
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE144]'
+- en: '[PRE145]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE145]'
+- en: '[PRE146]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE146]'
+- en: '[PRE147]'
+  id: totrans-337
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE147]'
+- en: '[PRE148]'
+  id: totrans-338
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE148]'
+- en: '[PRE149]'
+  id: totrans-339
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE149]'
+- en: '[PRE150]'
+  id: totrans-340
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE150]'
+- en: '[PRE151]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE151]'
+- en: '[PRE152]'
+  id: totrans-342
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE152]'
+- en: '[PRE153]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE153]'
+- en: '[PRE154]'
+  id: totrans-344
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE154]'
+- en: '[PRE155]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE155]'
+- en: '[PRE156]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE156]'
+- en: '[PRE157]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE157]'
+- en: '[PRE158]'
+  id: totrans-348
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE158]'
+- en: '[PRE159]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE159]'
+- en: '[PRE160]'
+  id: totrans-350
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE160]'
+- en: '[PRE161]'
+  id: totrans-351
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE161]'
+- en: '[PRE162]'
+  id: totrans-352
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE162]'
+- en: '[PRE163]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE163]'
+- en: '[PRE164]'
+  id: totrans-354
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE164]'
+- en: '[PRE165]'
+  id: totrans-355
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE165]'
+- en: In the preceding code, we used `feature_description` to parse `test_all_ds`.
+    Once it is parsed using `_parse_function`, we iterate through the entire test
+    dataset. The information we want can be found in `image/class/label` and `image/class/text`.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用 `feature_description` 解析 `test_all_ds`。一旦通过 `_parse_function` 解析，我们就遍历整个测试数据集。我们想要的信息可以在
+    `image/class/label` 和 `image/class/text` 中找到。
+- en: 'We can also inspect `val_label_map`:'
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以检查 `val_label_map`：
+- en: '[PRE166]'
+  id: totrans-358
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE166]'
+- en: This is the lookup table that maps the index to a plaintext name.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个查找表，用于将索引映射到明文名称。
+- en: Scoring with a hybrid quantization model
+  id: totrans-360
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用混合量化模型进行评分
+- en: 'As we did for the reduced `float16` model, we want to see how a hybrid quantization
+    model performs with test data. Now we can start the process of scoring test images
+    with the hybrid quantization model:'
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与减少的`float16`模型一样，我们希望查看混合量化模型在测试数据上的表现。现在我们可以开始使用混合量化模型对测试图像进行评分：
+- en: 'We will begin by loading the model and allocating tensors as usual with the
+    help of the following lines of code:'
+  id: totrans-362
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将按常规步骤加载模型并分配张量，代码如下：
+- en: '[PRE167]'
+  id: totrans-363
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE167]'
+- en: Now the hybrid quantization model is loaded.
+  id: totrans-364
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，混合量化模型已加载。
+- en: 'To ascertain the input and output shape of the tensors that the model operates
+    with, we may obtain input and output tensors in the following way:'
+  id: totrans-365
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为了确定模型操作的张量的输入和输出形状，我们可以通过以下方式获取输入和输出张量：
+- en: '[PRE168]'
+  id: totrans-366
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE168]'
+- en: In the preceding code, the `get_input_details` and `get_output_details` methods
+    will retrieve these tensor's details, such as `name`, `shape`, and data type,
+    and store these in `input_details` and `output_details`, respectively.
+  id: totrans-367
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，`get_input_details`和`get_output_details`方法将检索这些张量的详细信息，例如`name`、`shape`和数据类型，并分别将其存储在`input_details`和`output_details`中。
+- en: Scoring a single image
+  id: totrans-368
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 评分单张图像
+- en: 'We will score a single image by expanding its dimension, as if this is a batch
+    of a single image, pass it to the TFLite interpreter, and then get the output:'
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将通过扩展图像的维度来评分单张图像，就像这是一批只有一张图像一样，将其传递给TFLite解释器，然后获取输出：
+- en: 'We may begin by handling the image array and expanding its dimensions for batch:'
+  id: totrans-370
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以开始处理图像数组，并扩展其维度以形成批次：
+- en: '[PRE169]'
+  id: totrans-371
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE169]'
+- en: 'The preceding code expands the image to a batch dimension, and then passes
+    it to the interpreter for prediction. The output of the preceding code is here:'
+  id: totrans-372
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 前面的代码将图像扩展为批次维度，然后将其传递给解释器进行预测。前面代码的输出如下：
+- en: '[PRE170]'
+  id: totrans-373
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE170]'
+- en: These are probabilities for each flower type. We need to map the position of
+    highest probability to its plaintext name. That's where we will use the `lookup`
+    function again.
+  id: totrans-374
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这些是每种花卉类型的概率。我们需要将概率最高的位置映射到其纯文本名称。这就是我们再次使用`lookup`函数的地方。
+- en: 'We use a helper function (`lookup`) to convert probability into the most likely
+    class name:'
+  id: totrans-375
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用一个辅助函数（`lookup`）将概率转换为最可能的类别名称：
+- en: '[PRE171]'
+  id: totrans-376
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE171]'
+- en: 'The output is as follows:'
+  id: totrans-377
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出如下：
+- en: '[PRE172]'
+  id: totrans-378
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE172]'
+- en: In the `lookup` function, the NumPy array, `np_entry`, is the output of our
+    model. It contains the probability for each class. We want to map the position
+    index of the array with the highest probability to the class name. To achieve
+    this, this function maps it to the dictionary by key. In this case, it is the
+    last position (which corresponds to position `4`) in the probability array that
+    has the highest probability. `4` is mapped to `tulips`.
+  id: totrans-379
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在`lookup`函数中，NumPy数组`np_entry`是我们模型的输出。它包含每个类别的概率。我们希望将数组中概率最高的位置索引映射到类别名称。为此，函数通过键将其映射到字典。在这个例子中，概率数组中具有最高概率的是最后一个位置（即位置`4`）。`4`被映射到`tulips`。
+- en: Scoring batch images
+  id: totrans-380
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 批量图像评分
+- en: 'Currently, batch scoring in the TFLite model is supported through the iterative
+    scoring process of a single image. For our example of 50 test images, we may create
+    a helper function to encapsulate the entire single image scoring process that
+    we just went through in the previous Scoring a single image section with the hybrid
+    quantization model:'
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前，TFLite模型中的批量评分是通过对单张图像的迭代评分过程来实现的。对于我们50张测试图像的示例，我们可以创建一个辅助函数来封装整个单图像评分过程，就像我们在前面“评分单张图像”部分中使用混合量化模型所做的那样：
+- en: 'We will iterate the entire dataset to score the batch with the help of the
+    following code:'
+  id: totrans-382
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将通过以下代码迭代整个数据集来评分批次：
+- en: '[PRE173]'
+  id: totrans-383
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE173]'
+- en: The `batch_predict()` function expands the raw image dimensions to batches,
+    and then passes the batched image to the interpreter for scoring. The interpreter's
+    output is then mapped to a plaintext name by means of the `lookup` function and
+    the plaintext is returned as the predicted label.
+  id: totrans-384
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`batch_predict()`函数将原始图像维度扩展为批次，然后将批量图像传递给解释器进行评分。解释器的输出将通过`lookup`函数映射为纯文本名称，并返回该纯文本作为预测标签。'
+- en: 'We then need to iterate through our test data to call on `batch_predict`:'
+  id: totrans-385
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们需要迭代我们的测试数据，以调用`batch_predict`：
+- en: '[PRE174]'
+  id: totrans-386
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE174]'
+- en: 'We may evaluate the model''s accuracy using the `accuracy_score` function in
+    the sklearn library:'
+  id: totrans-387
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们可以使用`accuracy_score`函数在sklearn库中评估模型的准确性：
+- en: '[PRE175]'
+  id: totrans-388
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE175]'
+- en: 'Its output is as follows:'
+  id: totrans-389
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 它的输出如下：
+- en: '[PRE176]'
+  id: totrans-390
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE176]'
+- en: The output here is shown to also be 82%. Results may vary if you retrained the
+    model, but in my experience, it is identical to the accuracy of the base model.
+  id: totrans-391
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这里的输出显示准确率也是82%。如果重新训练模型，结果可能会有所不同，但根据我的经验，它与基础模型的准确度是相同的。
+- en: Note
+  id: totrans-392
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 注意
+- en: It's expected that your model accuracy will be slightly different from the nominal
+    value printed here. Every time a base model is trained, the model accuracy will
+    not be identical. However, it should not be too dissimilar to the nominal value.
+    Another factor that impacts reproducibility in terms of model accuracy is the
+    number of epochs used in training; in this case, only five epochs for demonstration
+    and didactic purposes. More training epochs will give you a better and tighter
+    variance in terms of model accuracy.
+  id: totrans-393
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 预计你的模型准确度会略有不同于此处显示的名义值。每次训练基本模型时，模型的准确度可能不会完全相同。然而，它不应与名义值相差太远。影响模型准确度再现性的另一个因素是训练过程中使用的epoch数量；在本示例中，仅使用了五个epoch进行演示和教学目的。更多的训练epoch将使模型准确度的方差更小，结果更稳定。
+- en: So far, we have learned about two types of post-training quantization techniques,
+    namely, reduced `float16` quantization and hybrid quantization. Both techniques
+    make the TFLite model significantly smaller than the original model. This is important
+    when deploying the model in edge devices or devices with low compute or power
+    resources.
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经学习了两种后训练量化技术，即减少`float16`量化和混合量化。两种技术都使TFLite模型比原始模型小得多。当模型部署在边缘设备或计算能力或功耗资源较低的设备时，这一点尤为重要。
+- en: In these two strategies, we quantized the middle layers and left the input and
+    output untouched. Therefore, the input and output are not quantized and keep their
+    respective original data types. However, in some devices that are optimized for
+    speed and being lightweight, such as an edge TPU or devices that can only handle
+    integer ops, we need to quantize the input and output layers to an integer type.
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两种策略中，我们量化了中间层，并保留了输入和输出层不变。因此，输入和输出层没有被量化，仍保持原始数据类型。然而，在一些专为加速和轻量化优化的设备上，如边缘TPU或只能处理整数操作的设备上，我们需要将输入和输出层量化为整数类型。
+- en: In the next section, we are going to learn the third quantization strategy,
+    which is integer quantization, which would do precisely this.
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分中，我们将学习第三种量化策略——整数量化，它将精确地完成此任务。
+- en: Converting a full model to an integer quantization model
+  id: totrans-397
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将完整模型转换为整数量化模型
+- en: This strategy requires `int8` representation. This quantization strategy will
+    try to use `int8` representation for all ops or operations as the goal. When this
+    is not possible, the ops are left as the original precision (in other words, `float32`).
+  id: totrans-398
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种策略需要`int8`表示。这种量化策略将尝试为所有操作或算子使用`int8`表示。若无法使用`int8`，则这些操作将保持原始精度（换句话说，即`float32`）。
+- en: This quantization strategy requires some representative data. This data represents
+    the type of data that the model typically expects in terms of a range of values.
+    In other words, we need to provide either some training or validation data to
+    the integer quantization process. This may be the data already used, such as a
+    subset of the training or validation data. Usually, around 100 samples are recommended.
+    We are going to use 80 samples from the validation data because this will suffice
+    in this case.
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种量化策略需要一些代表性数据。此数据代表了模型通常期望的数据类型，具体表现为数值范围。换句话说，我们需要为整数量化过程提供一些训练或验证数据。这可能是已使用的数据，如训练或验证数据的一个子集。通常，建议提供大约100个样本。我们将使用80个验证数据样本，因为在此情况下足够。
+- en: In this section, we will build a model with a pre-trained ResNet feature vector
+    from TensorFlow Hub. Once the training run is complete, we will use cross-validation
+    data again as the representative dataset. This dataset will help the model to
+    adjust parameters in both the input and output layers to integers.
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们将构建一个使用预训练ResNet特征向量的模型，该特征向量来自TensorFlow Hub。训练完成后，我们将再次使用交叉验证数据作为代表性数据集。这个数据集将帮助模型调整输入和输出层的参数为整数。
+- en: Training a full model
+  id: totrans-401
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 训练完整模型
+- en: We are going to use the same flower dataset as in [https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets).
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用与[https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_07/train_base_model/tf_datasets)相同的花卉数据集。
+- en: This is the same dataset that you used for reduced `float16` and hybrid quantization
+    Let's get started:.
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是你用于减少`float16`和混合量化的相同数据集。让我们开始吧：
+- en: 'As usual, we begin by importing libraries and loading the datasets:'
+  id: totrans-404
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 和往常一样，我们首先导入库并加载数据集：
+- en: '[PRE177]'
+  id: totrans-405
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE177]'
+- en: In the preceding code, we use the `tf.io` API to encapsulate the file path and
+    all the filenames we will use, which are training, validation, and test data.
+    Once we have the file paths encoded, we use `tf.data.TFRecordDatasedt` to reference
+    these files. This process is performed for the training data, which is referenced
+    by `train_all_ds`, and for the validation data, which is referenced by `val_all_ds`.
+  id: totrans-406
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用`tf.io` API来封装文件路径和我们将使用的所有文件名，包括训练、验证和测试数据。一旦我们将文件路径进行编码，我们就使用`tf.data.TFRecordDataset`来引用这些文件。此过程适用于训练数据，通过`train_all_ds`引用，和验证数据，通过`val_all_ds`引用。
+- en: 'Then we will require the following helper functions to decode and standardize
+    images, normalize pixel values, and set up a training dataset:'
+  id: totrans-407
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们将需要以下辅助函数来解码和标准化图像，规范化像素值，并设置训练数据集：
+- en: '[PRE178]'
+  id: totrans-408
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE178]'
+- en: The `decode_and_resize` function parses an image, resizes it to `224` by `224`
+    pixels, and, at the same time, one-hot encodes the image's label. `decode_and_resize`
+    then returns the image and corresponding label as a tuple, so that the image and
+    label are always kept together.
+  id: totrans-409
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`decode_and_resize`函数解析图像，将其调整为`224`x`224`像素，同时对图像的标签进行独热编码。`decode_and_resize`然后返回图像和相应的标签作为一个元组，这样图像和标签始终保持在一起。'
+- en: The `normalize` function divides the image pixel value by `255` in order to
+    bring the pixel range to `[0, 1.0]`. And even though nothing is done in relation
+    to the label, it is necessary to keep track of the image and label as a tuple
+    so that they are always kept together.
+  id: totrans-410
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`normalize`函数通过`255`来除以图像像素值，从而将像素范围调整为`[0, 1.0]`。尽管对标签没有进行任何处理，但有必要将图像和标签保持为元组，以确保它们始终在一起。'
+- en: 'We now need to define a function to shuffle and fetch the training dataset.
+    Here is the function to achieve this:'
+  id: totrans-411
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们需要定义一个函数来打乱和获取训练数据集。以下是实现此功能的函数：
+- en: '[PRE179]'
+  id: totrans-412
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE179]'
+- en: This function returns a dataset with shuffle, repeat, batch, and prefetch ops
+    attached. This is a standard approach for getting the dataset ready for training.
+  id: totrans-413
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 此函数返回一个附带有洗牌、重复、批量和预取操作的数据集。这是一种准备数据集以进行训练的标准方法。
+- en: 'Now we may apply the following steps to each element in the training dataset:'
+  id: totrans-414
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们可以对训练数据集中的每个元素应用以下步骤：
+- en: '[PRE180]'
+  id: totrans-415
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE180]'
+- en: So now, `decode_and_resize` is applied to each image in `train_all_ds` and `val_all_ds`.
+    The resulting datasets are `dataset` and `val_dataset`, respectively.
+  id: totrans-416
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 所以现在，`decode_and_resize`被应用到`train_all_ds`和`val_all_ds`中的每张图像。得到的数据集分别为`dataset`和`val_dataset`。
+- en: 'We also need to normalize the validation dataset and finalize the training
+    dataset for the training run process:'
+  id: totrans-417
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还需要对验证数据集进行标准化，并最终确定训练数据集，以便进行训练过程：
+- en: '[PRE181]'
+  id: totrans-418
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE181]'
+- en: In the preceding code, we use the `map` function to apply the `decode_and_resize`
+    function to each image in the dataset. For the training dataset, we also apply
+    `prepare_for_training` to prefetch the dataset and for the ingestion process.
+  id: totrans-419
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用`map`函数将`decode_and_resize`函数应用于数据集中的每张图片。对于训练数据集，我们还应用`prepare_for_training`来预取数据集并用于数据处理。
+- en: 'Now we will set up the parameters for cross-validation:'
+  id: totrans-420
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将设置交叉验证的参数：
+- en: '[PRE182]'
+  id: totrans-421
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE182]'
+- en: In the preceding code, we set the number of classes and the image size in variables
+    to be passed to the model training process. Then we determine the number of steps
+    for each epoch of training and cross-validation.
+  id: totrans-422
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们将类别数量和图像大小设置为变量，并传递给模型训练过程。然后我们确定每个训练轮次和交叉验证的步数。
+- en: 'The output should be as follows:'
+  id: totrans-423
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出应如下所示：
+- en: '[PRE183]'
+  id: totrans-424
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE183]'
+- en: This indicates that we have a training data sample size of `3540`, while the
+    cross-validation data sample size is `80`.
+  id: totrans-425
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这表明我们有一个训练数据样本大小为`3540`，而交叉验证数据样本大小为`80`。
+- en: 'Now we will build the model with the help of the following code:'
+  id: totrans-426
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们将使用以下代码构建模型：
+- en: '[PRE184]'
+  id: totrans-427
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE184]'
+- en: In the preceding code, we built and compiled our model using TensorFlow Hub's
+    ResNet feature vector as the middle layer, and the output is a classification
+    layer denoted by a dense layer with five outputs, with each output node providing
+    a probability for one of the five flower types.
+  id: totrans-428
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用 TensorFlow Hub 的 ResNet 特征向量作为中间层来构建和编译模型，输出是一个分类层，由一个具有五个输出的全连接层表示，每个输出节点提供一种五种花卉类型的概率。
+- en: 'Here is the model summary, and it consists of a layer from the *resnet_v1_101*
+    feature vector, followed by a classification head, as indicated in *Figure 7.3*:'
+  id: totrans-429
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这是模型摘要，它由一个来自*resnet_v1_101*特征向量的层组成，后面跟着一个分类头，如*图 7.3*所示：
+- en: '![Figure 7.3 – Model summary for flower type classification'
+  id: totrans-430
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![图 7.3 – 花卉类型分类模型摘要'
+- en: '](img/image0052.jpg)'
+  id: totrans-431
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image0052.jpg)'
+- en: Figure 7.3 – Model summary for flower type classification
+  id: totrans-432
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 7.3 – 用于花卉类型分类的模型总结
+- en: We will then use the `fit` API to train this model with the training and cross-validation
+    data provided.
+  id: totrans-433
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后，我们将使用 `fit` API 来训练这个模型，利用提供的训练数据和交叉验证数据。
+- en: 'The results of the model weights and biases are saved in the `checkpoint_prefix`
+    directory. This is how we start the training process for the model to recognize
+    five different types of flower images:'
+  id: totrans-434
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 模型的权重和偏置结果保存在 `checkpoint_prefix` 目录中。这是我们开始训练模型以识别五种不同花卉图像的方式：
+- en: '[PRE185]'
+  id: totrans-435
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE185]'
+- en: In the preceding code, the `fit` API is called to train the model. `train_ds`
+    and `val_ds` are the training and cross-validation data, respectively. At each
+    epoch, the weights and biases are stored as a checkpoint. This is specified by
+    the callbacks. To save training time, we will only train it for three epochs.
+  id: totrans-436
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，调用了 `fit` API 来训练模型。`train_ds` 和 `val_ds` 分别是训练数据和交叉验证数据。在每个 epoch 结束时，权重和偏置会作为检查点进行存储。这是通过回调函数来指定的。为了节省训练时间，我们将只训练三轮。
+- en: 'Next, we will save the model using the following lines of code:'
+  id: totrans-437
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将使用以下代码行来保存模型：
+- en: '[PRE186]'
+  id: totrans-438
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE186]'
+- en: 'We can inspect the weight matrix file to get an idea of the model size using
+    the following command:'
+  id: totrans-439
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们可以使用以下命令检查权重矩阵文件，以了解模型的大小：
+- en: '[PRE187]'
+  id: totrans-440
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE187]'
+- en: 'Let''s standardize and normalize the validation images:'
+  id: totrans-441
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们对验证图像进行标准化和归一化处理：
+- en: '[PRE188]'
+  id: totrans-442
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE188]'
+- en: 'Next, we expand by one dimension to batch the images. This extra dimension
+    is intended for a variable batch size:'
+  id: totrans-443
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们通过一个维度扩展来批处理图像。这个额外的维度是为可变批次大小设计的：
+- en: '[PRE189]'
+  id: totrans-444
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE189]'
+- en: The image is now expanded by one dimension to indicate that the first dimension
+    holds the number of images, which is the size of the image batch, and the normalized
+    images are iterated through. As we iterate through each image, we capture the
+    image value as a NumPy array and the corresponding label, and append `np_img_holder`
+    and `np_lbl_holder`, respectively.
+  id: totrans-445
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图像现在通过一个维度扩展，表示第一个维度保存的是图像的数量，即图像批次的大小，接着对标准化后的图像进行迭代。每当我们遍历一张图像时，我们将图像值作为 NumPy
+    数组和相应标签一起捕捉，并分别附加到 `np_img_holder` 和 `np_lbl_holder`。
+- en: 'Now that we have images as a NumPy array, we need to build a generator that
+    feeds this representative data into the conversion process:'
+  id: totrans-446
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们已经将图像转化为 NumPy 数组，接下来我们需要构建一个生成器，将这些代表性数据输入到转换过程中：
+- en: '[PRE190]'
+  id: totrans-447
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE190]'
+- en: We need to specify a function that is a generator to stream the representative
+    data during the conversion process. This is done through the `data_generator`
+    function. This function invokes the generator that streams a NumPy array.
+  id: totrans-448
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们需要指定一个生成器函数，在转换过程中流式传输代表性数据。这个过程通过 `data_generator` 函数来完成。该函数调用了一个生成器，用于流式传输
+    NumPy 数组。
+- en: 'Let''s confirm our sample size:'
+  id: totrans-449
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们确认我们的样本大小：
+- en: '[PRE191]'
+  id: totrans-450
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE191]'
+- en: 'The output from the preceding `print` statement is as follows:'
+  id: totrans-451
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 上面 `print` 语句的输出如下：
+- en: '[PRE192]'
+  id: totrans-452
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE192]'
+- en: The preceding code iterates through a validation dataset and keeps track of
+    the sample count as it goes over a `for` loop. For every encounter of an image,
+    a counter (`sample_size`, which is initialized to `0`) is incremented by 1\. Currently
+    this is the only way to find out about sample sizes in a dataset. We have just
+    confirmed that there are 80 samples in our validation data.
+  id: totrans-453
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 上面的代码会遍历一个验证数据集，并在 `for` 循环中跟踪样本计数。每次遇到一张图像时，计数器（`sample_size`，初始化为 `0`）会增加
+    1。目前，这是了解数据集中样本大小的唯一方法。我们刚刚确认了验证数据集中有 80 个样本。
+- en: 'Now we may start the conversion process:'
+  id: totrans-454
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们可以开始转换过程了：
+- en: '[PRE193]'
+  id: totrans-455
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE193]'
+- en: In the preceding code, we set up the converter instance and optimizer as in
+    hybrid quantization, and then we set up a data generator object for the representative
+    dataset.
+  id: totrans-456
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们像在混合量化中一样设置了转换器实例和优化器，然后为代表性数据集设置了一个数据生成器对象。
+- en: 'We also want to throw an error flag if there are any ops that failed to be
+    quantized:'
+  id: totrans-457
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果有任何操作未能量化，我们还希望抛出错误标志：
+- en: '[PRE194]'
+  id: totrans-458
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE194]'
+- en: In the preceding code, the supported data type we want for our model is set
+    as an 8-bit integer (`INT8`).
+  id: totrans-459
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们为模型设置的支持数据类型是 8 位整数（`INT8`）。
+- en: 'Now we designate the input and output tensors to be `INT8`:'
+  id: totrans-460
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们指定输入和输出张量的数据类型为 `INT8`：
+- en: '[PRE195]'
+  id: totrans-461
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE195]'
+- en: Now the model is converted to an integer quantization model. The model expects
+    an input data type of an 8-bit integer (`INT8`) and will output the data type
+    of an 8-bit integer (`INT8`).
+  id: totrans-462
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，模型已经转换为整数量化模型。该模型期望输入数据类型为 8 位整数（`INT8`），并将输出 8 位整数（`INT8`）的数据类型。
+- en: 'Once the preceding code finishes the execution, we may inspect and verify the
+    data type now associated with the input and output layer as unsigned `INT8`:'
+  id: totrans-463
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦前面的代码执行完毕，我们可以检查并验证现在与输入和输出层关联的数据类型，应该为无符号 `INT8`：
+- en: '[PRE196]'
+  id: totrans-464
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE196]'
+- en: In the preceding code, we first have to get the interpreter interface to the
+    TFLite model. An interpreter object is the component in the TFLite model that
+    executes the inference. It has methods such as `get_input_details` and `get_output_details`,
+    which help us to look at the data types expected by the model during inference.
+  id: totrans-465
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们首先需要获取 TFLite 模型的解释器接口。解释器对象是 TFLite 模型中执行推理的组件。它有像 `get_input_details`
+    和 `get_output_details` 这样的方法，帮助我们查看模型在推理过程中预期的数据类型。
+- en: 'The following is the output of the preceding code:'
+  id: totrans-466
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 以下是前面代码的输出：
+- en: '[PRE197]'
+  id: totrans-467
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE197]'
+- en: The model expects an input data type of an 8-bit integer (`INT8`) and will output
+    the data type of an 8-bit integer (`INT8`).
+  id: totrans-468
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该模型期望输入数据类型为 8 位整数（`INT8`），并将输出数据类型设为 8 位整数（`INT8`）。
+- en: 'Now we can save the quantized model:'
+  id: totrans-469
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们可以保存量化后的模型：
+- en: '[PRE198]'
+  id: totrans-470
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE198]'
+- en: Now, with the help of the preceding code, we set up a directory path and encode
+    the path to a `string`. This string represents the path where we will write our
+    integer quantized model. Finally, the `write_bytes` API completes the write process
+    and saves our integer quantized model in the path as defined by the string, `tflite_models_dir`.
+  id: totrans-471
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，借助前面的代码，我们设置了一个目录路径并将路径编码为一个 `string`。这个字符串表示我们将要写入整数量化模型的路径。最后，`write_bytes`
+    API 完成写入过程，并将我们的整数量化模型保存到字符串 `tflite_models_dir` 所定义的路径中。
+- en: 'This shows the model size to be the following:'
+  id: totrans-472
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这显示模型的大小如下：
+- en: '[PRE199]'
+  id: totrans-473
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE199]'
+- en: The preceding output shows that our integer quantization model is approximately
+    44 MB.
+  id: totrans-474
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 前面的输出显示我们的整数量化模型大约为 44 MB。
+- en: Next, we are going to see how well this model performs by scoring the test data.
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将通过对测试数据进行评分，看看这个模型的表现如何。
+- en: Scoring with an integer quantization model
+  id: totrans-476
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用整数量化模型进行评分
+- en: For scoring, we need to prepare the test dataset and a lookup table that maps
+    the model output to a class name. Our test dataset contains labels encoded as
+    an index and the corresponding class name. Therefore, we will use labels and class
+    names from the test dataset as the ground truth. This will be compared to the
+    model predictions.
+  id: totrans-477
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于评分，我们需要准备测试数据集和一个查找表，将模型输出映射到类名。我们的测试数据集包含作为索引编码的标签及其相应的类名。因此，我们将使用测试数据集中的标签和类名作为实际值。然后，将其与模型的预测结果进行比较。
+- en: Preparing a test dataset for scoring
+  id: totrans-478
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 准备用于评分的测试数据集
+- en: 'As we did for the reduced `float16` and hybrid quantization models, we want
+    to see how an integer quantization model performs with test data. Now we can start
+    the process of scoring test images with the integer quantization model:'
+  id: totrans-479
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们对减少的 `float16` 和混合量化模型所做的那样，我们希望看看整数量化模型在测试数据上的表现。现在我们可以开始使用整数量化模型对测试图像进行评分的过程：
+- en: 'We will proceed by loading the TFRecord test:'
+  id: totrans-480
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将通过加载 TFRecord 测试数据集来进行：
+- en: '[PRE200]'
+  id: totrans-481
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE200]'
+- en: In the preceding code, we use the `tf.io` API to encapsulate the file path and
+    all the filenames we will use, which is the test data. Once we have the file paths
+    encoded, we use `tf.data.TFRecordDatasedt` to reference the data. This process
+    is done for the test data, which is referenced by `test_all_ds`.
+  id: totrans-482
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们使用 `tf.io` API 封装文件路径和我们将使用的所有文件名，也就是测试数据。获取文件路径编码后，我们使用 `tf.data.TFRecordDatasedt`
+    来引用数据。这个过程是针对测试数据进行的，数据通过 `test_all_ds` 来引用。
+- en: 'Next, we can verify the sample size:'
+  id: totrans-483
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们可以验证样本大小：
+- en: '[PRE201]'
+  id: totrans-484
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE201]'
+- en: This will show that the sample size is `50`. The preceding code iterates through
+    the validation dataset and keeps track of the sample count as it goes over a `for`
+    loop. For every encounter of an image, a counter (`sample_size`, which is initialized
+    to `0`) is incremented by `1`. Currently, this is the only way to find out about
+    sample size in a dataset. We have just confirmed that there are 80 samples in
+    our validation data.
+  id: totrans-485
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将显示样本大小为`50`。前面的代码通过遍历验证数据集，并在 `for` 循环中跟踪样本数量。每当遇到一个图像时，计数器（`sample_size`，初始化为`0`）就会增加
+    1。目前，这是了解数据集中样本大小的唯一方法。我们刚刚确认验证数据集中有 80 个样本。
+- en: 'As our model was quantized to handle integer ops, we don''t want to normalize
+    pixel values into floating-point values. We only need to standardize the image
+    size:'
+  id: totrans-486
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 由于我们的模型已经量化为处理整数运算，我们不希望将像素值标准化为浮点数值。我们只需要标准化图像的大小：
+- en: '[PRE202]'
+  id: totrans-487
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE202]'
+- en: Then we convert TFRecord to NumPy arrays of image data and labels.
+  id: totrans-488
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后，我们将 TFRecord 转换为图像数据和标签的 NumPy 数组。
+- en: 'We also need to expand the data dimensions to handle the batch of images:'
+  id: totrans-489
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还需要扩展数据的维度，以处理图像的批量数据：
+- en: '[PRE203]'
+  id: totrans-490
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE203]'
+- en: The image is now expanded by one dimension to indicate that the first dimension
+    holds the number of images, which is the size of the image batch, and the normalized
+    images are iterated through. As we iterate through each image, we capture the
+    image value as a NumPy array and the corresponding label, and append `np_img_holder`
+    and `np_lbl_holder`, respectively.
+  id: totrans-491
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在，图像的维度被扩展了一个，表示第一维存储的是图像的数量，即图像批次的大小，然后对标准化后的图像进行迭代。每当我们遍历每一张图像时，我们将图像的值捕捉为NumPy数组及其对应的标签，并分别附加到`np_img_holder`和`np_lbl_holder`中。
+- en: 'To create a lookup dictionary to map the label index to the class name, we
+    may iterate through the TFRecord dataset to create a dictionary, `val_label_map`,
+    but first, we need to know how to parse the TFRecord dataset. This means that
+    we need to capture the tensors in the TFRecord dataset correctly. Therefore, we
+    need to use the following `feature_description`:'
+  id: totrans-492
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为了创建一个查找字典，将标签索引映射到类别名称，我们可以遍历TFRecord数据集来创建一个字典`val_label_map`，但首先，我们需要了解如何解析TFRecord数据集。这意味着我们需要正确捕捉TFRecord数据集中的张量。因此，我们需要使用以下的`feature_description`：
+- en: '[PRE204]'
+  id: totrans-493
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE204]'
+- en: '`The` `feature_description` in the preceding code is a collection of key-value
+    pairs. Each pair delineates a piece of metadata represented as a tensor:'
+  id: totrans-494
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`The` `feature_description` 在前面的代码中是一个键值对集合。每一对键值对定义了一段表示为张量的元数据：'
+- en: '[PRE205]'
+  id: totrans-495
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE205]'
+- en: 'The preceding code shows how to parse `test_all_ds` with the `feature_description`
+    provided. The result is a parsed dataset (`parsd_ds`) with all the necessary tensors
+    defined and parsed:'
+  id: totrans-496
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 前面的代码展示了如何使用提供的`feature_description`解析`test_all_ds`。结果是一个已解析的数据集（`parsd_ds`），其中包含所有定义和解析的必要张量：
+- en: '[PRE206]'
+  id: totrans-497
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE206]'
+- en: We now need to find out how the dataset assigns indices to class labels. One
+    way of doing this is to iterate through the whole dataset, or a portion of it.
+    At each iteration, we capture both the label index and the corresponding plaintext
+    for the label, and update this as a key-value pair in a dictionary such as `val_label_map`.
+    This is shown as the preceding code.
+  id: totrans-498
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们现在需要找出数据集如何为类别标签分配索引。做到这一点的一种方式是遍历整个数据集或其部分。在每次迭代时，我们捕捉标签索引和对应的明文标签，并将其更新为字典中的键值对，例如`val_label_map`。这在前面的代码中有展示。
+- en: 'We may inspect the dictionary by typing `val_label_map` in a notebook cell:'
+  id: totrans-499
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以通过在笔记本单元中输入`val_label_map`来检查字典：
+- en: '[PRE207]'
+  id: totrans-500
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE207]'
+- en: 'You may find `val_label_map` to be a dictionary such as this:'
+  id: totrans-501
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 你可能会发现`val_label_map`是一个类似于以下内容的字典：
+- en: '[PRE208]'
+  id: totrans-502
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE208]'
+- en: Keys are indexes of flower classes, and the values are plaintext names of flower
+    classes.
+  id: totrans-503
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 键是花卉类别的索引，值是花卉类别的明文名称。
+- en: 'We will create a helper function to handle the lookup:'
+  id: totrans-504
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将创建一个帮助函数来处理查找：
+- en: '[PRE209]'
+  id: totrans-505
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE209]'
+- en: In the `lookup` function, the NumPy array `np_entry` is the output of our model.
+    It contains the probability for each class. We want to map the position index
+    of the array with the highest probability to the class name. To achieve this,
+    this function maps it to the dictionary by key.
+  id: totrans-506
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在`lookup`函数中，NumPy数组`np_entry`是我们模型的输出。它包含每个类别的概率。我们希望将数组中概率最高的位置索引映射到类别名称。为此，函数通过键将其映射到字典中。
+- en: 'Next, we create a list that contains the ground truth flower class names:'
+  id: totrans-507
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建一个包含真实花卉类别名称的列表：
+- en: '[PRE210]'
+  id: totrans-508
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE210]'
+- en: We can create a table that maps the integer value of the label to the corresponding
+    plaintext name. In the preceding code, we first set up an empty list, `actual`,
+    and then we use a `for` loop to iterate through the entire label holder, `np_lbl_holder`.
+    The next step is to find the position where the maximum value occurs in this record,
+    and assign it to `class_key`. `class_key` is the index that is used for looking
+    up `val_label_map`, which maps the key to the corresponding plaintext name. The
+    plaintext name is then added to `actual`. Then, the `for` loop starts over again
+    with the next record it finds in `np_lbl_holder`.
+  id: totrans-509
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们可以创建一个表，将标签的整数值映射到对应的明文名称。在前面的代码中，我们首先设置一个空列表`actual`，然后使用`for`循环遍历整个标签持有者`np_lbl_holder`。接下来的步骤是找到该记录中最大值的位置，并将其赋值给`class_key`。`class_key`是用于查找`val_label_map`的索引，它将该键映射到相应的明文名称。然后，明文名称被添加到`actual`中。然后，`for`循环将继续处理`np_lbl_holder`中找到的下一个记录。
+- en: Scoring batch images
+  id: totrans-510
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 对批量图像进行评分
+- en: 'A helper function is required for batch scoring. This is similar to what we
+    used in the hybrid and reduced `float16` quantization models. The only difference
+    lies in the data type for the NumPy array dimension expansion. Since we are using
+    a model built by integer quantization, we need to cast the data type to an unsigned
+    8-bit integer (`uint8`):'
+  id: totrans-511
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 批量评分需要一个辅助函数。这与我们在混合型和减少的`float16`量化模型中使用的类似。唯一的区别在于 NumPy 数组维度扩展的数据类型。由于我们使用的是整数量化构建的模型，因此需要将数据类型转换为无符号
+    8 位整数（`uint8`）：
+- en: 'This is a `batch_predict` function that treats the input NumPy array as an
+    unsigned 8-bit integer (`uint8`):'
+  id: totrans-512
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这是一个将输入 NumPy 数组视为无符号 8 位整数（`uint8`）的 `batch_predict` 函数：
+- en: '[PRE211]'
+  id: totrans-513
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE211]'
+- en: This concludes the `batch_predict` function. This function takes the `input_raw`
+    array and scores it using our interpreter. The interpreter's output is then mapped
+    to a plaintext label with the `lookup` function.
+  id: totrans-514
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这就结束了 `batch_predict` 函数。该函数接收 `input_raw` 数组，并使用我们的解释器对其进行评分。解释器的输出随后通过 `lookup`
+    函数映射到一个明文标签。
+- en: 'Let''s now load the integer quantization model and set up the input and output
+    tensors:'
+  id: totrans-515
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在让我们加载整数量化模型，并设置输入和输出张量：
+- en: '[PRE212]'
+  id: totrans-516
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE212]'
+- en: In the preceding code, we initialized our quantization model and allocated memory
+    for input tensors as per this model. The `get_input_details` and `get_output_details`
+    methods will then retrieve these tensors' details, such as the name, shape, and
+    data type.
+  id: totrans-517
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们初始化了量化模型并为输入张量分配了内存，按照该模型的要求。`get_input_details` 和 `get_output_details`
+    方法将获取这些张量的详细信息，例如名称、形状和数据类型。
+- en: 'Then we may perform batched prediction:'
+  id: totrans-518
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们可以进行批量预测：
+- en: '[PRE213]'
+  id: totrans-519
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE213]'
+- en: In the preceding code, we iterate through the test images, score them, and then
+    store the results in a list defined as `batch_quantized_prediction`.
+  id: totrans-520
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，我们遍历了测试图像，对其进行评分，并将结果存储在名为 `batch_quantized_prediction` 的列表中。
+- en: 'We can calculate accuracy using `accuracy_score` from `sklearn`:'
+  id: totrans-521
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以使用 `sklearn` 的 `accuracy_score` 来计算准确度：
+- en: '[PRE214]'
+  id: totrans-522
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE214]'
+- en: The preceding function basically compares the `actual` list with the `batch_quantized_prediciton`
+    list.
+  id: totrans-523
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 上述函数基本上是将 `actual` 列表与 `batch_quantized_prediciton` 列表进行比较。
+- en: 'In this particular case, the accuracy is as follows:'
+  id: totrans-524
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这个特定情况下，准确度如下：
+- en: '[PRE215]'
+  id: totrans-525
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE215]'
+- en: Note
+  id: totrans-526
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 注意
+- en: It's expected that your model accuracy will be slightly different from the nominal
+    value printed here. Every time a base model is trained, the model accuracy will
+    not be identical. However, it should not be too dissimilar to the nominal value.
+    Another factor that impacts reproducibility in terms of model accuracy is the
+    number of epochs used in training; in this case, only five epochs for demonstration
+    and didactic purposes. More training epochs will give you a better and tighter
+    variance in terms of model accuracy.
+  id: totrans-527
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 预计您的模型准确性将略有不同于此处打印的名义值。每次训练基础模型时，模型的准确性都不会完全相同。然而，它不应该与名义值相差太多。影响模型准确性可重复性的另一个因素是训练时使用的
+    epochs 数量；在此示例中，仅使用了五个 epochs，目的是为了演示和教学。如果增加训练 epochs，您将获得更好、更稳定的模型准确性。
+- en: This result may vary if you retrained the full model over again, but it shouldn't
+    be too dissimilar to this value. Furthermore, based on my experience with this
+    data, integer quantized model performance is on a par with that of the original
+    full model. The preceding code shows that our TFLite model performed just as well
+    as the original model. As we reduce the model size through quantization, we are
+    still able to preserve the model's accuracy. In this example, the accuracy is
+    not impacted just because the model is now more compact.
+  id: totrans-528
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您重新训练了整个模型，结果可能会有所不同，但不应该与此值相差太多。此外，根据我对这些数据的经验，整数量化模型的性能与原始完整模型相当。前面的代码表明，我们的
+    TFLite 模型的表现与原始模型一样好。通过量化减少模型大小时，我们仍然能够保持模型的准确性。在这个例子中，模型的准确性不会因为模型变得更加紧凑而受到影响。
+- en: Summary
+  id: totrans-529
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we learned to optimize a trained model by making it smaller
+    and therefore more compact. Therefore, we have more flexibility when it comes
+    to deploying these models in various hardware or resource constrained conditions.
+    Optimization is important for model deployment in a resource constrained environment
+    such as edge devices with limited compute, memory, or power resources. We achieved
+    model optimization by means of quantization, where we reduced the model footprint
+    by altering the weight, biases, and activation levels' data type.
+  id: totrans-530
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一章中，我们学习了如何通过使训练后的模型变得更小、更紧凑来优化模型。因此，当我们将这些模型部署到各种硬件或资源受限的环境时，我们有了更多的灵活性。优化对于在资源受限的环境中部署模型非常重要，例如在计算、内存或电力资源有限的边缘设备上。我们通过量化实现了模型优化，在量化过程中，我们通过改变权重、偏置和激活层的数值类型，减少了模型的存储占用。
+- en: 'We learned about three quantization strategies: reduced `float16`, hybrid quantization,
+    and integer quantization. Of these three strategies, integer quantization currently
+    requires an upgrade to TensorFlow 2.3.'
+  id: totrans-531
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们学习了三种量化策略：减少的`float16`、混合量化和整数量化。在这三种策略中，整数量化目前需要升级到TensorFlow 2.3版本。
+- en: Choosing a quantization strategy depends on factors such as target compute,
+    resource, model size limit, and model accuracy. Furthermore, you have to consider
+    whether or not the target hardware requires integer ops only (in other words,
+    TPU). If so, then integer quantization is the obvious choice. With all the examples,
+    we learned that model accuracy is not impacted by model optimization strategies.
+    After quantization, model size is a fraction of the original. This demonstrates
+    the value of model optimization, especially when the deployment scenarios require
+    efficient use of the compute and power resources.
+  id: totrans-532
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择量化策略取决于多个因素，如目标计算能力、资源、模型大小限制和模型精度。此外，还需要考虑目标硬件是否只支持整数运算（换句话说，是否支持TPU）。如果是，那么整数量化显然是最佳选择。在所有的示例中，我们了解到模型优化策略不会影响模型的精度。量化后，模型的大小是原来的一个小分数。这证明了模型优化的价值，特别是在部署场景需要高效利用计算和电力资源时。
+- en: In the next chapter, we are going to take a closer look at some common practices
+    in the model building process. This practice involves data ingestion pipeline
+    design and how to avoid model overfitting.
+  id: totrans-533
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，我们将更详细地探讨模型构建过程中的一些常见实践。这些实践包括数据摄取管道设计以及如何避免模型过拟合。

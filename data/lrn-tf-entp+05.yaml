@@ -1,0 +1,1993 @@
+- en: 'Chapter 3:'
+  id: totrans-0
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三章：
+- en: Data Preparation and Manipulation Techniques
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据准备和处理技术
+- en: In this chapter, you will learn how to convert the two common data types into
+    structures suitable for ingestion pipelines—structured CSVs or pandas DataFrames
+    into a dataset, and unstructured data such as images into **TFRecords**.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，您将学习如何将两种常见的数据类型转换为适合摄取管道的结构——将结构化的 CSV 或 pandas DataFrame 转换为数据集，以及将图像等非结构化数据转换为
+    **TFRecord**。
+- en: Along the way, there will be some tips and utility functions that are reusable
+    in many situations. You will also understand the rationale of the conversion process.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此过程中，我们还将介绍一些在许多情况下都能重复使用的小技巧和实用功能。您还将理解转换过程的基本原理。
+- en: As demonstrated in the previous chapter, TensorFlow Enterprise takes advantage
+    of the flexibility offered by the Google Cloud AI platform to access training
+    data. Once access to the training data is resolved, our next task is to develop
+    a workflow to let the model consume the data efficiently. In this chapter, we
+    will learn how to examine and manipulate commonly used data structures.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前一章所示，TensorFlow Enterprise 利用 Google Cloud AI 平台提供的灵活性来访问训练数据。一旦解决了对训练数据的访问问题，我们的下一步任务是开发一个工作流，让模型高效地消耗数据。在本章中，我们将学习如何检查和处理常用的数据结构。
+- en: While TensorFlow can consume Pythonic data structures such as pandas or numpy
+    directly, for resource throughput and ingestion efficiency, TensorFlow built the
+    dataset API to convert data from its native Pythonic structure into TensorFlow's
+    specific structure. The dataset API can handle and parse many commonly used types
+    of data. For instance, structured or tabular data with defined schemas are typically
+    presented as a pandas DataFrame. The dataset API converts this data structure
+    into a Tensorflow dataset. Image data is typically presented as a numpy array.
+    In TensorFlow, it is preferred to convert it into `TFRecord`.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 TensorFlow 可以直接处理 Pythonic 数据结构，如 pandas 或 numpy，但为了提高资源吞吐量和摄取效率，TensorFlow
+    构建了数据集 API，用于将数据从其原生 Pythonic 结构转换为 TensorFlow 特定的结构。数据集 API 可以处理和解析许多常用的数据类型。例如，具有定义模式的结构化或表格数据通常呈现为
+    pandas DataFrame。数据集 API 将这种数据结构转换为 TensorFlow 数据集。图像数据通常呈现为 numpy 数组。在 TensorFlow
+    中，建议将其转换为 `TFRecord`。
+- en: In working with these data structures, it is important to be certain that the
+    conversion process is performed correctly and that the data can be verified. This
+    chapter will demonstrate some techniques that help to ensure that data structure
+    conversions are done correctly; for example, decoding a byte stream into an image.
+    It is always helpful to decode these data structures into a readable format just
+    for the purpose of a quick check of the data quality.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在处理这些数据结构时，确保转换过程正确且数据可验证非常重要。本章将演示一些有助于确保数据结构转换正确的技术；例如，解码字节流为图像。通常，将这些数据结构解码为可读格式有助于快速检查数据质量。
+- en: 'We will start with the TensorFlow dataset as applied to structured data. In
+    particular, we''ll cover the following main topics:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从应用于结构化数据的 TensorFlow 数据集开始。特别是，我们将涵盖以下主要内容：
+- en: Converting tabular data to a TensorFlow dataset
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将表格数据转换为 TensorFlow 数据集
+- en: Converting distributed CSV files to a TensorFlow dataset
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将分布式 CSV 文件转换为 TensorFlow 数据集
+- en: Handling image data for input pipelines
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 处理图像数据以供输入管道使用
+- en: Decoding `TFRecord` and reconstructing the image
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 解码 `TFRecord` 并重建图像
+- en: Handling image data at scale
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 处理大规模图像数据
+- en: Converting tabular data to a TensorFlow dataset
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将表格数据转换为 TensorFlow 数据集
+- en: '**Tabular** or **comma separated values (CSV)** data with fixed schemas and
+    data types are commonly encountered. We typically work it into a pandas DataFrame.
+    We have seen in the previous chapter how this can be easily done when the data
+    is hosted in a **BigQuery table** (the BigQuery magic command that returns a query
+    result to a pandas DataFrame by default).'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**表格** 或 **逗号分隔值（CSV）** 数据通常具有固定的模式和数据类型，这类数据常常会遇到。我们通常会将它转化为 pandas DataFrame。我们在上一章中看到，当数据托管在
+    **BigQuery 表** 中时，如何通过 BigQuery 的魔法命令将查询结果直接返回为 pandas DataFrame。'
+- en: Let's take a look at how to handle data that can fit into the memory. In this
+    example, we are going to read a public dataset using the BigQuery magic command,
+    so we can easily obtain the data in a pandas DataFrame. Then we are going to convert
+    it to a TensorFlow dataset. A TensorFlow dataset is the data structure for streaming
+    training data in batches without using up the compute node's runtime memory.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下如何处理可以适应内存的数据。在这个例子中，我们将使用BigQuery魔法命令读取一个公共数据集，这样我们就可以轻松地将数据导入pandas
+    DataFrame。然后，我们将把它转换为TensorFlow数据集。TensorFlow数据集是一种数据结构，用于按批次流式传输训练数据，而不会占用计算节点的运行内存。
+- en: Converting a BigQuery table to a TensorFlow dataset
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将BigQuery表格转换为TensorFlow数据集
+- en: 'Each of the following steps is executed in a cell. Again, use any of the AI
+    platforms you prefer (AI Notebook, Deep Learning VM, Deep Learning Container).
+    An AI notebook is the simplest and cheapest choice:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下每一步都会在单元格中执行。再次提醒，使用任何你喜欢的AI平台（AI Notebook、深度学习VM、深度学习容器）。AI notebook是最简单和最便宜的选择：
+- en: Note
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The table in this example is selected for demonstration purposes only. We are
+    going to treat `daily_deaths` as if it is the target for machine learning model
+    training. While we are going to treat it as if it is our training data (in other
+    words, containing features and target columns), in actual training data engineering
+    practices, there are other steps involved, such as feature engineering, aggregation,
+    and normalization.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本示例中的表格仅用于演示目的。我们将把`daily_deaths`视为机器学习模型训练的目标。虽然我们将其视为训练数据（换句话说，包含特征列和目标列），但在实际的数据工程实践中，还会涉及其他步骤，如特征工程、聚合和归一化。
+- en: Let's look at the data from BigQuery, so we can be sure of its data structure
+    and the data type of each column, and then take a preview of the table:![Figure
+    3.1 – Using BigQuery to examine the data structure
+  id: totrans-20
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们查看来自BigQuery的数据，以便确认其数据结构和每列的数据类型，然后预览表格：![图3.1 – 使用BigQuery检查数据结构
+- en: '](img/image001.jpg)'
+  id: totrans-21
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image001.jpg)'
+- en: Figure 3.1 – Using BigQuery to examine the data structure
+  id: totrans-22
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图3.1 – 使用BigQuery检查数据结构
+- en: 'Once the preceding query is run, you will see output as shown in the following
+    screenshot:'
+  id: totrans-23
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 一旦运行上述查询，你将看到如下所示的输出：
+- en: '![Figure 3.2 – Table preview'
+  id: totrans-24
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![图3.2 – 表格预览'
+- en: '](img/image002.jpg)'
+  id: totrans-25
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image002.jpg)'
+- en: Figure 3.2 – Table preview
+  id: totrans-26
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图3.2 – 表格预览
+- en: 'Load the library, define the variables, and define the project ID only if you
+    are running in a different project:'
+  id: totrans-27
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 加载库、定义变量，并仅在你运行在不同项目中时定义项目ID：
+- en: '[PRE0]'
+  id: totrans-28
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Use the BigQuery magic command to read a table into a pandas DataFrame (`train_raw_df`):'
+  id: totrans-29
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用BigQuery魔法命令将表格读取到pandas DataFrame（`train_raw_df`）中：
+- en: '[PRE1]'
+  id: totrans-30
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Take a look at a few sample rows:'
+  id: totrans-31
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 看几个样本行：
+- en: '[PRE2]'
+  id: totrans-32
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Here''s the output:'
+  id: totrans-33
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 以下是输出结果：
+- en: '![Figure 3.3 – Output of a few rows from the table'
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![图3.3 – 表格中几行数据的输出'
+- en: '](img/image003.jpg)'
+  id: totrans-35
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image003.jpg)'
+- en: Figure 3.3 – Output of a few rows from the table
+  id: totrans-36
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图3.3 – 表格中几行数据的输出
+- en: 'Some columns are categorical. We need to encode them as integers. First, we
+    designate the column as a pandas categorical feature:'
+  id: totrans-37
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一些列是类别型的。我们需要将它们编码为整数。首先，我们将该列指定为pandas类别特征：
+- en: '[PRE3]'
+  id: totrans-38
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Then we replace the column content with category code:'
+  id: totrans-39
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们将列内容替换为类别编码：
+- en: '[PRE4]'
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Then we repeat this procedure for the other categorical columns:'
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们对其他类别列重复此过程：
+- en: '[PRE5]'
+  id: totrans-42
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Make lists to hold column names according to data type. The reason is to ensure
+    that the dataset can cast the columns in our DataFrame to the correct TensorFlow
+    data type:'
+  id: totrans-43
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按数据类型创建列表来存放列名。这样做的原因是确保数据集能够将我们DataFrame中的列转换为正确的TensorFlow数据类型：
+- en: '[PRE6]'
+  id: totrans-44
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Creating a dataset from a pandas DataFrame requires us to specify the correct
+    column names and the data type. Column names are held in the respective list based
+    on their data type:'
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从pandas DataFrame创建数据集时，我们需要指定正确的列名和数据类型。列名根据其数据类型存放在相应的列表中：
+- en: '[PRE7]'
+  id: totrans-46
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Look at the structure of the dataset to make sure its metadata is as specified
+    during the creation process in the previous step:'
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查看数据集的结构，确保其元数据与前一步创建过程中指定的内容一致：
+- en: '[PRE8]'
+  id: totrans-48
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The output is as follows:'
+  id: totrans-49
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出结果如下：
+- en: '[PRE9]'
+  id: totrans-50
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The tensor shapes and data types are in the exact order as indicated in the
+    previous step.
+  id: totrans-51
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 张量的形状和数据类型与前一步中所示的顺序完全一致。
+- en: Now you have created a dataset from a pandas DataFrame. The dataset is now a
+    part of the input pipeline. If this dataset's features and targets are properly
+    normalized and selected (for example, having performed a normalization operation
+    such as min-max scaling, or a standardization operation such as Z-score conversion
+    if the distribution of the column data can be assumed to be Gaussian), then it
+    is ready to be fed into a model for training as-is.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经从 pandas DataFrame 创建了一个数据集。这个数据集现在是输入管道的一部分。如果这个数据集的特征和目标已正确归一化和选择（例如，执行了归一化操作如最小-最大缩放，或标准化操作如
+    Z 分数转换，如果可以假定列数据的分布为高斯分布），那么它可以直接用于模型训练。
+- en: 'So far, from this exercise, you''ve learned the following points:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，通过这次练习，你已经学到了以下几点：
+- en: Use BigQuery as much as possible to examine data schemas and data types first.
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 尽可能使用 BigQuery 来首先检查数据模式和数据类型。
+- en: For data that can fit into the memory, leverage the BigQuery magic command to
+    output a pandas DataFrame.
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于可以适应内存的数据，利用 BigQuery 魔法命令输出 pandas DataFrame。
+- en: Bin the column names by their data types for clarity and organization.
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据数据类型对列名进行分组，以便清晰和组织。
+- en: Encode categorical features to integers so they can be cast into a TensorFlow
+    data type that is compatible with a TensorFlow dataset.
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将类别特征编码为整数，以便它们可以转换为与 TensorFlow 数据集兼容的 TensorFlow 数据类型。
+- en: Converting distributed CSV files to a TensorFlow dataset
+  id: totrans-58
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将分布式 CSV 文件转换为 TensorFlow 数据集
+- en: If you are not sure about the data size, or are unsure as to whether it can
+    all fit in the Python runtime's memory, then reading the data into a pandas DataFrame
+    is not a viable option. In this case, we may use a **TF dataset** to directly
+    access the data without opening it.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不确定数据的大小，或者不确定它是否能完全适应 Python 运行时的内存，那么将数据读取到 pandas DataFrame 中就不是一个可行的选项。在这种情况下，我们可以使用
+    **TF 数据集** 来直接访问数据，而不需要打开它。
+- en: Typically, when data is stored in a storage bucket as parts, the naming convention
+    follows a general pattern. This pattern is similar to that of a `*`.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，当数据以部分形式存储在存储桶中时，命名约定遵循一般模式。这个模式类似于 `*`。
+- en: 'When storing distributed files in a Google Cloud Storage bucket, a common pattern
+    for filenames is as follows:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在将分布式文件存储到 Google Cloud Storage 桶时，文件名的常见模式如下：
+- en: '[PRE10]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '[PRE11]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[PRE12]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Alternatively, there is the following pattern:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，存在以下模式：
+- en: '[PRE13]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '[PRE15]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: There is always a pattern in the filenames. The TensorFlow module `tf.io.gfile.glob`
+    is a convenient API that encodes such filename patterns in a distributed filesystem.
+    This is critical for inferring distributed files that are stored in a storage
+    bucket. In this section, we will use this API to infer our structured data (multiple
+    CSV files), which is distributed in a storage bucket. Once inferred, we will then
+    convert it to a dataset (using `tf.data.experimental.make_csv_dataset`).
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件名中总是有一个模式。TensorFlow 模块 `tf.io.gfile.glob` 是一个方便的 API，它可以在分布式文件系统中编码此类文件名模式。这对于推断存储在存储桶中的分布式文件至关重要。在这一部分，我们将使用这个
+    API 来推断我们分布在存储桶中的结构化数据（多个 CSV 文件）。推断后，我们将使用 `tf.data.experimental.make_csv_dataset`
+    将其转换为数据集。
+- en: Preparing an example CSV
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 准备一个示例 CSV
+- en: Since we need multiple CSV files of the same schema for this demonstration, we
+    may use open source CSV data such as the **Pima Indians Diabetes** dataset (CSV)
+    as our data source. This CSV is hosted in [https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv](https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv).
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们需要多个相同模式的 CSV 文件进行演示，我们可以使用开源的 CSV 数据集，如 **皮马印第安人糖尿病** 数据集（CSV）作为数据来源。该
+    CSV 文件托管在 [https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv](https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv)。
+- en: 'You may simply run the following command on your local system (where you downloaded
+    the aforementioned file):'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在本地系统上运行以下命令（你已经下载了上述文件）：
+- en: '[PRE16]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Again, for demonstration purposes only, we need to split this data into multiple
+    smaller CSVs, and then upload these CSVs to a Google Cloud Storage bucket.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次强调，为了演示的目的，我们需要将这些数据拆分为多个较小的 CSV 文件，然后将这些 CSV 文件上传到 Google Cloud Storage 桶。
+- en: 'The column names for this file are as follows:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该文件的列名如下：
+- en: '[PRE17]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Column names are not included in the CSV thus we may split the file into multiple
+    parts without extracting the header row. Let’s start with steps below:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 CSV 文件中未包含列名，因此我们可以在不提取标题行的情况下将文件拆分为多个部分。让我们从以下步骤开始：
+- en: Split the file into multiple parts.
+  id: totrans-78
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将文件拆分为多个部分。
+- en: 'Once you have downloaded the CSV, you may split it into multiple parts with
+    the following `awk` command. This will split the file into multiple CSV parts
+    at every 200 rows:'
+  id: totrans-79
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 下载CSV文件后，你可以使用以下`awk`命令将其拆分为多个部分。这个命令会在每200行处将文件拆分成多个CSV部分：
+- en: '[PRE18]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The following CSV files are generated:'
+  id: totrans-81
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 生成了以下CSV文件：
+- en: '[PRE19]'
+  id: totrans-82
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Upload the files to storage. After you have created multiple CSV files from
+    the downloaded file, you may upload these files to a Google Cloud Storage bucket:'
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将文件上传到存储。下载完文件并生成多个CSV文件后，你可以将这些文件上传到Google Cloud Storage桶中：
+- en: '![Figure 3.4 – Uploading CSV files to a Cloud Storage bucket'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图3.4 – 上传CSV文件到Cloud Storage桶'
+- en: '](img/image005.jpg)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image005.jpg)'
+- en: Figure 3.4 – Uploading CSV files to a Cloud Storage bucket
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图3.4 – 上传CSV文件到Cloud Storage桶
+- en: 'All the files are here:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有文件都在这里：
+- en: '![Figure 3.5 – Multi-part CSV file in the Cloud Storage bucket'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图3.5 – Cloud Storage桶中的多部分CSV文件'
+- en: '](img/image007.jpg)'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image007.jpg)'
+- en: Figure 3.5 – Multi-part CSV file in the Cloud Storage bucket
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图3.5 – Cloud Storage桶中的多部分CSV文件
+- en: Building filename patterns with TensorFlow I/O
+  id: totrans-91
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用TensorFlow I/O构建文件名模式
+- en: 'Once the files are uploaded, let''s now go to our AI Platform notebook environment
+    and execute the following lines of code:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件上传完成后，接下来我们进入AI平台笔记本环境，执行以下代码行：
+- en: '[PRE20]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '[PRE21]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '`Tf.io.gfile.glob` takes a file pattern string as the input and creates a `filenames`
+    list:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Tf.io.gfile.glob`接收一个文件模式字符串作为输入，并创建一个`filenames`列表：'
+- en: '[PRE23]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '[PRE25]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Now that we have a list of filenames that match the pattern, we are ready to
+    convert these files to a dataset.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经有了匹配模式的文件名列表，我们可以准备将这些文件转换为数据集了。
+- en: Creating a dataset from CSV files
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 从CSV文件创建数据集
+- en: 'Typically, multiple CSV files are stored with either no header or all with
+    a header. In this case, there is no header. We need to prepare the column names
+    for the CSV before we convert it to dataset:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，多个CSV文件要么没有表头，要么全部都有表头。在这种情况下，没有表头。我们需要在将CSV转换为数据集之前准备列名：
+- en: '[PRE27]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: '[PRE29]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Here''s the source for column names: [https://data.world/data-society/pima-indians-diabetes-database](https://data.world/data-society/pima-indians-diabetes-database).'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是列名的来源：[https://data.world/data-society/pima-indians-diabetes-database](https://data.world/data-society/pima-indians-diabetes-database)。
+- en: 'Then we need to specify that the first lines in these files are not headers
+    as we convert the CSVs to a dataset:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们需要指定这些文件的第一行不是表头，因为我们要将CSV文件转换为数据集：
+- en: '[PRE30]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '[PRE31]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: '[PRE34]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: '[PRE35]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: In `make_csv_dataset`, we use a list of filenames as the input and specify there
+    is no header, and we then assign `COLUMN_NAMES`, make small batches for showing
+    the result, select a column as the target column (`'Outcome'`), and set the number
+    of epochs to `1` since we are not going to train a model with it at this point.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`make_csv_dataset`中，我们使用文件名列表作为输入，并指定没有表头，然后我们分配`COLUMN_NAMES`，制作小批量结果展示，选择一列作为目标列（`'Outcome'`），并将训练周期数设置为`1`，因为我们此时并不会用它训练模型。
+- en: Inspecting the dataset
+  id: totrans-119
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查数据集
+- en: Now we may verify the content of the dataset. Recall that since we specified
+    a column as the label, that means the rest of the columns are features. The output
+    will be a tuple that contains features and targets.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以验证数据集的内容了。回想一下，由于我们指定了一列作为标签，这意味着其余列是特征。输出将是一个包含特征和目标的元组。
+- en: 'Let''s take the first batch of the dataset, which contains five observations,
+    and print the data in features and target columns. In a dataset, the data is stored
+    as arrays, and each column is now a key-value pair. Within `features` is another
+    level of key-value pairs for each feature:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们以数据集的第一批数据为例，其中包含五个观测值，并打印出特征列和目标列的数据。在数据集中，数据以数组的形式存储，每一列现在是一个键值对。在`features`中是另一级别的键值对，表示每个特征：
+- en: '[PRE39]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '[PRE42]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '[PRE43]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'The output is as follows:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出如下：
+- en: '[PRE44]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '[PRE45]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '[PRE46]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: '[PRE48]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: '[PRE50]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '[PRE51]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '[PRE53]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: During training, the data will be passed to the training process in batches,
+    and not as a single file to be opened and possibly consume a large amount of runtime
+    memory. In the preceding example, we see that as a good practice, distributed
+    files stored in Cloud Storage follow a certain naming pattern. The `tf.io.gfile.glob`
+    API can easily infer multiple files that are distributed in a Cloud Storage bucket.
+    We may easily use `tf.data.experimental.make_csv_dataset` to create a dataset
+    instance from the `gfile` instance. Overall, the `tf.io` and `tf.data` APIs together
+    make it possible to build a data input pipeline without explicitly reading data
+    into memory.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中，数据将以批处理的形式传递给训练过程，而不是作为单个文件打开，可能会消耗大量运行时内存。在前面的示例中，我们看到作为一种最佳实践，存储在云存储中的分布式文件遵循一定的命名模式。`tf.io.gfile.glob`
+    API可以轻松推断分布在云存储桶中的多个文件。我们可以轻松使用`tf.data.experimental.make_csv_dataset`从`gfile`实例创建数据集实例。总体而言，`tf.io`和`tf.data`
+    API一起使得构建数据输入管道成为可能，而无需显式地将数据读取到内存中。
+- en: Handling image data for input pipelines
+  id: totrans-139
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 处理输入管道的图像数据
+- en: While there are many types of unstructured data, images are probably the most
+    frequently encountered type. TensorFlow provided `TFRecord` as a type of dataset
+    for image data. In this section, we are going to learn how to convert image data
+    in Cloud Storage into a `TFRecord` object for input pipelines.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管有许多类型的非结构化数据，但图像可能是最常见的一种类型。TensorFlow提供了`TFRecord`作为图像数据的一种数据集类型。在本节中，我们将学习如何将云存储中的图像数据转换为`TFRecord`对象，以供输入管道使用。
+- en: When working with image data in a TensorFlow pipeline, the raw image is typically
+    converted to a `TFRecord` object for the same reason as for CSV or DataFrames.
+    Compared to a raw numpy array, a `TFRecord` object is a more efficient and scalable
+    representation of the image collections. Converting raw images to a `TFRecord`
+    object is not a straightforward process. In `TFRecord`, the data is stored as
+    a binary string. In this section, we are going to show how to do this step by
+    step.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow管道中处理图像数据时，原始图像通常会转换为`TFRecord`对象，这与CSV或DataFrame相同。与原始numpy数组相比，`TFRecord`对象是图像集合的更高效且可扩展的表示形式。将原始图像转换为`TFRecord`对象不是一个简单的过程。在`TFRecord`中，数据以二进制字符串的形式存储。在本节中，我们将逐步展示如何实现这一过程。
+- en: 'Let''s start with the conversion process of converting a raw image to a `TFRecord`
+    object. Feel free to upload your own images to the JupyterLab instance:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从将原始图像转换为`TFRecord`对象的过程开始。随时将您自己的图像上传到JupyterLab实例：
+- en: Upload images of your choice to the JupyterLab runtime. Create a folder for
+    your images that we are going to upload. Give the folder a name, and this is the
+    folder where the images will be uploaded:![Figure 3.6 – Creating a folder in the
+    notebook runtime
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 上传您选择的图像到JupyterLab运行时。为我们将要上传的图像创建一个文件夹。给该文件夹命名，这就是图像将被上传的文件夹：![图 3.6 – 在笔记本运行时创建文件夹
+- en: '](img/image009.jpg)'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image009.jpg)'
+- en: Figure 3.6 – Creating a folder in the notebook runtime
+  id: totrans-145
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.6 – 在笔记本运行时创建文件夹
+- en: Now that the folder has a name, you may proceed to the next step.
+  id: totrans-146
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 现在文件夹已经命名，您可以继续执行下一步。
+- en: Double-click on the folder you just named. Now you are inside this folder. In
+    this example, I named this folder `image-ai-platform-examle`. Then, within this
+    folder, I created another folder named `maldives`. Once inside, you may click
+    the upload button to upload a few of your own images to this folder:![Figure 3.7
+    – Uploading an item to JupyterLab runtime
+  id: totrans-147
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 双击您刚才命名的文件夹。现在您已进入该文件夹。在此示例中，我将该文件夹命名为`image-ai-platform-examle`。然后，在这个文件夹内，我创建了另一个名为`maldives`的文件夹。一旦进入该文件夹，您可以点击上传按钮，将您自己的几张图像上传到此文件夹：![图
+    3.7 – 将项目上传到JupyterLab运行时
+- en: '](img/image011.jpg)'
+  id: totrans-148
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image011.jpg)'
+- en: Figure 3.7 – Uploading an item to JupyterLab runtime
+  id: totrans-149
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.7 – 将项目上传到JupyterLab运行时
+- en: Here, I uploaded an image named `maldives-1.jpg`.
+  id: totrans-150
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这里，我上传了一张名为`maldives-1.jpg`的图像。
+- en: You may acquire the path to this image by right-clicking on the image file:![Figure
+    3.8 – Finding the path to images uploaded to the notebook
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 您可以通过右键点击图像文件来获取该图像的路径：![图 3.8 – 查找上传到笔记本的图像路径
+- en: '](img/image013.jpg)'
+  id: totrans-152
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image013.jpg)'
+- en: Figure 3.8 – Finding the path to images uploaded to the notebook
+  id: totrans-153
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.8 – 查找上传到笔记本的图像路径
+- en: You may paste the file path to a notepad or editor for quick reference for the
+    next step.
+  id: totrans-154
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您可以将文件路径粘贴到记事本或编辑器中，便于下一步的快速参考。
+- en: 'Select `images-ai-platform-example/maldives/maldives-1.jpg`:'
+  id: totrans-155
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择`images-ai-platform-example/maldives/maldives-1.jpg`：
+- en: 'Display the image for verification:'
+  id: totrans-156
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 显示图像以进行验证：
+- en: '[PRE54]'
+  id: totrans-157
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'Here''s the output:'
+  id: totrans-158
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这是输出结果：
+- en: '![Figure 3.9 – Displaying the image'
+  id: totrans-159
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![图 3.9 – 显示图像'
+- en: '](img/image015.jpg)'
+  id: totrans-160
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image015.jpg)'
+- en: Figure 3.9 – Displaying the image
+  id: totrans-161
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.9 – 显示图像
+- en: 'Create a dictionary to map the filename with a label. We can use the `my_image`
+    alias as the key and we may verify this dictionary:'
+  id: totrans-162
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个字典，将文件名与标签映射。我们可以使用 `my_image` 别名作为键，并且可以验证此字典：
+- en: '[PRE55]'
+  id: totrans-163
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'The output should be as follows:'
+  id: totrans-164
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 输出应如下所示：
+- en: '[PRE56]'
+  id: totrans-165
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Constructing a protobuf message
+  id: totrans-166
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 构建 protobuf 消息
+- en: Now we have `image_labels` that map image files to their labels. The next thing
+    we need to do is to convert this image to a `tf.Example` `image_label`, the `tf.Example`
+    message consists of key-value pairs. The key-value pairs are the metadata of the
+    image, including the three dimensions and their respective values, the label and
+    its value, and finally the image itself in byte array format. The values are represented
+    as `tf.Tensor`. Let's now construct this protobuf message.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了 `image_labels`，它将图像文件映射到其标签。接下来，我们需要做的是将此图像转换为 `tf.Example` `image_label`，`tf.Example`
+    消息由键值对组成。键值对是图像的元数据，包括三个维度及其相应的值、标签及其值，最后是图像本身的字节数组格式。值表示为 `tf.Tensor`。现在让我们构建这个
+    protobuf 消息。
+- en: 'At this time, the `tf.Example` protobuf message can only accept three types
+    of `tf.Tensor`. These are as follows:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时，`tf.Example` protobuf 消息只能接受三种类型的 `tf.Tensor`。它们如下所示：
+- en: '`tf.train.ByteList` can handle `string` `and` `byte`.'
+  id: totrans-169
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.ByteList` 可以处理 `string` 和 `byte`。'
+- en: '`tf.train.FloatList` can handle `float (float32)` `and` `double (float64)`.'
+  id: totrans-170
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.FloatList` 可以处理 `float (float32)` 和 `double (float64)`。'
+- en: '`tf.train.Int64List` can handle `bool`, `enum`, `int32`, `uint32`, `int64`
+    `and` `uint64`.'
+  id: totrans-171
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.Int64List` 可以处理 `bool`、`enum`、`int32`、`uint32`、`int64` 和 `uint64`。'
+- en: 'Most other generic data types can be coerced into one of these three types
+    as per TensorFlow''s documentation, which is available at: [https://www.tensorflow.org/tutorials/load_data/tfrecord#tftrainexample](https://www.tensorflow.org/tutorials/load_data/tfrecord#tftrainexample):'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据 TensorFlow 文档，其他大多数通用数据类型可以强制转换为这三种类型之一，相关文档请参见：[https://www.tensorflow.org/tutorials/load_data/tfrecord#tftrainexample](https://www.tensorflow.org/tutorials/load_data/tfrecord#tftrainexample)：
+- en: 'First, we may use these functions that are provided as per TensorFlow''s documentation.
+    These functions can convert values to types that are compatible with `tf.Example`:'
+  id: totrans-173
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们可以使用 TensorFlow 文档中提供的这些函数。这些函数可以将值转换为与 `tf.Example` 兼容的类型：
+- en: '[PRE57]'
+  id: totrans-174
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: Generally speaking, from the pattern in the preceding function, we can see that
+    the raw value from the data is first coerced into one of the three acceptable
+    types and then it is converted to a `feature`.
+  id: totrans-175
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 一般来说，从前述函数的模式中，我们可以看到，数据中的原始值首先被强制转换为三种可接受类型之一，然后再转换为 `feature`。
+- en: 'Then, we can open the image as a byte string and extract its dimensions:'
+  id: totrans-176
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们可以将图像作为字节串打开并提取其尺寸：
+- en: '[PRE58]'
+  id: totrans-177
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'Let''s now construct a dictionary that puts these key-value pairs together:'
+  id: totrans-178
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在我们构建一个字典，将这些键值对组合在一起：
+- en: '[PRE59]'
+  id: totrans-179
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: Notice that the feature dictionary consists of key-value pairs of the metadata,
+    where the values are one of the three coerced data types for `tf.Example`.
+  id: totrans-180
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 请注意，特征字典由元数据的键值对组成，其中值是 `tf.Example` 的三种强制转换数据类型之一。
+- en: 'We will then convert this dictionary to `tf.Train.Features`:'
+  id: totrans-181
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们将此字典转换为 `tf.Train.Features`：
+- en: '[PRE60]'
+  id: totrans-182
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'Convert a `tf.Features` protobuf message to a `tf.Example` protobuf message:'
+  id: totrans-183
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将 `tf.Features` protobuf 消息转换为 `tf.Example` protobuf 消息：
+- en: '[PRE61]'
+  id: totrans-184
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'Now, create a directory for storing `tfrecords`:'
+  id: totrans-185
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，创建一个存储 `tfrecords` 的目录：
+- en: '[PRE62]'
+  id: totrans-186
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'Specify a target name, and then execute the write operation:'
+  id: totrans-187
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 指定目标名称，然后执行写操作：
+- en: '[PRE63]'
+  id: totrans-188
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: The image is now written into a protobuf message, which is a collection of key-value
+    pairs that store its dimensions, labels, and raw images (the image value is stored
+    as a byte string).
+  id: totrans-189
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该图像现在已写入 protobuf 消息，它是一个键值对集合，用于存储其尺寸、标签和原始图像（图像值以字节串形式存储）。
+- en: Decoding TFRecord and reconstructing the image
+  id: totrans-190
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 解码 TFRecord 并重建图像
+- en: 'In the previous section, we learned how to write a `.jpg` image into a `TFRecord`
+    dataset. Now we are going to see how to read it back and display it. An important
+    requirement is that you must know the feature structure of the `TFRecord` protobuf
+    as indicated by its keys. The feature structure is the same as the feature description
+    used to build the `TFRecord` in the previous section. In other words, in the same
+    way as a raw image was structured into a `tf.Example` protobuf with a defined
+    feature description, we can use that feature description to parse or reconstruct
+    the image using the same knowledge stored in the feature description:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们学习了如何将`.jpg`图像写入`TFRecord`数据集。现在我们将看到如何将其读回并显示。一个重要的要求是，你必须知道`TFRecord`
+    protobuf的特征结构，这是通过其键来指示的。特征结构与上一节中用于构建`TFRecord`的特征描述是相同的。换句话说，就像原始图像被结构化为具有定义特征描述的`tf.Example`
+    protobuf一样，我们可以使用该特征描述来解析或重建图像，使用存储在特征描述中的相同知识：
+- en: 'Read `TFRecord` back from the path where it is stored:'
+  id: totrans-192
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从存储路径中读取`TFRecord`：
+- en: '[PRE64]'
+  id: totrans-193
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'Create a dictionary to specify the keys and values in `TFRecord`, and use it
+    to parse all elements in the `TFRecord` dataset:'
+  id: totrans-194
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个字典来指定`TFRecord`中的键和值，并使用它来解析`TFRecord`数据集中的所有元素：
+- en: '[PRE65]'
+  id: totrans-195
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: In the preceding code, `_parse_image_function` uses `image_feature_description`
+    to parse the `tfrecord` protobuf. We use the `map` function to apply `_parse_iamge_function`
+    to each image in `read_back_tfrecord`.
+  id: totrans-196
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，`_parse_image_function`使用`image_feature_description`来解析`TFRecord` protobuf。我们使用`map`函数将`_parse_image_function`应用于`read_back_tfrecord`中的每个图像。
+- en: 'Next, we will show the image using the following code:'
+  id: totrans-197
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将使用以下代码来显示图像：
+- en: '[PRE66]'
+  id: totrans-198
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'Here''s the output:'
+  id: totrans-199
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这是输出结果：
+- en: '![Figure 3.10 – Displaying a dataset as an image'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 3.10 – 将数据集显示为图像'
+- en: '](img/image019.jpg)'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image019.jpg)'
+- en: Figure 3.10 – Displaying a dataset as an image
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.10 – 将数据集显示为图像
+- en: In this section, you learned how to convert raw data (an image) to `TFRecord`
+    format, and verify that the conversion was done correctly by reading the `TFRecord`
+    back and displaying it as an image. From this example, we can also see that in
+    order to decode and inspect `TFRecord` data, we need the feature dictionary as
+    was used during the encoding process. It is important to bear this in mind when
+    working with `TFRecord`.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，你学会了如何将原始数据（图像）转换为`TFRecord`格式，并通过读取`TFRecord`并将其显示为图像来验证转换是否正确。从这个例子中，我们还可以看到，为了解码和检查`TFRecord`数据，我们需要在编码过程中使用的特征字典。在使用`TFRecord`时，记住这一点非常重要。
+- en: Handling image data at scale
+  id: totrans-204
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 大规模处理图像数据
+- en: Handling data and their respective labels is simple if the everything can be
+    loaded into Python engine's runtime memory. However, in the case of constructing
+    a data pipeline for ingestion into a model training workflow, we want to ingest
+    or stream data in batches so that we don't rely on the runtime memory to hold
+    all the training data. In this case, maintaining the one-to-one relationship between
+    the data (image) and label has to be preserved. We are going to see how to do
+    this with `TFRecord`. We have already seen how to convert one image to a `TFRecord`.
+    With multiple images, the conversion process is exactly the same for each image.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理数据及其相应标签很简单，如果一切数据都可以加载到Python引擎的运行时内存中。然而，在构建数据管道以供模型训练工作流使用时，我们希望以批量的方式摄取或流式传输数据，以便不依赖于运行时内存来保存所有训练数据。在这种情况下，必须保持数据（图像）与标签之间的一对一关系。接下来我们将看到如何使用`TFRecord`来实现这一点。我们已经看到如何将一张图像转换为`TFRecord`。对于多张图像，转换过程对于每张图像都是完全相同的。
+- en: Let's take a look at how we can reuse and refactor the code from the previous
+    section to apply to a batch of images. Since you have seen how it was done for
+    a single image, you will have little to no problem understanding the code and
+    rationale here.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下如何重用和重构上一节中的代码，以应用于一批图像。由于你已经看到如何处理单个图像，所以在理解此处的代码和原理时，你应该几乎没有问题。
+- en: 'Typically, when working with images for classification, we would organize images
+    in the following directory structure, starting with a base directory (in other
+    words, project name). The next level of directories are `train`, `validation`,
+    and `test`. Within each of the three directories, there are image class directories.
+    In other words, labels are the lowest directory name. For example, the directories
+    may be organized into the following:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，在处理分类图像时，我们会按照以下目录结构组织图像，从一个基本目录开始（换句话说，项目名称）。下一级目录为`train`、`validation`和`test`。在这三个目录中，每个目录下都有图像类别目录。换句话说，标签是最底层的目录名称。例如，目录可以组织为以下结构：
+- en: '[PRE67]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: 'Then, below this level, we would have the following:'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在此级别下，我们将拥有以下内容：
+- en: '[PRE68]'
+  id: totrans-210
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '[PRE69]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-213
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: '[PRE72]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[PRE73]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '[PRE74]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: '[PRE75]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '[PRE76]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[PRE77]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '[PRE78]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: '[PRE79]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'Another way of demonstrating the organization of images by classes is as follows:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种展示图像按类别组织的方式如下：
+- en: '[PRE80]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: '[PRE81]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '[PRE84]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '[PRE86]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: '[PRE87]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: '[PRE88]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: '[PRE89]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: '[PRE90]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: '[PRE91]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: '[PRE92]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'Images are placed in a directory based on their class. In this section, the
+    example is simplified to the following structure in Cloud Storage:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图像根据其类别放置在相应的目录中。在本节中，示例简化为云存储中的以下结构：
+- en: '[PRE93]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: '[PRE94]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: '[PRE95]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '[PRE96]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: 'You may find example jpg images in: [https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_03/from_gs](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_03/from_gs)'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在以下链接找到示例的jpg图片：[https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_03/from_gs](https://github.com/PacktPublishing/learn-tensorflow-enterprise/tree/master/chapter_03/from_gs)
+- en: 'Each folder name corresponds to the label of images. The general procedure
+    is as follows:'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个文件夹名称对应图像的标签。一般步骤如下：
+- en: Copy images stored in the Cloud Storage bucket to the JupyterLab runtime.
+  id: totrans-243
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将存储在云存储桶中的图像复制到JupyterLab运行时。
+- en: Map image filenames to their respective labels.
+  id: totrans-244
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将图像文件名映射到它们各自的标签。
+- en: Write each image's dimension, label, and byte array to the `tf.Example` protobuf.
+  id: totrans-245
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将每个图像的尺寸、标签和字节数组写入`tf.Example` protobuf。
+- en: Store multiple protobufs together in a single `TFRecord`.
+  id: totrans-246
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将多个protobuf文件一起存储在一个`TFRecord`中。
+- en: Executing the steps
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 执行步骤
+- en: 'Here are the detailed steps that need to be run in each cell for this example:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是每个单元格中需要运行的详细步骤：
+- en: 'Copy images from a storage bucket to the notebook runtime:'
+  id: totrans-249
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将图像从存储桶复制到笔记本运行时：
+- en: '[PRE97]'
+  id: totrans-250
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: In this step, a folder, `from_gs`, is created, and the `image-collection` bucket
+    is copied into it.
+  id: totrans-251
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这一步骤中，创建了一个文件夹`from_gs`，并将`image-collection`桶复制到其中。
+- en: 'Consider the base directory to be `/from_gs/image-collection`:'
+  id: totrans-252
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 将基本目录视为`/from_gs/image-collection`：
+- en: '![Figure 3.11 – Base directory'
+  id: totrans-253
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![图 3.11 – 基本目录'
+- en: '](img/image016.jpg)'
+  id: totrans-254
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image016.jpg)'
+- en: Figure 3.11 – Base directory
+  id: totrans-255
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.11 – 基本目录
+- en: Since this example is for demonstrating how to create `TFRecordDataset`, and
+    not about partitioning data into training, validation, and testing, we can go
+    right to the image class directory level, as shown in the following screenshot:![Figure
+    3.12 – Image class directory level
+  id: totrans-256
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 由于此示例用于演示如何创建`TFRecordDataset`，而不是将数据划分为训练、验证和测试，因此我们可以直接进入图像类别目录级别，如下截图所示：![图
+    3.12 – 图像类别目录级别
+- en: '](img/image017.jpg)'
+  id: totrans-257
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image017.jpg)'
+- en: Figure 3.12 – Image class directory level
+  id: totrans-258
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.12 – 图像类别目录级别
+- en: 'Upon inspecting one of the image class directories, we see the image files:'
+  id: totrans-259
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 检查其中一个图像类别目录后，我们可以看到图像文件：
+- en: '![Figure 3.13 – Image files'
+  id: totrans-260
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '![图 3.13 – 图像文件'
+- en: '](img/image018.jpg)'
+  id: totrans-261
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '](img/image018.jpg)'
+- en: Figure 3.13 – Image files
+  id: totrans-262
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 图 3.13 – 图像文件
+- en: 'Import libraries and designate the label names as `CLASS_NAMES`:'
+  id: totrans-263
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 导入库并将标签名称指定为`CLASS_NAMES`：
+- en: '[PRE98]'
+  id: totrans-264
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: 'And CLASS_NAMES is captured properly as shown:'
+  id: totrans-265
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 并且`CLASS_NAMES`被正确捕获，如下所示：
+- en: '[PRE99]'
+  id: totrans-266
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: 'Now we need to construct a dictionary that maps filenames to their respective
+    label from `CLASS_NAMES`. We can use `glob` to encode directory and filename patterns.
+    A couple of empty lists are created so that we may iterate recursively through
+    directories, and append the path-to-filename into the filename list, and the label
+    (denoted by the directory name) into the class list:'
+  id: totrans-267
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们需要构建一个字典，将文件名映射到它们对应的标签（来自`CLASS_NAMES`）。我们可以使用`glob`来编码目录和文件名模式。创建几个空列表，以便我们可以递归遍历目录，并将路径到文件名添加到文件名列表中，将标签（由目录名表示）添加到类别列表中：
+- en: '[PRE100]'
+  id: totrans-268
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: 'Once both lists are populated in exact order, we may zip these lists together
+    and encode the result as key-value pairs (dictionary):'
+  id: totrans-269
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦两个列表按准确顺序填充，我们可以将这些列表组合在一起并将结果编码为键值对（字典）：
+- en: '[PRE101]'
+  id: totrans-270
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: As indicated, this is a dictionary, with the keys being the file path, and the
+    values encoding respective labels (image classes).
+  id: totrans-271
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如所示，这是一个字典，键是文件路径，值编码相应的标签（图像类别）。
+- en: 'We want to convert our data into a `tf.Example` protobuf message, which is
+    the predecessor format for `TFRecord`. `tf.Example` requires us to specify features
+    in the image (metadata such as the image width pixel count, height pixel count,
+    or data such as decimal values expressed as a `numpy` array). The three data types
+    designated by `tf.Example` are `tf.train.BytesList`, `tf.train.FloatList`, and
+    `tf.train.Int64List`. Therefore, commonly observed Pythonic data types need to
+    be coerced into one of these three types. These are what each `tf.Example` data
+    type can accept and coerce:'
+  id: totrans-272
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们想要将数据转换为 `tf.Example` protobuf 消息，这也是 `TFRecord` 的前身格式。`tf.Example` 要求我们在图像中指定特征（如图像宽度像素数、高度像素数，或者以
+    `numpy` 数组形式表示的小数值等数据）。`tf.Example` 指定的三种数据类型是 `tf.train.BytesList`、`tf.train.FloatList`
+    和 `tf.train.Int64List`。因此，常见的 Python 数据类型需要强制转换为这三种类型中的一种。这是每个 `tf.Example` 数据类型可以接受并强制转换的内容：
+- en: '`tf.train.BytesList`: `string`, `byte`.'
+  id: totrans-273
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.BytesList`：`string`，`byte`'
+- en: '`tf.train.FloatList`: `float` (float32, float64)'
+  id: totrans-274
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.FloatList`：`float`（float32，float64）'
+- en: '`tf.train.Int64List`: `bool`, `enum`, `int32`, `uint32`, `int64`, `uint64`'
+  id: totrans-275
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.train.Int64List`：`bool`，`enum`，`int32`，`uint32`，`int64`，`uint64`'
+- en: 'In order to coerce common data types into the respective compatible `tf.Example`
+    data type, the TensorFlow team provides the following helper functions:'
+  id: totrans-276
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 为了将常见的数据类型强制转换为相应的兼容 `tf.Example` 数据类型，TensorFlow 团队提供了以下辅助函数：
+- en: 'If we want to convert a string of text (byte string) into a feature of the
+    type `tf.train.ByteList`, the following function first converts the text (which
+    is an eager tensor) into a `numpy` array, because `tf.train.BytesList` currently
+    can only unpack `numpy` format into a byte list. After a protobuf message''s value
+    is casted to the `ByteList` type, then it is converted into a `f`eature object
+    with the `ByteList` data type:'
+  id: totrans-277
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果我们想要将一串文本（字节字符串）转换成 `tf.train.ByteList` 类型的特征，下面的函数首先将文本（它是一个急切张量）转换成 `numpy`
+    数组，因为 `tf.train.BytesList` 目前只能将 `numpy` 格式解包成字节列表。在将一个 protobuf 消息的值转换为 `ByteList`
+    类型之后，它会被转换为一个带有 `ByteList` 数据类型的特征对象：
+- en: '[PRE102]'
+  id: totrans-278
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: 'If we need to convert numbers with floating points into a feature of the `tf.train.FloatList`
+    type, then the following function does the job:'
+  id: totrans-279
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果我们需要将浮点数转换为 `tf.train.FloatList` 类型的特征，下面的函数可以完成这个任务：
+- en: '[PRE103]'
+  id: totrans-280
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: 'And finally, for generating a feature of the `tf.train.Int64List` type, this
+    can be done accordingly:'
+  id: totrans-281
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，对于生成 `tf.train.Int64List` 类型的特征，可以按照以下方式完成：
+- en: '[PRE104]'
+  id: totrans-282
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: A note of caution
+  id: totrans-283
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 注意事项
+- en: '`tf.train.Feature` accepts one feature at a time. Each of these functions deals
+    with converting and coercing one data feature at a time. This function is different
+    from `tf.train.Features`, which accepts a dictionary of multiple features. In
+    the next step, we are going to use `tf.train.Features`.'
+  id: totrans-284
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`tf.train.Feature` 一次只能接受一个特征。这些函数处理的是一次转换和强制转换一个数据特征。这个函数不同于 `tf.train.Features`，后者接受一个包含多个特征的字典。在下一步中，我们将使用
+    `tf.train.Features`。'
+- en: 'Consolidate the workflow of creating the `tf.Example` protobuf message into
+    a wrapper function. This function takes two inputs: a byte string that represents
+    the image, and the corresponding label of that image.'
+  id: totrans-285
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将创建 `tf.Example` protobuf 消息的工作流整合到一个包装函数中。这个函数接受两个输入：一个表示图像的字节字符串，以及该图像的对应标签。
+- en: 'Inside this function, first, the image shape is specified through the output
+    of `decode_jpeg`, which converts a byte array into a `jpeg`. Dimension values
+    are held in `image_shape` as a `numpy` array, and we may pass these values into
+    the feature dictionary. Inside the `feature` dictionary, keys are specified, and
+    corresponding values are derived and type casted from the helper functions in
+    the previous step. The feature dictionary is then used to specify schemas of the
+    feature into a `features` protobuf. The `feature` protobuf is then converted to
+    an example protobuf, which is the final format to be serialized into a `TFRecord`:'
+  id: totrans-286
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这个函数内部，首先通过 `decode_jpeg` 的输出指定图像形状，`decode_jpeg` 将字节数组转换为 `jpeg` 格式。维度值存储在
+    `image_shape` 中，作为 `numpy` 数组，我们可以将这些值传入特征字典。在 `feature` 字典内，指定了键，并且从前面步骤中的辅助函数中得到了相应的值并进行了类型转换。特征字典随后被用来指定特征的
+    schema 到 `features` protobuf 中。然后，`feature` protobuf 被转换为一个示例 protobuf，这是最终的格式，将被序列化为
+    `TFRecord`：
+- en: '[PRE105]'
+  id: totrans-287
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: 'Write multiple image files into `TFRecords` by looping through `image_label_dict`:'
+  id: totrans-288
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过遍历 `image_label_dict` 将多个图像文件写入 `TFRecords`：
+- en: '[PRE106]'
+  id: totrans-289
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: In the preceding steps, we wrote all seven images in the three classes into
+    a single `TFRecord`.
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的步骤中，我们将所有七张图像按三类写入了一个 `TFRecord`。
+- en: Reading TFRecord and displaying it as images
+  id: totrans-291
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读取 TFRecord 并将其显示为图像
+- en: 'To be assured about the image data as presented by the TFRecord format, it
+    would be helpful if we can read it back and display it, just to be sure everything
+    was formatted correctly. Now, let''s read `TFRecord` back and display it as images:'
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了确保TFRecord格式呈现的图像数据无误，如果我们能读取回这些数据并显示出来，确认一切都被正确格式化，那将是非常有帮助的。现在，让我们读取`TFRecord`并将其显示为图像：
+- en: 'Use the same API as in the previous section to read `tfrecords`:'
+  id: totrans-293
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用与前一节相同的API读取`tfrecords`：
+- en: '[PRE107]'
+  id: totrans-294
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: 'Define the specs for the dataset:'
+  id: totrans-295
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定义数据集的规格：
+- en: '[PRE108]'
+  id: totrans-296
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: 'Parse the protobuf. This is also exactly the same as shown in the previous
+    section:'
+  id: totrans-297
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 解析protobuf。这与前一节所示的完全相同：
+- en: '[PRE109]'
+  id: totrans-298
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: 'Display the images with the help of the following code:'
+  id: totrans-299
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用以下代码帮助显示图像：
+- en: '[PRE110]'
+  id: totrans-300
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: And you should see all the images contained in this protobuf message. For brevity,
+    we will show only two images, and notice that Figures 3.14 and 3.15 have different
+    dimensions, which are preserved and retrieved correctly by the protobuf.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该能看到这个protobuf消息中包含的所有图像。为了简便起见，我们只展示两张图像，并注意图 3.14 和图 3.15 的尺寸不同，protobuf能够正确保留和恢复这些尺寸。
+- en: 'Here''s the first image:'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是第一张图像：
+- en: '![Figure 3.14 – Image of Maldives class (1)'
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 3.14 – 马尔代夫类别图像 (1)'
+- en: '](img/image0191.jpg)'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image0191.jpg)'
+- en: Figure 3.14 – Image of Maldives class (1)
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.14 – 马尔代夫类别图像 (1)
+- en: 'And here''s the second image:'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是第二张图像：
+- en: '![Figure 3.15 – Image of Maldives class (2)'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 3.15 – 马尔代夫类别图像 (2)'
+- en: '](img/image021.jpg)'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/image021.jpg)'
+- en: Figure 3.15 – Image of Maldives class (2)
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.15 – 马尔代夫类别图像 (2)
+- en: A few words about having multiple images in a single TFRecord
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于在一个TFRecord中包含多个图像的几点说明
+- en: You have seen that whether it's one image or multiple images, everything can
+    be written in a single `TFRecord`. There is no right or wrong way as to which
+    one is preferred, as factors such as memory and I/O bandwidth all come into play.
+    A rule of thumb is to distribute your training images to at least 32 - 128 shards
+    (each shard is a `TFRecord`) to maintain a file-level parallelism in the I/O process
+    whenever you have sufficient images to do so.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你已经看到，无论是单张图像还是多张图像，一切都可以写入一个单一的`TFRecord`。没有绝对的对错，哪种方式更优，取决于内存和I/O带宽等因素。一个经验法则是，如果图像数量足够多，应将训练图像分布到至少32
+    - 128个分片（每个分片是一个`TFRecord`），以便在I/O过程中保持文件级并行性。
+- en: Summary
+  id: totrans-312
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: This chapter provided explanations and examples for dealing with commonly seen
+    structured and unstructured data. We first looked at how to read and format a
+    pandas DataFrame or CSV type of data structure and converted it to a dataset for
+    efficient data ingestion pipelines. Then, as regards unstructured data, we used
+    image files as examples. While dealing with image data, we have to organize these
+    image files in a hierarchical pattern, such that labels can be easily mapped to
+    each image file. `TFRecord` is the preferred format for handling image data, as
+    it wraps the image dimension, label, and image raw bytes together in a format
+    known as `tf.Example`.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章提供了关于如何处理常见的结构化和非结构化数据的解释和示例。我们首先介绍了如何读取和格式化pandas DataFrame或CSV类型的数据结构，并将其转换为高效的数据摄取管道数据集。然后，在处理非结构化数据时，我们以图像文件为例。在处理图像数据时，我们必须以层次化的方式组织这些图像文件，使得标签可以轻松地映射到每个图像文件。`TFRecord`是处理图像数据的首选格式，它将图像的尺寸、标签和原始图像字节封装在一个被称为`tf.Example`的格式中。
+- en: In the next chapter, we are going to take a look at reusable models and patterns
+    that can consume these data structures we have learned here.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将查看可重用的模型和模式，它们可以处理我们在这里学到的数据结构。

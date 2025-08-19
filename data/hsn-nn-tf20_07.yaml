@@ -1,0 +1,1945 @@
+- en: Efficient Data Input Pipelines and Estimator API
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 高效的数据输入管道和 Estimator API
+- en: 'In this chapter, we will look at two of the most common modules of the TensorFlow
+    API: `tf.data` and `tf.estimator`.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将重点介绍 TensorFlow API 中最常用的两个模块：`tf.data` 和 `tf.estimator`。
+- en: The TensorFlow 1.x design was so good that almost nothing changed in TensorFlow
+    2.0; in fact, `tf.data` and `tf.estimator` were the first two high-level modules
+    introduced during the life cycle of TensorFlow 1.x.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 1.x 的设计非常优秀，以至于在 TensorFlow 2.0 中几乎没有什么变化；实际上，`tf.data` 和 `tf.estimator`
+    是 TensorFlow 1.x 生命周期中最早引入的两个高级模块。
+- en: The `tf.data` module is a high-level API that allows you to define high-efficiency
+    input pipelines without worrying about threads, queues, synchronization, and distributed
+    filesystems. The API was designed with simplicity in mind to overcome the usability
+    issues of the previous low-level API.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data` 模块是一个高级 API，允许你定义高效的输入管道，而无需担心线程、队列、同步和分布式文件系统。该 API 的设计考虑了简便性，旨在克服以前低级
+    API 的可用性问题。'
+- en: The `tf.estimator` API was designed to simplify and standardize machine learning
+    programming, allowing to train, evaluate, run inference, and export for serving
+    a parametric model, letting the user focus on the model and input definition only.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.estimator` API 旨在简化和标准化机器学习编程，允许训练、评估、运行推理并导出用于服务的参数化模型，让用户只关注模型和输入定义。'
+- en: The `tf.data` and `tf.estimator` APIs are fully compatible, and it is highly
+    encouraged to use them together. Moreover, as we will see in the next sections,
+    every Keras model, the whole eager execution, and even AutoGraph are fully compatible
+    with the `tf.data.Dataset` object. This compatibility speeds up the training and
+    evaluation phases by defining and using high-efficiency data input pipelines in
+    a few lines.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data` 和 `tf.estimator` APIs 完全兼容，并且强烈建议一起使用。此外，正如我们将在接下来的章节中看到的，每个 Keras
+    模型、整个即时执行（eager execution）甚至 AutoGraph 都与 `tf.data.Dataset` 对象完全兼容。这种兼容性通过在几行代码中定义和使用高效的数据输入管道，加速了训练和评估阶段。'
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主题：
+- en: Efficient data input pipelines
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高效的数据输入管道
+- en: The `tf.estimator` API
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.estimator` API'
+- en: Efficient data input pipelines
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 高效的数据输入管道
+- en: Data is the most critical part of every machine learning pipeline; the model
+    learns from it, and its quantity and quality are game-changers of every machine
+    learning application.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据是每个机器学习管道中最关键的部分；模型从数据中学习，它的数量和质量是每个机器学习应用程序的游戏规则改变者。
+- en: 'Feeding data to a Keras model has so far seemed natural: we can fetch the dataset
+    as a NumPy array, create the batches, and feed the batches to the model to train
+    it using mini-batch gradient descent.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将数据提供给 Keras 模型到目前为止看起来很自然：我们可以将数据集作为 NumPy 数组获取，创建批次，然后将批次传递给模型，通过小批量梯度下降进行训练。
+- en: 'However, the way of feeding the input shown so far is, in fact, hugely inefficient
+    and error-prone, for the following reasons:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，迄今为止展示的输入方式实际上是极其低效且容易出错，原因如下：
+- en: 'The complete dataset can weight several thousands of GBs: no single standard
+    computer or even a deep learning workstation has the memory required to load huge
+    datasets in memory.'
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 完整的数据集可能有数千 GB 大：没有任何单一的标准计算机，甚至是深度学习工作站，都有足够的内存来加载如此庞大的数据集。
+- en: Manually creating the input batches means taking care of the slicing indexes
+    manually; errors can happen.
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 手动创建输入批次意味着需要手动处理切片索引；这可能会出错。
+- en: Doing data augmentation, applying random perturbations to each input sample,
+    slows down the model training phase since the augmentation process needs to complete
+    before feeding the data to the model. Parallelizing these operations means you
+    worry about synchronization problems among threads and many other common issues
+    related to parallel computing. Moreover, the boilerplate code increases.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据增强，给每个输入样本应用随机扰动，会减慢模型训练过程，因为增强过程需要在将数据提供给模型之前完成。并行化这些操作意味着你需要关注线程之间的同步问题以及与并行计算相关的许多常见问题。此外，模板代码的复杂性也增加了。
+- en: 'Feeding a model whose parameters are on a GPU/TPU from the main Python process
+    that resides on the CPU involves loading/unloading data, and this is a process
+    that can make the computation suboptimal: the hardware utilization can be below
+    100% and is a complete waste.'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将参数位于 GPU/TPU 上的模型从驻留在 CPU 上的主 Python 进程中提供数据，涉及加载/卸载数据，这是一个可能导致计算不理想的过程：硬件利用率可能低于
+    100%，这完全是浪费。
+- en: The TensorFlow implementation of the Keras API specification, `tf.keras`, has
+    native support for feeding models via the `tf.data` API, as it is possible and
+    suggested to use them while using, eager execution, AutoGraph, and estimator API.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow对Keras API规范的实现，`tf.keras`，原生支持通过`tf.data` API馈送模型，建议在使用急切执行（eager
+    execution）、AutoGraph和估算器API时使用它们。
+- en: Defining an input pipeline is a common practice that can be framed as an ETL
+    (Extract Transform and Load) process.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义输入管道是一个常见的做法，可以将其框架化为ETL（提取、转换和加载）过程。
+- en: Input pipeline structure
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 输入管道结构
+- en: 'Defining a training input pipeline is a standard process; the steps to follow
+    can be framed as an **Extract Transform and Load** (**ETL**) process: that is,
+    the procedure of copying the data from a data source to a destination system that
+    will use it.'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义训练输入管道是一个标准过程；可以将遵循的步骤框架化为**提取、转换和加载**（**ETL**）过程：即将数据从数据源复制到目标系统的过程，以便使用这些数据。
+- en: 'The ETL process consists of the following three steps that the `tf.data.Dataset` object
+    allows us to implement easily:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ETL过程包括以下三个步骤，`tf.data.Dataset`对象可以轻松实现这些步骤：
+- en: '**Extract**: Read the data from the data source. It can be either local (persistent
+    storage, already loaded in memory) or remote (cloud storage, remote filesystem).'
+  id: totrans-22
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**提取**：从数据源读取数据。数据源可以是本地的（持久存储，已加载到内存中）或远程的（云存储，远程文件系统）。'
+- en: '**Transform**: Apply transformations to the data to clean, augment (random
+    crop image, flip, color distortion, add noise), make it interpretable by the model.
+    Conclude the transformation by shuffling and batching the data.'
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**转换**：对数据进行转换，以清理、增强（随机裁剪图像、翻转、颜色失真、添加噪声），使数据能被模型解释。通过对数据进行打乱和批处理，完成转换。'
+- en: '**Load**: Load the transformed data into the device that better fits the training
+    needs (GPUs or TPUs) and execute the training.'
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**加载**：将转换后的数据加载到更适合训练需求的设备（如GPU或TPU）中，并执行训练。'
+- en: These ETL steps can be performed not only during the training phases but also
+    during the inference.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些ETL步骤不仅可以在训练阶段执行，还可以在推理阶段执行。
+- en: If the target device for the training/inference is not the CPU but a different
+    device, the `tf.data` API effectively utilizes the CPU, reserving the target device
+    for the inference/training of the model; in fact, target devices such as GPUs
+    or TPUs make it possible to train parametric models faster, while the CPU is heavily
+    utilized for the sequential processing of the input data.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果训练/推理的目标设备不是CPU，而是其他设备，`tf.data` API有效地利用了CPU，将目标设备保留用于模型的推理/训练；事实上，GPU或TPU等目标设备使得训练参数模型更快，而CPU则被大量用于输入数据的顺序处理。
+- en: This process, however, is prone to becoming the bottleneck of the whole training
+    process since target devices could consume the data at a faster rate than the
+    CPU produces it.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这个过程容易成为整个训练过程的瓶颈，因为目标设备可能以比CPU生产数据更快的速度消耗数据。
+- en: The `tf.data` API, through its `tf.data.Dataset` class, allows us to easily
+    define data input pipelines that transparently solve all the previous issues while
+    adding powerful high-level features that make using them a pleasure. Special attention
+    has to be given to performance optimization since it is still up to the developer
+    to define the ETL process correctly to have 100% usage of the target devices,
+    manually removing any bottleneck.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data` API通过其`tf.data.Dataset`类，使我们能够轻松定义数据输入管道，这些管道透明地解决了之前的问题，同时增加了强大的高级特性，使其使用变得更加愉快。需要特别注意性能优化，因为仍然由开发者负责正确定义ETL过程，以确保目标设备的100%使用率，手动去除任何瓶颈。'
+- en: The tf.data.Dataset object
+  id: totrans-29
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: tf.data.Dataset对象
+- en: A `tf.data.Dataset` object represents an input pipeline as a collection of elements
+    accompanied by an ordered set of transformations that act on those elements.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data.Dataset`对象表示输入管道，作为一组元素，并附带对这些元素进行处理的有序转换集合。'
+- en: Each element contains one or more `tf.Tensor` objects. For example, for an image
+    classification problem, the `tf.data.Dataset` elements might be single training
+    examples with a pair of tensors representing the image and its associated label.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个元素包含一个或多个`tf.Tensor`对象。例如，对于一个图像分类问题，`tf.data.Dataset`的元素可能是单个训练样本，包含一对张量，分别表示图像及其相关标签。
+- en: There are several ways of creating a dataset object, depending on the *data
+    source*.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建数据集对象有几种方法，具体取决于*数据源*。
+- en: 'Depending on the data position and format, the `tf.data.Dataset` class offers
+    many static methods to use to create a dataset easily:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据数据的位置和格式，`tf.data.Dataset` 类提供了许多静态方法，可以轻松创建数据集：
+- en: '**Tensors in memory**: `tf.data.Dataset.from_tensors` or `tf.data.Dataset.from_tensor_slices`.
+    In this case, the tensors can be NumPy arrays or `tf.Tensor` objects.'
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**内存中的张量**: `tf.data.Dataset.from_tensors` 或 `tf.data.Dataset.from_tensor_slices`。在这种情况下，张量可以是
+    NumPy 数组或 `tf.Tensor` 对象。'
+- en: '**From a Python generator**: `tf.data.Dataset.from_generator`.'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**来自 Python 生成器**: `tf.data.Dataset.from_generator`。'
+- en: '**From a list of files that matches a pattern**: `tf.data.Dataset.list_files`.'
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**从匹配模式的文件列表中**: `tf.data.Dataset.list_files`。'
+- en: 'Also, there are two specializations of the `tf.data.Dataset` object created
+    for working with two commonly used file formats:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，还有两个专门化的 `tf.data.Dataset` 对象，用于处理两种常用的文件格式：
+- en: '`tf.data.TFRecordDataset` to work with the `TFRecord` files'
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.data.TFRecordDataset` 用于处理 `TFRecord` 文件。'
+- en: '`tf.data.TextLineDataset` to work with text files, reading them line by line'
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`tf.data.TextLineDataset` 用于处理文本文件，逐行读取文件。'
+- en: A description of the `TFRecord` file format is presented in the optimization
+    section that follows.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TFRecord` 文件格式的描述在随后的优化部分中给出。'
+- en: Once the dataset object has been constructed, it is possible to transform it
+    into a new `tf.data.Dataset` object by chaining method calls. The `tf.data` API
+    extensively uses method chaining to naturally express the set of transformations
+    applied to the data as a sequence of actions.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦构建了数据集对象，就可以通过链式调用方法将其转换为一个新的 `tf.data.Dataset` 对象。`tf.data` API 广泛使用方法链来自然地表达应用于数据的转换序列。
+- en: In TensorFlow 1.x, it was required to create an iterator node since the input
+    pipeline was a member of the computational graph, too. From version 2.0 onward,
+    the `tf.data.Dataset` object is iterable, which means you can either enumerate
+    its elements using a `for` loop or create a Python iterator using the `iter` keyword.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 1.x 中，由于输入管道也是计算图的一个成员，因此需要创建一个迭代器节点。从 2.0 版本开始，`tf.data.Dataset`
+    对象是可迭代的，这意味着你可以通过 `for` 循环枚举其元素，或使用 `iter` 关键字创建一个 Python 迭代器。
+- en: Please note that being iterable does not imply being a Python iterator.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，可迭代并不意味着是一个 Python 迭代器。
+- en: You can loop in a dataset by using a `for` loop, `for value in dataset`, but
+    you can't extract elements by using `next(dataset)`.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过使用 `for` 循环 `for value in dataset` 来遍历数据集，但不能使用 `next(dataset)` 提取元素。
+- en: 'Instead, it is possible to use `next(iterator)` after creating an iterator
+    by using the Python `iter` keyword:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相反，可以在创建迭代器后，使用 Python 的 `iter` 关键字来使用 `next(iterator)`：
+- en: '`iterator = iter(dataset)` `value = next(iterator)`.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`iterator = iter(dataset)` `value = next(iterator)`。'
+- en: 'A dataset object is a very flexible data structure that allows creating a dataset
+    not only of numbers or a tuple of numbers but of every Python data structure.
+    As shown in the next snippet, it is possible to mix Python dictionaries with TensorFlow
+    generated values efficiently:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集对象是一个非常灵活的数据结构，它允许创建不仅仅是数字或数字元组的数据集，而是任何 Python 数据结构。如下一个代码片段所示，可以有效地将 Python
+    字典与 TensorFlow 生成的值混合：
+- en: '`(tf2)`'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE0]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The set of transformations the `tf.data.Dataset` object offers through its methods
+    supports datasets of any structure.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data.Dataset` 对象通过其方法提供的转换集支持任何结构的数据集。'
+- en: 'Let''s say we want to define a dataset that produces an unlimited number of
+    vectors, each one with 100 elements, of random values (we will do so in the chapter
+    dedicated to the GANs, [Chapter 9](66948c53-131c-43ef-a7fc-3d242d1e0664.xhtml),
+    *Generative Adversarial Networks*); using `tf.data.Dataset.from_generator`, it
+    is possible to do so in a few lines:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们想要定义一个数据集，它生成无限数量的向量，每个向量有 100 个元素，包含随机值（我们将在专门讨论 GANs 的章节 [第 9 章](66948c53-131c-43ef-a7fc-3d242d1e0664.xhtml)，*生成对抗网络*
+    中进行此操作）；使用 `tf.data.Dataset.from_generator`，只需几行代码即可完成：
+- en: '`(tf2)`'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE1]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The only peculiarity of the `from_generator` method is the need to pass the
+    type of the parameters (`tf.float32`, in this case) as the second parameter; this
+    is required since to build a graph we need to know the type of the parameters
+    in advance.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`from_generator` 方法的唯一特殊之处是需要将参数类型（此处为 `tf.float32`）作为第二个参数传递；这是必需的，因为在构建图时，我们需要提前知道参数的类型。'
+- en: 'Using method chaining, it is possible to create new dataset objects, transforming
+    the one just built to get the data our machine learning model expects as input.
+    For example, if we want to sum 10 to every component of the noise vector, shuffle
+    the dataset content, and create batches of 32 vectors each, we can do so by calling
+    just three methods:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过方法链，可以创建新的数据集对象，将刚刚构建的数据集转化为机器学习模型所期望的输入数据。例如，如果我们想在噪声向量的每个元素上加上10，打乱数据集内容，并创建32个向量为一批的批次，只需调用三个方法即可：
+- en: '`(tf2)`'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE2]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The `map` method is the most widely used method of the `tf.data.Dataset` object since
+    it allows us to apply a function to every element of the input dataset, producing
+    a new, transformed dataset.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`map`方法是`tf.data.Dataset`对象中最常用的方法，因为它允许我们对输入数据集的每个元素应用一个函数，从而生成一个新的、转化后的数据集。'
+- en: The `shuffle` method is used in every training pipeline since this transformation
+    randomly shuffles the input dataset using a fixed-sized buffer; this means that
+    the shuffled data first fetches the `buffer_size` element from its input, then
+    shuffles them and produces the output.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`shuffle`方法在每个训练管道中都使用，因为它通过一个固定大小的缓冲区随机打乱输入数据集；这意味着，打乱后的数据首先从输入中获取`buffer_size`个元素，然后对其进行打乱并生成输出。'
+- en: The `batch` method gathers the `batch_size` elements from its input and creates
+    a batch as output. The only constraint of this transformation is that all elements
+    of the batch must have the same shape.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`batch`方法从输入中收集`batch_size`个元素，并创建一个批次作为输出。此转换的唯一限制是批次中的所有元素必须具有相同的形状。'
+- en: To train a model, it has to be fed with all the elements of the training set
+    for multiple epochs. The `tf.data.Dataset` class offers the `repeat(num_epochs)`
+    method to do this.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要训练模型，必须将所有训练集的元素输入模型多个周期。`tf.data.Dataset`类提供了`repeat(num_epochs)`方法来实现这一点。
+- en: 'Thus, the input data pipeline can be summarized as shown in the following diagram:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，输入数据管道可以总结如下图所示：
+- en: '![](img/640c3fdc-3c31-47b8-8380-1f321542659d.png)'
+  id: totrans-63
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/640c3fdc-3c31-47b8-8380-1f321542659d.png)'
+- en: 'The diagram shows the typical data input pipeline: the transformation from
+    raw data to data ready to be used by the model, just by chaining method calls.
+    Prefetching and caching are optimization tips that are explained in the next section.'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该图展示了典型的数据输入管道：通过链式方法调用将原始数据转化为模型可用的数据。预取和缓存是优化建议，接下来的部分会详细讲解。
+- en: Please note that until not a single word has been said about the concept of
+    thread, synchronization, or remote filesystems.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，直到此时，仍未提及线程、同步或远程文件系统的概念。
+- en: 'All this is hidden by the `tf.data` API:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些操作都被`tf.data` API隐藏起来：
+- en: The input paths (for example, when using the `tf.data.Dataset.list_files` method)
+    can be remote. TensorFlow internally uses the `tf.io.gfile` package, which is
+    a file input/output wrapper without thread locking. This module makes it possible
+    to read from a local filesystem or a remote filesystem in the same way. For instance,
+    it is possible to read from a Google Cloud Storage bucket by using its address
+    in the `gs://bucket/` format, without the need to worry about authentication,
+    remote requests, and all the boilerplate required to work with a remote filesystem.
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 输入路径（例如，当使用`tf.data.Dataset.list_files`方法时）可以是远程的。TensorFlow内部使用`tf.io.gfile`包，它是一个没有线程锁定的文件输入/输出封装器。该模块使得可以像读取本地文件系统一样读取远程文件系统。例如，可以通过`gs://bucket/`格式的地址从Google
+    Cloud Storage存储桶读取，而无需担心认证、远程请求以及与远程文件系统交互所需的所有样板代码。
+- en: Every transformation applied to the data is executed using all the CPU resources
+    efficiently—a number of threads equal to the number of CPU cores are created together
+    with the dataset object and are used to process the data sequentially and in parallel
+    whenever parallel transformation is possible.
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对数据应用的每个转换操作都高效地利用所有CPU资源——与数据集对象一起创建的线程数量等于CPU核心数，并在可能进行并行转换时，按顺序和并行方式处理数据。
+- en: The synchronization among these threads is all managed by the `tf.data` API.
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这些线程之间的同步完全由`tf.data` API管理。
+- en: All the transformations described by chaining method calls are executed by threads
+    on the CPU that `tf.data.Dataset` instantiates to perform operations that can
+    be executed in parallel automatically, which is a great performance boost.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有通过方法链描述的转换操作都由`tf.data.Dataset`在CPU上实例化的线程执行，以自动执行可以并行的操作，从而大大提升性能。
+- en: 'Furthermore, `tf.data.Dataset` is high-level enough to make invisible all the
+    threads execution and synchronization, but the automated solution can be suboptimal:
+    the target device could be not completely used, and it is up to the user to remove
+    the bottlenecks to reach the 100% usage of the target devices.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，`tf.data.Dataset` 足够高层，以至于将所有线程的执行和同步隐藏起来，但这种自动化的解决方案可能不是最优的：目标设备可能没有完全被使用，用户需要消除瓶颈，以便实现目标设备的
+    100% 使用。
+- en: Performance optimizations
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能优化
+- en: The `tf.data` API as shown so far describes a sequential data input pipeline
+    that transforms the data from a raw to a useful format by applying transformations.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止展示的 `tf.data` API 描述了一个顺序的数据输入管道，该管道通过应用转换将数据从原始格式转变为有用格式。
+- en: All these operations are executed on the CPU while the target device (CPUs,
+    TPUs, or, in general, the consumer) waits for the data. If the target device consumes
+    the data faster than it is produced, there will be moments of 0% utilization of
+    the target devices.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些操作都在 CPU 上执行，而目标设备（CPU、TPU 或一般来说，消费者）则在等待数据。如果目标设备消耗数据的速度快于生产速度，那么目标设备将会有
+    0% 的利用率。
+- en: In parallel programming, this problem has been solved by using prefetching.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在并行编程中，这个问题已经通过预取解决。
+- en: Prefetching
+  id: totrans-76
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 预取
+- en: When the consumer is working, the producer shouldn't be idle but must work in
+    the background to produce the data the consumer will need in the next iteration.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当消费者在工作时，生产者不应闲置，而应在后台工作，以便生成消费者在下一次迭代中所需的数据。
+- en: The `tf.data` API offers the `prefetch(n)` method to apply a transformation
+    that allows overlapping the work of the producer and the consumer. The best practice
+    is adding `prefetch(n)` at the end of the input pipeline to overlap the transformation
+    performed on the CPU with the computation done on the target.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data` API 提供了 `prefetch(n)` 方法，通过该方法可以应用一种转换，使得生产者和消费者的工作能够重叠。最佳实践是在输入管道的末尾添加
+    `prefetch(n)`，以便将 CPU 上执行的转换与目标设备上的计算重叠。'
+- en: 'Choosing `n` is easy: `n` is the number of elements consumed by a training
+    step, and since the vast majority of models are trained using batches of data,
+    one batch per training step, then `n=1`.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择 `n` 非常简单：`n` 是训练步骤中消费的元素数量，由于绝大多数模型使用数据批次进行训练，每个训练步骤使用一个批次，因此 `n=1`。
+- en: The process of reading from disks, especially if reading big files, reading
+    from slow HDDs, or using remote filesystems can be time-consuming. Caching is
+    often used to reduce this overhead.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从磁盘读取数据的过程，尤其是在读取大文件、从慢速 HDD 或使用远程文件系统时，可能非常耗时。通常使用缓存来减少这种开销。
+- en: Cache elements
+  id: totrans-81
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 缓存元素
+- en: The `cache` transformation can be used to cache the data in memory, completely removing the
+    accesses to the data sources. This can bring huge benefits when using remote filesystems,
+    or when the reading process is slow. Caching data after the first epoch is only
+    possible if the data can fit into memory.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`cache` 转换可以用来将数据缓存到内存中，完全消除对数据源的访问。当使用远程文件系统或读取过程较慢时，这可以带来巨大好处。仅当数据可以适配到内存中时，才有可能在第一次训练周期后缓存数据。'
+- en: 'The `cache` method acts as a barrier in the transformation pipeline: everything
+    executed before the `cache` method is executed only once, thus placing this transformation
+    in the pipeline can bring immense benefits. In fact, it can be applied after a
+    computationally intensive transformation or after any slow process to speed up
+    everything that comes next.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`cache` 方法在转换管道中起到了屏障的作用：`cache` 方法之前执行的所有操作只会执行一次，因此在管道中放置此转换可以带来巨大的好处。实际上，它可以在计算密集型转换之后或在任何慢速过程之后应用，以加速接下来的所有操作。'
+- en: Using TFRecords
+  id: totrans-84
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 TFRecords
+- en: Reading data is a time-intensive process. Often, data can't be read as it is
+    stored on the disk linearly, but the files have to be processed and transformed
+    to be correctly read.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取数据是一个时间密集型的过程。通常，数据不能像它在线性存储在磁盘上一样被读取，而是文件必须经过处理和转换才能正确读取。
+- en: The `TFRecord` format is a binary and language-agnostic format (defined using
+    `protobuf`) for storing a sequence of binary records. TensorFlow allows reading
+    and writing `TFRecord` files that are composed of a series of `tf.Example` messages.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TFRecord` 格式是一种二进制和语言无关的格式（使用 `protobuf` 定义），用于存储一系列二进制记录。TensorFlow 允许读取和写入由一系列
+    `tf.Example` 消息组成的 `TFRecord` 文件。'
+- en: 'A `tf.Example` is a flexible message type that represents a `{"key": value}`
+    mapping where `key` is the feature name, and `value` is its binary representation.'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.Example` 是一种灵活的消息类型，表示一个 `{"key": value}` 映射，其中 `key` 是特征名称，`value` 是其二进制表示。'
+- en: 'For example, `tf.Example` could be the dictionary (in pseudocode):'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，`tf.Example` 可以是字典（伪代码形式）：
+- en: '[PRE3]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Where a row of the dataset (image, label, together with additional information)
+    is serialized as an example and stored inside a `TFRecord` file, in particular,
+    the image is not stored using a compression format but directly using its binary
+    representation. This allows reading the image linearly, as a sequence of bytes,
+    without the need to apply any image decoding algorithm on it, saving time (but
+    using disk space).
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集的一行（包括图像、标签及其他附加信息）被序列化为一个示例并存储在 `TFRecord` 文件中，尤其是图像没有采用压缩格式存储，而是直接使用其二进制表示形式。这使得图像可以线性读取，作为字节序列，无需应用任何图像解码算法，从而节省时间（但会占用更多磁盘空间）。
+- en: Before the introduction of `tfds` (TensorFlow Datasets), reading and writing `TFRecord`
+    files was a repetitive and tedious process since we had to take care of how to
+    serialize and deserialize the input features to be compatible with the `TFRecord`
+    binary format. TensorFlow Datasets, that is, a high-level API built over the `TFRecord`
+    file specification, standardized the process of high-efficiency dataset creation,
+    forcing the creation of the `TFRecord` representation of any dataset. Furthermore, `tfds` already
+    contains a lot of ready-to-use datasets correctly stored in the `TFRecord` format,
+    and its official guide explains perfectly how to build a dataset, by describing
+    its features, to create the `TFRecord` representation of the dataset ready to
+    use.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在引入 `tfds`（TensorFlow 数据集）之前，读取和写入 `TFRecord` 文件是一个重复且繁琐的过程，因为我们需要处理如何序列化和反序列化输入特征，以便与
+    `TFRecord` 二进制格式兼容。TensorFlow 数据集（即构建在 `TFRecord` 文件规范之上的高级 API）标准化了高效数据集创建的过程，强制要求创建任何数据集的
+    `TFRecord` 表示形式。此外，`tfds` 已经包含了许多正确存储在 `TFRecord` 格式中的现成数据集，其官方指南也完美解释了如何构建数据集，描述其特征，以创建准备使用的
+    `TFRecord` 表示形式。
+- en: Since the `TFRecord` description and usage goes beyond the scope of this book,
+    in the next sections we will cover only the utilization of TensorFlow Datasets.
+    For a complete guide on the creation of a TensorFlow Dataset Builder see [Chapter
+    8](51f4dcda-add6-4e58-a660-75f34a7e5593.xhtml), *Semantic Segmentation and Custom
+    Dataset* *Builder*. If you are interested in the `TFRecord` representation please
+    refer to the official documentation:[ https://www.tensorflow.org/beta/tutorials/load_data/tf_records](https://www.tensorflow.org/beta/tutorials/load_data/tf_records).
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 `TFRecord` 的描述和使用超出了本书的范围，接下来的章节将仅介绍 TensorFlow 数据集的使用。有关创建 TensorFlow 数据集构建器的完整指南，请参见
+    [第 8 章](51f4dcda-add6-4e58-a660-75f34a7e5593.xhtml)，*语义分割和自定义数据集构建器*。如果您对 `TFRecord`
+    表示形式感兴趣，请参考官方文档：[https://www.tensorflow.org/beta/tutorials/load_data/tf_records](https://www.tensorflow.org/beta/tutorials/load_data/tf_records)。
+- en: Building your dataset
+  id: totrans-93
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建数据集
+- en: The following example shows how to build a `tf.data.Dataset` object using the
+    Fashion-MNIST dataset. This is the first complete example of a dataset that uses
+    all the best practices described previously; please take the time to understand
+    why the method chaining is performed in this way and where the performance optimizations
+    have been applied.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例展示了如何使用 Fashion-MNIST 数据集构建一个 `tf.data.Dataset` 对象。这是一个完整的数据集示例，采用了之前描述的所有最佳实践；请花时间理解为何采用这种方法链式操作，并理解性能优化应用的位置。
+- en: 'In the following code, we define the `train_dataset` function, which returns
+    the `tf.data.Dataset` object ready to use:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们定义了 `train_dataset` 函数，该函数返回一个已准备好的 `tf.data.Dataset` 对象：
+- en: '`(tf2)`'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE4]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: A training dataset, however, should contain augmented data in order to address
+    the overfitting problem. Applying data augmentation on image data is straightforward
+    using the TensorFlow `tf.image` package.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，训练数据集应该包含增强的数据，以应对过拟合问题。使用 TensorFlow `tf.image` 包对图像数据进行数据增强非常直接。
+- en: Data augmentation
+  id: totrans-99
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据增强
+- en: The ETL process defined so far only transforms the raw data, applying transformations
+    that do not change the image content. Data augmentation, instead, requires to
+    apply meaningful transformation the raw data with the aim of creating a bigger
+    dataset and train, thus, a model more robust to these kinds of variations.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止定义的 ETL 过程仅转换原始数据，应用的转换不会改变图像内容。而数据增强则需要对原始数据应用有意义的转换，目的是创建更大的数据集，并因此训练一个对这些变化更为鲁棒的模型。
+- en: Working with images, it is possible to use the whole API offered by the `tf.image`
+    package to augment the dataset. The augmentation step consists in the definition
+    of a function and its application to the training set, using the dataset `map`
+    method.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在处理图像时，可以使用 `tf.image` 包提供的完整API来增强数据集。增强步骤包括定义一个函数，并通过使用数据集的 `map` 方法将其应用于训练集。
+- en: The set of valid transformations depends on the dataset—if we were using the
+    MNIST dataset, for instance, flipping the input image upside down won't be a good
+    idea (nobody wants to feed an image of the number 6 labeled as 9), but since we
+    are using the fashion-MNIST dataset we can flip and rotate the input image as
+    we like (a pair of trousers remains a pair of trousers, even if randomly flipped
+    or rotated).
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有效的变换集合取决于数据集——例如，如果我们使用的是MNIST数据集，那么将输入图像上下翻转就不是一个好主意（没有人希望看到一个标记为9的数字6图像），但由于我们使用的是fashion-MNIST数据集，我们可以随意翻转或旋转输入图像（一条裤子即使被随机翻转或旋转，依然是条裤子）。
+- en: 'The `tf.image` package already contains functions with stochastic behavior,
+    designed for data augmentation. These functions apply the transformation to the
+    input image with a 50% chance; this is the desired behavior since we want to feed
+    the model with both original and augmented images. Thus, a function that applies
+    meaningful transformations to the input data can be defined as follows:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.image` 包已经包含了具有随机行为的函数，专为数据增强设计。这些函数以50%的概率对输入图像应用变换；这是我们期望的行为，因为我们希望向模型输入原始图像和增强图像。因此，可以按如下方式定义一个对输入数据应用有意义变换的函数：'
+- en: '`(tf2)`'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE5]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Applying this augmentation function to the dataset, using the dataset `map`
+    method, is left as an exercise for you.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将此增强函数应用于数据集，并使用数据集的 `map` 方法，作为一个练习留给你完成。
+- en: Although it is easy, thanks to the `tf.data` API, building your own datasets
+    to benchmark every new algorithm on a standard task (classification, object detection,
+    or semantic segmentation) can be a repetitive and, therefore, error-prone process.
+    The TensorFlow developers, together with the TensorFlow developer community, standardized
+    the *extraction* and *transformation* process of the ETL pipeline, developing
+    TensorFlow Datasets.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管借助 `tf.data` API 很容易构建自己的数据集，以便在标准任务（分类、目标检测或语义分割）上对每个新算法进行基准测试，但这一过程可能是重复的，因而容易出错。TensorFlow开发者与TensorFlow开发社区一起，标准化了ETL管道的
+    *提取* 和 *转换* 过程，开发了TensorFlow Datasets。
+- en: 'The data augmentation functions offered by TensorFlow sometimes are not enough,
+    especially when working with small datasets that require a lot of argumentation
+    to become useful. There are many data augmentation libraries written in Python
+    that can be easily integrated into the dataset augmentation step. Two of the most
+    common are the following:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow提供的数据增强函数有时不够用，尤其是在处理需要大量变换才能有用的小数据集时。有许多用Python编写的数据增强库，可以轻松地集成到数据集增强步骤中。以下是两个最常见的库：
+- en: '- **imgaug**: [https://github.com/aleju/imgaug](https://github.com/aleju/imgaug)'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**imgaug**: [https://github.com/aleju/imgaug](https://github.com/aleju/imgaug)'
+- en: '- **albumentations**: [https://github.com/albu/albumentations](https://github.com/albu/albumentations)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**albumentations**: [https://github.com/albu/albumentations](https://github.com/albu/albumentations)'
+- en: Using `tf.py_function` it is possible to execute Python code inside the `map`
+    method, and thus use these libraries to generate a rich set of transformations
+    (not offered by the `tf.image` package).
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `tf.py_function` 可以在 `map` 方法中执行Python代码，从而利用这些库生成丰富的变换集（这是 `tf.image` 包所没有提供的）。
+- en: TensorFlow Datasets – tfds
+  id: totrans-112
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: TensorFlow Datasets – tfds
+- en: TensorFlow Datasets is a collection of ready-to-use datasets that handle the
+    downloading and preparation phases of the ETL process, constructing a `tf.data.Dataset` object.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow Datasets 是一个现成可用的数据集集合，它处理ETL过程中的下载和准备阶段，并构建 `tf.data.Dataset` 对象。
+- en: The significant advantage this project has brought to machine learning practitioners
+    is the extreme simplification of the data download and preparation of the most
+    commonly used benchmark dataset.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个项目为机器学习从业者带来的显著优势是极大简化了最常用基准数据集的下载和准备工作。
+- en: TensorFlow Datasets (`tfds`) not only downloads and converts the dataset to
+    a standard format but also locally converts the dataset to its `TFRecord` representation,
+    making the reading from disk highly efficient and giving the user a `tf.data.Dataset`
+    object that reads from `TFRecord` and is ready to use. The API comes with the
+    concept of a builder***. ***Every builder is an available dataset.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow数据集（`tfds`）不仅下载并将数据集转换为标准格式，还会将数据集本地转换为其`TFRecord`表示形式，使得从磁盘读取非常高效，并为用户提供一个从`TFRecord`中读取并准备好使用的`tf.data.Dataset`对象。该API具有构建器的概念***。***每个构建器都是一个可用的数据集。
+- en: Different from the `tf.data` API, TensorFlow Datasets comes as a separate package
+    that needs to be installed.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与`tf.data` API不同，TensorFlow数据集作为一个独立的包，需要单独安装。
+- en: Installation
+  id: totrans-117
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 安装
+- en: 'Being a Python package, installing it using `pip` is straightforward:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个Python包，通过`pip`安装非常简单：
+- en: '[PRE6]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: That's it. The package is lightweight since all the datasets are downloaded
+    only when needed.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就是这样。该包非常轻量，因为所有数据集仅在需要时下载。
+- en: Usage
+  id: totrans-121
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用
+- en: 'The package comes with two main methods: `list_builders()` and `load()`:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该包提供了两个主要方法：`list_builders()`和`load()`：
+- en: '`list_builders()` returns the list of the available datasets.'
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`list_builders()`返回可用数据集的列表。'
+- en: '`load(name, split)` accepts the name of an available builder and the desired
+    split. The split value depends on the builder since every builder carries its
+    information.'
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`load(name, split)`接受一个可用构建器的名称和所需的拆分。拆分值取决于构建器，因为每个构建器都有自己的信息。'
+- en: 'Using `tfds` to load the train and test splits of MNIST, in the list of the
+    available builders, is shown as follows:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`tfds`加载MNIST的训练和测试拆分，在可用构建器的列表中显示如下：
+- en: '`(tf2)`'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE7]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: In a single line of code, we downloaded, processed, and converted the dataset
+    to TFRecord, and created two `tf.data.Dataset` objects to read them.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一行代码中，我们下载、处理并将数据集转换为TFRecord，并创建两个`tf.data.Dataset`对象来读取它们。
+- en: 'In this single line of code, we don''t have any information about the dataset
+    itself: no clue about the data type of the returned objects, the shape of the
+    images and labels, and so on.'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一行代码中，我们没有关于数据集本身的任何信息：没有关于返回对象的数据类型、图像和标签的形状等线索。
+- en: 'To gain a complete description of the whole dataset, it is possible to use
+    the builder associated with the dataset and print the `info` property; this property
+    contains all the information required to work with the dataset, from the academic
+    citation to the data format:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取整个数据集的完整描述，可以使用与数据集相关联的构建器并打印`info`属性；该属性包含所有工作所需的信息，从学术引用到数据格式：
+- en: '`(tf2)`'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE8]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Executing it, we get the following:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行它后，我们得到如下结果：
+- en: '[PRE9]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: That's all we need.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是我们所需的一切。
+- en: Using `tfds` is highly encouraged; moreover, since the `tf.data.Dataset` objects
+    are returned, there is no need to learn how to use another fancy API as the `tf.data` API
+    is the standard, and we can use it everywhere in TensorFlow 2.0.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强烈推荐使用`tfds`；此外，由于返回的是`tf.data.Dataset`对象，因此无需学习如何使用其他复杂的API，因为`tf.data` API是标准的，并且我们可以在TensorFlow
+    2.0中随处使用它。
+- en: Keras integration
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Keras集成
+- en: Dataset objects are natively supported by the TensorFlow implementation of the
+    Keras `tf.keras` specification. This means that using NumPy arrays or using a `tf.data.Dataset`
+    object is the same when it comes to training/evaluating a model. The classification
+    model defined in [Chapter 4](655b734e-1636-4e11-b944-a71fafacb977.xhtml), *TensorFlow
+    2.0 Architecture,* using the `tf.keras.Sequential` API, can be trained more quickly
+    using the `tf.data.Dataset` object created by the `train_dataset` function previously
+    defined.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集对象原生支持Keras的`tf.keras`规范在TensorFlow中的实现。这意味着在训练/评估模型时，使用NumPy数组或使用`tf.data.Dataset`对象是一样的。使用`tf.keras.Sequential`
+    API定义的分类模型，在[第4章](655b734e-1636-4e11-b944-a71fafacb977.xhtml)，*TensorFlow 2.0架构*中，使用之前定义的`train_dataset`函数创建的`tf.data.Dataset`对象训练会更快。
+- en: 'In the following code, we just use the standard `.compile` and `.fit` method
+    calls, to compile (define the training loop) and fit the dataset (that is a `tf.data.Dataset`):'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们只是使用标准的`.compile`和`.fit`方法调用，来编译（定义训练循环）和拟合数据集（这是一个`tf.data.Dataset`）：
+- en: '`(tf2)`'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE10]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: TensorFlow 2.0, being eager by default, natively allows iterating over a `tf.data.Dataset`
+    object to build our own custom training loop.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0默认是急切执行的，原生支持遍历`tf.data.Dataset`对象，以构建我们自己的自定义训练循环。
+- en: Eager integration
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 急切集成
+- en: The `tf.data.Dataset` object is iterable, which means one can either enumerate
+    its elements using a for loop or create a Python iterator using the `iter` keyword.
+    Please note that being iterable does not imply being a Python iterator as pointed
+    out at the beginning of this chapter.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data.Dataset` 对象是可迭代的，这意味着可以使用 for 循环枚举其元素，或者使用 `iter` 关键字创建一个 Python 迭代器。请注意，可迭代并不意味着是
+    Python 迭代器，正如本章开头所指出的那样。'
+- en: 'Iterating over a dataset object is extremely easy: we can use the standard
+    Python `for` loop to extract a batch at each iteration.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 遍历数据集对象是非常简单的：我们可以使用标准的Python `for` 循环在每次迭代中提取一个批次。
+- en: Configuring the input pipeline by using a dataset object is a better solution
+    than the one used so far.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用数据集对象来配置输入管道，比当前使用的解决方案要更好。
+- en: The manual process of extracting elements from a dataset by computing the indices
+    is error-prone and inefficient, while the `tf.data.Dataset` objects are highly-optimized.
+    Moreover, the dataset objects are fully compatible with `tf.function`, and therefore
+    the whole training loop can be graph-converted and accelerated.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 手动通过计算索引从数据集中提取元素的过程容易出错且效率低，而 `tf.data.Dataset` 对象经过高度优化。此外，数据集对象与 `tf.function`
+    完全兼容，因此整个训练循环可以图转换并加速。
+- en: 'Furthermore, the lines of code get reduced a lot, increasing the readability.
+    The following code block represents the graph-accelerated (via `@tf.function`)
+    custom training loop from the previous chapter, [Chapter 4](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=28&action=edit#post_27), *TensorFlow
+    2.0 Architecture*; the loop uses the `train_dataset` function defined previously:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，代码行数大大减少，提高了可读性。以下代码块表示上一章的图加速（通过 `@tf.function`）自定义训练循环，参见 [第4章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=28&action=edit#post_27)，*TensorFlow
+    2.0架构*；该循环使用了之前定义的 `train_dataset` 函数：
+- en: '`(tf2)`'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE11]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: You are invited to read the source code carefully and compare it with the custom
+    training loop from the previous chapter, [Chapter 4](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=28&action=edit#post_27), *TensorFlow
+    2.0 Architecture*.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欢迎仔细阅读源代码，并与上一章的自定义训练循环进行对比，参见 [第4章](https://cdp.packtpub.com/hands_on_applied_neural_networks_with_tensorflow_2_x/wp-admin/post.php?post=28&action=edit#post_27)，*TensorFlow
+    2.0架构*。
+- en: Estimator API
+  id: totrans-152
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Estimator API
+- en: In the previous section, we saw how the `tf.data` API simplifies and standardizes
+    the input pipeline definition. Also, we saw that the `tf.data` API is completely
+    integrated into the TensorFlow Keras implementation and the eager or graph-accelerated
+    version of a custom training loop.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节中，我们看到 `tf.data` API 如何简化并标准化输入管道的定义。我们还看到，`tf.data` API 完全整合到了 TensorFlow
+    Keras 实现中，并且能够在自定义训练循环的急切或图加速版本中使用。
+- en: 'Just as for the input data pipelines, there are a lot of repetitive parts in
+    the whole machine learning programming. In particular, after defining the first
+    version of the machine learning model, the practitioner is interested in:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像输入数据管道一样，整个机器学习编程中有很多重复的部分。特别是在定义了第一个版本的机器学习模型后，实践者会关注以下几个方面：
+- en: Training
+  id: totrans-155
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 训练
+- en: Evaluating
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 评估
+- en: Predicting
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 预测
+- en: After many iterations of these points, exporting the trained model for serving
+    is the natural consequence.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在多次迭代这些步骤之后，将训练好的模型导出以供服务是自然的结果。
+- en: Of course, defining a training loop, the evaluation process, and the predicting
+    process are very similar for each machine learning process. For example, for a
+    predictive model, we are interested in training the model for a certain number
+    of epochs, measuring a metric on the training and validation set at the end of
+    the process, and repeating this process, changing the hyperparameters until the
+    results are satisfactory.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，定义训练循环、评估过程和预测过程在每个机器学习过程中是非常相似的。例如，对于一个预测模型，我们关心的是训练模型指定次数的 epochs，在过程结束时测量训练集和验证集的某个指标，并重复这个过程，调整超参数直到结果令人满意。
+- en: To simplify machine learning programming and help the developer to focus on
+    the nonrepetitive parts of the process, TensorFlow introduced the concept of Estimator
+    through the `tf.estimator` API.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简化机器学习编程并帮助开发者专注于过程中的非重复部分，TensorFlow 引入了通过 `tf.estimator` API 的 Estimator
+    概念。
+- en: 'The `tf.estimator` API is a high-level API that encapsulates the repetitive
+    and standard processes of the machine learning pipeline. For more information
+    on estimators, see the official documentation ([https://www.tensorflow.org/guide/estimators](https://www.tensorflow.org/guide/estimators)).
+    Here are the main advantages estimators bring:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.estimator` API是一个高级API，它封装了机器学习管道中的重复和标准化过程。有关Estimator的更多信息，请参见官方文档（[https://www.tensorflow.org/guide/estimators](https://www.tensorflow.org/guide/estimators)）。以下是Estimator带来的主要优点：'
+- en: You can run Estimator-based models on a local host or a distributed multiserver
+    environment without changing your model. Furthermore, you can run Estimator-based
+    models on CPUs, GPUs, or TPUs without recoding your model.
+  id: totrans-162
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你可以在本地主机或分布式多服务器环境中运行基于Estimator的模型，而无需更改模型。此外，你还可以在CPU、GPU或TPU上运行基于Estimator的模型，无需重新编写代码。
+- en: Estimators simplify sharing implementations between model developers.
+  id: totrans-163
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Estimator简化了模型开发者之间实现的共享。
+- en: You can develop a state-of-the-art model with high-level, intuitive code. In
+    short, it is generally much easier to create models with Estimators than with
+    the low-level TensorFlow APIs.
+  id: totrans-164
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你可以使用高层次、直观的代码开发最先进的模型。简而言之，通常使用Estimator创建模型比使用低级TensorFlow API要容易得多。
+- en: Estimators are themselves built on `tf.keras.layers`, which simplifies customization.
+  id: totrans-165
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Estimator本身是建立在`tf.keras.layers`上的，这简化了自定义。
+- en: Estimators build the graph for you.
+  id: totrans-166
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Estimator为你构建图。
+- en: 'Estimators provide a safely distributed training loop that controls how and
+    when to:'
+  id: totrans-167
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Estimator提供了一个安全分布式的训练循环，控制如何以及何时进行：
+- en: Build the graph
+  id: totrans-168
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建图
+- en: Initialize variables
+  id: totrans-169
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 初始化变量
+- en: Load data
+  id: totrans-170
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 加载数据
+- en: Handle exceptions
+  id: totrans-171
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 处理异常
+- en: Create checkpoint files and recover from failures
+  id: totrans-172
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建检查点文件并从故障中恢复
+- en: Save summaries for TensorBoard
+  id: totrans-173
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为TensorBoard保存摘要
+- en: '![](img/afe1dc5d-85d3-4366-8fae-faff6b191706.png)'
+  id: totrans-174
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/afe1dc5d-85d3-4366-8fae-faff6b191706.png)'
+- en: 'The Estimator API is built upon the TensorFlow mid-level layers; in particular,
+    estimators themselves are built using the Keras layers in order to simplify the
+    customization. Image credits: tensorflow.org'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Estimator API建立在TensorFlow中层层次之上；特别地，Estimator本身是使用Keras层构建的，以简化自定义。图片来源：tensorflow.org
+- en: The standardization process of the machine learning pipeline passes through
+    the definition of a class that describes it: `tf.estimator.Estimator`.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 机器学习管道的标准化过程通过一个描述它的类的定义进行：`tf.estimator.Estimator`。
+- en: 'To use this class, you need to use a well-defined programming model that is
+    enforced by the public methods of the `tf.estimator.Estimator` object, as shown
+    in the following screenshot:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用这个类，你需要使用一个由`tf.estimator.Estimator`对象的公共方法强制执行的、定义良好的编程模型，如下图所示：
+- en: '![](img/61f4769c-873f-4ca0-9a5a-299c1cbe50d9.png)'
+  id: totrans-178
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/61f4769c-873f-4ca0-9a5a-299c1cbe50d9.png)'
+- en: 'The estimator programming model is enforced by the Estimator object public
+    methods; the API itself takes care of the checkpoint saving and reloading; the
+    user must implement only the input function and the model itself; the standard
+    processes of training, evaluate, and predict are implemented by the API. Image
+    credits: tensorflow.org'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Estimator编程模型由Estimator对象的公共方法强制执行；API本身处理检查点保存和重新加载；用户只需实现输入函数和模型本身；训练、评估和预测的标准过程由API实现。图片来源：tensorflow.org
+- en: 'It is possible to use the Estimator API in two different ways: building custom
+    Estimators or using premade Estimators.'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用Estimator API有两种不同的方式：构建自定义Estimator或使用预制Estimator。
+- en: Premade and custom Estimators follow the same programming model; the only difference
+    is that in custom Estimators the user must write a `model_fn` model function,
+    while in the premade Estimator the model definition comes for free (at the cost
+    of lower flexibility).
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预制和自定义的Estimator遵循相同的编程模型；唯一的区别是，在自定义Estimator中，用户必须编写一个`model_fn`模型函数，而在预制Estimator中，模型定义是现成的（代价是灵活性较低）。
+- en: 'The programming model the Estimator API forces you to use consists of the implementation
+    of two components:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Estimator API强制你使用的编程模型包括两个组件的实现：
+- en: The implementation of the data input pipeline, implementing the `input_fn` function
+  id: totrans-183
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据输入管道的实现，实现`input_fn`函数
+- en: (optional) The implementation of the model, handling the training, evaluation,
+    and predict cases, and implementing the `model_fn` function
+  id: totrans-184
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: （可选）模型的实现，处理训练、评估和预测情况，并实现`model_fn`函数
+- en: Please note that the documentation talks about graphs**. **In fact, to guarantee
+    high performance, the Estimator API is built upon the (hidden) graph representation.
+    Even if TensorFlow 2.0 defaults on the eager execution paradigm, neither `model_fn`
+    and `input_fn` are executed eagerly, the Estimator switches to graph mode before
+    calling these functions, which is why the code has to be compatible with graph
+    mode execution.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，文档中提到了**图**（graphs）。事实上，为了保证高性能，Estimator API是建立在（隐藏的）图表示上的。即使TensorFlow
+    2.0默认使用急切执行（eager execution）范式，`model_fn`和`input_fn`也不会立即执行，Estimator会在调用这些函数之前切换到图模式，这就是为什么代码必须与图模式执行兼容的原因。
+- en: 'In practice, the Estimator API is a standardization of the good practice of separating
+    the data from the model. This is well highlighted by the constructor of the `tf.estimator.Estimator`
+    object, which is the subject of this chapter:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，Estimator API是将数据与模型分离的良好实践的标准化。这一点通过`tf.estimator.Estimator`对象的构造函数得到了很好的体现，该对象是本章的主题：
+- en: '[PRE12]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: It is worth noticing that there is no mention of `input_fn` in the constructor,
+    and this makes sense since the input can change during the estimator's lifetime,
+    whereas the model can't.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得注意的是，在构造函数中并未提到`input_fn`，这也是有道理的，因为输入可以在估算器的生命周期中发生变化，而模型则不能。
+- en: Let's see how the `input_fn` function should be implemented.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下`input_fn`函数应该如何实现。
+- en: Data input pipeline
+  id: totrans-190
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据输入管道
+- en: 'Firstly, let''s look at the standard ETL process:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们看看标准的ETL过程：
+- en: '**Extract**: Read the data from the data source. It can be either local (persistent
+    storage, already loaded in memory) or remote (Cloud Storage, remote filesystem).'
+  id: totrans-192
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**提取**：从数据源读取数据。数据源可以是本地的（持久存储、已经加载到内存中）或远程的（云存储、远程文件系统）。'
+- en: '**Transform**: Apply transformations to the data to clean, augment (random
+    crop image, flip, color distortion, adding noise), and make the data interpretable
+    by the model. Conclude the transformation by shuffling and batching the data.'
+  id: totrans-193
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**转换**：对数据应用变换操作，以清洗数据、增强数据（随机裁剪图像、翻转、颜色扭曲、添加噪声），并使数据可以被模型理解。通过打乱数据并进行批处理来结束变换过程。'
+- en: '**Load**: Load the transformed data into the device that better fits the training
+    needs (GPUs or TPUs) and execute the training.'
+  id: totrans-194
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**加载**：将变换后的数据加载到最适合训练需求的设备（GPU或TPU）中，并执行训练。'
+- en: The `tf.estimator.Estimator` API merges the first two phases in the implementation
+    of the `input_fn` function passed to the `train` and `evaluate` methods.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.estimator.Estimator` API将前两阶段合并在`input_fn`函数的实现中，该函数被传递给`train`和`evaluate`方法。'
+- en: The `input_fn` function is a Python function that returns a `tf.data.Dataset`
+    object, which yields the `features` and `labels` objects consumed by the model,
+    that's all.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`input_fn`函数是一个Python函数，它返回一个`tf.data.Dataset`对象，该对象生成模型消耗的`features`和`labels`对象，仅此而已。'
+- en: 'As known from the theory presented in [Chapter 1](0dff1bba-f231-45fa-9a89-b4f127309579.xhtml),
+    *What is machine learning?, *the correct way of using a dataset is to split it
+    into three non-overlapping parts: training, validation, and test set.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如在[第1章](0dff1bba-f231-45fa-9a89-b4f127309579.xhtml)中提出的理论所知，*什么是机器学习？*，使用数据集的正确方式是将其分为三个不重叠的部分：训练集、验证集和测试集。
+- en: To correctly implement it, it is suggested to define an input function that
+    accepts an input parameter able to change the returned `tf.data.Dataset` object,
+    returning a new function to pass as input to the Estimator object. The estimator
+    API comes with the concept of *m**ode*.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了正确实现这一点，建议定义一个输入函数，该函数接受一个输入参数，能够改变返回的`tf.data.Dataset`对象，并返回一个新的函数作为输入传递给Estimator对象。Estimator
+    API包含了*模式*（mode）的概念。
+- en: 'The model, and dataset too, can be in a different mode, depending on which
+    phases of the pipeline we are at. The mode is implemented in the `enum` type `tf.estimator.ModeKeys`,
+    which contains the three standard keys:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型和数据集也可能处于不同的模式，这取决于我们处于管道的哪个阶段。模式通过`enum`类型`tf.estimator.ModeKeys`来实现，该类型包含三个标准键：
+- en: '`TRAIN`: Training mode'
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`TRAIN`：训练模式'
+- en: '`EVAL`: Evaluation mode'
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`EVAL`：评估模式'
+- en: '`PREDICT`: Inference mode'
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`PREDICT`：推理模式'
+- en: It is thus possible to use a `tf.estimator.ModeKeys` input variable to change
+    the returned dataset (the fact that this is not required by the Estimator API
+    is something that comes in handy).
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，可以使用`tf.estimator.ModeKeys`输入变量来改变返回的数据集（这一点Estimator API并不强制要求，反而很方便）。
+- en: Suppose we are interested in defining the correct input pipeline for a classification
+    model of the fashion-MNIST dataset, we just have to get the data, split the dataset
+    (since the evaluation set is not provided, we halve the test set), and build the
+    dataset object we need.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有兴趣为 Fashion-MNIST 数据集的分类模型定义正确的输入管道，我们只需要获取数据，拆分数据集（由于没有提供评估集，我们将测试集分成两半），并构建我们需要的数据集对象。
+- en: 'The input signature of the input function is completely up to the developer;
+    this freedom allows us to define the dataset objects parametrically by passing
+    every dataset parameter as function inputs:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入函数的输入签名完全由开发者决定；这种自由度允许我们通过将每个数据集参数作为函数输入来参数化地定义数据集对象：
+- en: '`(tf2)`'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE13]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'After defining the input function, the programming model introduced by the
+    Estimator API gives us two choices: create our own custom estimator by manually
+    defining the model to train, or use the so-called canned or premade estimators.'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在定义输入函数之后，Estimator API 引入的编程模型为我们提供了两种选择：通过手动定义要训练的模型来创建我们自己的自定义估算器，或者使用所谓的现成（预制）估算器。
+- en: Custom estimators
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 自定义估算器
+- en: 'Premade and custom estimators share a common architecture: both aim to build
+    a `tf.estimator.EstimatorSpec` object that fully defines the model to be run by `tf.estimator.Estimator`;
+    the return value of any `model_fn` is, therefore, the Estimator specification.'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现成估算器和自定义估算器共享相同的架构：它们的目标是构建一个`tf.estimator.EstimatorSpec`对象，该对象完整定义了将由`tf.estimator.Estimator`执行的模型；因此，任何`model_fn`的返回值就是
+    Estimator 规格。
+- en: 'The `model_fn` function follows this signature:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`model_fn`函数遵循以下签名：'
+- en: '[PRE14]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The function parameters are:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数参数如下：
+- en: '`features` is the first item returned from `input_fn`'
+  id: totrans-214
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`features` 是从`input_fn`返回的第一个项目。'
+- en: '`labels` is the second item returned from `input_fn`'
+  id: totrans-215
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`labels` 是从`input_fn`返回的第二个项目。'
+- en: '`mode` is the `tf.estimator.ModeKeys` object that specifies the status of the
+    model, if it is in the training, evaluation, or prediction phase'
+  id: totrans-216
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`mode` 是一个 `tf.estimator.ModeKeys` 对象，指定模型的状态，是处于训练、评估还是预测阶段。'
+- en: '`params` is a dictionary of hyperparameters that can be used to tune the model
+    easily'
+  id: totrans-217
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`params` 是一个包含超参数的字典，可以用来轻松调优模型。'
+- en: '`config` is a `tf.estimator.RunConfig` object that allows you to configure
+    parameters related to the runtime execution, such as the model parameters directory
+    and the number of distributed nodes to use'
+  id: totrans-218
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`config` 是一个`tf.estimator.RunConfig`对象，它允许你配置与运行时执行相关的参数，例如模型参数目录和要使用的分布式节点数量。'
+- en: Note that `features`, `labels`, and `mode` are the most important part of the `model_fn`
+    definition, and that the signature of `model_fn` must use these parameter names;
+    otherwise, a `ValueError` exception is raised.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，`features`、`labels` 和 `mode` 是`model_fn`定义中最重要的部分，`model_fn`的签名必须使用这些参数名称；否则，会抛出`ValueError`异常。
+- en: The requirement of having a complete match with the input signature is proof
+    that estimators must be used in standard scenarios when the whole machine learning
+    pipeline can get a huge speedup from this standardization.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要求输入签名与模型完全匹配，证明估算器必须在标准场景中使用，在这些场景中，整个机器学习管道可以从这种标准化中获得巨大的加速。
+- en: 'The goals of `model_fn` are twofold: it has to define the model using Keras,
+    and define its behavior during the various `mode`. The way to specify the behavior
+    is to return a correctly built `tf.estimator.EstimatorSpec`.'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`model_fn`的目标是双重的：它必须使用 Keras 定义模型，并定义在不同`mode`下的行为。指定行为的方式是返回一个正确构建的`tf.estimator.EstimatorSpec`。'
+- en: Since even writing the model function is straightforward using the Estimator
+    API, a complete implementation of a classification problem solution using the
+    Estimator API follows. The model definition is pure Keras, and the function used
+    is the `make_model(num_classes)` previously defined.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于使用 Estimator API 编写模型函数非常简单，下面是使用 Estimator API 解决分类问题的完整实现。模型定义是纯 Keras 的，所使用的函数是之前定义的`make_model(num_classes)`。
+- en: 'You are invited to look carefully at how the behavior of the model changes
+    when the `mode` parameter changes:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们邀请你仔细观察当`mode`参数变化时模型行为的变化：
+- en: '**Important**: The Estimator API, although present in TensorFlow 2.0, still
+    works in graph mode. `model_fn`, thus, can use Keras to build the model, but the
+    training and summary logging operation must be defined using the `tf.compat.v1` compatibility
+    module.'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**重要**：虽然 Estimator API 存在于 TensorFlow 2.0 中，但它仍然在图模式下工作。因此，`model_fn` 可以使用
+    Keras 来构建模型，但训练和摘要日志操作必须使用`tf.compat.v1`兼容模块来定义。'
+- en: Please refer to [Chapter 3](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml), *TensorFlow
+    Graph Architecture*, for a better understanding of the graph definition.`(tf2)`
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请参阅[第3章](f62be9d4-c8e0-4590-8299-2fdad139830f.xhtml)，*TensorFlow图架构*，以更好地理解图定义。`(tf2)`
+- en: '[PRE15]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: The `model_fn` function works exactly like a standard graph model of TensorFlow
+    1.x; the whole model behavior (three possible scenarios) is encoded inside the
+    function, inside the Estimator specification the function returns.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`model_fn`函数的工作方式与TensorFlow 1.x的标准图模型完全相同；整个模型的行为（三种可能的情况）都被编码在该函数中，函数返回的Estimator规格中。'
+- en: 'A few lines of code are required to train and evaluate the model performance
+    at the end of every training epoch:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练和评估模型性能需要在每个训练周期结束时编写几行代码：
+- en: '`(tf2)`'
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE16]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: The loop for 50 epochs shows that the estimator API takes care of restoring
+    the model parameters and saving them at the end of each `.train` invocation, without
+    any user intervention, all automatically.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 50个训练周期的循环显示，估计器API会自动处理恢复模型参数并在每次`.train`调用结束时保存它们，无需用户干预，完全自动化。
+- en: 'By running `TensorBoard --logdir log`, it is possible to see the loss and accuracy
+    trends. The orange is the training run while the blue is the validation run:'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过运行`TensorBoard --logdir log`，可以查看损失和准确率的趋势。橙色表示训练过程，而蓝色表示验证过程：
+- en: '![](img/59a37b54-2e87-46d8-9110-3fc4e2f94fa7.png)'
+  id: totrans-233
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/59a37b54-2e87-46d8-9110-3fc4e2f94fa7.png)'
+- en: The validation accuracy and the training and validation loss values as shown
+    in TensorBoard
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorBoard中显示的验证准确率以及训练和验证损失值
+- en: Writing custom estimators requires you to think about the TensorFlow graph architecture
+    and use them as in the 1.x version.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编写自定义估计器要求你思考TensorFlow图架构，并像在1.x版本中一样使用它们。
+- en: In TensorFlow 2.0, as in the 1.x version, it is possible to define computational
+    graphs by using premade estimators that define the `model_fn` function automatically,
+    without the need to think in the graph-way.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow 2.0中，像1.x版本一样，可以使用预制估计器自动定义计算图，这些估计器自动定义`model_fn`函数，而无需考虑图的方式。
+- en: Premade estimators
+  id: totrans-237
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 预制估计器
+- en: 'TensorFlow 2.0 has two different kinds of premade Estimators: the one automatically
+    created from the Keras model definition, and the canned-estimators built upon
+    the TensorFlow 1.x API.'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow 2.0有两种不同类型的预制Estimator：一种是自动从Keras模型定义中创建的，另一种是基于TensorFlow 1.x API构建的现成估计器。
+- en: Using a Keras model
+  id: totrans-239
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用Keras模型
+- en: The recommended way of constructing an Estimator object in TensorFlow 2.0 is
+    to use a Keras model itself.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在TensorFlow 2.0中构建Estimator对象的推荐方式是使用Keras模型本身。
+- en: The `tf.keras.estimator` package offers all the tools required to automatically
+    convert a `tf.keras.Model` object to its Estimator counterpart. In fact, when
+    a Keras model is compiled, the whole training and evaluation loops are defined;
+    it naturally follows that the `compile` method almost defines an Estimator-like
+    architecture that the `tf.keras.estimator` package is able to use.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.keras.estimator`包提供了将`tf.keras.Model`对象自动转换为其Estimator对等体所需的所有工具。实际上，当Keras模型被编译时，整个训练和评估循环已经定义；因此，`compile`方法几乎定义了一个Estimator-like架构，`tf.keras.estimator`包可以使用该架构。'
+- en: Even when using Keras, you must always define the `tf.estimator.EstimatorSpec`
+    objects that define the `input_fn` function to use during the training and evaluation
+    phases.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使使用Keras，你仍然必须始终定义`tf.estimator.EstimatorSpec`对象，这些对象定义了在训练和评估阶段使用的`input_fn`函数。
+- en: There is no need to define a single `EstimatorSpec` object for both cases, but
+    it is possible and recommended to use `tf.estimator.TrainSpec` and `tf.estimator.EvalSpec`
+    to define the behavior of the model separately.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无需为这两种情况定义单独的`EstimatorSpec`对象，但可以并建议使用`tf.estimator.TrainSpec`和`tf.estimator.EvalSpec`分别定义模型的行为。
+- en: 'Therefore, given the usual `make_model(num_classes)` function, which creates
+    a Keras model, it is really easy to define the specs and convert the model to
+    an estimator:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，给定通常的`make_model(num_classes)`函数，该函数创建一个Keras模型，实际上很容易定义规格并将模型转换为估计器：
+- en: '`(tf2)`'
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`(tf2)`'
+- en: '[PRE17]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Using a canned estimator
+  id: totrans-247
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用现成的估计器
+- en: 'Model architectures are pretty much standard: convolutional neural networks
+    are made of convolutional layers interleaved by pooling layers; fully connected
+    neural networks are made by a stack of dense layers, each with a different number
+    of hidden units, and so on.'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型架构基本上是标准的：卷积神经网络由卷积层和池化层交替组成；全连接神经网络由堆叠的密集层组成，每一层有不同数量的隐藏单元，依此类推。
+- en: The `tf.estimator` package comes with a huge list of premade models, ready to
+    use. The full list is available in the documentation: [https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/estimator](https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/estimator)[.](https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/estimator)
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.estimator`包包含了大量预制的模型，随时可以使用。完整的列表可以在文档中查看：[https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/estimator](https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/estimator)[.]('
+- en: The process of the input function definition is pretty similar to what has been
+    described so far; the main difference is that instead of feeding the model with
+    the data as is, the canned Estimator requires an input description using feature
+    columns.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入函数的定义过程与之前描述的相似；主要的区别是，预设Estimator需要通过特征列来定义输入，而不是直接喂入原始数据。
+- en: Feature columns are intermediaries between the `tf.data.Dataset` object and
+    the Estimator. In fact, they can be used to apply standard transformations to
+    the input data, working exactly like an additional `.map` method added to the
+    input pipeline.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特征列是`tf.data.Dataset`对象和Estimator之间的中介。事实上，它们可以用来对输入数据应用标准转换，完全像是向输入管道添加了一个额外的`.map`方法。
+- en: Unfortunately, the `tf.estimator` API was added to TensorFlow 2.0 because of
+    the popularity of the Estimator-based solution in 1.x, but this package lacks
+    many features that a Keras-based or pure TensorFlow with eager execution plus
+    AutoGraph offers. When TensorFlow 1.x was the standard, it was tough and time-consuming
+    to experiment with many standard solutions and to manually define several standard
+    computational graphs; that's why the Estimator package gained popularity quickly.
+    Using TensorFlow 2.0 in eager mode and defining models using Keras, instead, allows
+    you to prototype and experiment with many different solutions easily. Moreover,
+    the `tf.data` API is so flexible that correctly defining the input pipeline is
+    straightforward.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，`tf.estimator` API是由于TensorFlow 1.x中基于Estimator的解决方案非常流行而被添加到TensorFlow
+    2.0中的，但这个包缺乏Keras基础的或是使用急切执行和AutoGraph的纯TensorFlow所提供的许多特性。当TensorFlow 1.x是标准时，实验许多标准解决方案并手动定义多个标准计算图是非常困难和耗时的，这也是为什么Estimator包迅速流行的原因。相反，使用TensorFlow
+    2.0的急切模式并通过Keras定义模型，能够轻松地原型化并尝试许多不同的解决方案。而且，`tf.data` API非常灵活，正确地定义输入管道变得简单。
+- en: For this reason, canned Estimators are only cited in this book. This knowledge
+    is not mandatory, and there is a high chance that in future versions of TensorFlow
+    the, `tf.estimator` package will be removed or moved to a separate project.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，本书中仅提及了预设Estimator。这个知识点并非必需，而且未来的TensorFlow版本中，`tf.estimator`包可能会被移除或转移到一个独立的项目中。
+- en: Summary
+  id: totrans-254
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, two of the most widely used high-level APIs were presented.
+    `tf.estimator` and `tf.data` APIs have maintained almost the same structure they
+    had in TensorFlow 1.x since they were designed with simplicity in mind.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了两种最常用的高级API。`tf.estimator`和`tf.data` API自TensorFlow 1.x以来几乎保持了相同的结构，因为它们在设计时就考虑到了简洁性。
+- en: The `tf.data` API, through `tf.data.Dataset`, allows you to define a high-efficiency
+    data input pipeline by chaining transformations in an ETL fashion, using the method
+    chaining paradigm. `tf.data.Dataset` objects are integrated with every part of
+    TensorFlow, from eager execution to AutoGraph, passing through the training methods
+    of Keras models and the Estimator API. The ETL process is made easy and the complexity
+    is hidden.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tf.data` API通过`tf.data.Dataset`，允许你通过以ETL方式串联转换来定义高效的数据输入管道，使用方法链式调用的范式。`tf.data.Dataset`对象与TensorFlow的每个部分都能兼容，从急切执行到AutoGraph，再到Keras模型的训练方法和Estimator
+    API。ETL过程变得简单，复杂性被隐藏了。'
+- en: TensorFlow Datasets is the preferred way of creating a new `tf.data.Dataset` object,
+    and is the perfect tool to use when a machine learning model has been developed,
+    and it is time to measure the performance on every publicly available benchmark.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow Datasets是创建新的`tf.data.Dataset`对象的首选方式，是在机器学习模型开发完成，并需要在每个公开可用的基准上衡量性能时，最理想的工具。
+- en: The Estimator API standardized machine learning programming but reduces flexibility
+    while increasing productivity. In fact, it is the perfect tool to use to define
+    the input pipeline once and to test with different standard models if a solution
+    to the problem can be easily found.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Estimator API标准化了机器学习编程，但降低了灵活性，同时提高了生产力。事实上，它是定义输入管道并测试不同标准模型的完美工具，能够轻松找到问题的解决方案。
+- en: The custom estimators, on the other hand, are the perfect tool to use when a
+    non-standard architecture could solve the problem, but the training process is
+    the standard one. Instead of wasting time rewriting the training loops, the metrics
+    measurements, and all the standard machine learning training pipeline, you can
+    focus only on the model definition. The `tf.estimator` and `tf.data` APIs are
+    two powerful tools TensorFlow offers, and using them together speeds up the development
+    a lot. The whole path from the development to the production is handled by these
+    tools, making putting a model into production almost effortless.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而自定义估算器则是当非标准架构可以解决问题，但训练过程是标准化时的完美工具。与其浪费时间重写训练循环、指标测量和所有标准的机器学习训练管道，不如将精力集中在模型定义上。`tf.estimator`和`tf.data`
+    APIs是TensorFlow提供的两个强大工具，结合使用它们可以大大加速开发。整个从开发到生产的过程都由这些工具处理，使得将模型投入生产几乎变得毫不费力。
+- en: This is the last chapter dedicated to the TensorFlow framework architecture.
+    In the following chapters, we will look at several machine learning tasks, all
+    of them with an end-to-end TensorFlow 2.0 solution. During the hands-on solution,
+    we will use other features of TensorFlow 2.0, such as the integration of TensorFlow
+    Hub with the Keras framework. The following chapters are a complete tutorial on
+    how to use TensorFlow 2.0 to solve a certain machine learning task using neural
+    networks.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是最后一章，专门讲解TensorFlow框架架构。在接下来的章节中，我们将讨论几个机器学习任务，所有这些任务都将采用端到端的TensorFlow 2.0解决方案。在动手实践的过程中，我们将使用TensorFlow
+    2.0的其他特性，如将TensorFlow Hub与Keras框架集成。接下来的章节将是一个完整的教程，展示如何使用TensorFlow 2.0通过神经网络解决某个机器学习任务。
+- en: Exercises
+  id: totrans-261
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 练习
+- en: 'Once again, you are invited to answer all the following questions. You will struggle
+    to find answers when the problems are hard, since this is the only way to master
+    Estimator and Data APIs:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次邀请你回答以下所有问题。遇到困难时，你将会很难找到答案，因为这是掌握Estimator和Data APIs的唯一途径：
+- en: What is an ETL process?
+  id: totrans-263
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 什么是ETL过程？
+- en: How is an ETL process related to the `tf.data` API?
+  id: totrans-264
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: ETL过程与`tf.data` API有什么关系？
+- en: Why can't a `tf.data.Dataset` object can't be manipulated directly, but every
+    non-static method returns a new dataset object that's the result of the transformation
+    applied?
+  id: totrans-265
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为什么不能直接操作`tf.data.Dataset`对象，而是每个非静态方法都会返回一个新的数据集对象，作为应用的转换结果？
+- en: Which are the most common optimizations in the context of the `tf.data` API?
+    Why is prefetching so important?
+  id: totrans-266
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`tf.data` API的上下文中，最常见的优化措施有哪些？为什么预取如此重要？
+- en: Given the two datasets of the next question, which one loops faster? Explain
+    your response.
+  id: totrans-267
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 给定下一个问题中的两个数据集，哪个循环更快？解释你的回答。
+- en: 'Given the following two datasets:'
+  id: totrans-268
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 给定以下两个数据集：
+- en: '[PRE18]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Can functions `l1` and `l2` be converted to their graph representations using
+    `@tf.function`? Analyze the resulting code using the `tf.autograph` module to
+    explain the answer.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`l1`和`l2`函数可以使用`@tf.function`转换为其图形表示吗？使用`tf.autograph`模块分析生成的代码，以解释答案。'
+- en: When should the `tf.data.Dataset.cache` method be used?
+  id: totrans-271
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 何时应使用`tf.data.Dataset.cache`方法？
+- en: Use the `tf.io.gfile` package to store an uncompressed copy of the fashion-MNIST
+    dataset locally.
+  id: totrans-272
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`tf.io.gfile`包将未压缩的fashion-MNIST数据集副本本地存储。
+- en: Create a `tf.data.Dataset` object reading the files created in the previous
+    point; use the `tf.io.gfile` package.
+  id: totrans-273
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个`tf.data.Dataset`对象，读取上一点中创建的文件；使用`tf.io.gfile`包。
+- en: Convert the complete example of the previous chapter to `tf.data`.
+  id: totrans-274
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将上一章的完整示例转换为`tf.data`。
+- en: Convert the complete example of the previous chapter to `tf.Estimator`.
+  id: totrans-275
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将上一章的完整示例转换为`tf.Estimator`。
+- en: 'Use `tfds` to load the `"cat_vs_dog"` dataset. Look at its builder information:
+    it''s a single split dataset. Split it in three non-overlapping parts: the training
+    set, the validation set, and the test set, using the `tf.data.Dataset.skip` and `tf.data.dataset.take`
+    methods. Resize every image to `32x32x3`, and swap the labels.'
+  id: totrans-276
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`tfds`加载`"cat_vs_dog"`数据集。查看其构建器信息：这是一个单一分割数据集。使用`tf.data.Dataset.skip`和`tf.data.dataset.take`方法将其分为三个不重叠的部分：训练集、验证集和测试集。将每张图片调整为`32x32x3`，并交换标签。
+- en: Use the three datasets created previously to define `input_fn`, which chooses
+    the correct split when the `mode` changes.
+  id: totrans-277
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用之前创建的三个数据集来定义`input_fn`，当`mode`变化时，选择正确的分割。
+- en: Define a custom `model_fn` function using a simple convolutional neural network
+    to classify cats and dogs (with swapped labels). Log the results on TensorBoard
+    and measure the accuracy, the loss value, and the distribution of the output neuron
+    on the validation set.
+  id: totrans-278
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用简单的卷积神经网络定义一个自定义的`model_fn`函数，用于分类猫和狗（标签交换）。在TensorBoard上记录结果，并衡量准确率、损失值以及验证集上输出神经元的分布。
+- en: Use a canned estimator to solve question 11\. Is it possible to reproduce the
+    same solution developed using a custom `model_fn` function with a premade Estimator?
+  id: totrans-279
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用预设的估算器解决问题11。是否可以使用一个现成的Estimator复现使用自定义`model_fn`函数开发的相同解决方案？
+- en: From the accuracy and validation loss curves shown in the section dedicated
+    to the custom Estimator, it is possible to see that the model is not behaving
+    correctly; what is the name of this pathological condition and how can it be mitigated?
+  id: totrans-280
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从自定义Estimator部分展示的准确率和验证损失曲线中，可以看出模型行为不正常；这种病态情况的名称是什么？如何缓解这种情况？
+- en: Try to reduce the pathological condition of the model (referred to in the previous
+    question) by tweaking the `loss` and/or changing the model architecture. Your
+    solution should reach at least a validation accuracy value of 0.96.
+  id: totrans-281
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过调整`loss`值和/或更改模型架构，尽量减少模型的病态情况（参考前面的问题）。你的解决方案应该至少达到0.96的验证准确率。

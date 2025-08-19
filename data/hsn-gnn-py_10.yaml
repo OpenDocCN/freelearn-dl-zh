@@ -1,0 +1,1382 @@
+- en: '10'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '10'
+- en: Predicting Links with Graph Neural Networks
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用图神经网络预测链接
+- en: '**Link prediction** is one of the most popular tasks performed with graphs.
+    It is defined as the problem of predicting the existence of a link between two
+    nodes. This ability is at the core of social networks and recommender systems.
+    A good example is how social media networks display friends and followers you
+    have in common with others. Intuitively, if this number is high, you are more
+    likely to connect with these people. This likelihood is precisely what link prediction
+    tries to estimate.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**链接预测**是图形分析中最常见的任务之一。它被定义为预测两个节点之间是否存在链接的问题。这一能力在社交网络和推荐系统中起着核心作用。一个好的例子是社交媒体网络如何展示你与他人共有的朋友和关注者。如果这个数字很高，你更可能与这些人建立连接。这种可能性正是链接预测试图估算的内容。'
+- en: In this chapter, we will first see how to perform link prediction without any
+    machine learning. These traditional techniques are essential to understanding
+    what GNNs learn. We will then refer to previous chapters about `DeepWalk` and
+    `Node2Vec` to link prediction through **matrix factorization**. Unfortunately,
+    these techniques have significant limitations, which is why we will transition
+    to GNN-based methods.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们首先将看到如何在没有任何机器学习的情况下执行链接预测。这些传统技术对于理解GNN所学的内容至关重要。接着，我们将参考前几章关于`DeepWalk`和`Node2Vec`的内容，通过**矩阵分解**进行链接预测。不幸的是，这些技术有显著的局限性，这就是为什么我们将转向基于GNN的方法。
+- en: We will explore three methods from two different families. The first family
+    is based on node embeddings and performs a GNN-based matrix factorization. The
+    second method focuses on subgraph representation. The neighborhood around each
+    link (fake or real) is considered an input to predict the link probability. Finally,
+    we will implement a model of each family in PyTorch Geometric.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将探讨来自两个不同范畴的三种方法。第一个范畴基于节点嵌入，并执行基于图神经网络（GNN）的矩阵分解。第二种方法则侧重于子图表示。每个链接（无论真假）周围的邻域被视为输入，用于预测链接的概率。最后，我们将在PyTorch
+    Geometric中实现每个范畴的模型。
+- en: By the end of this chapter, you will be able to implement various link prediction
+    techniques. Given a link prediction problem, you will know which technique is
+    the best suited to address it – heuristics, matrix factorization, GNN-based embeddings,
+    or subgraph-based techniques.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到本章结束时，你将能够实现各种链接预测技术。给定一个链接预测问题，你将知道哪种技术最适合解决它——启发式方法、矩阵分解、基于GNN的嵌入，或基于子图的技术。
+- en: 'In this chapter, we will cover the following main topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主要内容：
+- en: Predicting links with traditional methods
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用传统方法预测链接
+- en: Predicting links with node embeddings
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用节点嵌入预测链接
+- en: Predicting links with SEAL
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用SEAL预测链接
+- en: Technical requirements
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: All the code examples from this chapter can be found on GitHub at https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter10.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的所有代码示例都可以在GitHub上找到，网址为 [https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter10](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python/tree/main/Chapter10)。
+- en: Installation steps required to run the code on your local machine can be found
+    in the *Preface* section of this book.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的*前言*部分可以找到在本地机器上运行代码所需的安装步骤。
+- en: Predicting links with traditional methods
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用传统方法预测链接
+- en: The link prediction problem has been around for a long time, which is why numerous
+    techniques have been proposed to solve it. First, this section will describe popular
+    heuristics based on local and global neighborhoods. Then, we will introduce matrix
+    factorization and its connection to DeepWalk and Node2Vec.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 链接预测问题已经存在很长时间，这也是为何提出了许多技术来解决这个问题。本节首先将描述基于局部和全局邻域的常用启发式方法。接着，我们将介绍矩阵分解及其与DeepWalk和Node2Vec的关系。
+- en: Heuristic techniques
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 启发式技术
+- en: Heuristic techniques are a simple and practical way to predict links between
+    nodes. They are easy to implement and offer strong baselines for this task. We
+    can classify them based on the number of hops they perform (see *Figure 10**.1*).
+    Some of them only require 1-hop neighbors that are adjacent to the target nodes.
+    More complex techniques also consider 2-hop neighbors or an entire graph. In this
+    section, we will divide them into two categories – *local* (1-hop and 2-hop) and
+    *global* heuristics.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启发式技术是一种简单而实用的方式，用于预测节点之间的链接。它们易于实现，并为这一任务提供了强大的基准。我们可以根据它们执行的跳数对它们进行分类（见*图
+    10.1*）。其中一些方法只需要考虑与目标节点相邻的1跳邻居。而更复杂的技术则考虑2跳邻居或整个图。在本节中，我们将它们分为两类——*局部*（1跳和2跳）和*全局*启发式方法。
+- en: '![Figure 10.1 – Graph with 1-hop, 2-hop, and 3-hop neighbors](img/B19153_10_001.jpg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 10.1 – 包含1跳、2跳和3跳邻居的图](img/B19153_10_001.jpg)'
+- en: Figure 10.1 – Graph with 1-hop, 2-hop, and 3-hop neighbors
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 10.1 – 包含1跳、2跳和3跳邻居的图
+- en: 'Local heuristics measure the similarity between two nodes by considering their
+    local neighborhoods. We use ![](img/Formula_B19153_10_001.png) to denote the neighbors
+    of node ![](img/Formula_B19153_10_002.png). Here are three examples of popular
+    local heuristics:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 局部启发式方法通过考虑两个节点的局部邻域来衡量它们之间的相似性。我们用 ![](img/Formula_B19153_10_001.png) 来表示节点
+    ![](img/Formula_B19153_10_002.png) 的邻居。以下是三种流行的局部启发式方法的示例：
+- en: '**Common neighbors** simply counts the number of neighbors two nodes have in
+    common (1-hop neighbors). The idea is similar to our previous example with social
+    networks – the more neighbors you have in common, the more likely you are to be
+    connected:'
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**共同邻居**仅计算两个节点共同拥有的邻居数量（1跳邻居）。其思想类似于我们之前在社交网络中的示例——你们有共同邻居的数量越多，你们越有可能被连接：'
+- en: '![](img/Formula_B19153_10_003.jpg)'
+  id: totrans-21
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_003.jpg)'
+- en: '**Jaccard’s coefficient** measures the proportion of neighbors shared by two
+    nodes (1-hop neighbors). It relies on the same idea as common neighbors but normalizes
+    the result by the total number of neighbors. This rewards nodes with few interconnected
+    neighbors instead of nodes with high degrees:'
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Jaccard系数**衡量两个节点共享的邻居（1跳邻居）的比例。它基于与共同邻居相同的理念，但通过邻居的总数对结果进行归一化。这会奖励邻居数量少的节点，而不是度数高的节点：'
+- en: '![](img/Formula_B19153_10_004.jpg)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_004.jpg)'
+- en: 'The **Adamic–Adar index** sums the inverse logarithmic degree of neighbors
+    shared by the two target nodes (2-hop neighbors). The idea is that common neighbors
+    with large neighborhoods are less significant than those with small neighborhoods.
+    This is why they should have less importance in the final score:'
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Adamic–Adar指数**对两个目标节点共享的邻居的逆对数度数进行求和（2跳邻居）。其思想是，具有大规模邻域的共同邻居不如具有小规模邻域的共同邻居重要。因此，它们在最终评分中的重要性应该较低：'
+- en: '![](img/Formula_B19153_10_005.jpg)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_005.jpg)'
+- en: All these techniques rely on neighbors’ node degrees, whether they are direct
+    (common neighbors or Jaccard’s coefficient) or indirect (the Adamic–Adar index).
+    This is beneficial for speed and explainability but also limits the complexity
+    of the relationships they can capture.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些技术都依赖于邻居节点的度数，无论它们是直接的（共同邻居或Jaccard系数）还是间接的（Adamic–Adar指数）。这对于速度和可解释性有益，但也限制了它们能够捕捉的关系的复杂性。
+- en: 'Global heuristics offer a solution to this problem by considering an entire
+    network instead of a local neighborhood. Here are two well-known examples:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全局启发式方法通过考虑整个网络而不是局部邻域来解决这个问题。以下是两个著名的例子：
+- en: The **Katz index**computes the weighted sum of every possible path between two
+    nodes. Weights correspond to a discount factor, ![](img/Formula_B19153_10_006.png)
+    (usually between 0.8 and 0.9), to penalize longer paths. With this definition,
+    two nodes are more likely to be connected if there are many (preferably short)
+    paths between them. Paths of any length can be calculated using adjacency matrix
+    powers, ![](img/Formula_B19153_10_007.png), which is why the Katz index is defined
+    as follows:![](img/Formula_B19153_10_008.jpg)
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**Katz指数**计算两个节点之间每条可能路径的加权和。权重对应于折扣因子，![](img/Formula_B19153_10_006.png)（通常在0.8到0.9之间），用于惩罚较长的路径。根据这个定义，如果两个节点之间有许多（最好是短的）路径，它们更有可能连接。可以使用邻接矩阵的幂来计算任意长度的路径，![](img/Formula_B19153_10_007.png)，这就是为什么Katz指数定义如下：![](img/Formula_B19153_10_008.jpg)'
+- en: '`DeepWalk` and `Node2Vec` algorithms.'
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DeepWalk` 和 `Node2Vec` 算法。'
+- en: Global heuristics are usually more accurate but require knowing the entirety
+    of a graph. However, they are not the only way to predict links with this knowledge.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全局启发式方法通常更准确，但需要了解整个图。尽管如此，这些方法并不是唯一能够通过这些知识预测链接的方式。
+- en: Matrix factorization
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 矩阵分解
+- en: 'Matrix factorization for link prediction is inspired by the previous work on
+    recommender systems [2]. With this technique, we indirectly predict links by predicting
+    the entire adjacency matrix, ![](img/Formula_B19153_10_010.png). This is performed
+    using node embeddings – similar nodes, ![](img/Formula_B19153_10_011.png) and
+    ![](img/Formula_B19153_10_012.png), should have similar embeddings, ![](img/Formula_B19153_10_013.png)
+    and ![](img/Formula_B19153_10_014.png) respectively. Using the dot product, we
+    can write it as follows:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 链接预测的矩阵分解受到了推荐系统[2]中先前工作的启发。通过这项技术，我们通过预测整个邻接矩阵！[](img/Formula_B19153_10_010.png)间接预测链接。该操作是通过节点嵌入来完成的——相似的节点，![](img/Formula_B19153_10_011.png)和![](img/Formula_B19153_10_012.png)，应该有相似的嵌入，![](img/Formula_B19153_10_013.png)和![](img/Formula_B19153_10_014.png)。通过点积，我们可以将其写成如下形式：
+- en: If these nodes are similar, ![](img/Formula_B19153_10_015.png) should be maximal
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果这些节点相似，![](img/Formula_B19153_10_015.png)应该是最大的
+- en: If these nodes are different, ![](img/Formula_B19153_10_016.png) should be minimal
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果这些节点是不同的，![](img/Formula_B19153_10_016.png)应该是最小的
+- en: 'So far, we have assumed that similar nodes should be connected. This is why
+    we can use this dot product to approximate each element (link) of the adjacency
+    matrix, ![](img/Formula_B19153_10_017.png):'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们假设相似的节点应该是连接的。这就是我们可以使用点积来近似邻接矩阵每个元素（链接）的原因！[](img/Formula_B19153_10_017.png)：
+- en: '![](img/Formula_B19153_10_018.jpg)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_018.jpg)'
+- en: 'In terms of matrix multiplication, we have the following:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就矩阵乘法而言，我们有以下公式：
+- en: '![](img/Formula_B19153_10_019.jpg)'
+  id: totrans-38
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_019.jpg)'
+- en: 'Here, ![](img/Formula_B19153_10_020.png) is the node embedding matrix. The
+    following figure shows a visual explanation of how matrix factorization works:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_10_020.png)是节点嵌入矩阵。下图展示了矩阵分解如何工作的可视化解释：
+- en: '![Figure 10.2 – Matrix multiplication with node embeddings](img/B19153_10_002.jpg)'
+  id: totrans-40
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 10.2 – 使用节点嵌入的矩阵乘法](img/B19153_10_002.jpg)'
+- en: Figure 10.2 – Matrix multiplication with node embeddings
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 10.2 – 使用节点嵌入的矩阵乘法
+- en: 'This technique is called matrix factorization because the adjacency matrix,
+    ![](img/Formula_B19153_10_021.png), is decomposed into a product of two matrices.
+    The goal is to learn relevant node embeddings that minimize the L2 norm between
+    true and predicted elements, ![](img/Formula_B19153_10_022.png), for the graph,
+    ![](img/Formula_B19153_10_023.png):'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这项技术被称为矩阵分解，因为邻接矩阵！[](img/Formula_B19153_10_021.png)被分解为两个矩阵的乘积。目标是学习相关的节点嵌入，以最小化图中真实元素和预测元素之间的L2范数！[](img/Formula_B19153_10_022.png)和！[](img/Formula_B19153_10_023.png)：
+- en: '![](img/Formula_B19153_10_024.jpg)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_024.jpg)'
+- en: 'There are more advanced variants of matrix factorization that include the Laplacian
+    matrix and powers of ![](img/Formula_B19153_10_025.png). Another solution consists
+    of using models such as `DeepWalk` and `Node2Vec`. They produce node embeddings
+    that can be paired to create link representations. According to Qiu, et al. [3],
+    these algorithms implicitly approximate and factorize complex matrices. For example,
+    here is the matrix computed by `DeepWalk`:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 矩阵分解的更高级变种包括拉普拉斯矩阵和![](img/Formula_B19153_10_025.png)的幂。另一种解决方案是使用诸如`DeepWalk`和`Node2Vec`之类的模型。它们生成的节点嵌入可以配对以创建链接表示。根据Qiu等人[3]的研究，这些算法隐式地近似并分解复杂矩阵。例如，这是`DeepWalk`计算的矩阵：
+- en: '![](img/Formula_B19153_10_026.jpg)'
+  id: totrans-45
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_026.jpg)'
+- en: 'Here, ![](img/Formula_B19153_10_027.png) is the parameter for negative sampling.
+    The same can be said for similar algorithms, such as LINE and PTE. Although they
+    can capture more complex relationships, they suffer from the same limitations
+    that we saw in *Chapters 3* and *4*:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_10_027.png)是负采样的参数。同样的情况也适用于类似的算法，如LINE和PTE。尽管它们能够捕捉更复杂的关系，但它们仍然存在我们在*第3章*和*第4章*中看到的相同局限性：
+- en: '**They cannot use node features**: They only use topological information to
+    create embeddings'
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**它们无法使用节点特征**：它们仅使用拓扑信息来创建嵌入'
+- en: '**They have no inductive capabilities**: They cannot generalize to nodes that
+    were not in the training set'
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**它们没有归纳能力**：它们无法对训练集以外的节点进行泛化'
+- en: '**They cannot capture structural similarity**: Structurally similar nodes in
+    the graph can obtain vastly different embeddings'
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**它们无法捕捉结构相似性**：图中的结构相似节点可能获得完全不同的嵌入'
+- en: These limitations motivate the need for GNN-based techniques, as we will see
+    in the next sections.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些局限性促使了基于GNN（图神经网络）技术的需求，正如我们将在接下来的章节中看到的那样。
+- en: Predicting links with node embeddings
+  id: totrans-51
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用节点嵌入预测链接
+- en: In the previous chapters, we saw how to use GNNs to produce node embeddings.
+    A popular link prediction technique consists of using these embeddings to perform
+    matrix factorization. This section will discuss two GNN architectures for link
+    prediction – the **Graph Autoencoder** (**GAE**) and the **Variational Graph**
+    **Autoencoder** (**VGAE**).
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的章节中，我们讨论了如何使用GNN生成节点嵌入。一种流行的链路预测技术是使用这些嵌入进行矩阵分解。本节将讨论两种用于链路预测的GNN架构——**图自编码器**（**GAE**）和**变分图自编码器**（**VGAE**）。
+- en: Introducing Graph Autoencoders
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入图自编码器
+- en: Both architectures were introduced by Kipf and Welling in 2016 [5] in a three-page
+    paper. They represent the GNN counterparts of two popular neural network architectures
+    – the autoencoder and the variational autoencoder. Prior knowledge about these
+    architectures is helpful but not necessary. For ease of understanding, we will
+    first focus on the GAE.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两种架构由Kipf和Welling在2016年[5]的三页论文中介绍。它们代表了两种流行神经网络架构的GNN对应物——自编码器和变分自编码器。对这些架构的先验知识是有帮助的，但不是必须的。为了便于理解，我们将首先关注GAE。
+- en: 'The GAE is composed of two modules:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GAE由两个模块组成：
+- en: 'The **encoder** is a classic two-layer GCN that computes node embeddings as
+    follows:'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**编码器**是一个经典的两层GCN，通过以下方式计算节点嵌入：'
+- en: '![](img/Formula_B19153_10_028.jpg)'
+  id: totrans-57
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_028.jpg)'
+- en: 'The **decoder** approximates the adjacency matrix, ![](img/Formula_B19153_10_029.png),
+    using matrix factorization and a sigmoid function, ![](img/Formula_B19153_10_030.png),
+    to output probabilities:'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**解码器**使用矩阵分解和sigmoid函数来逼近邻接矩阵，![](img/Formula_B19153_10_029.png)，输出概率：'
+- en: '![](img/Formula_B19153_10_031.jpg)'
+  id: totrans-59
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_031.jpg)'
+- en: 'Note that we are not trying to classify nodes or graphs. The goal is to predict
+    a probability (between 0 and 1) for each element of the adjacency matrix, ![](img/Formula_B19153_10_032.png).
+    This is why the GAE is trained using the binary cross-entropy loss (negative log-likelihood)
+    between the elements of both adjacency matrices:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们并不是要对节点或图进行分类。目标是为邻接矩阵的每个元素预测一个概率（在0和1之间），![](img/Formula_B19153_10_032.png)。这就是为什么GAE使用二元交叉熵损失（负对数似然）来训练，即两个邻接矩阵之间的元素：
+- en: '![](img/Formula_B19153_10_033.jpg)'
+  id: totrans-61
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_033.jpg)'
+- en: However, adjacency matrices are often very sparse, which biases the GAE toward
+    predicting zero values. There are two simple techniques to fix this bias. First,
+    we can add a weight to favor ![](img/Formula_B19153_10_034.png) in the previous
+    loss function. Secondly, we can sample fewer zero values during training, making
+    labels more balanced. The latter technique is the one implemented by Kipf and
+    Welling.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，邻接矩阵通常非常稀疏，这会使GAE偏向于预测零值。有两种简单的技术可以解决这个偏差。首先，我们可以在前面的损失函数中添加一个权重，以偏向![](img/Formula_B19153_10_034.png)。其次，我们可以在训练过程中采样更少的零值，从而使标签更加平衡。后一种技术是Kipf和Welling实施的。
+- en: This architecture is flexible – the encoder can be replaced with another type
+    of GNN (GraphSAGE, for example), and an MLP can take the role of a decoder, for
+    instance. Another possible improvement involves transforming the GAE into a probabilistic
+    variant – the Variational GAE.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种架构是灵活的——编码器可以替换为另一种类型的GNN（例如，GraphSAGE），并且可以用MLP来替代解码器。另一个可能的改进是将GAE转化为概率变种——变分GAE。
+- en: Introducing VGAEs
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入VGAEs
+- en: 'The difference between GAEs and VGAEs is the same as between autoencoders and
+    variational autoencoders. Instead of directly learning node embeddings, VGAEs
+    learn normal distributions that are then sampled to produce embeddings. They are
+    also divided into two modules:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GAEs和VGAEs之间的区别就像自编码器和变分自编码器之间的区别一样。VGAEs不是直接学习节点嵌入，而是学习正态分布，然后从中进行采样以生成嵌入。它们也分为两个模块：
+- en: The **encoder** is composed of two GCNs that share their first layer. The objective
+    is to learn the parameters of each latent normal distribution – a mean, ![](img/Formula_B19153_10_035.png)
+    (learned by ![](img/Formula_B19153_10_036.png)), and a variance, ![](img/Formula_B19153_10_037.png)
+    (in practice, ![](img/Formula_B19153_10_038.png) learned by ![](img/Formula_B19153_10_039.png)).
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**编码器**由两个共享第一层的GCN组成。目标是学习每个潜在正态分布的参数——均值，![](img/Formula_B19153_10_035.png)（由![](img/Formula_B19153_10_036.png)学习），和方差，![](img/Formula_B19153_10_037.png)（实际上，![](img/Formula_B19153_10_038.png)由![](img/Formula_B19153_10_039.png)学习）。'
+- en: The **decoder** samples embeddings, ![](img/Formula_B19153_10_040.png), from
+    the learned distributions, ![](img/Formula_B19153_10_041.png), using the reparametrization
+    trick [4]. Then, it uses the same inner product between latent variables to approximate
+    the adjacency matrix, ![](img/Formula_B19153_10_042.png).
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**解码器**从学习到的分布中采样嵌入，![](img/Formula_B19153_10_040.png)，使用重参数化技巧[4]。然后，它使用潜在变量之间的相同内积来近似邻接矩阵，![](img/Formula_B19153_10_042.png)。'
+- en: 'With VGAEs, it is important to ensure that the encoder’s output follows a normal
+    distribution. This is why we add a new term to the loss function – the **Kullback-Leibler**
+    (**KL**) divergence, which measures the divergence between two distributions.
+    We obtain the following loss, also called the **evidence lower** **bound** (**ELBO**):'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在VGAE中，确保编码器输出符合正态分布是很重要的。这就是为什么我们要在损失函数中添加一个新项——**Kullback-Leibler**（**KL**）散度，它衡量两个分布之间的差异。我们得到以下损失，也称为**证据下界**（**ELBO**）：
+- en: '![](img/Formula_B19153_10_043.jpg)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_043.jpg)'
+- en: Here, ![](img/Formula_B19153_10_044.png) represents the encoder and ![](img/Formula_B19153_10_045.png)
+    is the prior distribution of ![](img/Formula_B19153_10_046.png).
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_10_044.png)表示编码器，![](img/Formula_B19153_10_045.png)是![](img/Formula_B19153_10_046.png)的先验分布。
+- en: The model’s performance is generally evaluated using two metrics – the area
+    under the ROC (**AUROC**) curve and the **average** **precision** (**AP**).
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型的性能通常使用两个指标来评估——ROC曲线下面积（**AUROC**）和**平均**精度（**AP**）。
+- en: Let’s see how to implement a VGAE using PyTorch Geometric.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何使用PyTorch Geometric实现VGAE。
+- en: Implementing a VGAE
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现VGAE
+- en: 'There are two main differences with previous GNN implementations:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与之前的GNN实现相比，主要有两个区别：
+- en: We will preprocess the dataset to remove links to predict randomly.
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将对数据集进行预处理，以移除那些随机预测的链接。
+- en: We will create an encoder model that we will feed to a `VGAE` class, instead
+    of directly implementing a VGAE from scratch.
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将创建一个编码器模型，并将其输入到`VGAE`类中，而不是从头开始直接实现VGAE。
+- en: 'The following code is inspired by PyTorch Geometric’s VGAE example:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下代码灵感来自PyTorch Geometric的VGAE示例：
+- en: 'First, we import the required libraries:'
+  id: totrans-78
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们导入所需的库：
+- en: '[PRE0]'
+  id: totrans-79
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We try to use the GPU if it’s available:'
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果GPU可用，我们会尝试使用它：
+- en: '[PRE1]'
+  id: totrans-81
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We create a `transform` object that normalizes input features, directly performs
+    tensor device conversion, and randomly splits links. In this example, we have
+    an 85/5/10 split. The `add_negative_train_samples` parameter is set to `False`
+    because the model already performs negative sampling, so it is not needed in the
+    dataset:'
+  id: totrans-82
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个`transform`对象，它会对输入特征进行归一化，直接执行张量设备转换，并随机分割链接。在这个例子中，我们有85/5/10的分割比例。`add_negative_train_samples`参数设置为`False`，因为模型已经执行了负采样，因此数据集中不需要负样本：
+- en: '[PRE2]'
+  id: totrans-83
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We load the `Cora` dataset with the previous `transform` object:'
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用之前的`transform`对象加载`Cora`数据集：
+- en: '[PRE3]'
+  id: totrans-85
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The `RandomLinkSplit` produces a train/val/test split by design. We store these
+    splits as follows:'
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`RandomLinkSplit`通过设计生成训练/验证/测试分割。我们将这些分割存储如下：'
+- en: '[PRE4]'
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Now, let’s implement the encoder. First, we need to import `GCNConv` and `VGAE`:'
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，让我们实现编码器。首先，我们需要导入`GCNConv`和`VGAE`：
+- en: '[PRE5]'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'We declare a new class. In this class, we want three GCN layers – a shared
+    layer, a second layer to approximate mean values, ![](img/Formula_B19153_10_047.png),
+    and a third layer to approximate variance values (in practice, the log standard
+    deviation, ![](img/Formula_B19153_10_048.png)):'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们声明一个新类。在这个类中，我们需要三个GCN层——一个共享层，第二个层来近似均值，![](img/Formula_B19153_10_047.png)，第三个层来近似方差值（实际上是对数标准差，![](img/Formula_B19153_10_048.png)）：
+- en: '[PRE6]'
+  id: totrans-91
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'We can initialize our VGAE and give the encoder as input. By default, it will
+    use the inner product as a decoder:'
+  id: totrans-92
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们可以初始化VGAE并将编码器作为输入。默认情况下，它将使用内积作为解码器：
+- en: '[PRE7]'
+  id: totrans-93
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The `train()` function includes two important steps. First, the embedding matrix,
+    ![](img/Formula_B19153_10_049.png), is computed using `model.encode()`; the name
+    might be counter-intuitive, but this function does sample embeddings from the
+    learned distributions. Then, the ELBO loss is computed with `model.recon_loss()`
+    (binary cross-entropy loss) and `model.kl_loss()` (KL divergence). The decoder
+    is implicitly called to calculate the cross-entropy loss:'
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`train()`函数包括两个重要步骤。首先，嵌入矩阵，![](img/Formula_B19153_10_049.png)，是通过`model.encode()`计算的；这个名字可能有些不直观，但这个函数确实是从学习到的分布中采样嵌入。然后，计算ELBO损失，使用`model.recon_loss()`（二元交叉熵损失）和`model.kl_loss()`（KL散度）。解码器会隐式调用来计算交叉熵损失：'
+- en: '[PRE8]'
+  id: totrans-95
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The `test()` function simply calls the VGAE''s dedicated method:'
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`test()`函数只是调用VGAE的专用方法：'
+- en: '[PRE9]'
+  id: totrans-97
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We train this model for 301 epochs and print the two built-in metrics – the
+    AUC and the AP:'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将该模型训练了301个epoch，并输出了两个内置指标——AUC和AP：
+- en: '[PRE10]'
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We obtain the following output:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们获得了以下输出：
+- en: '[PRE11]'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'We evaluate our model on the test set:'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们在测试集上评估了我们的模型：
+- en: '[PRE12]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Finally, we can manually calculate the approximated adjacency matrix, ![](img/Formula_B19153_10_050.png):'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们可以手动计算近似的邻接矩阵，！[](img/Formula_B19153_10_050.png)：
+- en: '[PRE13]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Training a VGAE is fast and outputs results that are easily understandable.
+    However, we saw that the GCN is not the most expressive operator. In order to
+    improve the model’s expressiveness, we need to incorporate better techniques.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练VGAE快速且输出结果易于理解。然而，我们看到GCN并不是最具表现力的操作符。为了提高模型的表现力，我们需要结合更好的技术。
+- en: Predicting links with SEAL
+  id: totrans-107
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用SEAL进行链接预测
+- en: The previous section introduced node-based methods, which learn relevant node
+    embeddings to compute link likelihoods. Another approach consists of looking at
+    the local neighborhood around the target nodes. These techniques are called subgraph-based
+    algorithms and were popularized by **SEAL** (which could be said to stand for
+    **Subgraphs, Embeddings, and Attributes for Link prediction** – though not always!).
+    In this section, we will describe the SEAL framework and implement it using PyTorch
+    Geometric.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上一节介绍了基于节点的方法，这些方法学习相关的节点嵌入来计算链接的可能性。另一种方法是观察目标节点周围的局部邻域。这些技术被称为基于子图的算法，并由**SEAL**推广（虽然不一定总是如此，可以理解为**子图、嵌入和属性用于链接预测**的缩写）。在本节中，我们将描述SEAL框架，并使用PyTorch
+    Geometric实现它。
+- en: Introducing the SEAL framework
+  id: totrans-109
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 引入SEAL框架
+- en: Introduced in 2018 by Zhang and Chen [6], SEAL is a framework that learns graph
+    structure features for link prediction. It defines the subgraph formed by the
+    target nodes ![](img/Formula_B19153_10_051.png) and their ![](img/Formula_B19153_10_052.png)-hop
+    neighbors as the **enclosing subgraph**. Each enclosing subgraph is used as input
+    (instead of the entire graph) to predict a link likelihood. Another way to look
+    at it is that SEAL automatically learns a local heuristic for link prediction.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由张和陈在2018年提出的[6]，SEAL是一个用于链接预测的框架，旨在学习图结构特征。它定义了由目标节点！[](img/Formula_B19153_10_051.png)及其！[](img/Formula_B19153_10_052.png)跳邻居所构成的子图为**封闭子图**。每个封闭子图被用作输入（而不是整个图）来预测链接的可能性。另一种看法是，SEAL自动学习一个本地启发式规则来进行链接预测。
+- en: 'The framework involves three steps:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该框架包含三个步骤：
+- en: '**Enclosing subgraph extraction**, which consists of taking a set of real links
+    and a set of fake links (negative sampling) to form the training data.'
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**封闭子图提取**，包括采用一组真实链接和一组虚假链接（负采样）来构成训练数据。'
+- en: '**Node information matrix construction**, which involves three components –
+    node labels, node embeddings, and node features.'
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**节点信息矩阵构建**，涉及三个组成部分——节点标签、节点嵌入和节点特征。'
+- en: '**GNN training**, which takes the node information matrices as input and outputs
+    link likelihoods.'
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '**GNN训练**，它以节点信息矩阵作为输入，输出链接的可能性。'
+- en: 'These steps are summarized in the following figure:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些步骤在下图中进行了总结：
+- en: '![Figure 10.3 – The SEAL framework](img/B19153_10_003.jpg)'
+  id: totrans-116
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图10.3 – SEAL框架](img/B19153_10_003.jpg)'
+- en: Figure 10.3 – The SEAL framework
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图10.3 – SEAL框架
+- en: The enclosing subgraph extraction is a straightforward process. It consists
+    of listing the target nodes and their ![](img/Formula_B19153_10_053.png)-hop neighbors
+    to extract their edges and features. A high ![](img/Formula_B19153_10_054.png)
+    will improve the quality of the heuristics SEAL can learn, but it also creates
+    larger subgraphs that are more computationally expensive.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 封闭子图提取是一个直接的过程。它包括列出目标节点及其！[](img/Formula_B19153_10_053.png)跳邻居，以提取它们的边和特征。较高的！[](img/Formula_B19153_10_054.png)将提高SEAL可以学习到的启发式规则的质量，但也会生成更大的子图，从而增加计算开销。
+- en: The first component of the node information construction is node labeling. This
+    process assigns a specific number to each node. Without it, the GNN would be unable
+    to differentiate between target and contextual nodes (their neighbors). It also
+    embeds distances, which describe nodes’ relative positions and structural importance.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点信息构建的第一个组成部分是节点标签。这个过程为每个节点分配一个特定的编号。如果没有这个步骤，GNN将无法区分目标节点和上下文节点（它们的邻居）。它还嵌入了距离信息，描述节点的相对位置和结构重要性。
+- en: In practice, the target nodes, ![](img/Formula_B19153_10_055.png) and ![](img/Formula_B19153_10_056.png),
+    must share a unique label to identify them as target nodes. For contextual nodes,
+    ![](img/Formula_B19153_10_057.png) and ![](img/Formula_B19153_10_058.png), they
+    must share the same label if they have the same distance as the target nodes –
+    ![](img/Formula_B19153_10_059.png) and ![](img/Formula_B19153_10_060.png). We
+    call this distance the double radius, noted as ![](img/Formula_B19153_10_061.png).
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实际应用中，目标节点，![](img/Formula_B19153_10_055.png) 和 ![](img/Formula_B19153_10_056.png)，必须共享一个唯一标签，以便将它们识别为目标节点。对于上下文节点，![](img/Formula_B19153_10_057.png)
+    和 ![](img/Formula_B19153_10_058.png)，如果它们与目标节点的距离相同——![](img/Formula_B19153_10_059.png)
+    和 ![](img/Formula_B19153_10_060.png)，则必须共享相同的标签。我们称这种距离为双半径，记作 ![](img/Formula_B19153_10_061.png)。
+- en: 'Different solutions can be considered, but SEAL’s authors propose the **Double-Radius
+    Node Labeling** (**DRNL**) algorithm. It works as follows:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以考虑不同的解决方案，但 SEAL 的作者提出了 **双半径节点标签化**（**DRNL**）算法。其工作原理如下：
+- en: First, assign label 1 to ![](img/Formula_B19153_10_062.png) and ![](img/Formula_B19153_10_063.png).
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，将标签 1 分配给 ![](img/Formula_B19153_10_062.png) 和 ![](img/Formula_B19153_10_063.png)。
+- en: Assign label 1 to nodes with a radius – ![](img/Formula_B19153_10_064.png).
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将标签 1 分配给半径为 ![](img/Formula_B19153_10_064.png) 的节点。
+- en: Assign label 3 to nodes with a radius – ![](img/Formula_B19153_10_065.png) or
+    ![](img/Formula_B19153_10_066.png).
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将标签 3 分配给半径为 ![](img/Formula_B19153_10_065.png) 或 ![](img/Formula_B19153_10_066.png)
+    的节点。
+- en: Assign label 4 to nodes with a radius – ![](img/Formula_B19153_10_067.png),
+    ![](img/Formula_B19153_10_068.png), and so on.
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将标签 4 分配给半径为 ![](img/Formula_B19153_10_067.png)、![](img/Formula_B19153_10_068.png)
+    等的节点。
+- en: 'The DRNL function can be written as follows:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DRNL 函数可以写作如下：
+- en: '![](img/Formula_B19153_10_069.jpg)'
+  id: totrans-127
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/Formula_B19153_10_069.jpg)'
+- en: Here, ![](img/Formula_B19153_10_070.png), and ![](img/Formula_B19153_10_071.png)
+    and ![](img/Formula_B19153_10_072.png) are the integer quotient and remainder
+    of ![](img/Formula_B19153_10_073.png) divided by 2 respectively. Finally, these
+    node labels are one-hot encoded.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，![](img/Formula_B19153_10_070.png)、![](img/Formula_B19153_10_071.png) 和 ![](img/Formula_B19153_10_072.png)
+    是分别将 ![](img/Formula_B19153_10_073.png) 除以 2 后得到的整数商和余数。最后，这些节点标签被一热编码。
+- en: Note
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The two other components are easier to obtain. The node embeddings are optional
+    but can be calculated using another algorithm, such as `Node2Vec`. Then, they
+    are concatenated with the node features and one-hot encoded labels to build the
+    final node information matrix.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外两个组件较易获取。节点嵌入是可选的，但可以使用其他算法（如 `Node2Vec`）计算。然后，它们与节点特征和一热编码的标签一起连接，以构建最终的节点信息矩阵。
+- en: 'Finally, a GNN is trained to predict links, using enclosing subgraphs’ information
+    and adjacency matrices. For this task, SEAL’s authors chose the **Deep Graph Convolutional
+    Neural Network** (**DGCNN**) [7]. This architecture performs three steps:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，训练一个 GNN 来预测链接，使用封闭子图的信息和邻接矩阵。在此任务中，SEAL 的作者选择了 **深度图卷积神经网络**（**DGCNN**）[7]。该架构执行三个步骤：
+- en: Several GCN layers compute node embeddings that are then concatenated (like
+    a GIN).
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 几个 GCN 层计算节点嵌入，然后将其连接（像 GIN 一样）。
+- en: A global sort pooling layer sorts these embeddings in a consistent order before
+    feeding them into convolutional layers, which are not permutation-invariant.
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一个全局排序池化层会在将这些嵌入输入卷积层之前，按照一致的顺序对它们进行排序，因为卷积层不是排列不变的。
+- en: Traditional convolutional and dense layers are applied to the sorted graph representations
+    and output a link probability.
+  id: totrans-134
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 传统的卷积和密集层应用于排序后的图表示，并输出链接概率。
+- en: The DGCNN model is trained using the binary cross-entropy loss and outputs probabilities
+    between `0` and `1`.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DGCNN 模型使用二元交叉熵损失进行训练，并输出介于 `0` 和 `1` 之间的概率。
+- en: Implementing the SEAL framework
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现 SEAL 框架
+- en: 'The SEAL framework requires extensive preprocessing to extract and label the
+    enclosing subgraphs. Let’s implement it using PyTorch Geometric:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SEAL 框架需要大量的预处理来提取和标记封闭子图。我们通过 PyTorch Geometric 来实现它：
+- en: 'First, we import all the necessary libraries:'
+  id: totrans-138
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们导入所有必要的库：
+- en: '[PRE14]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'We load the `Cora` dataset and apply a link-level random split, like in the
+    previous section:'
+  id: totrans-140
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们加载 `Cora` 数据集并应用链接级随机拆分，如前一节所示：
+- en: '[PRE15]'
+  id: totrans-141
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The link-level random split creates new fields in the `Data` object to store
+    the labels and index of each positive (real) and negative (fake) edge:'
+  id: totrans-142
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 链接级随机拆分在 `Data` 对象中创建新字段，用于存储每个正（真实）和负（伪造）边的标签和索引：
+- en: '[PRE16]'
+  id: totrans-143
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We create a function to process each split and obtain enclosing subgraphs with
+    one-hot encoded node labels and node features. We declare a list to store these
+    subgraphs:'
+  id: totrans-144
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个函数来处理每个划分，并获得具有独热编码节点标签和节点特征的封闭子图。我们声明一个列表来存储这些子图：
+- en: '[PRE17]'
+  id: totrans-145
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'For each (source and destination) pair in the dataset, we extract the k-hop
+    neighbors (here, ![](img/Formula_B19153_10_074.png)):'
+  id: totrans-146
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于数据集中的每一对（源节点和目标节点），我们提取k-hop邻居（这里，![](img/Formula_B19153_10_074.png)）：
+- en: '[PRE18]'
+  id: totrans-147
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'We calculate the distances using the DRNL function. First, we remove the target
+    nodes from the subgraph:'
+  id: totrans-148
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们使用DRNL函数计算距离。首先，我们从子图中移除目标节点：
+- en: '[PRE19]'
+  id: totrans-149
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'We compute the adjacency matrices for source and destination nodes based on
+    the previous subgraph:'
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们根据之前的子图计算源节点和目标节点的邻接矩阵：
+- en: '[PRE20]'
+  id: totrans-151
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'We calculate the distance between every node and the source/destination target
+    node:'
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们计算每个节点与源/目标节点之间的距离：
+- en: '[PRE21]'
+  id: totrans-153
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'We calculate the node labels, `z`, for every node in the subgraph:'
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们为子图中的每个节点计算节点标签`z`：
+- en: '[PRE22]'
+  id: totrans-155
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'In this example, we will not use node embeddings, but we still concatenate
+    features and one-hot-encoded labels to build the node information matrix:'
+  id: totrans-156
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在本例中，我们不会使用节点嵌入，但我们仍然连接特征和独热编码标签来构建节点信息矩阵：
+- en: '[PRE23]'
+  id: totrans-157
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'We create a `Data` object and append it to the list, which is the final output
+    of this function:'
+  id: totrans-158
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个`Data`对象并将其添加到列表中，这就是该函数的最终输出：
+- en: '[PRE24]'
+  id: totrans-159
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Let’s use it to extract enclosing subgraphs for each dataset. We separate positive
+    and negative examples to get the correct label to predict:'
+  id: totrans-160
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 让我们使用它来为每个数据集提取封闭子图。我们将正负样本分开，以获得正确的预测标签：
+- en: '[PRE25]'
+  id: totrans-161
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Next, we merge positive and negative data lists to reconstruct the training,
+    validation, and test datasets:'
+  id: totrans-162
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们合并正负数据列表，以重构训练、验证和测试数据集：
+- en: '[PRE26]'
+  id: totrans-163
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'We create data loaders to train the GNN using batches:'
+  id: totrans-164
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建数据加载器来使用批量训练GNN：
+- en: '[PRE27]'
+  id: totrans-165
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'We create a new class for the DGCNN model. The `k` parameter represents the
+    number of nodes to hold for each subgraph:'
+  id: totrans-166
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们为DGCNN模型创建一个新类。`k`参数表示每个子图要保留的节点数：
+- en: '[PRE28]'
+  id: totrans-167
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'We create four GCN layers with a fixed hidden dimension of 32:'
+  id: totrans-168
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建四个GCN层，固定隐藏层维度为32：
+- en: '[PRE29]'
+  id: totrans-169
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'We instantiate the global sort pooling at the core of the DGCNN architecture:'
+  id: totrans-170
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们在DGCNN架构的核心实例化全局排序池化：
+- en: '[PRE30]'
+  id: totrans-171
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'The node ordering provided by global pooling allows us to use traditional convolutional
+    layers:'
+  id: totrans-172
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 全局池化提供的节点顺序使我们能够使用传统的卷积层：
+- en: '[PRE31]'
+  id: totrans-173
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Finally, the prediction is managed by an MLP:'
+  id: totrans-174
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，预测由MLP管理：
+- en: '[PRE32]'
+  id: totrans-175
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'In the `forward()` function, we calculate node embeddings for each GCN and
+    concatenate the results:'
+  id: totrans-176
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`forward()`函数中，我们计算每个GCN的节点嵌入并连接结果：
+- en: '[PRE33]'
+  id: totrans-177
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The global sort pooling, convolutional layers, and dense layers are sequentially
+    applied to this result:'
+  id: totrans-178
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 全局排序池化、卷积层和密集层依次应用于该结果：
+- en: '[PRE34]'
+  id: totrans-179
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'We instantiate the model on a GPU if available, and train it using the `Adam`
+    optimizer and the binary cross-entropy loss:'
+  id: totrans-180
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果GPU可用，我们在GPU上实例化模型，并使用`Adam`优化器和二元交叉熵损失进行训练：
+- en: '[PRE35]'
+  id: totrans-181
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'We create a traditional `train()` function for batch training:'
+  id: totrans-182
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们创建一个传统的`train()`函数进行批量训练：
+- en: '[PRE36]'
+  id: totrans-183
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'In the `test()` function, we calculate the ROC AUC score and the average precision
+    to compare the SEAL performance with the VGAE performance:'
+  id: totrans-184
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`test()`函数中，我们计算ROC AUC分数和平均精度，以比较SEAL与VGAE的性能：
+- en: '[PRE37]'
+  id: totrans-185
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'We train the DGCNN for 31 epochs:'
+  id: totrans-186
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们训练DGCNN共31个epoch：
+- en: '[PRE38]'
+  id: totrans-187
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Finally, we test it on the test dataset:'
+  id: totrans-188
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们在测试数据集上进行测试：
+- en: '[PRE39]'
+  id: totrans-189
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: We obtain results that are similar to those observed using the VGAE (test AUC
+    – `0.8833` and test AP – `0.8845`). In theory, subgraph-based methods such as
+    SEAL are more expressive than node-based methods such as VGAEs. They capture more
+    information by explicitly considering the entire neighborhood around target nodes.
+    SEAL’s accuracy can also be improved by increasing the number of neighbors taken
+    into account with the `k` parameter.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们获得的结果与使用VGAE时的结果相似（测试AUC – `0.8833` 和 测试AP – `0.8845`）。理论上，基于子图的方法（如SEAL）比基于节点的方法（如VGAE）更具表达力。它们通过明确考虑目标节点周围的整个邻域来捕获更多信息。通过增加`k`参数考虑的邻居数量，SEAL的准确性也可以提高。
+- en: Summary
+  id: totrans-191
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: In this chapter, we explored a new task with link prediction. We gave an overview
+    of this field by presenting heuristic and matrix factorization techniques. Heuristics
+    can be classified according to the k-hop neighbors they consider – from local
+    with 1-hop neighbors to global with the knowledge of the entire graph. Conversely,
+    matrix factorization approximates the adjacency matrix using node embeddings.
+    We also explained how this technique was connected to algorithms described in
+    previous chapters (`DeepWalk` and `Node2Vec`).
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中，我们探讨了一项新任务——链接预测。我们通过介绍启发式和矩阵分解技术概述了该领域。启发式方法可以根据它们考虑的k步邻居进行分类——从仅考虑1步邻居的局部方法到考虑整个图的全局方法。相反，矩阵分解则通过节点嵌入来近似邻接矩阵。我们还解释了这种技术如何与前几章中描述的算法（`DeepWalk`
+    和 `Node2Vec`）相关联。
+- en: After this introduction to link prediction, we saw how to implement it using
+    GNNs. We outlined two kinds of techniques, based on node embeddings (GAE and VGAE)
+    and subgraph representations (SEAL). Finally, we implemented a VGAE and SEAL on
+    the `Cora` dataset with an edge-level random split and negative sampling. Both
+    models obtained comparable performance, although SEAL is strictly more expressive.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在对链接预测的介绍之后，我们展示了如何使用GNN实现该任务。我们概述了两种基于节点嵌入（GAE 和 VGAE）以及子图表示（SEAL）的方法。最后，我们在`Cora`数据集上实现了VGAE和SEAL，使用边级随机拆分和负采样。尽管SEAL的表达能力更强，但两个模型的性能相当。
+- en: In [*Chapter 11*](B19153_11.xhtml#_idTextAnchor131)*, Generating Graphs with
+    Graph Neural Networks*, we will see different strategies to produce realistic
+    graphs. First, we will describe traditional techniques with the popular Erdős–Rényi
+    model. Then, we will see how deep generative methods work by reusing the GVAE
+    and introducing a new architecture – the **Graph Recurrent Neural** **Network**
+    (**GraphRNN**).
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [*第11章*](B19153_11.xhtml#_idTextAnchor131)*《利用图神经网络生成图》* 中，我们将看到不同的策略来生成真实的图形。首先，我们将介绍传统技术及其流行的Erdős–Rényi模型。接着，我们将展示深度生成方法是如何通过重用GVAE并引入一种新架构——**图递归神经网络**（**GraphRNN**）来工作的。
+- en: Further reading
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 深度阅读
+- en: '[1] H. Tong, C. Faloutsos and J. -y. Pan. “Fast Random Walk with Restart and
+    Its Applications” in *Sixth International Conference on Data Mining (ICDM’06)*,
+    2006, pp. 613-622, doi: 10.1109/ICDM.2006.70.'
+  id: totrans-196
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[1] H. Tong, C. Faloutsos 和 J. -y. Pan. “带重启的快速随机游走及其应用”在 *第六届国际数据挖掘会议（ICDM’06）*，2006年，第613-622页，doi:
+    10.1109/ICDM.2006.70.'
+- en: '[2] Yehuda Koren, Robert Bell, and Chris Volinsky. 2009\. *Matrix Factorization
+    Techniques for Recommender Systems.* Computer 42, 8 (August 2009), 30–37\. https://doi.org/10.1109/MC.2009.263.'
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[2] Yehuda Koren, Robert Bell 和 Chris Volinsky. 2009年\. *推荐系统的矩阵分解技术*。计算机，42卷，第8期（2009年8月），30-37\.
+    https://doi.org/10.1109/MC.2009.263.'
+- en: '[3] J. Qiu, Y. Dong, H. Ma, J. Li, K. Wang, and J. Tang. *Network Embedding
+    as Matrix Factorization*. Feb. 2018\. doi: 10.1145/3159652.3159706.'
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[3] J. Qiu, Y. Dong, H. Ma, J. Li, K. Wang 和 J. Tang. *作为矩阵分解的网络嵌入*。2018年2月\.
+    doi: 10.1145/3159652.3159706.'
+- en: '[4] D. P. Kingma and M. Welling. *Auto-Encoding Variational Bayes.* arXiv,
+    2013\. doi: 10.48550/ARXIV.1312.6114.'
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[4] D. P. Kingma 和 M. Welling. *自编码变分贝叶斯*。arXiv，2013年\. doi: 10.48550/ARXIV.1312.6114.'
+- en: '[5] T. N. Kipf and M. Welling. *Variational Graph Auto-Encoders*. arXiv, 2016\.
+    doi: 10.48550/ARXIV.1611.07308.'
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[5] T. N. Kipf 和 M. Welling. *变分图自动编码器*。arXiv，2016年\. doi: 10.48550/ARXIV.1611.07308.'
+- en: '[6] M. Zhang and Y. Chen. *Link Prediction Based on Graph Neural Networks*.
+    arXiv, 2018\. doi: 10.48550/ARXIV.1802.09691.'
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[6] M. Zhang 和 Y. Chen. *基于图神经网络的链接预测*。arXiv，2018年\. doi: 10.48550/ARXIV.1802.09691.'
+- en: '[7] Muhan Zhang, Zhicheng Cui, Marion Neumann, and Yixin Chen. 2018\. *An end-to-end
+    deep learning architecture for graph classification*. In *Proceedings of the Thirty-Second
+    AAAI Conference on Artificial Intelligence* and *Thirtieth Innovative Applications
+    of Artificial Intelligence Conference* and *Eighth AAAI Symposium on Educational
+    Advances in Artificial Intelligence* (AAAI’18/IAAI’18/EAAI’18). AAAI Press, Article
+    544, 4438–4445.'
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[7] Muhan Zhang, Zhicheng Cui, Marion Neumann 和 Yixin Chen. 2018年\. *一种用于图分类的端到端深度学习架构*。在
+    *第三十二届人工智能AAAI会议*、*第三十届人工智能创新应用会议* 和 *第八届人工智能教育进展AAAI研讨会*（AAAI’18/IAAI’18/EAAI’18）上发表。AAAI出版社，文章544，4438-4445。'

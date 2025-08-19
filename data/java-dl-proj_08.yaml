@@ -1,0 +1,1486 @@
+- en: Distributed Deep Learning – Video Classification Using Convolutional LSTM Networks
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分布式深度学习 – 使用卷积LSTM网络进行视频分类
+- en: So far, we have seen how to develop deep-learning-based projects on numerals
+    and images. However, applying similar techniques to video clips, for example,
+    for human activity recognition from video, is not straightforward.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经看到如何在数字和图像上开发基于深度学习的项目。然而，将类似的技术应用于视频片段，例如从视频中进行人类活动识别，并不是一件简单的事。
+- en: In this chapter, we will see how to apply deep learning approaches to a video
+    dataset. We will describe how to process and extract features from a large collection
+    of video clips. Then we will make the overall pipeline scalable and faster by
+    distributing the training on multiple devices (CPUs and GPUs), and run them in
+    parallel.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将看到如何将深度学习方法应用于视频数据集。我们将描述如何处理和提取大量视频片段的特征。然后，我们将通过在多个设备（CPU和GPU）上分配训练，并使其并行运行，从而使整体管道变得可扩展且更快。
+- en: We will see a complete example of how to develop a deep learning application
+    that accurately classifies a large collection of a video dataset, such as UCF101
+    dataset, using a combined CNN and LSTM network with **Deeplearning4j** (**DL4J**).
+    This overcomes the limitation of standalone CNN or RNN **Long Short-Term Memory**
+    (**LSTM**) networks.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将看到一个完整的示例，展示如何使用**Deeplearning4j**（**DL4J**）开发一个深度学习应用程序，准确地分类大型视频数据集（如UCF101数据集）。该应用程序结合了CNN和LSTM网络，克服了独立CNN或RNN
+    **长短时记忆**（**LSTM**）网络的局限性。
+- en: 'The training will be carried out on an Amazon EC2 GPU compute cluster. Eventually,
+    this end-to-end project can be treated as a primer for human activity recognition
+    from a video or so. Concisely, we will learn the following topics throughout an
+    end-to-end project:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 训练将在Amazon EC2 GPU计算集群上进行。最终，这个端到端项目可以作为从视频中进行人类活动识别的入门指南。简而言之，我们将在整个端到端项目中学习以下主题：
+- en: Distributed deep learning across multiple GPUs
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在多个GPU上进行分布式深度学习
+- en: Dataset collection and description
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据集收集与描述
+- en: Developing a video classifier using a convolutional-LSTM network
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用卷积-LSTM网络开发视频分类器
+- en: Frequently asked questions (FAQs)
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 常见问题解答（FAQ）
+- en: Distributed deep learning across multiple GPUs
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在多个GPU上进行分布式深度学习
+- en: As stated earlier, we will see a systematic example for classifying a large
+    collection of video clips from the `UCF101` dataset using a convolutional-LSTM
+    network. However, first we need to know how to distribute the training across
+    multiple GPUs. In previous chapters, we discussed several advanced techniques
+    such as network weight initialization, batch normalization, faster optimizers,
+    proper activation functions, etc. these certainly help the network to converge
+    faster. However, still, training a large neural network on a single machine can
+    take days or even weeks. Therefore, this is not a viable way for working with
+    large-scale datasets.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，我们将看到一个系统的示例，展示如何使用卷积-LSTM网络对`UCF101`数据集中的大量视频片段进行分类。然而，首先我们需要知道如何将训练分配到多个GPU上。在之前的章节中，我们讨论了多种先进技术，如网络权重初始化、批量归一化、更快的优化器、适当的激活函数等，这些无疑有助于网络更快地收敛。然而，单机训练一个大型神经网络可能需要数天甚至数周。因此，这种方法不适用于处理大规模数据集。
+- en: 'Theoretically, there are two main methods for the distributed training of neural
+    networks: data parallelism and model parallelism. DL4J relies on data parallelism
+    called distributed deep learning with parameter averaging. Nevertheless, multimedia
+    analytics typically makes things even more complicated, since, from a single video
+    clip, we can see thousands of frames and images, and so on. To get rid of this
+    issue, we will first distribute computations across multiple devices on just one
+    machine, and then do it on multiple devices across multiple machines as follows:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，神经网络的分布式训练主要有两种方法：数据并行和模型并行。DL4J依赖于数据并行，称为具有参数平均的分布式深度学习。然而，多媒体分析通常会使事情变得更加复杂，因为从一个视频片段中，我们可以看到成千上万的帧和图像等等。为了避免这个问题，我们将首先在一台机器上的多个设备上分配计算，然后在多个机器的多个设备上进行分布式训练，具体如下：
+- en: '![](img/ecd11ffd-5ef5-47fa-8155-0910f3566db2.png)'
+  id: totrans-12
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ecd11ffd-5ef5-47fa-8155-0910f3566db2.png)'
+- en: Executing a DL4J Java application across multiple devices in parallel
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在多个设备上并行执行DL4J Java应用程序
+- en: 'For example, you can typically train a neural network just as fast using eight
+    GPUs on a single machine rather than 16 GPUs across multiple machines. The reason
+    is simple—the extra delay imposed by network communications in a multi-machine
+    setup. The following diagram shows how to configure DL4J that uses CUDA and cuDNN
+    to control GPUs and boost DNNs:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，你通常可以在一台机器上使用八个 GPU 训练神经网络，而不必使用跨多台机器的 16 个 GPU，原因很简单——在多机器设置中，网络通信带来的额外延迟。下图显示了如何配置
+    DL4J 来使用 CUDA 和 cuDNN 控制 GPU 并加速 DNN：
+- en: '![](img/fd8e6fc1-224d-4706-95e7-ec824a1046ce.png)'
+  id: totrans-15
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/fd8e6fc1-224d-4706-95e7-ec824a1046ce.png)'
+- en: DL4J uses CUDA and cuDNN to control GPUs and boost DNNs
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DL4J 使用 CUDA 和 cuDNN 来控制 GPU 并加速 DNN。
+- en: Distributed training on GPUs with DL4J
+  id: totrans-17
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在 GPU 上使用 DL4J 进行分布式训练
+- en: DL4J works on distributed GPUs as well as on native (that is, ones with CPU
+    backend). It allows users to run locally on a single GPU, such as the Nvidia Tesla,
+    Titan, or GeForce GTX, and in the cloud on Nvidia GRID GPUs. We can also perform
+    the training on an Amazon AWS EC2 GPU cluster,by having multiple GPUs installed.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DL4J 既支持分布式 GPU，也支持本地（即有 CPU 后端的）GPU。它允许用户在单个 GPU 上本地运行，比如 Nvidia Tesla、Titan
+    或 GeForce GTX，也可以在 Nvidia GRID GPU 上的云端运行。我们还可以在安装了多个 GPU 的 Amazon AWS EC2 GPU
+    集群上进行训练。
+- en: 'To train a neural network on GPUs, you need to make some changes to the `pom.xml`
+    file in your root directory, such as properties and dependency management for
+    pulling down the required dependencies provided by the DL4j team. First, we take
+    care of the project properties, as follows:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在 GPU 上训练神经网络，你需要对根目录下的 `pom.xml` 文件进行一些更改，例如属性设置和依赖管理，以拉取 DL4J 团队提供的必需依赖。首先，我们处理项目属性，如下所示：
+- en: '[PRE0]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: In the preceding `<properties>` tag, as the entries explain, we will be using
+    DL4J 1.0.0-alpha version with CUDA 9.0 platform as the backend. In addition, we
+    plan to use Java 8\. Nonetheless, an additional property for `logback` is defined.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的 `<properties>` 标签中，如条目所示，我们将使用 DL4J 1.0.0-alpha 版本，并以 CUDA 9.0 平台作为后端。此外，我们计划使用
+    Java 8。不过，还定义了一个额外的 `logback` 属性。
+- en: Logback is intended as a successor to the popular log4j project, picking up
+    where log4j left off. Logback's architecture is sufficiently generic so as to
+    apply under different circumstances. Presently, logback is divided into three
+    modules, logback-core, logback-classic and logback-access. For more information,
+    readers should refer to [https://logback.qos.ch/](https://logback.qos.ch/).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Logback 是流行的 log4j 项目的继任者，承接了 log4j 的发展。Logback 的架构足够通用，能够在不同情况下应用。目前，logback
+    被划分为三个模块：logback-core、logback-classic 和 logback-access。欲了解更多信息，请参阅 [https://logback.qos.ch/](https://logback.qos.ch/)。
+- en: 'I am assuming you have already configured CUDA and cuDNN and set the path accordingly.
+    Once we have defined the project properties, the next important task would be
+    to define GPU-related dependencies, as shown here:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我假设你已经配置好了 CUDA 和 cuDNN，并且相应地设置了路径。一旦我们定义了项目属性，接下来重要的任务是定义与 GPU 相关的依赖，如下所示：
+- en: '[PRE1]'
+  id: totrans-24
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Where ND4J is the numerical computing engine that powers DL4J and acts as the
+    backends, or different types of hardware that it works on. If your system has
+    multiple GPUs installed, you can train your model in data-parallel mode, which
+    is called **multi-GPU data parallelism**. DL4J provides a simple wrapper that
+    can be instantiated, something like this:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中，ND4J 是支持 DL4J 的数值计算引擎，充当其后端，或者说是它工作的不同硬件类型。如果你的系统安装了多个 GPU，你可以在数据并行模式下训练模型，这被称为
+    **多 GPU 数据并行**。DL4J 提供了一个简单的封装器，可以实例化，类似于这样：
+- en: '[PRE2]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'A more concrete example can be seen as follows:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更具体的示例如下所示：
+- en: '[PRE3]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '`ParallelWrapper` takes your existing model as the primary argument and does
+    training in parallel by keeping the number of workers equal to or higher than
+    the number of GPUs on your machine.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ParallelWrapper` 将现有模型作为主要参数，并通过将工作者数量保持为等于或大于机器上 GPU 数量的方式进行并行训练。'
+- en: 'Within `ParallelWrapper`, the initial model will be duplicated, and each worker
+    will be training its own model. After every *N* iterations in `averagingFrequency(X)`,
+    all models will be averaged, and training continues. Now, to use this functionality,
+    use the following dependency in the `pom.xml` file:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `ParallelWrapper` 内，初始模型将被复制，每个工作者将训练自己的模型。在 `averagingFrequency(X)` 中的每 *N*
+    次迭代后，所有模型将被平均，并继续训练。现在，要使用此功能，请在 `pom.xml` 文件中使用以下依赖：
+- en: '[PRE4]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'For more up-to-date documentation, interested readers can check out the following
+    link: [https://deeplearning4j.org/gpu](https://deeplearning4j.org/gpu).'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于最新的文档，感兴趣的读者可以查看以下链接：[https://deeplearning4j.org/gpu](https://deeplearning4j.org/gpu)。
+- en: Now we have a theoretical understanding of how to distribute DL-based training
+    across multiple GPUs. We will see a hands-on example soon in the next section.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经对如何在多个GPU之间分配基于深度学习的训练有了理论理解。在接下来的部分中，我们将很快看到一个动手示例。
+- en: Video classification using convolutional – LSTM
+  id: totrans-34
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用卷积 – LSTM进行视频分类
+- en: In this section, we will start combining convolutional, max pooling, dense,
+    and recurrent layers to classify each frame of a video clip. Specifically, each
+    video contains several human activities, which persist for multiple frames (though
+    they move between frames) and may leave the frame. First, let's get a more detailed
+    description of the dataset we will be using for this project.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将开始结合卷积、最大池化、全连接和递归层来对每一帧视频进行分类。具体来说，每个视频包含多个持续多帧的人的活动（尽管它们在帧之间移动），并且可能离开画面。首先，让我们更详细地了解我们将用于此项目的数据集。
+- en: UCF101 – action recognition dataset
+  id: totrans-36
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: UCF101 – 动作识别数据集
+- en: '`UCF101` is an action recognition dataset of realistic action videos, collected
+    from YouTube and having 101 action categories covering 13,320 videos. The videos
+    are collected with variations in camera motion, object appearance and pose, object
+    scale, viewpoint, cluttered background, and illumination condition.'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UCF101`是一个真实动作视频的动作识别数据集，收集自YouTube，包含101个动作类别，涵盖了13,320个视频。视频收集时考虑到了摄像机运动、物体外观与姿势、物体尺度、视角、杂乱背景和光照条件的变化。'
+- en: 'The videos in 101 action categories are further clustered into 25 groups (clips
+    in each group have common features, for example, background and viewpoint) having
+    four to seven videos of an action in each group. There are five action categories:
+    human-object interaction, body-motion only, human-human interaction, playing musical
+    instruments, and dports.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 101个动作类别的视频进一步被聚类成25个组（每个组中的剪辑具有共同的特征，例如背景和视角），每个组包含四到七个同一动作的视频。共有五个动作类别：人类与物体交互、仅身体动作、人类与人类交互、演奏乐器和体育运动。
+- en: 'A few more facts about this dataset:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于该数据集的更多事实：
+- en: '`UCF101` videos contain different frame lengths, ranging between 100 and 300
+    frames per video clip'
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UCF101` 视频包含不同的帧长度，每个视频剪辑的帧数范围在100到300帧之间。'
+- en: '`UCF101` uses the `XVID` compression standard (that is, `.avi` format)'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UCF101`使用`XVID`压缩标准（即`.avi`格式）'
+- en: The `UCF101` dataset has picture size of 320 x 240
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UCF101`数据集的图片大小为320 x 240'
+- en: The `UCF101` dataset contains different classes in different video files
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UCF101`数据集包含不同视频文件中的不同类别。'
+- en: 'A high-level glimpse of the dataset can be as follows:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据集的高层次概览如下：
+- en: '![](img/a80f2a12-0bd4-42d6-bcf6-42a54b8d1869.png)'
+  id: totrans-45
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a80f2a12-0bd4-42d6-bcf6-42a54b8d1869.png)'
+- en: 'Some random clips from the `UCF50` dataset (source: [http://crcv.ucf.edu/data/UCF50.php](http://crcv.ucf.edu/data/UCF50.php))'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自`UCF50`数据集的一些随机剪辑（来源：[http://crcv.ucf.edu/data/UCF50.php](http://crcv.ucf.edu/data/UCF50.php)）
+- en: Preprocessing and feature engineering
+  id: totrans-47
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 预处理和特征工程
+- en: Processing video files is a very challenging task. Especially when it comes
+    to reading video clips by handling and interoperating different encodings; this
+    is a tedious job. Also, video clips may contain distorted frames, which is an
+    obstacle when extracting high-quality features.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理视频文件是一项非常具有挑战性的任务，尤其是当涉及到通过处理和互操作不同的编码来读取视频剪辑时；这是一个繁琐的工作。此外，视频剪辑可能包含失真帧，这在提取高质量特征时是一个障碍。
+- en: Considering these, in this subsection, we will see how to preprocess video clips
+    by dealing with the video encoding problem, and then we will describe the feature
+    extraction process in detail.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑到这些问题，在本小节中，我们将看到如何通过处理视频编码问题来预处理视频剪辑，并详细描述特征提取过程。
+- en: Solving the encoding problem
+  id: totrans-50
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 解决编码问题
+- en: Dealing with video data in Java is a troublesome job (given that we don't have
+    many libraries like Python), especially if the videos come in old `.avi` or such
+    formats. I have seen some blogs and examples on GitHub using JCodec Java library
+    Version 0.1.5 (or 0.2.3) to read and parse `UCF101` video clips in an MP4 format.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Java中处理视频数据是一项繁琐的工作（因为我们没有像Python那样多的库），尤其是当视频采用旧的`.avi`格式时。我在GitHub上看到一些博客和示例，使用JCodec
+    Java库版本0.1.5（或0.2.3）来读取和解析MP4格式的`UCF101`视频剪辑。
+- en: 'Even DL4J depends on datavec-data-codec, which depends on old JCodec API and
+    is incompatible with the new version. Unfortunately, even this newer version of
+    JCodec cannot read `UCF101` videos. Therefore, I decided to use the FFmpeg to
+    process the video in MP4 format. This comes under the JavaCV library, which I''ve
+    discussed already in an earlier chapter. Anyway, to use this library, just include
+    the following dependency in the `pom.xml` file:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使DL4J也依赖于datavec-data-codec，它依赖于旧版的JCodec API，且与新版本不兼容。不幸的是，即使是新版的JCodec也无法读取`UCF101`视频。因此，我决定使用FFmpeg来处理MP4格式的视频。这属于JavaCV库，之前的章节中已经讨论过了。总之，要使用这个库，只需在`pom.xml`文件中添加以下依赖：
+- en: '[PRE5]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: As the `UCF101` comes in `.avi` format, I had a hard time processing them with
+    either JCodec or FFfmpeg libraries in Java. Therefore, I converted the video to
+    `MP4` format in a handcrafted way.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于`UCF101`是`.avi`格式，我在使用JCodec或FFmpeg库处理时遇到了困难。因此，我手动将视频转换为`MP4`格式。
+- en: 'For this, I wrote a Python script (named `prepare.py`, which can be found under
+    this chapter''s code repository). This Python does download, extract, and decode
+    the full `UCF101` dataset, but it may take several hours, depending upon the hardware
+    config and Internet speed. Although putting Python code is not relevant to this
+    book, I still put it so that folks can get some idea of how the thing works, so
+    take a look at this code:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为此，我编写了一个Python脚本（名为`prepare.py`，可以在本章的代码库中找到）。这个Python脚本会下载、解压和解码完整的`UCF101`数据集，但根据硬件配置和互联网速度，可能需要几个小时。尽管将Python代码放在此书中并不相关，我还是把它放在这里，以便大家能够了解整个过程，因此请看一下这个代码：
+- en: '[PRE6]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: As this code shows, you just need to download the `UCF101` dataset from [http://crcv.ucf.edu/data/UCF101.php](http://crcv.ucf.edu/data/UCF101.php)
+    and put it in the `VideoData/UCF101` folder. Then Python uses the built-in FFmpeg
+    package to convert all the `.avi` files to `.mp4` format, and saves in the `VideoData/UCF101_MP4`
+    directory once it is executed using the `$ python3 prepare.py` command.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如代码所示，你只需从[http://crcv.ucf.edu/data/UCF101.php](http://crcv.ucf.edu/data/UCF101.php)下载`UCF101`数据集，并将其放入`VideoData/UCF101`文件夹中。然后，Python使用内置的FFmpeg包将所有`.avi`文件转换为`.mp4`格式，并在执行`$
+    python3 prepare.py`命令后保存到`VideoData/UCF101_MP4`目录。
+- en: Data processing workflow
+  id: totrans-58
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据处理工作流
+- en: 'Once the files are in MP4 format, we can start extracting the features. Now,
+    in order to process the `UCF101` dataset and extract the features, I wrote three
+    more Java classes, outlined as follows:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦文件转换为MP4格式，我们就可以开始提取特征。现在，为了处理`UCF101`数据集并提取特征，我编写了另外三个Java类，具体如下：
+- en: '`UCF101Reader.java`**:** This is the main entry point for video file reading,
+    decoding, and conversion to ND4J vectors. It receives the full path to the dataset
+    and creates the `DataSetIterator` required for the neural network. In addition,
+    it generates a list of all classes, and it assigns sequential integers for them.'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UCF101Reader.java`**：**这是视频文件读取、解码和转换为ND4J向量的主要入口点。它接收数据集的完整路径并创建神经网络所需的`DataSetIterator`。此外，它还生成所有类的列表，并为每个类分配顺序整数。'
+- en: '`UCF101ReaderIterable.java`: This reads all the clips and decodes using JCodec.'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UCF101ReaderIterable.java`：该类读取所有视频片段并使用JCodec进行解码。'
+- en: '`RecordReaderMultiDataSetIterator.java`: This is similar to the one provided
+    by DL4J but an improved version, which works pretty well on the new version of
+    JCodec.'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`RecordReaderMultiDataSetIterator.java`：这与DL4J提供的类似，但这是一个改进版，在新版本的JCodec上表现良好。'
+- en: 'Then, to prepare the train and test split, the `UCF101Reader.getDataSetIterator()`
+    method has been used. The method reads each video clip, but, first, it decides
+    on how many examples (video files) to read based on parameters and offset value.
+    These parameters are then passed to `UCF101ReaderIterable`. The signature of this
+    method is as follows:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，为了准备训练和测试集，使用了`UCF101Reader.getDataSetIterator()`方法。该方法读取每个视频片段，但首先，根据参数和偏移值决定读取多少个示例（视频文件）。这些参数然后传递给`UCF101ReaderIterable`。该方法的签名如下：
+- en: '[PRE7]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'In this method, `ExistingDataSetIterator` acts as a wrapper that provides a
+    `DataSetIterator` interface to the existing Java `Iterable<DataSet>` and `Iterator<DataSet>`.
+    Then the `UCF101Reader.UCF101ReaderIterable()` method is used to create the label
+    map (class name to int index) and inverse label map, as shown here:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此方法中，`ExistingDataSetIterator`作为一个封装器，提供了一个`DataSetIterator`接口，用于现有的Java `Iterable<DataSet>`和`Iterator<DataSet>`。然后，使用`UCF101Reader.UCF101ReaderIterable()`方法创建标签映射（类名到整数索引）和逆标签映射，如下所示：
+- en: '[PRE8]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'As you can see from the following, `dataDirectory` is the directory of the
+    video in MP4 format, (`V_WIDTH`, `V_HEIGHT`) signifies the size of the video frame,
+    and `labelMap()` provides the mapping for each video clip:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，`dataDirectory` 是 MP4 格式视频的目录，(`V_WIDTH`, `V_HEIGHT`) 表示视频帧的大小，而 `labelMap()`
+    则提供每个视频剪辑的映射：
+- en: '[PRE9]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'So, the signature of `labelMap()` is as follows:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，`labelMap()` 的签名如下：
+- en: '[PRE10]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Then, `UCF101ReaderIterable.iterator()` is used to create an iterator of `DataSet`
+    required by the network. This iterator is transmitted to the `ExistingDataSetIterator`
+    to be in a form required by the neural net API, `DataSetIterator`, as shown here:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，`UCF101ReaderIterable.iterator()` 用于创建网络所需的 `DataSet` 迭代器。此迭代器传递给 `ExistingDataSetIterator`，以符合神经网络
+    API 所需的形式，如下所示：
+- en: '[PRE11]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'In addition, `AsyncDataSetIterator` is used to do all data processing in a
+    separated thread. Whereas `UCF101ReaderIterable.rowStream()` lists all dataset
+    files and creates a sequence of files and corresponding class labels, as shown
+    here:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，`AsyncDataSetIterator` 用于在单独的线程中进行所有数据处理。而 `UCF101ReaderIterable.rowStream()`
+    则列出所有数据集文件，并创建文件和相应类标签的序列，如下所示：
+- en: '[PRE12]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Then, the `UCF101ReaderIterable.dataSetStreamFromFile()` method is used to convert
+    the underlying iterator to java streams. It is just a technical step to convert
+    iterators to streams. Because it is more convenient in Java to filter some elements
+    and limit the number of elements in the stream. Take a look at this code!
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，使用 `UCF101ReaderIterable.dataSetStreamFromFile()` 方法将基础迭代器转换为 Java 流。这只是将迭代器转换为流的技术步骤。因为在
+    Java 中，通过流更方便地过滤一些元素并限制流中的元素数量。看一下这段代码！
+- en: '[PRE13]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'The `UCF101ReaderIterable.dataSetIteratorFromFile()` method receives the video
+    file path and then creates frame reader (`FrameGrab`—JCodec class). Finally, it
+    passes the frame reader to `RecordReaderMultiDataSetIterator.nextDataSet`, as
+    shown here:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UCF101ReaderIterable.dataSetIteratorFromFile()` 方法接收视频文件路径，然后创建帧读取器（`FrameGrab`—JCodec
+    类）。最后，将帧读取器传递给 `RecordReaderMultiDataSetIterator.nextDataSet`，如下所示：'
+- en: '[PRE14]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: In the preceding code block, the `RecordReaderMultiDataSetIterator.nextDataSet()`
+    method is used to convert each video frame to dataSet, compatible with DL4J. In
+    its turn, DataSet is an association of the features vector generated from the
+    frame and the labels vector generated from frame the label using one-hot encoding.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码块中，使用 `RecordReaderMultiDataSetIterator.nextDataSet()` 方法将每个视频帧转换为与 DL4J
+    兼容的 `DataSet`。`DataSet` 是从帧生成的特征向量和使用单热编码生成的标签向量的组合。
+- en: 'Well, this logic is based on the `RecordReaderMultiDataSetIterator` class of
+    DL4J but necessary support comes from the latest JCodec API. Then we used the
+    `UCF101RecordIterable.labelToNdArray()` method to encode labels in ND4J `INDArray`
+    format:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 嗯，这个逻辑基于 DL4J 的 `RecordReaderMultiDataSetIterator` 类，但必要的支持来自最新的 JCodec API。然后我们使用
+    `UCF101RecordIterable.labelToNdArray()` 方法将标签编码为 ND4J 的 `INDArray` 格式：
+- en: '[PRE15]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The previously mentioned workflow steps can be depicted in the following diagram:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面提到的工作流程步骤可以在以下图表中描述：
+- en: '![](img/ef0da07a-2257-42e4-890f-05ba5ae19151.png)'
+  id: totrans-83
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ef0da07a-2257-42e4-890f-05ba5ae19151.png)'
+- en: Data flow in the feature extraction process
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特征提取过程中的数据流
+- en: Simple UI for checking video frames
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 检查视频帧的简易 UI
+- en: I developed a simple UI application, using Java Swing to test whether the code
+    correctly handles frames. This UI reads an input video file in MP4 format and
+    shows frames to the reader one by one like a simple video player. The UI application
+    is named `JCodecTest.java`.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我开发了一个简单的 UI 应用程序，使用 Java Swing 来测试代码是否正确处理帧。此 UI 读取 MP4 格式的输入视频文件，并像简单的视频播放器一样逐帧显示给读者。该
+    UI 应用程序名为 `JCodecTest.java`。
+- en: 'In the `JCodecTest.java` class, the `testReadFrame()` method utilizes the `getFrameFromFile()`
+    method from the `FrameGrab` class (that is, from the JavaCV library) and checks
+    whether the frame extraction process from each video clip works correctly. Here
+    is the signature:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `JCodecTest.java` 类中，`testReadFrame()` 方法利用 `FrameGrab` 类的 `getFrameFromFile()`
+    方法（即来自 JavaCV 库），检查每个视频剪辑的帧提取过程是否正常工作。这是方法签名：
+- en: '[PRE16]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'In the preceding code block, the `rowsStream()` method is as follows:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码块中，`rowsStream()` 方法如下所示：
+- en: '[PRE17]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'To see the effectiveness of this approach, readers can execute the `JCodecTest.java`
+    class containing the `main()` method, as follows:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看此方法的有效性，读者可以执行包含 `main()` 方法的 `JCodecTest.java` 类，如下所示：
+- en: '[PRE18]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Once it is executed, you will experience the following output, as shown in
+    this screenshot:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦执行，您将体验以下输出，如此屏幕截图所示：
+- en: '![](img/4f0a6a42-50d5-484e-aa8b-f6633f143334.png)'
+  id: totrans-94
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4f0a6a42-50d5-484e-aa8b-f6633f143334.png)'
+- en: The JCodecTest.java class checks whether the frame extraction from each video
+    clip works correctly
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JCodecTest.java 类检查每个视频片段的帧提取是否正常工作
+- en: Preparing training and test sets
+  id: totrans-96
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备训练集和测试集
+- en: 'As described earlier, the `UCF101Reader.java` class is used to extract the
+    features and prepare the training and test sets. First, we set and show Java the
+    MP4 file''s path, as shown here:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，`UCF101Reader.java` 类用于提取特征并准备训练集和测试集。首先，我们设置并展示 Java 中 MP4 文件的路径，如下所示：
+- en: '[PRE19]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'It is to be noted that training the network with the video clips took about
+    45 hours for me on the `EC2 p2.8xlarge` machine. However, I did not have that
+    patience for a second time; therefore, I performed the training by utilizing only
+    these video categories having 1,112 video clips:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要注意的是，使用视频片段训练网络花费了我大约 45 小时，使用的是 `EC2 p2.8xlarge` 机器。然而，我第二次没有那样的耐心，因此，我只利用了包含
+    1,112 个视频片段的视频类别来进行训练：
+- en: '![](img/0c169f36-4ab2-4b98-af94-a8a2f4ddfa7f.png)'
+  id: totrans-100
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0c169f36-4ab2-4b98-af94-a8a2f4ddfa7f.png)'
+- en: The UCF101 dataset directory structure (MP4 version)
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UCF101 数据集目录结构（MP4 版本）
+- en: 'Then we define the minibatch size to be used for preparing the training and
+    test sets. For our case, I put 128, as you can see:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们定义了用于准备训练集和测试集的迷你批次大小。对于我们的情况，我设置了 128，如下所示：
+- en: '[PRE20]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'We define the offset from which file the extraction process will start taking
+    place:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们定义了提取过程从哪个文件开始：
+- en: '[PRE21]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Then we decide how many sample video clips are to be used for training the
+    network, whereas the `UCF101Reader.fileCount()` method returns the number of video
+    clips in the `UCF101_MP4` directory. Take a look at this code line:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们决定使用多少个视频片段来训练网络，而 `UCF101Reader.fileCount()` 方法返回 `UCF101_MP4` 目录中视频片段的数量。看看这行代码：
+- en: '[PRE22]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Next, we compute the test set start index. We use 80% for training and the
+    other 20% for testing . Let''s see the code:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们计算测试集的起始索引。我们使用 80% 的数据进行训练，其余 20% 用于测试。让我们看看这段代码：
+- en: '[PRE23]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Now we prepare the training set. For this, the `getDataSetIterator()` method
+    does the trick by returning the `DataSetIterator` for all video clips except the
+    ones that are planned to be used for the test set. Take a look at this code:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备训练集。为此，`getDataSetIterator()` 方法会返回一个 `DataSetIterator`，包含所有视频片段，除了那些计划用于测试集的片段。请查看这段代码：
+- en: '[PRE24]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Then we prepare the test set. For this, again the `getDataSetIterator()` method
+    does the trick by returning the `DataSetIterator` for all video clips except those
+    planned to be used for the test set. Take a look at this code:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们准备测试集。为此，同样 `getDataSetIterator()` 方法会返回一个 `DataSetIterator`，包含所有视频片段，除了那些计划用于测试集的片段。请查看这段代码：
+- en: '[PRE25]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Fantastic! Up to this point, we have been able to prepare both training and
+    test sets. Now the next step would be to create the network and perform the training.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 太棒了！到目前为止，我们已经能够准备好训练集和测试集。接下来的步骤是创建网络并进行训练。
+- en: Network creation and training
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络创建与训练
+- en: 'Now we start creating the network by combining convolutional, max pooling,
+    dense (feedforward), and recurrent (LSTM) layers to classify each frame of a video
+    clip. First, we need to define some hyperparameters and the necessary instantiation,
+    as shown here:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们开始通过结合卷积层、最大池化层、全连接层（前馈）和递归层（LSTM）来创建网络，对每一帧视频进行分类。首先，我们需要定义一些超参数和必要的实例化，如下所示：
+- en: '[PRE26]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Here, `NUM_CLASSES` is the number of classes from `UCF101` calculated as the
+    quantity of directories in the dataset base directory:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`NUM_CLASSES` 是 `UCF101` 数据集中的类别数量，计算方法是数据集根目录下目录的数量：
+- en: '[PRE27]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Then we start the training by calling the `networkTrainer()` method. Well, as
+    I stated earlier, we will be combining convolutional, max pooling, dense (feedforward),
+    and recurrent (LSTM) layers to classify each frame of a video clip. The training
+    data is first fed to the convolutional layer (layer 0), which then gets subsampled
+    (layer 1) before being inputted into the second convolutional layer (layer 2).
+    Then the second convolutional layer feeds the fully connected layer (layer 3).
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们通过调用 `networkTrainer()` 方法开始训练。正如我之前所说，我们将结合卷积层、最大池化层、全连接层（前馈）和递归层（LSTM）来对视频片段的每一帧进行分类。训练数据首先输入到卷积层（层
+    0），然后经过子采样（层 1），再输入到第二个卷积层（层 2）。接着，第二个卷积层将数据传递到全连接层（层 3）。
+- en: It is to be noted that for the first CNN layer we have CNN preprocessor input
+    width/height 13 x 18, which reflects a picture size of 320 x 240\. This way, the
+    dense layer acts as the input layer for the LSTM layer (layer 4, but feel free
+    to use regular LSTM too). However, it is important to note that dense layer inputs
+    have a size of 2,340 (that is, 13 * 18 * 10).
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要注意的是，对于第一个CNN层，我们有CNN预处理器输入宽度/高度为13 x 18，这反映了320 x 240的图片大小。这样，密集层作为LSTM层（层4）的输入层（但你也可以使用常规的LSTM）。然而，重要的是要注意，密集层的输入大小为2,340（即13
+    * 18 * 10）。
+- en: 'Then the recurrent feedback is connected to RNN output layer, which has a softmax
+    activation function for probability distribution over the classes. We also use
+    gradient normalization to deal with the vanishing and exploding gradient problem,
+    and the backpropagation in the last layer is truncated BPTT. Apart from these,
+    we use some other hyperparameters; those are self-explanatory. The following diagram
+    shows this network setting:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，递归反馈连接到RNN输出层，该层使用softmax激活函数来进行类别的概率分布。我们还使用梯度归一化来处理梯度消失和梯度爆炸问题，最后一层的反向传播使用截断BPTT。除此之外，我们还使用了一些其他超参数，这些参数不言而喻。以下图显示了该网络设置：
+- en: '![](img/afab5457-5573-4536-82c9-cc51e27e6255.png)'
+  id: totrans-123
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/afab5457-5573-4536-82c9-cc51e27e6255.png)'
+- en: Network architecture
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络架构
+- en: 'Now, from the coding point of view, the `networkTrainer()` method has the following
+    network configuration:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，从编码的角度来看，`networkTrainer()`方法具有以下网络配置：
+- en: '[PRE28]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Next, based on the preceding network configuration setting, we create a `MultiLayerNetwork`
+    and initialize it, as shown here:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，根据前述的网络配置设置，我们创建并初始化了一个`MultiLayerNetwork`，如下所示：
+- en: '[PRE29]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Then we can observe the number of parameters across each layer, as shown here:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们可以观察每一层的参数数量，如下所示：
+- en: '[PRE30]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '<q>>>></q> Number of parameters in network: 149599'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: <q>>>></q> 网络中的参数数量：149599
+- en: Layer 0 nParams = 9030
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第零层 nParams = 9030
+- en: Layer 1 nParams = 0
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一层 nParams = 0
+- en: Layer 2 nParams = 2710
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二层 nParams = 2710
+- en: Layer 3 nParams = 117050
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三层 nParams = 117050
+- en: Layer 4 nParams = 20350
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第四层 nParams = 20350
+- en: Layer 5 nParams = 459
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第五层 nParams = 459
+- en: 'Finally, we start the training using this training set:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们使用这个训练集开始训练：
+- en: '[PRE31]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'We save the trained network and video configuration using the `saveConfigs()`
+    method, and the signature of this method is pretty straightforward, as you can
+    see:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用`saveConfigs()`方法保存训练好的网络和视频配置，该方法的签名非常直接，正如你所看到的：
+- en: '[PRE32]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Then we save the trained model for later inferencing purposes using the `saveNetwork()`
+    method; it is as follows:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们使用`saveNetwork()`方法保存训练好的模型，以便以后进行推理；其代码如下：
+- en: '[PRE33]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: Performance evaluation
+  id: totrans-144
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能评估
+- en: 'To evaluate the network performance, I wrote the `evaluateClassificationPerformance()`
+    method, which takes the test set and `evalTimeSeries` evaluation, as shown here:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了评估网络性能，我编写了`evaluateClassificationPerformance()`方法，该方法接受测试集和`evalTimeSeries`评估，如下所示：
+- en: '[PRE34]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Now, to follow the aforementioned steps more clearly, here is the `main()`
+    method containing the steps:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，为了更清晰地遵循上述步骤，以下是包含这些步骤的`main()`方法：
+- en: '[PRE35]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: We have not achieved higher accuracy. There could be many reasons for this.
+    For example, we have used only a few categories (that is, only 9 out of 101).
+    Therefore, our model did not get enough training data to learn. Also, most of
+    the hyperparameters were set naively.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们尚未达到更高的准确率。可能有许多原因导致这种情况。例如，我们只使用了少数类别（即仅使用了9个类别中的9个）。因此，我们的模型没有足够的训练数据来学习。此外，大多数超参数设置过于简单。
+- en: Distributed training on AWS deep learning AMI 9.0
+  id: totrans-150
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在AWS深度学习AMI 9.0上的分布式训练
+- en: So far, we have seen how to perform training and inferencing on a single GPU.
+    However, to make the training even faster in a parallel and distributed way, having
+    a machine or server with multiple GPUs is a viable option. An easy way to achieve
+    this is by using AMAZON EC2 GPU compute instances.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经看到如何在单个GPU上进行训练和推理。然而，为了以并行和分布式的方式加速训练，拥有一台或服务器上有多个GPU是一个可行的选择。实现这一点的简单方法是使用AMAZON
+    EC2 GPU计算实例。
+- en: For example, P2 is well suited for distributed deep learning frameworks that
+    come with the latest binaries of deep learning frameworks (MXNet, TensorFlow,
+    Caffe, Caffe2, PyTorch, Keras, Chainer, Theano, and CNTK) pre-installed in separate
+    virtual environments.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，P2非常适合用于分布式深度学习框架，这些框架预安装了最新的深度学习框架（MXNet、TensorFlow、Caffe、Caffe2、PyTorch、Keras、Chainer、Theano和CNTK）的二进制文件，并分别在虚拟环境中运行。
+- en: 'An even bigger advantage is that they are fully configured with NVidia CUDA
+    and cuDNN. Interested readers can take a look at [https://aws.amazon.com/ec2/instance-types/p2/](https://aws.amazon.com/ec2/instance-types/p2/).
+    A short glimpse of P2 instances configuration and pricing is as follows:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更大的优势在于，它们已经完全配置了NVidia CUDA和cuDNN。有兴趣的读者可以查看[https://aws.amazon.com/ec2/instance-types/p2/](https://aws.amazon.com/ec2/instance-types/p2/)。以下是P2实例配置和定价的简要概览：
+- en: '![](img/89805bb5-7998-48ee-b7fd-82965ba99374.png)'
+  id: totrans-154
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/89805bb5-7998-48ee-b7fd-82965ba99374.png)'
+- en: P2 instance details
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: P2实例详情
+- en: For this project, I decided to use `p2.8xlarge`. You can create it too, but
+    make sure that you have already submitted an increased limit to at least one instance,
+    which may take as long as three days. However, if you do not know how to do that,
+    just create an account on AWS and finish the verification; then go to the EC2
+    management console. On the left panel, click on the Limits tab, which will take
+    you a page where you can submit an increase limit request by clicking on the Request
+    limit increase link.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这个项目，我决定使用`p2.8xlarge`。你也可以创建它，但请确保你已经提交了至少一个实例的限制增加请求，这可能需要三天时间。如果你不知道怎么做，直接在AWS上创建一个帐户并完成验证；然后进入EC2管理控制台。在左侧面板中，点击“限制”标签，它会带你到一个页面，在这里你可以通过点击“请求限制增加”链接来提交增加限制的请求。
+- en: 'Anyway, I assume that you know this simple stuff, so I''ll move forward to
+    creating an instance of type `p2.8xlarge`. On the left panel, click on the Instances
+    menu, which should take you to the following page:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论如何，我假设你知道这些简单的内容，所以我将继续创建一个`p2.8xlarge`类型的实例。在左侧面板中，点击实例菜单，它应该会带你进入以下页面：
+- en: '![](img/bbbd6a83-181b-4bb3-9a61-fb0f258898e3.png)'
+  id: totrans-158
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/bbbd6a83-181b-4bb3-9a61-fb0f258898e3.png)'
+- en: Selecting a deep learning AMI
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择一个深度学习AMI
+- en: An easy option would be creating a deep learning AMI (Ubuntu) Version 9.0, which
+    has already configured CUDA and cuDNN, which can be used across eight GPUs. Another
+    good thing is that it has 32 computing cores and 488 GB of RAM; this would be
+    sufficient for our dataset too. Therefore, instead of using video clips of only
+    nine categories, we can perform the training with the full dataset.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个简单的选项是创建一个已经配置了CUDA和cuDNN的深度学习AMI（Ubuntu）版本9.0，该版本可以在八个GPU上使用。另一个好处是它具有32个计算核心和488GB的内存；这对我们的数据集也足够。因此，除了使用只有九个类别的视频片段外，我们还可以使用完整的数据集进行训练。
+- en: 'However, note that, since we will be using DL4J, which is based on JVM, Java
+    has to be installed and configured (`JAVA_HOME` has to be set). First, connect
+    with your instance from SSH or using an SFTP client. Then on Ubuntu, we can do
+    this with a few commands, as shown here:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，注意，由于我们将使用基于JVM的DL4J，因此必须安装并配置Java（需要设置`JAVA_HOME`）。首先，通过SSH或使用SFTP客户端连接到您的实例。然后，在Ubuntu上，我们可以通过以下几个命令来完成，具体如下面所示：
+- en: '[PRE36]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Then, depending on the version you want to install, execute one of the following
+    commands:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，根据您要安装的版本，执行以下其中一个命令：
+- en: '[PRE37]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'After installing, do not forget to set Java home. Just apply the following
+    commands (we assume Java is installed at `/usr/lib/jvm/java-8-oracle`):'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装后，别忘了设置Java home。只需应用以下命令（假设Java已安装在`/usr/lib/jvm/java-8-oracle`）：
+- en: '[PRE38]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Now let''s see the `Java_HOME`, as follows:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看一下`Java_HOME`，如下所示：
+- en: '[PRE39]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Now you should observe the following result on the Terminal:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，您应该在终端看到以下结果：
+- en: '[PRE40]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Finally, let''s check to make sure that Java has been installed successfully
+    by issuing this command (you may see the latest version!):'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们通过执行以下命令来检查Java是否已成功安装（您可能会看到最新版本！）：
+- en: '[PRE41]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Fantastic! We have been able to set up and configure Java on our instance.
+    Then let''s see whether the GPUs drivers are configured by issuing the `nvidia-smi`
+    command on the Terminal:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 太棒了！我们已经能够在我们的实例上设置并配置Java了。接下来，让我们通过在终端发出`nvidia-smi`命令，查看GPU驱动是否已配置：
+- en: '![](img/889034af-b0b1-41b8-9cd3-dc5a9d8255fc.png)'
+  id: totrans-174
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/889034af-b0b1-41b8-9cd3-dc5a9d8255fc.png)'
+- en: Showing Tesla K80 GPUs on a p2.8 xlarge instance
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示Tesla K80 GPU的p2.8xlarge实例
+- en: 'As we can see, initially, there''s no usage of GPUs, but it clearly says that,
+    on the instance, there are eight Tesla K80 GPUs installed and configured. Now
+    that our GPUs and machine are fully configured, we can focus on the project. We
+    are going to use more or less the same code that we used previously but with some
+    minimal modifications. The very first change we need to make is to add the following
+    line at the beginning of our `main()` method:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如我们所见，最初没有使用 GPU，但它清楚地指出，在该实例上已安装并配置了八个 Tesla K80 GPU。现在我们的 GPU 和机器已经完全配置好，我们可以专注于项目。我们将使用与之前差不多的代码，但做一些最小的修改。我们需要进行的第一个更改是在
+    `main()` 方法的开头添加以下代码：
+- en: '[PRE42]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Then we perform the training across eight GPUs, using ParallelWrapper, which
+    take cares of load balancing between GPUs. The network construction is the same
+    as before, as shown here:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们使用 ParallelWrapper 在八个 GPU 上进行训练，它负责 GPU 之间的负载均衡。网络构建与之前相同，如下所示：
+- en: '[PRE43]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'Now we start the training by fitting the full test set, as shown here:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们通过拟合完整的测试集来开始训练，如下所示：
+- en: '[PRE44]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'That is all we need to make. However, make sure you import the following at
+    the beginning of the `VideoClassificationExample.java` file for the `CudaEnvironment`
+    and `ParallelWrapper`, as shown here:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是我们需要做的全部。然而，请确保在 `VideoClassificationExample.java` 文件的开头导入以下内容，以便使用 `CudaEnvironment`
+    和 `ParallelWrapper`，如下面所示：
+- en: '[PRE45]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'Nonetheless, I still believe that showing the code for the `main()` method
+    and the `networkTrainer()` methods would be helpful. In addition, to avoid possible
+    confusion, I have written two Java classes for single and multiple GPUs:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管如此，我仍然认为展示 `main()` 方法和 `networkTrainer()` 方法的代码会很有帮助。此外，为了避免可能的混淆，我编写了两个
+    Java 类，分别用于单个和多个 GPU：
+- en: '`VideoClassificationExample.java`**:** For a single GPU or CPU'
+  id: totrans-185
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`VideoClassificationExample.java`**:** 用于单个 GPU 或 CPU'
+- en: '`VideoClassificationExample_MUltipleGPU.java`: For multiple GPUs on an AWS
+    EC2 instance'
+  id: totrans-186
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`VideoClassificationExample_MUltipleGPU.java`：用于 AWS EC2 实例上的多个 GPU'
+- en: 'So, the latter class has a method, `networkTrainer()`, which is used to create
+    a network for distributed training, as follows:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，后者类有一个方法，`networkTrainer()`，用于创建一个用于分布式训练的网络，如下所示：
+- en: '[PRE46]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Now the `main()` method is as follows:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在 `main()` 方法如下所示：
+- en: '[PRE47]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'That''s all we need before executing the `VideoClassificationExample_MUltipleGPU.java`
+    class. It should also be noted that running a standalone Java class is not a good
+    idea from the terminal. Therefore, I would suggest creating a `fat .jar` and including
+    all the dependencies. To do that, move your code to the instance using any SFTP
+    client. Then install `maven`:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们在执行 `VideoClassificationExample_MUltipleGPU.java` 类之前所需要的一切。还应该注意，从终端运行独立的
+    Java 类并不是一个好主意。因此，我建议创建一个 `fat .jar` 文件并包含所有依赖项。为此，使用任何 SFTP 客户端将代码移到实例上。然后安装
+    `maven`：
+- en: '[PRE48]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'Once the maven is installed, we can start creating the fat JAR file containing
+    all the dependencies, like so:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦安装了 maven，我们可以开始创建包含所有依赖项的 fat JAR 文件，如下所示：
+- en: '[PRE49]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Then, after a while, a fat JAR file will be generated in the target directory.
+    We move to that directory and execute the JAR file, as shown here:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，过了一段时间，一个 fat JAR 文件将在目标目录中生成。我们移动到该目录并执行 JAR 文件，如下所示：
+- en: '[PRE50]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'At this point, please make sure that you have set all the paths properly and
+    have the necessary permissions. Well, I assume everything is set properly. Then,
+    executing the preceding command will force DL4J to pick BLAS, CUDA, and cuDNN
+    and perform the training and other steps. Roughly, you should see the following
+    logs on the Terminal:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时，请确保您已正确设置所有路径并具有必要的权限。好吧，我假设一切都设置好了。那么，执行前面的命令将迫使 DL4J 选择 BLAS、CUDA 和 cuDNN，并执行训练和其他步骤。大致上，您应该在终端上看到如下日志：
+- en: '[PRE51]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'The preceding command should start the training and you should observe the
+    following logs on the Terminal/command line:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的命令应该开始训练，您应该在终端/命令行中观察到以下日志：
+- en: '[PRE52]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Then the training should start. Now let''s check whether DL4J is utilizing
+    all the GPUs. To know this, again execute the `nvidia-smi` command on the Terminal,
+    which should show the following:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后训练应该开始。现在让我们检查一下 DL4J 是否正在利用所有的 GPU。要确认这一点，再次在终端执行 `nvidia-smi` 命令，它应该显示如下内容：
+- en: '![](img/cab146ff-6db0-4956-b71a-ef9068cd59a9.png)'
+  id: totrans-202
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/cab146ff-6db0-4956-b71a-ef9068cd59a9.png)'
+- en: Showing resource usage on Tesla K80 GPUs on the p2.8 xlarge instance
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示在 p2.8 xlarge 实例上的 Tesla K80 GPU 的资源使用情况
+- en: Since there are many video clips, training will take a few hours. Once the training
+    is completed, the code should provide similar or slightly better classification
+    accuracy.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于视频片段较多，训练需要几个小时。训练完成后，代码应提供相似或稍微更好的分类准确率。
+- en: Frequently asked questions (FAQs)
+  id: totrans-205
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 常见问题解答（FAQs）
+- en: Now that we have solved the video classification problem, but with low accuracy,
+    there are other practical aspects of this problem and overall deep learning phenomena
+    that need to be considered too. In this section, we will see some frequently asked
+    questions that may be on your mind. Answers to these questions can be found in
+    Appendix A.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经解决了视频分类问题，但准确率较低。这个问题及整体深度学习现象还有其他实际方面需要考虑。在本节中，我们将看到一些可能出现在你脑海中的常见问题。答案可以在附录
+    A 中找到。
+- en: My machine has multiple GPUs installed (for example, two), but DL4J is using
+    only one. How do I fix this problem?
+  id: totrans-207
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我的机器上安装了多块 GPU（例如，两个），但 DL4J 只使用一个。我该如何解决这个问题？
+- en: I have configured a p2.8 xlarge EC2 GPU compute instance on AWS. However, it
+    is showing low disk space while installing and configuring CUDA and cuDNN. How
+    to fix this issue?
+  id: totrans-208
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我已经在 AWS 上配置了一个 p2.8 xlarge EC2 GPU 计算实例。然而，在安装和配置 CUDA 和 cuDNN 时，显示磁盘空间不足。如何解决这个问题？
+- en: I understand how the distributed training happens on AWS EC2 AMI instance. However,
+    my machine has a low-end GPU, and often I get OOP on the GPU. How can solve the
+    issue?
+  id: totrans-209
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我了解如何在 AWS EC2 AMI 实例上进行分布式训练。然而，我的机器有一块低端 GPU，且经常出现 GPU OOP 错误。我该如何解决这个问题？
+- en: Can I treat this application as a human activity recognition from a video?
+  id: totrans-210
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我可以将这个应用程序视为从视频中进行人体活动识别吗？
+- en: Summary
+  id: totrans-211
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we developed a complete deep learning application that classifies
+    a large collection of video datasets from the `UCF101` dataset. We applied a combined
+    CNN-LSTM network with DL4J that overcome the limitation of standalone CNN or RNN
+    LSTM networks.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们开发了一个完整的深度学习应用程序，利用 `UCF101` 数据集对大量视频数据集进行分类。我们应用了结合 CNN 和 LSTM 网络的 DL4J，克服了单独使用
+    CNN 或 RNN LSTM 网络的局限性。
+- en: Finally, we saw how to perform training in parallel and distributed ways across
+    multiple devices (CPUs and GPUs). In summary, this end-to-end project can be treated
+    as a primer for human activity recognition from a video. Although we did not achieve
+    high accuracy after training, in the network with a full video dataset and hyperparameter
+    tuning, the accuracy will definitely be increased.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们展示了如何在多个设备（CPU 和 GPU）上并行和分布式地进行训练。总的来说，这个端到端的项目可以作为从视频中进行人体活动识别的入门教程。虽然我们在训练后没有取得高准确率，但在具有完整视频数据集和超参数调优的网络中，准确率肯定会提高。
+- en: The next chapter is all about designing a machine learning system driven by
+    criticisms and rewards. We will see how to develop a demo GridWorld game using
+    DL4J, RL4J, and neural Q-learning, which acts as the Q-function. We will start
+    from reinforcement learning and its theoretical background so that the concepts
+    are easier to grasp.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将介绍如何设计一个由批评和奖励驱动的机器学习系统。我们将看到如何使用 DL4J、RL4J 和神经网络 Q 学习来开发一个演示版 GridWorld
+    游戏，其中 Q 学习起到 Q 函数的作用。我们将从强化学习及其理论背景开始，帮助更容易理解这些概念。
+- en: Answers to questions
+  id: totrans-215
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 问题答案
+- en: '**Answer** **to question 1:** This means the training is not being distributed,
+    which also means that your system is forcing you to use just one GPU. Now to solve
+    this issue, just add the following line at the beginning of your `main()` method:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**问题 1 的答案：** 这意味着训练没有分布式进行，也就是说系统强制你使用单个 GPU。现在，为了解决这个问题，只需在 `main()` 方法的开头添加以下代码：'
+- en: '[PRE53]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '**Answer** **to question 2:** Well, this is certainly an AWS EC2-related question.
+    However, I will provide a short explanation. If you see the default boot device,
+    it allocates only 7.7 GB of space, but about 85% is allocated for the udev device,
+    as shown here:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**问题 2 的答案：** 这个问题显然与 AWS EC2 相关。不过，我会提供一个简短的解释。如果你查看默认的启动设备，它只分配了 7.7 GB 的空间，但大约
+    85% 的空间被分配给了 udev 设备，如下所示：'
+- en: '![](img/4ae219c5-ea53-4456-b9e6-e97d83f012c8.png)'
+  id: totrans-219
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/4ae219c5-ea53-4456-b9e6-e97d83f012c8.png)'
+- en: Showing storage on a p2.8xlarge instance
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示 p2.8xlarge 实例上的存储
+- en: 'Now, to get rid of this issue, you can specify sufficient storage in the boot
+    device while creating the instance, as follows:'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了消除这个问题，在创建实例时，你可以在启动设备中指定足够的存储，如下所示：
+- en: '![](img/0c6f61f3-6b03-4f34-b6a0-feca85705ff1.png)'
+  id: totrans-222
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0c6f61f3-6b03-4f34-b6a0-feca85705ff1.png)'
+- en: Increasing storage on the default boot device the on p2.8xlarge instance
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 增加 p2.8xlarge 实例默认启动设备上的存储
+- en: '**Answer** **to question 3:** Well, if this is the case, you can probably do
+    the training on CPU instead of GPU. However, if performing training on a GPU is
+    mandatory, I recommend using the `HALF` datatype.'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**问题 3 的答案**：好吧，如果是这种情况，你可能可以在 CPU 上进行训练，而不是 GPU。然而，如果必须在 GPU 上进行训练，我建议使用 `HALF`
+    数据类型。'
+- en: 'If your machine and code can afford using half-precision math, you can enable
+    this as the data type. It will then ensure 2x less GPU memory usage by DL4J. To
+    enable this, just add the following line of code to the beginning of the `main()`
+    method (even before the multi-GPU allows one):'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的机器和代码能够支持使用半精度数学运算，你可以将其作为数据类型启用。这将确保 DL4J 使用的 GPU 内存减少一半。要启用此功能，只需将以下代码行添加到
+    `main()` 方法的开头（即使是在多 GPU 允许的代码之前）：
+- en: '[PRE54]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: Using the `HALF` datatype will force your network to squash less precision compared
+    to `float` or `double` types. Nonetheless, tuning your network may be harder.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `HALF` 数据类型将强制你的网络压缩精度，低于 `float` 或 `double` 类型。然而，调优网络可能会更困难。
+- en: '**Answer** **to question** **4:** We have not managed to achieve good accuracy.
+    This is the main objective of this end-to-end chapter. Therefore, after training
+    the network with the full video dataset and hyperparameter tuning, the accuracy
+    will definitely increase.'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**问题 4 的答案**：我们尚未成功达到良好的准确率。这是本章端到端的主要目标。因此，在使用完整的视频数据集进行训练并调优超参数后，准确率肯定会提高。'
+- en: Finally, and to be honest, Java is not the perfect choice if you want to take
+    an application to production. I am saying this because so many advanced feature-extraction
+    libraries from video clips are in Python, and those can be used too.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，老实说，如果你想将一个应用程序投入生产，Java 可能不是完美的选择。我之所以这么说，是因为许多从视频片段提取高级特征的库都是用 Python 编写的，而且那些库也可以使用。

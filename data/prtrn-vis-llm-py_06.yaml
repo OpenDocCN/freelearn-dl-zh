@@ -1,0 +1,988 @@
+- en: '6'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '6'
+- en: 'Dataset Preparation: Part Two, the Data Loader'
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据集准备：第二部分，数据加载器
+- en: '*Become one with the data. – Andrej Karpathy*'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*与数据融为一体。 – Andrej Karpathy*'
+- en: In this chapter, you’ll learn how to prepare your dataset to immediately use
+    it with your chosen models. You’ll master the concept of a data loader, learning
+    why it’s a common source of errors in training large models. You’ll learn about
+    creating embeddings, using tokenizers, and other methods to featurize your raw
+    data for your preferred neural network. Following these steps, you’ll be able
+    to prepare your entire dataset, using methods for both vision and language. Finally,
+    you’ll learn about data optimization on AWS and Amazon SageMaker to efficiently
+    send datasets large and small to your training cluster. Throughout this chapter,
+    we’ll work backward through the training loop, incrementally giving you all the
+    steps you need to have functional deep neural networks training at scale. You’ll
+    also follow a case study on how I trained on 10 TB for Stable Diffusion on SageMaker!
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，你将学习如何准备数据集，以便立即将其与选择的模型一起使用。你将掌握数据加载器的概念，了解它为何在训练大型模型时是常见的错误来源。你还将学习如何创建嵌入、使用分词器以及其他方法，将原始数据特征化，以适应你首选的神经网络。按照这些步骤，你将能够准备整个数据集，涵盖视觉和语言任务。最后，你将学习如何在AWS和Amazon
+    SageMaker上进行数据优化，以高效地将大大小小的数据集发送到训练集群。在本章中，我们将从训练循环的后端开始，逐步为你提供所需的所有步骤，帮助你在大规模训练中构建功能性深度神经网络。你还将跟随一个案例研究，了解我如何在SageMaker上训练了10TB数据用于Stable
+    Diffusion！
+- en: Never underestimate the power of data. Whether it’s getting the highest quality
+    samples and labels you can, failing to catch subtle corruptions, or optimizing
+    your compute selections, data can truly make or break the success of your project.
+    Many top deep learning models actually came about through the development of a
+    novel dataset, from MNIST to AlexNet, and from GPT-3 to Stable Diffusion! When
+    we think big in machine learning, frequently that means thinking big about your
+    dataset.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 永远不要低估数据的力量。无论是获取尽可能高质量的样本和标签，还是未能捕捉到微妙的损坏，抑或是优化计算选择，数据都能真正决定你项目的成败。许多顶尖的深度学习模型实际上是通过开发一个新颖的数据集诞生的，从MNIST到AlexNet，从GPT-3到Stable
+    Diffusion！当我们在机器学习中思考宏大时，往往意味着对你的数据集进行宏大的思考。
+- en: 'You can’t have a functional training loop without a functional data loader,
+    so let’s unpack it! In this chapter, we’re going to cover the following main topics:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你无法拥有一个功能完整的训练循环，除非你有一个功能完善的数据加载器，所以让我们来解析它！在本章中，我们将覆盖以下主要主题：
+- en: Introducing the data loader through key concepts in Python
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过Python中的关键概念介绍数据加载器
+- en: 'Building and testing your own data loader: a case study from Stable Diffusion'
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建并测试你自己的数据加载器：来自Stable Diffusion的案例研究
+- en: Embeddings and tokenizers
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 嵌入和分词器
+- en: Optimizing your data pipeline on AWS
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在AWS上优化你的数据管道
+- en: Transforming deep learning datasets at scale on AWS
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在AWS上大规模转换深度学习数据集
+- en: Introducing the data loader in Python
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在Python中介绍数据加载器
+- en: The data loader is a concept that is fairly unique to deep learning. In statistical
+    machine learning, you still see many models using gradient updating, which requires
+    mini-batches, but the *loading* aspect is more hidden – more integrated with the
+    algorithm itself. PyTorch leaned into this concept from the early days, explicitly
+    offering a `data loader` object and exposing the entire training loop to the developer.
+    While somewhat more complex than early TensorFlow, this actually enabled developers
+    to have a lot more flexibility and control over the training process, which helped
+    them more easily develop custom solutions. This was a part of the reason more
+    and more research projects eventually embraced PyTorch over TensorFlow as their
+    deep learning framework of choice. Now, the majority of models I encounter are
+    first implemented in PyTorch, and occasionally in TensorFlow.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据加载器是一个深度学习中特有的概念。在统计机器学习中，你仍然会看到许多模型使用梯度更新，这需要小批量数据，但其*加载*方面更为隐蔽——更多地与算法本身集成。PyTorch从早期便采纳了这一概念，明确地提供了一个`data
+    loader`对象，并将整个训练循环暴露给开发者。尽管比早期的TensorFlow稍显复杂，但这实际上使开发者在训练过程中拥有了更多的灵活性和控制权，从而帮助他们更轻松地开发定制解决方案。这也是越来越多的研究项目最终选择PyTorch而非TensorFlow作为其深度学习框架的原因之一。现在，我接触到的大多数模型都是首先在PyTorch中实现的，偶尔会用TensorFlow。
+- en: What is a data loader? A data loader *hydrates your training loop with data*.
+    Most PyTorch training loops are actually just nested loops. First, there’s an
+    outer loop through the number of epochs. Each epoch is a full pass through the
+    dataset. This means – you guessed it – *the inner loop is just a pass through
+    your data loader*. This means that your data loader needs to use, under the hood,
+    a really useful object in Python known as an **iterator**.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据加载器是什么？数据加载器*为你的训练循环注入数据*。大多数 PyTorch 训练循环实际上只是嵌套的循环。首先，外部循环遍历训练的轮次（epochs）。每个轮次是对数据集的完整遍历。也就是说——你猜对了——*内部循环其实就是对数据加载器的遍历*。这意味着，数据加载器需要在底层使用一个非常有用的
+    Python 对象，称为**迭代器**。
+- en: First, let’s take a quick look at objects in Python, and build up to the data
+    loader.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们快速了解一下 Python 中的对象，然后逐步构建数据加载器。
+- en: '![Figure 6.1 – Classes in Python](img/B18942_Figure_6.1.jpg)'
+  id: totrans-15
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.1 – Python 中的类](img/B18942_Figure_6.1.jpg)'
+- en: Figure 6.1 – Classes in Python
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.1 – Python 中的类
+- en: Remember, Python is an **object-oriented** language. This means that, most of
+    the time, when you’re working in Python you’re working with objects. A class is
+    then just a convenient way of building, maintaining, and using objects.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，Python 是一门**面向对象**的语言。这意味着，大多数时候，当你在使用 Python 时，你是在与对象打交道。类则是构建、维护和使用对象的便捷方式。
+- en: Most of the time, in the real world, you won’t be building objects, unless you’re
+    building a new software SDK. Usually, as a service consumer, you’re just using
+    an object someone else has built, and developing a script to integrate it into
+    your tasks. This is also true in deep learning; most of our objects are already
+    written in software packages such as PyTorch, pandas, sklearn, and so on.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数情况下，在现实世界中，你不会自己构建对象，除非你正在构建一个新的软件 SDK。通常，作为服务的消费者，你只是使用别人已经构建好的对象，并开发脚本将其集成到你的任务中。这在深度学习中也同样适用；我们的大多数对象已经在
+    PyTorch、pandas、sklearn 等软件包中实现。
+- en: Now, what if I wanted to point to a really large list all at once, but have
+    it return only a predefined number of objects every time I call that function?
+    Would I have to build this entire construct myself? Now that I’m not in grad school
+    anymore, I can happily say no way! I’d just use an iterator, as shown in the following
+    screenshot.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，如果我想一次性指向一个非常大的列表，但每次调用该函数时只返回预定义数量的对象呢？我需要自己构建整个结构吗？现在我不再是研究生了，可以很高兴地说不需要！我只需使用一个迭代器，就像下面截图所示的那样。
+- en: '![Figure 6.2 – A simple iterator class in Python](img/B18942_Figure_6.2.jpg)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.2 – Python 中的简单迭代器类](img/B18942_Figure_6.2.jpg)'
+- en: Figure 6.2 – A simple iterator class in Python
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.2 – Python 中的简单迭代器类
+- en: Python iterators are purpose-built for scenarios like this, calling an object
+    multiple times but retrieving a different item each time. Many objects in Python
+    support iterators, such as lists and dictionaries. Turning one of them into an
+    iterator is usually pretty simple. You’ll do it in two steps, first when you define
+    the core object as an iterator, here with the `iter()` syntax. Second, when you
+    call the iterator to provide you with the next batch of items, here with `next()`.
+    Expect the syntax to change, but most of the concepts to stay the same.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python 迭代器是为这种场景特别设计的，能够多次调用一个对象，但每次返回不同的项目。Python 中许多对象都支持迭代器，比如列表和字典。将它们转换为迭代器通常非常简单。你需要做两步，首先在定义核心对象时，将其作为迭代器，这里使用
+    `iter()` 语法。其次，当你调用迭代器来提供下一个批次的项目时，使用 `next()`。可以预期语法会发生变化，但大部分概念会保持不变。
+- en: Your job in building a data loader is *not* to necessarily build a class from
+    scratch. It’s to use some software framework, such as NumPy, Hugging Face, PyTorch,
+    or TensorFlow, to accept the data you want to work with. Then, you need to use
+    that pre-built data loader to walk through your batches and populate your training
+    loop with them.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构建数据加载器时，你的任务*并不是*从头开始构建一个类。你的任务是使用一些软件框架，如 NumPy、Hugging Face、PyTorch 或 TensorFlow，来接收你想要使用的数据。然后，你需要使用那些预先构建好的数据加载器来遍历你的批次，并将它们填充到训练循环中。
+- en: Now that you know what a data loader is supposed to do, let’s explore how to
+    build your own data loader.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经知道数据加载器应该做什么，接下来让我们探讨如何构建你自己的数据加载器。
+- en: Building and testing your own data loader – a case study from Stable Diffusion
+  id: totrans-25
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 构建和测试你自己的数据加载器——以 Stable Diffusion 为案例分析
+- en: 'The syntax for data loaders is guaranteed to change, so I don’t want to rely
+    on PyTorch’s current implementation too heavily. However, let me provide you with
+    one simple screenshot:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据加载器的语法有可能发生变化，所以我不想过于依赖 PyTorch 当前的实现。不过，让我先提供一张简单的截图：
+- en: '![Figure 6.3 – Using data loaders in PyTorch](img/B18942_Figure_6.3.jpg)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.3 – 在PyTorch中使用数据加载器](img/B18942_Figure_6.3.jpg)'
+- en: Figure 6.3 – Using data loaders in PyTorch
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.3 – 在PyTorch中使用数据加载器
+- en: 'This is actually from my re:Invent demo on large-scale training in 2022, with
+    Gal Oshri from SageMaker and Dan Padnos from AI21: [https://medium.com/@emilywebber/how-i-trained-10tb-for-stable-diffusion-on-sagemaker-39dcea49ce32](https://medium.com/@emilywebber/how-i-trained-10tb-for-stable-diffusion-on-sagemaker-39dcea49ce32).
+    Here, I’m training Stable Diffusion on 10 TB of data, using SageMaker and FSx
+    for Lustre, which is a distributed file system built for high-performance computing.
+    More on that and related optimizations later in the chapter!'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这实际上来自我在2022年re:Invent大会上与SageMaker的Gal Oshri和AI21的Dan Padnos一起进行的大规模训练演示：[https://medium.com/@emilywebber/how-i-trained-10tb-for-stable-diffusion-on-sagemaker-39dcea49ce32](https://medium.com/@emilywebber/how-i-trained-10tb-for-stable-diffusion-on-sagemaker-39dcea49ce32)。在这里，我使用SageMaker和FSx
+    for Lustre训练Stable Diffusion，数据量为10 TB，FSx for Lustre是为高性能计算设计的分布式文件系统。关于这一点以及相关优化将在本章后面详细介绍！
+- en: 'As you can see, really the only hard part about this is building the input
+    training dataset. Once you have a valid dataset object, getting a valid data loader
+    is as simple as copying the latest syntax into your script and ensuring it’s valid.
+    So, you ask, how do we get our own training dataset? One word: dictionaries!'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所看到的，实际上唯一困难的部分是构建输入的训练数据集。一旦你有了一个有效的数据集对象，获取一个有效的数据加载器就像把最新的语法复制到你的脚本中并确保它有效一样简单。所以，你可能会问，我们如何获得自己的训练数据集？一个词：字典！
+- en: In my setup right now, I have a Jupyter notebook running on Studio. I upgrade
+    and downgrade the instance running my kernel gateway application, or ephemeral
+    notebook, continuously based on whether and when I need to do some large- or small-scale
+    processing. In this notebook, I have developed scripts and functions that I’m
+    sure will work, then I copied them into the main script that runs on my SageMaker
+    training jobs. This is where I built out a custom data loading function.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我当前的设置中，我有一个在Studio上运行的Jupyter笔记本。我根据是否需要进行大规模或小规模处理，不断升级和降级运行我的内核网关应用程序或临时笔记本的实例。在这个笔记本中，我开发了我确信能够工作的脚本和函数，然后将它们复制到在SageMaker训练任务上运行的主脚本中。这就是我构建自定义数据加载函数的地方。
+- en: 'Hugging Face provides a nice `load_dataset()` function from its dataset library,
+    but after more than a few hours of searching and testing, I wasn’t able to get
+    this to work with my custom dataset. So, I ended up building my own data loader
+    backend, which I then pointed to the `DatasetDict()` object. In my notebook, it
+    looks like this:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Hugging Face提供了一个很好的`load_dataset()`函数，可以从其数据集库加载数据，但经过几个小时的搜索和测试，我还是无法使它与我的自定义数据集一起工作。所以，我最终构建了自己的数据加载器后端，然后指向了`DatasetDict()`对象。在我的笔记本中，它看起来是这样的：
+- en: '![Figure 6.4 – Create your own DatasetDict object in Hugging Face](img/B18942_Figure_6.4.jpg)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.4 – 在Hugging Face中创建你自己的DatasetDict对象](img/B18942_Figure_6.4.jpg)'
+- en: Figure 6.4 – Create your own DatasetDict object in Hugging Face
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.4 – 在Hugging Face中创建你自己的DatasetDict对象
+- en: Pretty simple, right? You can see I clearly have a training set, which itself
+    is just the word `train` pointing to a Hugging Face `Dataset` object. You can
+    also see that I only have 1,736 objects in this dataset, which is good, because
+    I’m only using an `ml.t3.medium` instance to run my notebook, and it’s tiny. When
+    I need to point to and test a larger dataset, then in Studio, I upgrade my instance
+    in a few clicks and suddenly I have hundreds of GB of instance memory with tens
+    of CPU cores at my fingertips!
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很简单，对吧？你可以看到，我显然有一个训练集，它本身只是指向Hugging Face `Dataset`对象的`train`词。你还可以看到，这个数据集中只有1,736个对象，这很好，因为我仅使用一个`ml.t3.medium`实例来运行我的笔记本，而这个实例非常小。当我需要指向并测试一个更大的数据集时，我只需在Studio中几次点击就能升级我的实例，突然间，我的实例内存达到数百GB，数十个CPU核心触手可及！
+- en: 'When it’s simple, that is due to elegant design decisions. Your code should
+    be like poetry: short, simple, effective, and evocative. Powerful. This goes all
+    the way back to Shakespeare:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当它简单时，那是由于优雅的设计决策。你的代码应该像诗歌一样：简短、简单、有效、富有表现力。强大。这可以追溯到莎士比亚：
+- en: Brevity is the soul of wit.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简洁是智慧的灵魂。
+- en: For my Stable Diffusion dataset, I downloaded 50 million image and caption pairs.
+    More on how I did that is presented later in the chapter!
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我的Stable Diffusion数据集，我下载了5000万个图像和标题对。关于我是如何做到这一点的，稍后会在本章中介绍！
+- en: After this, I realized that it would be extremely inefficient to waste expensive
+    GPU time loading that entire dataset into memory. This is because my implementation,
+    which no doubt could be improved, lazily lists all of the images, walks through
+    them one by one, reads the caption, and stores it with the pointer.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这之后，我意识到，浪费宝贵的GPU时间将整个数据集加载到内存中是极其低效的。这是因为我的实现，尽管毫无疑问可以改进，却懒散地列出了所有图片，逐一查看，读取标题，并将其与指针一起存储。
+- en: Now, fortunately, I could at least use Python’s multiprocessing package to list
+    the images concurrently, one per CPU core, but for 50 million images that could
+    easily take 24 hours to do. On top of that, I only needed one machine to execute
+    this task. My training cluster has 24 `ml.p4d.24xlarge` machines, so I was not
+    going to let all of those hosts sit idle while I listed the images and walked
+    through them. So, I built an index!
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，幸运的是，我至少可以使用Python的多进程包并发列出图片，每个CPU核心处理一张，但对于5000万张图片，这可能需要24小时才能完成。更何况，我只需要一台机器来执行此任务。我的训练集群有24台`ml.p4d.24xlarge`机器，所以我不打算让这些主机闲置，等着我列出图片并逐一查看。因此，我构建了一个索引！
+- en: Here, the index is simply a JSON Lines object. Let’s inspect it!
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，索引只是一个JSON Lines对象。让我们来检查一下！
+- en: '![Figure 6.5 – Inspect the data index](img/B18942_Figure_6.5.jpg)'
+  id: totrans-42
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.5 - 检查数据索引](img/B18942_Figure_6.5.jpg)'
+- en: Figure 6.5 – Inspect the data index
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.5 - 检查数据索引
+- en: 'I spent a few days building this whole process end to end:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我花了几天时间构建了整个过程的端到端流程：
+- en: First, I tested my training script with some toy data on SageMaker to make sure
+    it worked properly.
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我在SageMaker上使用一些玩具数据测试了我的训练脚本，确保它能正常工作。
+- en: Then, I downloaded a new dataset using more than a few large CPU machines on
+    SageMaker.
+  id: totrans-46
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我使用多个大型CPU机器在SageMaker上下载了一个新的数据集。
+- en: Next, I put the dataset onto FSx for Lustre. I tested this on SageMaker, pointing
+    to the relevant **Virtual Private Cloud** (**VPC**) location.
+  id: totrans-47
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我将数据集放到了FSx for Lustre上。我在SageMaker上进行了测试，指向了相关的**虚拟私有云**（**VPC**）位置。
+- en: Then I replicated a tiny version of this, with just a few objects, in Studio.
+    I built some scripts to parse these objects, ensuring they scaled and were operational
+    as I went. I moved those scripts onto my SageMaker training jobs and executed
+    a run on a large-CPU machine overnight.
+  id: totrans-48
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我在Studio中复制了一个小版本，仅包含几个对象。我编写了一些脚本来解析这些对象，确保它们在执行过程中能够扩展并且可操作。我将这些脚本移到了SageMaker的训练作业中，并在一个大型CPU机器上进行了过夜运行。
+- en: The next morning, I built and tested my index loader, moving it onto SageMaker
+    training as it worked. Now I am running on 16 `ml.p4d.24xlarge` instances, or
+    128 A100 GPUs. Tomorrow, I’ll do the full run for one full epoch with 50 million
+    images on 24 `ml.p4d.24xlarge` instances, or 192 GPUs. If I could do this end
+    to end, so can you!
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二天早上，我构建并测试了我的索引加载器，在它正常工作时将其移到了SageMaker训练中。现在，我正在16个`ml.p4d.24xlarge`实例上运行，或者说128个A100
+    GPU。明天，我将在24个`ml.p4d.24xlarge`实例上进行完整的运行，处理5000万张图片，或者192个GPU。如果我能做到端到端运行，你也可以！
+- en: 'Throughout this chapter, I’ll share optimizations about that entire pipeline
+    with you, but for now, let’s unpack one key aspect of this training flow that
+    is critical to preparing your data for your chosen model: tokenizers.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我将与您分享整个管道的优化方案，但现在，让我们拆解一下这条训练流程中的一个关键环节，这对为您选择的模型准备数据至关重要：分词器。
+- en: Creating embeddings – tokenizers and other key steps for smart features
+  id: totrans-51
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建嵌入——分词器和其他智能特征的关键步骤
+- en: 'Now that you have your data loader tested, built, and possibly scaled, you’re
+    thinking to yourself, what do I do with all of these raw images and/or natural
+    language strings? Do I throw them straight into my neural network? Actually, the
+    last five years of learning representations have proven this definitively: no,
+    you should not put raw images or text into your neural network right off the bat.
+    You should convert your raw inputs to embeddings by using another model.'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，您已经测试并构建了数据加载器，并可能进行了扩展，您可能会在想，我该如何处理这些原始图片和/或自然语言字符串？我是否直接将它们丢进神经网络？事实上，过去五年的学习表示已经明确证明了这一点：不，您不应该直接将原始图片或文本输入到神经网络中。您应该通过使用另一个模型将原始输入转换为嵌入。
+- en: 'The intuition for this is simple: before you teach your model how to recognize
+    relationships in your dataset, you first have to introduce it to the concept of
+    a dataset. Creating embeddings is basically a way of doing this; you use a data
+    structure that has been trained from another process to create vector representations
+    of your data. That is to say, you provide your raw text and images as input, and
+    you get high-dimensional vectors as output. Those vectors are produced through
+    what you hope is a valid process that should catch nuanced details in their inter-relationship.
+    Commonly in multimodal settings, such as with Stable Diffusion, you will actually
+    use different processes for the vision and language embeddings, putting them into
+    your model and integrating them through the learning loop distinctly.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个直觉非常简单：在你教会模型如何识别数据集中的关系之前，你首先得向它介绍数据集的概念。创建嵌入基本上就是这么做的；你使用一个已经通过其他过程训练过的数据结构来创建你数据的向量表示。也就是说，你将原始文本和图像作为输入，然后得到高维的向量作为输出。这些向量是通过你希望它能够捕捉到数据之间细微关系的有效过程生成的。在多模态设置中，像Stable
+    Diffusion这样的模型，你实际上会使用不同的过程来处理视觉和语言的嵌入，将它们分别输入到你的模型中，并通过学习循环进行集成。
+- en: Natural language tends to use a process called **tokenization**. Each model
+    has a unique tokenizer that was trained on a specific vocabulary. If you want
+    to pretrain or finetune a GPT-3 type model, you’ll need to download the tokenizer
+    that ships with the model and apply that tokenizer to your dataset. This will
+    have a unique way of breaking down strings into words, subwords, or characters
+    depending on the model. Eventually, each token is converted to a high-dimensional
+    vector, or in more simple terms, a really long list of numbers. We call them **vector
+    embeddings**. Many word embeddings also include **positional encoding**, a numerical
+    way of representing to the neural network where that specific word, or token,
+    sits in the sentence relative to other words. This positional encoding helps your
+    transformer-based model pick up on the meaning of words in that specific dataset.
+    If you are pretraining a net new model or dataset, you will likely end up needing
+    to train your own tokenizer.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自然语言通常使用一种叫做**分词（tokenization）**的过程。每个模型都有一个独特的分词器，这个分词器是基于特定词汇表训练出来的。如果你想要预训练或微调一个类似于GPT-3的模型，你需要下载与模型一起提供的分词器，并将其应用到你的数据集上。这个分词器会有独特的方式将字符串拆分成单词、子词或字符，具体取决于模型的不同。最终，每个词元都会被转换成一个高维向量，或者用更简单的术语来说，就是一个非常长的数字列表。我们称之为**向量嵌入（vector
+    embeddings）**。许多词嵌入还包括**位置编码（positional encoding）**，这是一种用数值表示特定单词或词元在句子中相对于其他单词位置的方式。这种位置编码帮助基于变换器（transformer）的模型理解该数据集中特定单词的含义。如果你正在预训练一个全新的模型或数据集，你可能最终需要训练你自己的分词器。
+- en: In computer vision, a common way of creating embeddings for images is *using
+    a pretrained vision model to create features*. This means you can use a fully-trained
+    computer vision model, such as **Contrastive Language-Image Pretraining** (**CLIP**),
+    while setting the weights to inference only. This is the same as freezing the
+    weights. That means as images pass through this network, the network creates a
+    dense representation of the image, without actually formally producing a prediction.
+    This dense representation then interacts with your trainable model, the one you
+    actually are running gradient descent against.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在计算机视觉中，一种常见的生成图像嵌入的方式是*使用预训练的视觉模型来创建特征*。这意味着你可以使用一个完全训练好的计算机视觉模型，比如**对比语言-图像预训练**（**CLIP**），并将权重设置为仅用于推理。这就相当于冻结权重。也就是说，当图像通过这个网络时，网络会创建图像的密集表示，而不是正式地做出预测。然后，这个密集表示会与可训练的模型进行交互，这个模型才是你实际用梯度下降算法训练的模型。
+- en: Now, let’s make these ideas more concrete through our example training Stable
+    Diffusion on SageMaker.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们通过在SageMaker上训练Stable Diffusion的示例来使这些概念更加具体化。
+- en: '![Figure 6.6 – Importing libraries](img/B18942_Figure_6.6.jpg)'
+  id: totrans-57
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图6.6 – 导入库](img/B18942_Figure_6.6.jpg)'
+- en: Figure 6.6 – Importing libraries
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图6.6 – 导入库
+- en: 'First, you’ll see I’m pointing to two critical libraries: `diffusers` and `transformers`.
+    Both of them are from our friends over at Hugging Face!'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，你会看到我指向了两个关键的库：`diffusers` 和 `transformers`。它们都是来自我们在Hugging Face的朋友们！
+- en: The `transformers` library provides a lot of helpful methods and techniques
+    for working with natural language. The `diffusers` library does the same, just
+    for models based on diffusion. Diffusion models tend to enable high-quality image
+    generation, commonly by providing a prompt from natural language. This means you
+    can provide a natural language prompt and have the model generate an image for
+    you!
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`transformers` 库提供了许多有用的自然语言处理方法和技术。`diffusers` 库也提供了类似的功能，只不过它是针对基于扩散的模型。扩散模型通常可以生成高质量的图像，通常通过提供自然语言提示。这意味着您可以提供自然语言提示，并让模型为您生成图像！'
+- en: In the preceding code snippet, we’re just pointing to the base models and tokenizers
+    we’ll use to featurize the image and text pairs we need to train a Stable Diffusion
+    model. After that, we need to download them properly.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码片段中，我们只是指向我们将用来特征化图像和文本对的基础模型和分词器，这些是我们训练 Stable Diffusion 模型所需的。之后，我们需要正确地下载它们。
+- en: '![Figure 6.7 – Importing models to train Stable Diffusion](img/B18942_Figure_6.7.jpg)'
+  id: totrans-62
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.7 – 导入模型以训练 Stable Diffusion](img/B18942_Figure_6.7.jpg)'
+- en: Figure 6.7 – Importing models to train Stable Diffusion
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.7 – 导入模型以训练 Stable Diffusion
+- en: To save time on my massive GPU cluster, I downloaded each of these models ahead
+    of time. I saved them in my S3 bucket, then created a *training channel* to point
+    to that S3 path when I run my SageMaker training job. The script then reads them
+    from the path on the training cluster where they’ve been downloaded at the start
+    of the job.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了节省我庞大的 GPU 集群的时间，我提前下载了这些模型。我将它们保存在我的 S3 存储桶中，然后创建了一个*训练渠道*，指向当我运行 SageMaker
+    训练作业时的 S3 路径。脚本随后从训练集群的路径读取它们，这些模型在作业开始时已经下载到该路径。
+- en: A channel is just a pointer from your SageMaker training job to any supported
+    data input. That can be an S3 path, an FSx for Lustre mount, or an EFS volume.
+    Channels are handy ways to organize different inputs for your job. You can create
+    them for pointing to different splits in your data, such as training and validation,
+    base models, scripts, or anything else you want. These are tracked for you as
+    job parameters, so you can see them stored with the rest of the job metadata.
+    They’re also searchable. SageMaker will copy, stream, or mount your channels after
+    the instances start, so make sure you keep the copy time to a minimum, as this
+    will reduce costs.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 渠道只是将您的 SageMaker 训练作业指向任何支持的数据输入。这可以是一个 S3 路径、一个 FSx for Lustre 挂载，或一个 EFS
+    卷。渠道是组织作业中不同输入的便捷方式。您可以为指向数据中不同切分的部分创建渠道，例如训练集和验证集、基础模型、脚本或任何您想要的内容。这些会作为作业参数进行跟踪，您可以看到它们与作业的其余元数据一起存储。它们也是可搜索的。SageMaker
+    会在实例启动后复制、流式传输或挂载您的渠道，因此请确保尽量减少复制时间，因为这将有助于降低成本。
+- en: Next, we need to *freeze the weights*. This is the same as setting them to “untrainable,”
+    or “inference only.” It means we only want the result of data passing through
+    this model, not a prediction. Fortunately for us, the syntax for this is dead
+    simple.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要*冻结权重*。这与将其设置为“不可训练”或“仅推理”是一样的。它意味着我们只想要数据通过该模型的结果，而不是预测。幸运的是，这个语法非常简单。
+- en: '![Figure 6.8 – Freezing parameters for the non-trainable models](img/B18942_Figure_6.8.jpg)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.8 – 冻结不可训练模型的参数](img/B18942_Figure_6.8.jpg)'
+- en: Figure 6.8 – Freezing parameters for the non-trainable models
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.8 – 冻结不可训练模型的参数
+- en: After this, we need to process our raw data to feed it into our neural network.
+    This is where tokenization and featurization come into play.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，我们需要处理原始数据，将其输入到神经网络中。这时，分词和特征化就显得尤为重要。
+- en: '![Figure 6.9 – Preprocessing the images](img/B18942_Figure_6.9.jpg)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.9 – 图像预处理](img/B18942_Figure_6.9.jpg)'
+- en: Figure 6.9 – Preprocessing the images
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.9 – 图像预处理
+- en: This snippet should be fairly understandable. We pass in our training set. This
+    function is explicitly expecting two columns, one with a path to images and one
+    with captions. Then it uses a Python `Image` object to simply read all the images
+    from disk and convert them into a machine-readable format. Typically this is three
+    channels, one each for red, green, and blue. Each channel is a two-dimensional
+    array or a simple list of lists of floating-point pixel values. After reading
+    the images, the function next tokenizes the captions. This script uses `ClipTokenizer`
+    to parse the provided natural text.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个代码片段应该比较容易理解。我们传入训练集。这个函数明确期望有两列，一列是图像路径，另一列是图像的描述。然后，它使用 Python `Image` 对象来简单地从磁盘读取所有图像并将它们转换为机器可读的格式。通常，这意味着三通道，每个通道分别对应红色、绿色和蓝色。每个通道是一个二维数组，或者是一个简单的浮点像素值列表。读取完图像后，函数接着会对描述进行分词处理。这个脚本使用
+    `ClipTokenizer` 来解析提供的自然语言文本。
+- en: This function is then applied after we’ve created the `DataSetDict()` object,
+    as in the notebook earlier in this chapter. We point to the training set, apply
+    the transformation, and we are ready to finally pass this into our data loader!
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数在我们创建了 `DataSetDict()` 对象后应用，就像本章前面笔记本中展示的那样。我们指向训练集，应用转换，然后我们终于可以将其传递给数据加载器了！
+- en: '![Figure 6.10 – Pointing to the training dataset](img/B18942_Figure_6.10.jpg)'
+  id: totrans-74
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.10 – 指向训练数据集](img/B18942_Figure_6.10.jpg)'
+- en: Figure 6.10 – Pointing to the training dataset
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.10 – 指向训练数据集
+- en: Now that we’ve learned how to build, test, and scale our data loader, let’s
+    learn about different optimizations for the entire data flow available on AWS.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经学习了如何构建、测试和扩展我们的数据加载器，让我们来学习 AWS 上可用的整个数据流的不同优化方法。
+- en: Optimizing your data pipeline on Amazon SageMaker
+  id: totrans-77
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 优化 Amazon SageMaker 上的数据管道
+- en: Remember that we’ve learned about ephemeral training on Amazon SageMaker, where
+    you can seamlessly spin up anywhere from a few to hundreds, to thousands of GPUs
+    on remote instances that are fully managed. Now, let’s learn about different options
+    to optimize sending data to your SageMaker Training instances.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，我们已经学习了 Amazon SageMaker 上的短暂训练，在那里你可以无缝地启动从几到几百、甚至几千个 GPU，运行完全托管的远程实例。现在，让我们学习如何优化数据发送到
+    SageMaker 训练实例的不同选项。
+- en: 'If you’ve worked with SageMaker Training, you’ll remember the different stages
+    your job moves through: starting the instances, downloading your data, downloading
+    your training image and invoking it, then uploading the finished model.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你曾经使用过 SageMaker 训练，你会记得你的任务经历的不同阶段：启动实例、下载数据、下载训练镜像并调用它，然后上传完成的模型。
+- en: Here’s a screenshot from my 2022 re:Invent demo, featuring Stable Diffusion.
+    You might ask yourself, how is it that I’m downloading 50 million image/text pairs
+    in only two minutes? The answer is an optimized data pipeline. In this case, I
+    used FSx for Lustre.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我 2022 年 re:Invent 演示中的一个截图，展示了 Stable Diffusion。你可能会问，我怎么能在仅仅两分钟内下载 5000
+    万对图像/文本呢？答案是优化的数据管道。在这个案例中，我使用了 FSx for Lustre。
+- en: '![Figure 6.11 – Training job status](img/B18942_Figure_6.11.jpg)'
+  id: totrans-81
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.11 – 训练任务状态](img/B18942_Figure_6.11.jpg)'
+- en: Figure 6.11 – Training job status
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.11 – 训练任务状态
+- en: For much smaller datasets, such as those that are only a few tens of GB, it’s
+    fine to simply point to S3 as your input training channel. When you use S3 as
+    your training input, SageMaker can either *copy* (File Mode) or *stream* (Pipe
+    Mode or Fast File Mode) your files during training. Moving data around is generally
+    a slow process, and here it’s bottlenecked by the bandwidth of your lead training
+    machine. Using File Mode with S3 as your input can easily add tens of minutes
+    to your training time, and possibly hours or more as your dataset scales. When
+    I train on 100 GB, for example, using S3 as my input data mode without streaming
+    would add a solid 20 minutes to my training time. Sadly, I am paying for that
+    wait time, because the instances have already initialized, so it’s in my best
+    interest to optimize my data pipeline.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于非常小的数据集，比如只有几十 GB 的数据，直接将 S3 作为输入训练通道是完全可以的。当你使用 S3 作为训练输入时，SageMaker 可以在训练过程中以*复制*（文件模式）或*流式传输*（管道模式或快速文件模式）方式处理你的文件。数据的移动通常是一个缓慢的过程，这里受到主训练机器带宽的瓶颈限制。使用文件模式将
+    S3 作为输入，可能会让你的训练时间增加数十分钟，随着数据集规模的扩大，可能会增加几个小时甚至更长时间。例如，当我训练 100 GB 数据时，如果使用 S3
+    作为输入数据模式而不进行流式传输，训练时间就会增加整整 20 分钟。遗憾的是，我需要为这段等待时间付费，因为实例已经初始化，所以优化我的数据管道是对我最有利的选择。
+- en: In some cases, a simple and cost-effective alternative to the S3 copy option
+    is **streaming**, using either Pipe Mode or Fast File Mode. Pipe Mode requires
+    some scripting modifications on your end, but happily, Fast File Mode does not!
+    However, Fast File Mode is known to have some scaling issues when you work with
+    a larger number of files. To solve this issue, and to handle data loading at scale
+    for hundreds to thousands of GPUs, we typically recommend FSx for Lustre.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，S3 复制选项的简单且具有成本效益的替代方案是**流式传输**，可以使用管道模式（Pipe Mode）或快速文件模式（Fast File
+    Mode）。管道模式需要您在本地做一些脚本修改，但幸运的是，快速文件模式则不需要！然而，快速文件模式在处理大量文件时已知存在扩展性问题。为了解决这个问题，并处理数百到数千个
+    GPU 的数据加载，我们通常推荐使用 FSx for Lustre。
+- en: FSx for Lustre is a distributed file system that easily connects to a data repository
+    in S3, mounts to your SageMaker Training jobs, and executes a high throughput
+    training loop on your behalf. This is because it reads the data from S3 once,
+    then stores it in a cache and *scales reads horizontally with your mounts*. Said
+    another way, once your data is loaded into Lustre, the training loop throughput
+    reads and writes scale linearly as a function of your accelerators.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: FSx for Lustre 是一个分布式文件系统，能够轻松连接到 S3 中的数据存储库，挂载到您的 SageMaker 训练任务上，并代表您执行高吞吐量的训练循环。这是因为它从
+    S3 读取数据一次，然后将数据存储在缓存中，并且*通过挂载水平扩展读取操作*。换句话说，一旦数据加载到 Lustre 中，训练循环的吞吐量读写会随着加速器的数量线性扩展。
+- en: You’ll need to create Lustre in a VPC, that is to say, in your virtual private
+    cloud, on AWS. This is good news for those who work with personally identifiable
+    information or in heavily regulated industries. Using VPCs, you can build and
+    maintain a private network on the cloud, using security and networking controls
+    to manage traffic and secure access to your highly restricted content.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要在 VPC 中创建 Lustre，也就是说，在 AWS 上的虚拟私有云中创建 Lustre。这对处理个人身份信息或在高度监管行业中工作的人员来说是个好消息。通过使用
+    VPC，您可以在云上构建和维护一个私有网络，利用安全性和网络控制来管理流量并确保对高度受限内容的访问。
+- en: Honestly, manage traffic and secure access from an S3 data repository is pretty
+    straightforward. It usually takes me about twenty minutes, with a few of my own
+    hiccups along the road, and that includes the volume creation time.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 说实话，管理来自 S3 数据存储库的流量并确保安全访问相当直接。通常我大约需要二十分钟，过程中偶尔会遇到一些小问题，这包括了卷创建的时间。
+- en: 'Here’s how to establish the data repository when you are creating Lustre:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是在创建 Lustre 时建立数据存储库的方法：
+- en: First, point to your S3 path with all of the data.
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，指向包含所有数据的 S3 路径。
+- en: Second, determine what type of policies you’d like to set. An import policy
+    will determine how Lustre automatically grabs data from S3, and an export policy
+    determines how Lustre automatically pushes data to S3.
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 其次，确定您想要设置的策略类型。导入策略将决定 Lustre 如何自动从 S3 获取数据，而导出策略则决定 Lustre 如何自动将数据推送到 S3。
+- en: 'Lastly, here’s a view of my volume after I loaded it with 9.5 TB of Stable
+    Diffusion image/text pairs:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，这里是我加载了 9.5 TB 稳定扩散图像/文本对后的卷视图：
+- en: '![](img/B18942_Figure_6.12.jpg)'
+  id: totrans-92
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B18942_Figure_6.12.jpg)'
+- en: Figure 6.12 – My FSx for Lustre volume
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.12 – 我的 FSx for Lustre 卷
+- en: 'Once you have Lustre created, you’ll need to spend another thirty minutes or
+    so testing and perfecting the connection from SageMaker to Lustre. This entails
+    configuring the VPC and its relevant subnet. Currently, these are the key steps:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦创建了 Lustre，您需要花大约三十分钟左右的时间来测试和完善从 SageMaker 到 Lustre 的连接。这包括配置 VPC 及其相关子网。目前，以下是关键步骤：
+- en: Make sure you have an internet gateway in your target VPC.
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确保您的目标 VPC 中有一个互联网网关。
+- en: Make sure the subnet where you created Lustre has a route to that gateway.
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确保创建 Lustre 的子网有通往该网关的路由。
+- en: Ensure the security group for that subnet allows inbound and outbound traffic,
+    defined in multiple ways.
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确保该子网的安全组允许以多种方式定义的进出流量。
+- en: Establish an S3 VPC endpoint for your target buckets to allow SageMaker to upload
+    the finished model artifacts to S3 on completion.
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为您的目标存储桶建立一个 S3 VPC 终端节点，以允许 SageMaker 在完成后将模型结果上传到 S3。
+- en: I’ve seen some configurations with two subnets, one to interact with the actual
+    public internet to `pip install` new packages, and one to run the training jobs.
+    Personally, I skipped over this by building a Docker container with all my packages,
+    then loaded this to ECR, and pointed to it when starting my training job.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我见过一些配置，它们有两个子网，一个用于与实际的公共互联网交互以执行 `pip install` 新包，另一个用于运行训练任务。就个人而言，我跳过了这个过程，通过构建一个包含所有包的
+    Docker 容器，然后将其加载到 ECR，在启动训练任务时指向它。
+- en: When you run your training jobs, if you want to point to a specific VPC, make
+    sure you pass in the relevant credentials to the estimator. You’ll also need to
+    pass a few extra parameters to point to FSx for Lustre.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你运行训练作业时，如果想指向特定的 VPC，确保将相关凭证传递给估算器。你还需要传递一些额外的参数来指向 FSx for Lustre。
+- en: Lastly, you can also mount Lustre to your notebooks directly! In this setup,
+    you’ll need to *rebuild the notebook instance to connect to the same VPC credentials*.
+    That actually isn’t necessary to launch a job on Lustre, but it is required to
+    mount the volume directly. Here’s a nice script that helps you do this *(1)*.
+    For an even more detailed consideration of the pros and cons of each of these
+    options, see our blog post on the topic *(2)*.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，你还可以直接将 Lustre 挂载到你的笔记本电脑上！在这种设置中，你需要*重新构建笔记本实例以连接到相同的 VPC 凭证*。实际上，启动 Lustre
+    作业时并不需要这样做，但要直接挂载卷时是必须的。这里有一个很好的脚本，可以帮助你完成这个操作 *(1)*。如果你想更详细地了解每种选项的优缺点，请查看我们关于这个话题的博客文章
+    *(2)*。
+- en: Now that you have a better idea of how to optimize your data pipeline options
+    to point to SageMaker for the training loop, let’s take a step back and evaluate
+    a few options for downloading and transforming datasets at scale on AWS!
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你对如何优化数据管道选项，指向 SageMaker 进行训练循环有了更好的了解，让我们退后一步，评估一下在 AWS 上大规模下载和转换数据集的几种选项！
+- en: Transforming deep learning datasets at scale on AWS
+  id: totrans-103
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在 AWS 上大规模转换深度学习数据集
+- en: At this point, you must be thinking now I know how to build and test my data
+    loader, and even put my data on FSx for Lustre to integrate with SageMaker training,
+    but what if I need to do large-scale downloads or transformations ahead of time?
+    How can I do those at a large scale, in a cost-effective and simple way?
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一点上，你一定在想，我现在知道如何构建和测试我的数据加载器，甚至将我的数据放到 FSx for Lustre 上，以便与 SageMaker 训练集成。但如果我需要提前进行大规模的下载或转换怎么办？如何以大规模、具有成本效益且简单的方式完成这些操作？
+- en: While there are many different tools and perspectives for attacking this problem,
+    my personal favorite is always to take the simplest, least expensive, and most
+    scalable approach. To me, that’s actually with **job parallelism** on SageMaker
+    Training.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然有许多不同的工具和方法可以解决这个问题，但我个人最喜欢的始终是采取最简单、最经济且最具可扩展性的方法。对我来说，实际上这是使用 **作业并行性**
+    在 SageMaker 训练上实现的。
+- en: As it turns out, SageMaker Training is a very broad compute service offering
+    you can use to run essentially any type of script. In particular, you can use
+    it to run large CPU-based data transformation jobs in parallel. There’s no upper
+    limit on how many SageMaker Training jobs you can run, and we have customers who
+    run *thousands of jobs a day* in order to train models for their unique business
+    purposes. This might be training tiny models for advertising, personalized recommendations,
+    pricing, or other enhancements.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事实证明，SageMaker 训练是一项非常广泛的计算服务，你可以用它来运行几乎任何类型的脚本。特别是，你可以用它并行运行大型 CPU 数据转换作业。你可以运行的
+    SageMaker 训练作业数量没有上限，我们有客户每天运行 *数千个作业* 来训练模型，以满足他们独特的业务需求。这可能是为广告、个性化推荐、定价或其他增强功能训练小型模型。
+- en: 'For my Stable Diffusion case study, I actually used 18 concurrent SageMaker
+    jobs to download all of my data! First, I used one large CPU job to download all
+    of the Parquet files included in the Laion-5B dataset. Then, I looped through
+    them, sending each Parquet file to its own job. It looked something like this:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我的 Stable Diffusion 案例研究，我实际上使用了 18 个并发的 SageMaker 作业来下载我的所有数据！首先，我使用了一个大的
+    CPU 作业来下载 Laion-5B 数据集中的所有 Parquet 文件。然后，我对它们进行循环，将每个 Parquet 文件发送到它自己的作业。它大致看起来是这样的：
+- en: '![Figure 6.13 – Use job parallelism to transform data at scale](img/B18942_Figure_6.13.jpg)'
+  id: totrans-108
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.13 – 使用作业并行性大规模转换数据](img/B18942_Figure_6.13.jpg)'
+- en: Figure 6.13 – Use job parallelism to transform data at scale
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.13 – 使用作业并行性大规模转换数据
+- en: See how I am actually running 18 different jobs? This way, you can easily track,
+    manage, and assess each job. All of the results are sent back to S3 – in this
+    case, by the tool itself, which writes to S3 on my behalf. Now I don’t even need
+    to use Spark! I can just run as many SageMaker jobs as I need to, using Python
+    and its `multiprocessing` package, to execute as many tasks as I need.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你看到我实际上在运行 18 个不同的作业吗？这样，你可以轻松追踪、管理和评估每个作业。所有结果都返回到 S3 —— 在这种情况下，是通过工具本身，它代表我写入
+    S3。现在我甚至不需要使用 Spark！我可以根据需要运行任意多的 SageMaker 作业，使用 Python 和其 `multiprocessing`
+    包来执行所需的多个任务。
+- en: '![Figure 6.14 – A data processing script](img/B18942_Figure_6.14.jpg)'
+  id: totrans-111
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 6.14 – 数据处理脚本](img/B18942_Figure_6.14.jpg)'
+- en: Figure 6.14 – A data processing script
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 6.14 – 数据处理脚本
+- en: 'How does `multiprocessing` with Python work, you ask? It’s simple. The lynchpin
+    is the critical `Pool.map()` process. First, you create the pool by providing
+    it with the number of available CPUs. You can look that up using the `multiprocess.cpu_count()`
+    method. Then you’ll bring two objects to `map()`: first, a list of objects you
+    want farmed out to all of the processes, and second, a function that you want
+    executed on each object in that list. It’s basically the concept of a `for`loop,
+    but here, instead of using only one process, you’re using as many processes as
+    are available on the instance. That means if you are going from 2 CPUs up to 96
+    CPUs, you can run more than 10x faster.'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会问，Python的`multiprocessing`是如何工作的？其实很简单。关键在于`Pool.map()`这个过程。首先，你通过提供可用CPU的数量来创建池。你可以使用`multiprocess.cpu_count()`方法查找这个数量。然后，你将两个对象传递给`map()`：第一个是你想分发给所有进程的对象列表，第二个是你希望在列表中的每个对象上执行的函数。基本上，这就是一个`for`循环的概念，不过在这里，你不仅使用一个进程，而是使用实例上所有可用的进程。这意味着，如果你从2个CPU增加到96个CPU，你的运行速度将提升超过10倍。
+- en: It’s a great idea to offload as much data transformation to CPUs as you can
+    because CPUs are dirt cheap. In comparing the costs of my 192 GPUs per hour versus
+    18 CPU-based jobs, the CPU was about 13x cheaper than the GPUs!
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将尽可能多的数据转换工作交给CPU处理是个不错的主意，因为CPU非常便宜。以我每小时使用192个GPU与18个基于CPU的作业的成本做比较，CPU的成本大约是GPU的13倍便宜！
+- en: As you also may have guessed, we have literally hundreds of other options for
+    manipulating data on AWS. I won’t go into detail on that here, but feel free to
+    explore for yourself.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所料，我们实际上有数百种其他方法可以在AWS上操作数据。我这里不打算详细讲解这些内容，但你可以随时自己去探索。
+- en: Summary
+  id: totrans-116
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: At this point in the book, and in your project, you should have a fully functional
+    data loader built, tested, and optimized on both your local notebook and your
+    SageMaker training instances. You should have your entire dataset identified,
+    downloaded, processed, and ready to run through your training loop. You should
+    have done at least one full pass through your training loop with a tiny sample
+    of your dataset – something as small as 100 samples would be fine. You should
+    have identified how you want to send your large dataset to your SageMaker training
+    instances, possibly by using FSx for Lustre, and you should have this built, tested,
+    and operational. You should also know a few other ways to store and process data
+    on AWS.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书的这一部分，以及在你的项目中，你应该已经构建、测试并优化了一个完全可用的数据加载器，且在本地笔记本和SageMaker训练实例上都能正常工作。你应该已经确定、下载、处理并准备好整个数据集，准备通过训练循环运行。你应该至少用数据集中的一个小样本（例如100个样本）完成过一次完整的训练循环。你应该已经确定如何将大型数据集发送到SageMaker训练实例，可能是使用FSx
+    for Lustre，你应该已经建立、测试并投入使用。你还应该了解其他一些在AWS上存储和处理数据的方法。
+- en: You should be very comfortable making architectural decisions that reduce your
+    project costs, such as opting for CPU-based data downloading and processing, along
+    with the Python `multiprocessing` package to easily farm your tasks out to all
+    available CPUs. You should also be comfortable parallelizing jobs on SageMaker
+    training, such that you can run different jobs at the same time, each working
+    on different parts of your project.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该非常熟悉做出能够降低项目成本的架构决策，比如选择基于CPU的数据下载和处理，并使用Python的`multiprocessing`包，轻松地将任务分发到所有可用的CPU上。你也应该能够轻松地在SageMaker训练中并行化作业，使得你可以同时运行不同的作业，每个作业处理项目的不同部分。
+- en: 'Now that you’ve fully prepared your dataset, in the next chapter, we’ll move
+    on to the main event: training your model!'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经完全准备好数据集，在下一章中，我们将进入主题：训练你的模型！
+- en: References
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 参考文献
+- en: Please go through the following content for more information on a few topics
+    covered in the chapter.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请参阅以下内容，了解本章中涉及的几个主题的更多信息。
+- en: '*amazon-sagemaker-notebook-instance-lifecycle-config-samples*: [https://github.com/aws-samples/amazon-sagemaker-notebook-instance-lifecycle-config-samples/blob/master/scripts/mount-fsx-lustre-file-system/on-start.sh](https://github.com/aws-samples/amazon-sagemaker-notebook-instance-lifecycle-config-samples/blob/master/scripts/mount-fsx-lustre-file-system/on-start.sh'
+  id: totrans-122
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*amazon-sagemaker-notebook-instance-lifecycle-config-samples*: [https://github.com/aws-samples/amazon-sagemaker-notebook-instance-lifecycle-config-samples/blob/master/scripts/mount-fsx-lustre-file-system/on-start.sh](https://github.com/aws-samples/amazon-sagemaker-notebook-instance-lifecycle-config-samples/blob/master/scripts/mount-fsx-lustre-file-system/on-start.sh'
+- en: )
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: )
+- en: '*Choose the best data source for your Amazon SageMaker training* *job*: [https://aws.amazon.com/blogs/machine-learning/choose-the-best-data-source-for-your-amazon-sagemaker-training-job/](https://aws.amazon.com/blogs/machine-learning/choose-the-best-data-source-for-your-amazon-sagemaker-training-job/)'
+  id: totrans-124
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*为你的 Amazon SageMaker 训练* *作业选择最佳数据源*：[https://aws.amazon.com/blogs/machine-learning/choose-the-best-data-source-for-your-amazon-sagemaker-training-job/](https://aws.amazon.com/blogs/machine-learning/choose-the-best-data-source-for-your-amazon-sagemaker-training-job/)'
+- en: 'Part 3: Train Your Model'
+  id: totrans-125
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第3部分：训练你的模型
+- en: In part 3, you’ll learn how to train your large-scale language and vision model.
+    You’ll learn how to find the right hyperparameters, ensure that loss decreases,
+    and troubleshoot ongoing performance issues.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第3部分，你将学习如何训练大规模语言和视觉模型。你将学习如何找到合适的超参数，确保损失下降，并解决持续的性能问题。
+- en: 'This section has the following chapters:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节包含以下章节：
+- en: '[*Chapter 7*](B18942_07.xhtml#_idTextAnchor116), *Finding the Right Hyperparameters*'
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第7章*](B18942_07.xhtml#_idTextAnchor116)，*找到正确的超参数*'
+- en: '[*Chapter 8*](B18942_08.xhtml#_idTextAnchor127), *Large-Scale Training on SageMaker*'
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第8章*](B18942_08.xhtml#_idTextAnchor127)，*在 SageMaker 上进行大规模训练*'
+- en: '[*Chapter 9*](B18942_09.xhtml#_idTextAnchor138), *Advanced Training Concepts*'
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[*第9章*](B18942_09.xhtml#_idTextAnchor138)，*高级训练概念*'

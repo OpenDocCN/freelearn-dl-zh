@@ -1,0 +1,973 @@
+- en: State Inference - Predicting the States
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 状态推理 - 预测状态
+- en: In the previous chapters, we introduced Markov chains and the **Hidden Markov
+    Model** (**HMM**), and saw examples of modeling problems using them. In this chapter,
+    we will see how we can make predictions using these models or ask the models questions
+    (known as **inference**). The algorithms used for computing these values are known
+    as **inference algorithms**. In this chapter, we will specifically look into computing
+    probability distribution over the state variables.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前几章中，我们介绍了马尔可夫链和**隐马尔可夫模型**（**HMM**），并展示了如何用它们来建模问题。在本章中，我们将看到如何使用这些模型进行预测或向模型提问（称为**推理**）。用于计算这些值的算法称为**推理算法**。在本章中，我们将专门研究如何计算状态变量的概率分布。
+- en: 'This chapter will cover the following topics:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
+- en: State inference in HMM
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 隐马尔可夫模型中的状态推理
+- en: Dynamic programming
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 动态规划
+- en: Forward-backward algorithm
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 前向-后向算法
+- en: Viterbi algorithm
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 维特比算法
+- en: State inference in HMM
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 隐马尔可夫模型中的状态推理
+- en: Let's start with a simple example to show what kind of interesting questions
+    we can ask our HMM models. We are taking an example of *robot localization.* There
+    are a lot of variations of this example, but we are assuming that a robot is moving
+    in a 2D grid, as shown in *Figure 3.1*. The robot also has four sensors on it.
+    Each of these sensors detects whether there's a wall right next to the robot in
+    the sensor's direction.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从一个简单的例子开始，展示我们可以对我们的HMM模型提出什么有趣的问题。我们以*机器人定位*为例。这个例子有很多变体，但我们假设机器人在一个二维网格中移动，如*图
+    3.1*所示。机器人上有四个传感器，这些传感器能检测机器人周围是否有墙壁，并且每个传感器都有一个特定的方向。
+- en: 'We would like to model the movement of the robot in the following grid along
+    with the observations from our sensors:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望在以下网格中建模机器人的运动，并结合传感器的观测结果：
+- en: '![](img/a54806be-d44a-44da-b9b7-3bdcd05907c7.png)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a54806be-d44a-44da-b9b7-3bdcd05907c7.png)'
+- en: 'Figure 3.1: The probability distribution of the position of the robot over
+    time'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.1：机器人在不同时间点的位置概率分布
+- en: In *Figure 3.1*, we see how the observations at different time instances change
+    the probability of the location of the robot in the grid. Initially, we start
+    with a uniform probability over all the positions in the grid. Now, at time *t=1*,
+    let's say the sensors of our robot show that there are walls on the top and bottom
+    sides. Having this observation will change our perception of the location of the
+    robot. Now we will have a higher probability of the robot being in either blocks
+    2, 4, 10, or 12, as shown in the second block in *Figure 3.1*. If we are at time
+    instance *t=2*, our robot's sensors say that there is a wall only at the top,
+    we will have the highest probability of it being in block 3, as shown in the third
+    block in *Figure 3.1*. This is because we knew its last most probable position
+    and, when combining that information with the current sensor readings, block 3 is
+    the robot's likely location. Now, if we are at time *t=3*, the robot's sensors
+    indicate there are walls on the left and right, then it would mean that the robot
+    is most likely in in block 7\. This process enables us able to locate the position
+    of our robot in the grid based on just the sensor readings over time.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*图 3.1*中，我们可以看到不同时间点的观察如何改变机器人在网格中位置的概率。最初，我们从对网格中所有位置的均匀概率开始。现在，在时间*t=1*时，假设我们机器人的传感器显示出顶部和底部有墙壁。得到这个观察结果后，我们对机器人位置的感知会发生变化。现在，我们会更倾向于认为机器人处于2、4、10或12块区域，如*图
+    3.1*中的第二块所示。如果我们在时间实例*t=2*，机器人传感器显示只有顶部有墙壁，那么它最有可能处于3块区域，如*图 3.1*中的第三块所示。这是因为我们知道它上次最有可能的位置，并且将这个信息与当前的传感器读数结合起来，3块区域就是机器人可能的位置。现在，如果我们在时间*t=3*，机器人传感器显示左右两侧都有墙壁，那么它最有可能位于7块区域。这一过程使我们能够仅凭传感器读数随着时间推移定位机器人在网格中的位置。
+- en: 'Since we are modelling the transition of state (position in the grid) of the
+    robot over some duration of time along with an outcome at each instance (sensor
+    output), HMM seems to be the perfect model in the situation. In this example,
+    we are assuming that we know the transition probability of the robot''s position.
+    We are also assuming that we know the structure of the grid and therefore we will
+    know the emission probabilities. We can use the emission probability to also model
+    the uncertainty in the output of the sensors since they might give noise results
+    at some instance:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们在模型中考虑了机器人在一段时间内的状态转移（网格中的位置）以及每个时刻的结果（传感器输出），因此 HMM 在这种情况下似乎是完美的模型。在这个示例中，我们假设我们知道机器人的位置转移概率。我们还假设我们知道网格的结构，因此我们也能知道发射概率。我们可以利用发射概率来建模传感器输出的不确定性，因为它们在某些时刻可能会给出噪声结果：
+- en: '![](img/0b2385a5-9df2-418b-8e35-ba8f977e0712.png)'
+  id: totrans-14
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/0b2385a5-9df2-418b-8e35-ba8f977e0712.png)'
+- en: 'Figure 3.2: An example HMM for the robot localization'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.2：机器人定位的一个 HMM 示例
+- en: Now let's think about the kind of questions we might want to ask our model.
+    We might be interested in knowing the position of our robot at any time instance
+    given all the observations till that time instance. Another question that we might
+    want to ask is the probability of our sensor output at some time instance given
+    all the positions of the robot until that time instance. We might also be interested
+    in computing the joint distribution over our observed variables and the position
+    of the robot. All these values can be easily computed using the *forward algorithm,
+    backward algorithm, or forward-backward algorithm*.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们考虑一下我们可能想要向模型提问的问题。我们可能有兴趣了解在某个时刻给定直到该时刻的所有观测值后，机器人的位置。我们可能还想知道在某个时刻，给定直到该时刻的所有位置，传感器输出的概率。我们也可能有兴趣计算我们观察到的变量和机器人位置的联合分布。所有这些值都可以使用
+    *前向算法、后向算法或前向-后向算法* 轻松计算。
+- en: Now, instead of asking for distributions, we might be interested in the most
+    probable path the robot took. To compute the most probable path, we would need
+    to do a MAP inference over the state at each time instance of the robot. This
+    can be done efficiently using the Viterbi algorithm.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们不再询问分布，而是可能对机器人走过的最可能路径感兴趣。为了计算最可能的路径，我们需要对机器人每个时刻的状态进行 MAP 推理。使用维特比算法可以高效地完成这项工作。
+- en: In the following sections, we will introduce these algorithms formally and see
+    how we can implement them. All of these algorithms rely on a very important programming
+    paradigm known as **dynamic programming***.* Dynamic programming allows us to
+    run these inference algorithms in HMMs in tractable time. We will discuss dynamic
+    programming in detail in the next section.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将正式介绍这些算法，并看看如何实现它们。所有这些算法都依赖于一个非常重要的编程范式，称为**动态规划**。*动态规划使我们能够在可处理的时间内运行这些
+    HMM 推理算法。我们将在下一节详细讨论动态规划。*
+- en: Dynamic programming
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 动态规划
+- en: Dynamic programming is a programming paradigm in which we divide a complex problem
+    into smaller sub-problems. We solve these sub-problems and store the results.
+    Whenever we need to recompute the same sub-problem again, we just used our stored
+    results, thus saving us computation time at the expense of using storage space.
+    This technique of caching the results of sub-problems is known as **memoization***. *Therefore,
+    using dynamic programming allows us to speed up our computations by using memoization,
+    and in some cases, it can bring the computational complexity from exponential
+    to linear, as we will see in the following example.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 动态规划是一种编程范式，在这种范式中，我们将一个复杂问题划分为更小的子问题。我们解决这些子问题并存储结果。每当我们需要重新计算相同的子问题时，我们只需使用存储的结果，从而节省了计算时间，代价是使用了存储空间。这种缓存子问题结果的技术称为**备忘录法**。*因此，使用动态规划通过备忘录法可以加速我们的计算，并且在某些情况下，它能将计算复杂度从指数级降低到线性级，正如我们将在以下示例中看到的那样。*
+- en: 'One of the simplest examples of optimization using dynamic programming is computing
+    the *n^(th)* member of the Fibonacci sequence. Any term in a Fibonacci sequence
+    is the sum of the last two terms, which can be formally defined as follows:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用动态规划优化的最简单示例之一是计算斐波那契数列的 *n^(th)* 项。斐波那契数列中的任何项都是前两项之和，可以正式定义为如下：
+- en: '*fib(0)=0*'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*fib(0)=0*'
+- en: '*fib(1)=1*'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*fib(1)=1*'
+- en: '*fib(n)=fib(n-1)+fib(n-2)*'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*fib(n)=fib(n-1)+fib(n-2)*'
+- en: 'Here, *fib(n)* represents the *n*^(*th* )number in the Fibonacci sequence.
+    From the definition, we can easily compute the Fibonacci sequence as: *0, 1, 1,
+    2, 3, 5, 8, 13*.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，*fib(n)*表示斐波那契数列中的*n*^(*th*)项。根据定义，我们可以轻松地计算出斐波那契数列：*0, 1, 1, 2, 3, 5, 8,
+    13*。
+- en: 'Now let''s say we want to write a function which would return the *n*^(*th* )number
+    in the Fibonacci sequence. A simple way to write this function could be to use
+    recursion, as shown in the following code:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，假设我们想写一个函数，它将返回斐波那契数列中的*n*^(*th*)项。写这个函数的一个简单方法是使用递归，如下所示：
+- en: '[PRE0]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'In the preceding code, we have a simple `if ... else` condition, where if `n`
+    is less than or equal to 1, we return the value of `n`; otherwise, we use recursion
+    to compute the sum of the previous two numbers in the sequence. Now let''s try
+    to determine the number of calls to the `fibonacci` function for a small `n`,
+    let''s say 5\. Our function calls would look something like the following:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码中，我们有一个简单的`if ... else`条件语句，其中如果`n`小于或等于1，我们返回`n`的值；否则，我们使用递归来计算数列中前两个数字的和。现在让我们尝试确定对于一个小的`n`值，比如5，`fibonacci`函数的调用次数。我们的函数调用可能类似于以下方式：
+- en: '[PRE1]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: For such a small value of `n`, we can still see the repetition in the number
+    of calls to the function with the same argument. We can see that `fibonacci(1)`
+    is being called five times and `fibonacci(0)` is getting called three times. If
+    we move a level up, we can see that `fibonacci(2)` is also getting called multiple
+    times. In this case, the computation is still tractable, but for large values
+    of `n` the run time of this function would grow exponentially; the runtime complexity
+    is given by *O(2^n)*. To give an idea of how fast the runtime grows, to compute
+    the 1,000^(th )term in the Fibonacci sequence using this algorithm, we would need
+    more time than the age of our universe on a computer built with all the electrons
+    in our observable universe.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于如此小的`n`值，我们仍然可以看到在相同参数的函数调用中存在重复。我们可以看到`fibonacci(1)`被调用了五次，而`fibonacci(0)`被调用了三次。如果我们再往上看一层，我们会看到`fibonacci(2)`也被多次调用。在这种情况下，计算仍然是可处理的，但对于较大的`n`值，这个函数的运行时间将呈指数增长；其时间复杂度为*O(2^n)*。为了让大家了解运行时间的增长速度，使用该算法计算斐波那契数列的第1,000项，我们所需要的时间将比我们可观察到的宇宙的年龄还要长，前提是计算机上有宇宙中所有的电子。
+- en: 'Since we have proved that it is impossible to compute the *n^(th)* term of
+    the Fibonacci sequence for any moderately large `n`, we will look at another algorithm
+    that is based on dynamic programming and looks as follows:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们已经证明，对于任何适中的`n`值，计算斐波那契数列的*n*^(*th*)项是不可能的，因此我们将研究另一种基于动态规划的算法，代码如下所示：
+- en: '[PRE2]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: In this case, we are storing the result of each of our calls to the function
+    in a dictionary, which allows us to access it in *O(1)*. Because of this cache, we
+    only need to compute each term of the Fibonacci sequence exactly once. For each
+    call, we first check whether we have already computed the value. If we have already
+    computed it, we directly access it from the dictionary, otherwise we compute the
+    value. The runtime complexity of this algorithm is *O(n)* since we are computing
+    each term in the sequence exactly once. We can see, therefore, that using dynamic
+    programming facilitates a trade-off between the runtime complexity and memory
+    complexity, and this allows us to bring down the runtime complexity from being
+    exponential to linear.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，我们将每次调用函数的结果存储在字典中，这样我们就可以在*O(1)*的时间内访问它。由于这个缓存，我们只需要计算斐波那契数列的每一项一次。对于每次调用，我们首先检查是否已经计算过该值。如果已经计算过，我们直接从字典中访问该值，否则我们进行计算。这个算法的运行时复杂度为*O(n)*，因为我们每次只计算一次数列中的每一项。因此，我们可以看到，使用动态规划可以在运行时复杂度和内存复杂度之间进行权衡，从而将运行时复杂度从指数级降低到线性级。
+- en: 'If we think about the way we have programmed the Fibonacci series, we start
+    with trying to compute the *n^(th)* number and then compute the values we are
+    missing. This can be thought of as a top-down approach. Another approach could
+    be a bottom-up approach, in which we start by computing the 0th term and then
+    move to the first, second, and so on. The concept of dynamic programming is the
+    same in both cases, but with just a minor difference in how we write the code,
+    shown as follows:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们考虑一下我们编写斐波那契数列的方式，我们首先尝试计算*n*^(*th*)项，然后计算缺失的值。这可以看作是一种自顶向下的方法。另一种方法是自底向上的方法，我们从计算第0项开始，然后逐步计算第一项、第二项，依此类推。动态规划的概念在这两种情况下是相同的，但在如何编写代码上有一个小的差异，如下所示：
+- en: '[PRE3]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: As you can see, the code in the preceding example is much simpler, and we don't
+    need to check whether we have already computed the values. This works well in
+    problems where we need all the previous values to compute the next value. However,
+    if we don't need all the previous values, we will end up computing unnecessary
+    values with the bottom-up approach.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，前面示例中的代码要简洁得多，我们不需要检查是否已经计算过这些值。这对于需要利用所有先前值来计算下一个值的问题非常有效。然而，如果我们不需要所有的先前值，我们最终会在自下而上的方法中计算一些不必要的值。
+- en: We will see in the next sections that the inference algorithms in HMMs allow
+    us to use dynamic programming to break the problem into sub-problems, which makes
+    computations tractable.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将看到HMM中的推理算法使我们能够使用动态规划将问题拆解成子问题，从而使得计算变得可处理。
+- en: Forward algorithm
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 前向算法
+- en: 'Let''s now formally define our problem for the forward algorithm. In the case
+    of the forward algorithm, we are trying to compute the joint distribution of the
+    position of the robot at any time instance using the output of the sensors till
+    that time instance, as shown in the following diagram:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们正式定义前向算法中的问题。在前向算法的情况下，我们试图计算机器人在任何时间点的联合分布，利用到那个时间点为止传感器的输出，如下图所示：
+- en: '*Forward algorithm: P(Z[k], X[1:k])*'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*前向算法：P(Z[k], X[1:k])*'
+- en: '![](img/d6e7d007-0276-4568-b8ed-40a03bd69f3c.png)'
+  id: totrans-41
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d6e7d007-0276-4568-b8ed-40a03bd69f3c.png)'
+- en: 'Figure 3.3: HMM showing two time slices, *k-1* and **k**'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图3.3：HMM显示两个时间片，*k-1*和**k**
+- en: 'To compute this probability distribution, we will try to split the joint distribution
+    term into smaller known terms. As we will see, we can write a recursion formula
+    over time for the distribution. We start by introducing a new variable, *Z[k-1]*,
+    in the distribution, *P(Z[k], X[1:k])*, as follows:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了计算这个概率分布，我们将尝试将联合分布项拆分成更小的已知项。正如我们将看到的，我们可以为该分布写出一个递归公式。我们首先通过在分布*P(Z[k],
+    X[1:k])*中引入一个新变量*Z[k-1]*，如下所示：
+- en: '![](img/977c0d76-4972-4f48-a30e-222d265ded21.png)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/977c0d76-4972-4f48-a30e-222d265ded21.png)'
+- en: 'The marginalization rule of probability is:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 概率的边缘化法则是：
+- en: '![](img/131323d8-8601-4e5f-ae64-4c1516addb41.png)'
+  id: totrans-46
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/131323d8-8601-4e5f-ae64-4c1516addb41.png)'
+- en: 'The product rule of probability is:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 概率的乘法法则是：
+- en: '![](img/30fffc1c-1dc9-4264-ac07-c6ed7aca8d43.png)'
+  id: totrans-48
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/30fffc1c-1dc9-4264-ac07-c6ed7aca8d43.png)'
+- en: 'Here, we are basically using the *marginalization* rule of probability to introduce
+    *Z[k-1]* and then summing its states. In this case, we have assumed that *Z[k-1]* has
+    *m* states, so now we can use the *product* rule of probability to split this
+    term as follows:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们基本上是使用概率的*边缘化*法则来引入*Z[k-1]*，然后对其状态进行求和。在这种情况下，我们假设*Z[k-1]*有*m*个状态，因此现在我们可以使用概率的*乘法*法则来将此项拆分如下：
+- en: '![](img/3ab6d5f2-d643-4210-a8e7-53a250ee6837.png)'
+  id: totrans-50
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/3ab6d5f2-d643-4210-a8e7-53a250ee6837.png)'
+- en: 'In the last chapter, we saw how the d-separation property of HMM can make variables
+    independent from each other. Here, we will apply some of those conditions to simplify
+    our terms in the preceding equation. As we know that, given the hidden state,
+    the observation is independent of all the terms in previous time instances, we
+    also know: ![](img/f44ce271-c1e0-44c8-9470-a60440d4adab.png). Applying this to
+    the first term of our preceding equation, we can write it as the following:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们看到了HMM的d-分离属性如何使变量彼此独立。在这里，我们将应用其中的一些条件来简化前面方程中的项。正如我们所知道的，给定隐藏状态时，观察值与之前时间实例中的所有项相互独立，我们也知道：![](img/f44ce271-c1e0-44c8-9470-a60440d4adab.png)。将其应用到我们前面方程的第一项，我们可以将其写为如下：
+- en: '![](img/db86faa7-0606-446f-ba4d-48c84d6dfa3c.png)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/db86faa7-0606-446f-ba4d-48c84d6dfa3c.png)'
+- en: 'Similarly, we know that the current hidden state is dependent on the last hidden
+    state and is independent of hidden states before that. Hence, in this case, the
+    formula is ![](img/2b04e26f-a094-4bec-8aa0-00e2354cb748.png). Using this property,
+    we can write our second term in the equation as follows:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，我们知道当前的隐藏状态依赖于上一个隐藏状态，并且与之前的隐藏状态相互独立。因此，在这种情况下，公式是！[](img/2b04e26f-a094-4bec-8aa0-00e2354cb748.png)。利用这一属性，我们可以将方程中的第二项写为如下：
+- en: '![](img/71356e3f-001a-4d41-9e86-f5e1d2e9d021.png)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/71356e3f-001a-4d41-9e86-f5e1d2e9d021.png)'
+- en: 'Now, if we compare our last term with the term we were trying to compute, we
+    should see there is a similarity between them. Let''s define a new function, *α*,
+    as follows:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们将最后一项与我们试图计算的项进行比较，我们应该能够看到它们之间的相似性。我们定义一个新的函数，*α*，如下所示：
+- en: '![](img/416b9ab8-b5e5-47ff-9062-70ce86c78097.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/416b9ab8-b5e5-47ff-9062-70ce86c78097.png)'
+- en: 'Now we can rewrite our original equation as the following:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以将原始方程重写为如下：
+- en: '![](img/67167be6-e5a5-4b3e-8b52-1e37241c9da0.png)'
+  id: totrans-58
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/67167be6-e5a5-4b3e-8b52-1e37241c9da0.png)'
+- en: 'So, we now have a nice recursive equation and we are familiar with all the
+    terms in the equation. The first term, *P(X[k]|Z[k])*, is the emission probability
+    of the HMM. The second term of the equation, *P(Z[k]|Z[k-1])*, is the transition
+    probability and is also known. Now we can focus on solving this recursive equation.
+    When solving any recursive equation, we need to know at least one of the values,
+    so we can start computing consecutive terms. In this case, we know the value of *α(1)*,
+    which is given as follows:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，我们现在有了一个很好的递归方程，并且我们对方程中的所有项都很熟悉。第一个项，*P(X[k]|Z[k])*，是HMM的发射概率。方程的第二个项，*P(Z[k]|Z[k-1])*，是转移概率，也是已知的。现在我们可以集中精力求解这个递归方程。在求解任何递归方程时，我们需要知道至少一个值，以便开始计算连续的项。在这个例子中，我们知道*α(1)*的值，给出如下：
+- en: '![](img/09011cb7-a601-4e74-ac6b-9345eea4806f.png)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/09011cb7-a601-4e74-ac6b-9345eea4806f.png)'
+- en: Here, *P(Z[1])* is the initial probability of the position of the robot, which
+    we know, and *P(X[1]|Z[1])* is the emission probability of HMM, which is also
+    known. Using these two values, we can compute the value of *α(1)*. Once we have
+    the value of *α(1)*, we can use our recursive equation to compute all the *α* values.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，*P(Z[1])*是我们已知的机器人位置的初始概率，而*P(X[1]|Z[1])*是已知的隐马尔可夫模型（HMM）的发射概率。通过这两个值，我们可以计算出*α(1)*的值。一旦得到*α(1)*的值，我们可以利用递归公式计算所有的*α*值。
+- en: Now let's talk about the computational complexity of this algorithm to see whether
+    the inference is tractable. As we can see in the equation for computing each *α*, we
+    are doing a sum over all the states of *Z[k-1]*, and we have assumed that it has
+    *m* states; for each one of these steps, we do *m* multiplications for computing
+    *P(X[k]|Z[k])P(Z[k]|Z[k-1])α(k-1)*. Therefore, to compute the next *α*, we do
+    *m²* computations. If we want to compute *α(n)*, we will need *nm²* computations,
+    which gives us the computational complexity of the algorithm as *O(nm²)*.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来讨论一下这个算法的计算复杂度，看看推理是否可行。正如我们在计算每个*α*的公式中看到的那样，我们对所有状态*Z[k-1]*进行求和，而我们假设它有*m*个状态；在每一步中，我们进行*m*次乘法操作来计算*P(X[k]|Z[k])P(Z[k]|Z[k-1])α(k-1)*。因此，为了计算下一个*α*，我们需要进行*m²*次计算。如果我们想要计算*α(n)*，我们将需要*nm²*次计算，这样我们就得到了算法的计算复杂度为*O(nm²)*。
+- en: 'Let''s now try to write the code for our robot localization problem to compute
+    the joint distribution using the forward algorithm. For simplicity, let''s assume
+    that we have only one sensor on the robot that checks whether there is a wall
+    on the left-hand side of the robot. To define the model, we mainly need two quantities:
+    the transition matrix and the emission matrix. In our example, we assume that
+    the robot can either stay at its original position or move a block in any possible
+    direction in any given time instance. Therefore, if the robot is at position 1 at
+    any given time, it can be in positions 1, 2, or 6 at the next time instance with
+    equal probabilities of *0.33*.'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们尝试编写代码来解决我们的机器人定位问题，利用前向算法计算联合分布。为了简化起见，假设我们只有一个传感器，它检查机器人左侧是否有墙壁。为了定义模型，我们主要需要两个量：转移矩阵和发射矩阵。在我们的例子中，我们假设机器人在任意时刻可以保持原位置，或者以相等的概率*0.33*向任意方向移动一个单位。因此，如果机器人在任意时刻处于位置1，它可以出现在位置1、2或6，且概率相等。
+- en: 'In this way, we can write the transition probability from state 1 as:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，我们可以将从状态1的转移概率写成：
+- en: '![](img/541137a6-293c-47fd-ac6c-ca4c82b141c8.png)'
+  id: totrans-65
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/541137a6-293c-47fd-ac6c-ca4c82b141c8.png)'
+- en: 'In a similar way, we can write the transition probabilities, *P(Z[t+1]|Z[t])*,
+    from each of the position, and we will get the following transition matrix:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以类似的方式，我们可以写出从每个位置的转移概率*P(Z[t+1]|Z[t])*，并得到以下转移矩阵：
+- en: '[PRE4]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Coming to the emission probability in this problem, *P(X[t]|Z[t])*, we should
+    have the emission probability of 1 for the states that have a wall on their left.
+    Hence, the emission probability would be as follows:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个问题中，关于发射概率*P(X[t]|Z[t])*，我们应该为左侧有墙壁的状态分配发射概率1。因此，发射概率将如下所示：
+- en: '[PRE5]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'However, as we don''t know the position of our robot at *t=0*, we will assume
+    that it has a uniform distribution over all the possible states. Therefore, the
+    initial probability, *P(Z[0])*, can be written as follows:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，由于我们不知道机器人在*t=0*时的位置，我们假设它在所有可能的状态上均匀分布。因此，初始概率*P(Z[0])*可以写成如下形式：
+- en: '[PRE6]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'With these values in hand, we should be able to run the forward algorithm,
+    but before that, we need to code up the algorithm, as follows:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在掌握了这些值后，我们应该能够运行前向算法，但在此之前，我们需要按如下方式编码算法：
+- en: '[PRE7]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'We can try to compute the probability by running it over some observations,
+    as follows:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过对一些观察结果进行计算来尝试计算该概率，如下所示：
+- en: '[PRE8]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Computing the conditional distribution of the hidden state given the observations
+  id: totrans-76
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 计算给定观察结果的隐藏状态的条件分布
+- en: 'Using the forward algorithm, we have been able to compute the value of *P(Z[x],
+    X)*, so we might be tempted to think that we will easily be able to compute the
+    conditional distribution *P(Z[k], X)* using the following product rule:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用前向算法，我们已经能够计算出*P(Z[x], X)*的值，因此我们可能会认为，我们可以轻松地使用以下乘法规则来计算条件分布*P(Z[k], X)*：
+- en: '![](img/f073c302-f6fb-418e-a47e-fc2251c1bbf8.png)'
+  id: totrans-78
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f073c302-f6fb-418e-a47e-fc2251c1bbf8.png)'
+- en: 'Computing the distribution, *P(X) *however, is computationally intractable,
+    as we will see. We can express *P(Z[k], X)* as follows:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，计算分布*P(X)*是计算上不可行的，正如我们将看到的那样。我们可以将*P(Z[k], X)*表示为：
+- en: '![](img/e096c04f-37ba-49dc-b4c8-71ee2075d680.png)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/e096c04f-37ba-49dc-b4c8-71ee2075d680.png)'
+- en: 'And hence we can compute *P(X)* as the following:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们可以计算*P(X)*如下：
+- en: '![](img/a2dce95f-8bbd-4860-8b21-7bb07cbe76d6.png)'
+  id: totrans-82
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a2dce95f-8bbd-4860-8b21-7bb07cbe76d6.png)'
+- en: If we look at the computational complexity of computing *P(X)* using the preceding
+    equation, it is *O(m^n)*, which is intractable for any sufficiently large value
+    of *m* and *n*. And hence it is impossible to compute the conditional distribution
+    of our hidden state using just the forward algorithm. In the next sections, we
+    will introduce the backward algorithm and then we will show you how can we compute
+    these conditional distributions.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们查看使用上述方程计算*P(X)*的计算复杂度，它是*O(m^n)*，对于任何足够大的*m*和*n*值而言，这都是不可行的。因此，仅使用前向算法计算隐藏状态的条件分布是不可能的。在接下来的章节中，我们将介绍反向算法，并向您展示如何计算这些条件分布。
+- en: Backward algorithm
+  id: totrans-84
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 反向算法
+- en: 'Let''s formally define the problem statement for the backward algorithm. In
+    this case, we are trying to compute the probability of observation variables given
+    the current state:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们正式定义反向算法的问题描述。在这种情况下，我们试图计算给定当前状态下观察变量的概率：
+- en: '*Backward algorithm: P(X[k+1:n]|Z[k])*'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*反向算法：P(X[k+1:n]|Z[k])*'
+- en: '![](img/248cab76-6c07-4fd9-b983-0c2260796b9f.png)'
+  id: totrans-87
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/248cab76-6c07-4fd9-b983-0c2260796b9f.png)'
+- en: Figure 3.4: HMM showing two time slices, *k* and *k+1*
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图3.4：HMM展示了两个时间片，*k*和*k+1*
+- en: 'Similar to what we did in the case of the forward algorithm, we will again
+    try to convert this probability term into a recursive equation in terms of known
+    distributions, so that we can recursively compute the probabilities at different
+    time instances. First, we introduce a new term, *Z[k+1]* in *P(X[k+1:n]|Z[k])*,
+    using the marginalization rule:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似于我们在前向算法中所做的那样，我们将再次尝试将这个概率项转换为一个递归方程，以已知分布为基础，从而递归地计算不同时间点的概率。首先，我们引入一个新项*Z[k+1]*，在*P(X[k+1:n]|Z[k])*中，使用边际化规则：
+- en: '![](img/f45ee6a4-7335-44a5-b5ed-e6053c05dd50.png)'
+  id: totrans-90
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f45ee6a4-7335-44a5-b5ed-e6053c05dd50.png)'
+- en: 'Here, we are marginalizing over the *Z[k+1]* variable by summing over all of
+    its possible states, which we have assumed to be *m*. Now, we can use the product
+    rule of probability to split the preceding equation as:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们通过对所有可能的状态求和来对*Z[k+1]*变量进行边际化，我们假设它的取值为*m*。现在，我们可以使用概率的乘法规则将上述方程分解为：
+- en: '![](img/41cf8de5-41f6-470f-88d7-0491774cd25c.png)'
+  id: totrans-92
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/41cf8de5-41f6-470f-88d7-0491774cd25c.png)'
+- en: 'Now, from the d-separation property of our model, we know that ![](img/19fa7ae2-606d-455a-a00b-877849f4f47f.png).
+    Also, we know from the definition of HMMs that ![](img/29e48e7c-7ec1-4193-b98d-fd5c4aadffbb.png).
+    Using these independent conditions, we can write our equation as:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，从我们模型的d-分离性质中，我们知道！[](img/19fa7ae2-606d-455a-a00b-877849f4f47f.png)。此外，我们从HMM的定义中知道！[](img/29e48e7c-7ec1-4193-b98d-fd5c4aadffbb.png)。利用这些独立条件，我们可以将我们的方程写成：
+- en: '![](img/50c41c81-088c-456b-ae74-bdcc33dc0353.png)'
+  id: totrans-94
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/50c41c81-088c-456b-ae74-bdcc33dc0353.png)'
+- en: 'Now, the terms in our equation look familiar. The second term is the emission
+    probability and the last term is the transition probability of our HMM. Now, to
+    express it as a recursion, let''s define a new function, *β*, given as:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们方程中的项看起来很熟悉。第二项是发射概率，最后一项是我们HMM的转移概率。现在，为了将其表示为递归，让我们定义一个新的函数*β*，如以下所示：
+- en: '![](img/ba205953-f863-4c95-8556-9a3edb5c2b36.png)'
+  id: totrans-96
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/ba205953-f863-4c95-8556-9a3edb5c2b36.png)'
+- en: 'We can use β in the previous equation to represent it as a recursion:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以在前一个方程中使用β来表示它作为递归：
+- en: '![](img/593de81a-b69a-4a7b-9c4d-e90a34ff2e47.png)'
+  id: totrans-98
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/593de81a-b69a-4a7b-9c4d-e90a34ff2e47.png)'
+- en: 'Now, since we have the recursive equation, we can start computing the different
+    values of *β[k]*. But for computing the values, we will need to know at least
+    one term of the recursion, so let''s compute the value of *β(1)*:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，由于我们已经有了递归方程，我们可以开始计算不同的 *β[k]* 值。但在计算这些值时，我们至少需要知道递归中的一个项，所以我们先计算 *β(1)*
+    的值：
+- en: '![](img/f054c7f4-dca8-4097-b091-39108f9712ca.png)'
+  id: totrans-100
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f054c7f4-dca8-4097-b091-39108f9712ca.png)'
+- en: '[PRE9]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We can run this algorithm also on the same observations to see whether the
+    results were correct:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以在相同的观察值上运行这个算法，看看结果是否正确：
+- en: '[PRE10]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Forward-backward algorithm (smoothing)
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 前向-后向算法（平滑）
+- en: Coming to the forward-backward algorithm, we are now trying to compute the conditional
+    distribution of the hidden state given the observations.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 进入前向-后向算法，我们现在正试图计算给定观察值下隐藏状态的条件分布。
+- en: 'Taking the example of our robot localization, we are trying to now find the
+    probability distribution of the robot''s position at some time instance given
+    the sensor readings:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以我们的机器人定位为例，我们现在试图找到给定传感器读数时，机器人在某个时刻位置的概率分布：
+- en: '*Forward-backward algorithm: P(Z[k]|X)*![](img/2dabbe7b-8dd2-483d-95ee-02dec8abe31a.png)'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*前向-后向算法：P(Z[k]|X)*![](img/2dabbe7b-8dd2-483d-95ee-02dec8abe31a.png)'
+- en: 'Figure 3.5: HMM showing three time slices, *k-1*, *k*, and *k+1*'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.5：HMM 显示三个时间片，*k-1*，*k* 和 *k+1*。
+- en: Now, since we have been given all the observed variables in the model, we can
+    say that the value of *P(Z[k]|X)* is going to be proportional to the joint distribution
+    over *Z[k] *and *X:*
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，由于模型中所有观察到的变量都已给定，我们可以说 *P(Z[k]|X)* 的值将与 *Z[k]* 和 *X* 的联合分布成正比：
+- en: '![](img/75a59eb6-4820-417e-bc30-83812de77d87.png)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/75a59eb6-4820-417e-bc30-83812de77d87.png)'
+- en: 'Now, we know that we can write *X={X[1:k], X[k+1:n]}*. Replacing this in the
+    preceding equation, we get:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们知道可以将 *X={X[1:k]， X[k+1:n]}*。将其代入前面的方程中，我们得到：
+- en: '![](img/23870c17-ec20-471e-bb16-c765f703fe13.png)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/23870c17-ec20-471e-bb16-c765f703fe13.png)'
+- en: 'We can apply the chain rule in the preceding equation to write it as:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以应用前面的链式法则将其写为：
+- en: '![](img/144e7b06-2f9f-441a-93ee-df59e8c423ca.png)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/144e7b06-2f9f-441a-93ee-df59e8c423ca.png)'
+- en: 'From our model structure, we know that ![](img/190acd23-d62f-45e4-b819-e738501e7fd1.png),
+    and using this independence property we can write the preceding equation as:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从我们的模型结构来看，我们知道 ![](img/190acd23-d62f-45e4-b819-e738501e7fd1.png)，并利用这一独立性性质，我们可以将前面的方程写为：
+- en: '![](img/c7b78595-168f-423a-8967-d78ebe606723.png)'
+  id: totrans-116
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c7b78595-168f-423a-8967-d78ebe606723.png)'
+- en: Now if we look at the preceding terms, the first term is *P(X[k+1:n]|Z[k])*,
+    which is what we computed in our backward algorithm. The second term is *P(Z[k],
+    X[1:k])*, which we computed in the case of the forward algorithm. So for computing
+    *P(Z[k|]X)*, we can compute both the terms using the forward and the backward
+    algorithm. But since *P(Z[k|]X)* is proportional to the product of these two terms,
+    we will need to normalize the distribution.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们看一下前面的项，第一项是 *P(X[k+1:n]|Z[k])*，这是我们在后向算法中计算的结果。第二项是 *P(Z[k], X[1:k])*，这是我们在前向算法中计算的结果。因此，在计算
+    *P(Z[k|]X)* 时，我们可以使用前向和后向算法计算这两个项。但由于 *P(Z[k|]X)* 与这两个项的乘积成正比，我们需要对分布进行归一化。
+- en: The Viterbi algorithm
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 维特比算法
+- en: 'So far, we have been trying to compute the different conditional and joint
+    probabilities in our model. But one thing that we can''t do with the forward-backward
+    algorithm is find the most probable state of the hidden variables in the model
+    given the observations. Formally, we can write this problem as, we know the observed
+    variable, the transition probabilities and the emission probability of the network
+    and we would like to compute *Z^**, which is defined as:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们一直在尝试计算模型中的不同条件和联合概率。但前向-后向算法无法做的一件事是，给定观察值后，找出模型中隐藏变量的最可能状态。形式上，我们可以将这个问题写为：我们知道观察变量、转移概率和网络的发射概率，并且我们希望计算
+    *Z^**，其定义为：
+- en: '![](img/7d6cea05-5fb3-4358-8e3a-28ecf75e8f75.png)'
+  id: totrans-120
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/7d6cea05-5fb3-4358-8e3a-28ecf75e8f75.png)'
+- en: Where,
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中，
+- en: '*Z={Z[1], Z[2], …, Z[n]} *'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*Z={Z[1]， Z[2]， …， Z[n]}*'
+- en: And,
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外，
+- en: '*X={X[1], X[2], …, X[n]}*'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*X={X[1]， X[2]， …， X[n]}*'
+- en: '**Properties of operations on probability distributions**:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**概率分布操作的性质**：'
+- en: 'When we do operations on the probability distributions (marginalization, maximization,
+    and so on), we can push in the operation through the independent terms of the
+    distribution. We can see these examples in the case of marginalization and *argmax*:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们对概率分布进行操作（边缘化、最大化等）时，可以通过分布的独立项将操作推进去。我们可以在边缘化和 *argmax* 的例子中看到这些：
+- en: '![](img/d204b37c-5438-4ec5-a374-f41c3001efbd.png)'
+  id: totrans-127
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/d204b37c-5438-4ec5-a374-f41c3001efbd.png)'
+- en: '![](img/c0471f50-a6ac-4a65-9332-aa98eb651a98.png)![](img/9ae3544c-a122-499b-8149-bdaf63d3f6bb.png)'
+  id: totrans-128
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/c0471f50-a6ac-4a65-9332-aa98eb651a98.png)![](img/9ae3544c-a122-499b-8149-bdaf63d3f6bb.png)'
+- en: 'Figure 3.6: HMM showing three time slices *k-2*, *k-1*, and *k*'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.6：显示三个时间切片 *k-2*、*k-1* 和 *k* 的 HMM
+- en: 'Since we saw that *P(Z|X)∝ P(Z, X),* and since we are trying to compute the
+    *argmax*, it wouldn''t matter if we compute on either of these two terms. And
+    hence we can say that:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们看到 *P(Z|X)∝ P(Z, X)*，并且因为我们正在尝试计算 *argmax*，所以无论我们在哪两个项中计算，结果都不重要。因此我们可以说：
+- en: '![](img/882e1637-33ba-4ede-8df9-a406e31676d6.png)'
+  id: totrans-131
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/882e1637-33ba-4ede-8df9-a406e31676d6.png)'
+- en: 'Now, we will again try to formulate our equation as a recursion so that it
+    is easier for us to compute. So, let''s introduce a new term, *µ(k)*, defined
+    as:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将再次尝试将我们的方程形式化为递归，以便更容易进行计算。那么，接下来我们引入一个新的项，*µ(k)*，定义为：
+- en: '![](img/bb9faaee-1dc9-4f2c-9841-95bdb643c854.png)'
+  id: totrans-133
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/bb9faaee-1dc9-4f2c-9841-95bdb643c854.png)'
+- en: 'And again, we will try to break this term into known terms. Using the chain
+    rule, we can write it as:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次，我们将尝试将此项拆分为已知项。使用链式法则，我们可以将其写为：
+- en: '![](img/dfa9fde2-0cba-4d20-ac7d-65e036d531b9.png)'
+  id: totrans-135
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/dfa9fde2-0cba-4d20-ac7d-65e036d531b9.png)'
+- en: 'Now, we start pushing in the *argmax* argument using the property (see information
+    box for details). And this gives us:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们开始使用该性质推入 *argmax* 参数（请参见信息框了解详细信息）。这将给出我们：
+- en: '![](img/fe6663ef-9bc3-4841-abf1-e236f46646cd.png)'
+  id: totrans-137
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/fe6663ef-9bc3-4841-abf1-e236f46646cd.png)'
+- en: 'These terms look familiar, *P(X[k]|Z[k])* is the emission probability, *P(Z[k]|Z[k-1])* is
+    the transition probability, and ![](img/330530a0-916e-4819-8419-92860b1171ae.png)
+    is *µ(k-1)*. So now we have a recursive equation to work with:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些术语看起来很熟悉，*P(X[k]|Z[k])* 是发射概率，*P(Z[k]|Z[k-1])* 是转移概率，且 ![](img/330530a0-916e-4819-8419-92860b1171ae.png)
+    是 *µ(k-1)*。现在我们有一个递归方程可以使用：
+- en: '![](img/a88a719c-ae24-4c87-8cc6-01f0c1b4ee7f.png)'
+  id: totrans-139
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/a88a719c-ae24-4c87-8cc6-01f0c1b4ee7f.png)'
+- en: Since we have the recursive formula, we can compute the values for any *k* if
+    we have the first term. So, let's look at the first term of the recursion, which
+    is *µ(1):*
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 既然我们有了递归公式，如果我们知道第一个项的值，就可以计算任何 *k* 的值。那么，首先让我们来看一下递归的第一个项，即 *µ(1)*：
+- en: '![](img/690c4938-4439-4cc2-8350-248e46e1f012.png)'
+  id: totrans-141
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/690c4938-4439-4cc2-8350-248e46e1f012.png)'
+- en: 'Here, the first term is *P(Z[1])*, which is our initial probability, which
+    is known. The second term is *P(X[1]|Z[1])*, which is the emission probability
+    of our model:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，第一个项是 *P(Z[1])*，即我们的初始概率，是已知的。第二项是 *P(X[1]|Z[1])*，即我们模型的发射概率：
+- en: '[PRE11]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'We can try it out with the same observations:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以用相同的观测值来试试：
+- en: '[PRE12]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Summary
+  id: totrans-146
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we introduced algorithms for doing inference over our HMM models.
+    We looked at the forward-backward algorithm to do predictions for our hidden states
+    given the observations. We also discussed the Viterbi algorithm, which is used
+    to compute the most probable states in our model.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了用于推理我们隐马尔可夫模型（HMM）的算法。我们研究了前向-后向算法，用于根据观测结果预测我们的隐藏状态。我们还讨论了维特比算法，用于计算模型中最可能的状态。
+- en: In all these algorithms, we assumed that we knew the transition and the emission
+    probabilities of the model. But in real-world problems, we need to compute these
+    values from the data. In the next chapter, we will introduce algorithms for computing
+    transition and emission probabilities using the maximum-likelihood approach.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在所有这些算法中，我们假设已经知道模型的转移概率和发射概率。但是在现实世界中的问题中，我们需要从数据中计算这些值。在下一章中，我们将介绍用于计算转移和发射概率的最大似然法算法。

@@ -1,0 +1,828 @@
+- en: '3'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '3'
+- en: Fitting Deformable Mesh Models to Raw Point Clouds
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将可变形网格模型拟合到原始点云
+- en: In this chapter, we are going to discuss a project for using deformable mesh
+    models for fitting raw point cloud observations potentially coming from a raw
+    depth camera sensing result. Raw point cloud observations from depth cameras are
+    usually in the format of point clouds without any information on how these points
+    are connected; that is, the point clouds don’t contain information about how surfaces
+    can be formed from the points. This is contrary to a mesh, where the list of faces
+    defined by the mesh shows us how the surfaces are. Such information on how points
+    can be gathered into surfaces is important for downstream postprocessing, such
+    as denoising and object detection. For example, if one point is isolated without
+    any connection to any of the other points, then the point may likely be a false
+    detection by the sensor.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将讨论一个项目，使用可变形网格模型拟合来自原始深度相机传感器结果的原始点云观测数据。深度相机的原始点云观测数据通常是没有任何关于这些点如何连接的信息的点云格式；即，点云不包含关于如何从这些点形成表面的信息。这与网格相反，网格通过定义面的列表显示了表面是如何形成的。如何将点聚集成表面的信息对于后续的后处理（如去噪和物体检测）非常重要。例如，如果一个点孤立无援，没有与任何其他点连接，那么该点很可能是传感器的误检。
+- en: Thus, reconstructing the surface information from point clouds is usually a
+    standard step in 3D data processing pipelines. There exists a large body of prior-art
+    literature on 3D surface reconstruction from points clouds, such as Poisson reconstruction.
+    Using deformable mesh models for surface reconstruction is also among the frequently
+    used methods. The method of fitting deformable mesh models for point clouds discussed
+    in this chapter is a practical and simple baseline method.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，从点云中重建表面信息通常是3D数据处理流程中的标准步骤。关于从点云进行3D表面重建的前沿文献有很多，例如泊松重建。使用可变形网格模型进行表面重建也是一种常用方法。本章讨论的将可变形网格模型拟合到点云的方法是一种实用且简单的基准方法。
+- en: The method presented in this chapter is based on PyTorch optimization. The method
+    is another perfect demonstration of how optimization using PyTorch works. We will
+    explain the optimization in reasonable detail, so that you can further improve
+    your understanding of PyTorch optimization.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章提出的方法基于PyTorch优化。该方法是如何使用PyTorch进行优化的另一个完美示范。我们将详细解释优化过程，以便你能进一步加深对PyTorch优化的理解。
+- en: Loss functions are very important in most deep learning algorithms. Here, we
+    will also discuss which loss functions we should use and the loss functions that
+    have conventionally been contained in PyTorch3D. Luckily, many well-known loss
+    functions have been implemented in many modern 3D deep learning frameworks and
+    libraries, such as PyTorch3D. In this chapter, we are going to learn about many
+    such loss functions.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 损失函数在大多数深度学习算法中非常重要。在这里，我们还将讨论应该使用哪些损失函数，以及传统上在PyTorch3D中包含的损失函数。幸运的是，许多著名的损失函数已经在许多现代3D深度学习框架和库中实现，如PyTorch3D。在本章中，我们将学习许多这样的损失函数。
+- en: 'In this chapter, we’re going to cover the following main topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将涵盖以下主要主题：
+- en: Fitting meshes to point clouds – the problem
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将网格拟合到点云——问题
+- en: Formulating the mesh model fitting problem as an optimization problem
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将网格模型拟合问题表述为优化问题
+- en: Loss functions for regularization
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于正则化的损失函数
+- en: Implementing the mesh fitting with PyTorch3D
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用PyTorch3D实现网格拟合
+- en: Technical requirements
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: To run the example code snippets in this book, you should ideally have a computer
+    that has a GPU. However, running the code snippets with only CPUs is not impossible.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要运行本书中的示例代码片段，理想情况下，你的计算机应配备GPU。然而，仅使用CPU运行代码片段也是可行的。
+- en: 'The recommended computer configuration includes the following:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 推荐的计算机配置包括以下内容：
+- en: A GPU, for example, the GTX series or RTX series, with at least 8 GB of memory
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一块GPU，例如GTX系列或RTX系列，至少有8 GB的内存
+- en: Python 3
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Python 3
+- en: The PyTorch and PyTorch3D libraries
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PyTorch和PyTorch3D库
+- en: The code snippets with this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python).
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的代码片段可以在[https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python)找到。
+- en: Fitting meshes to point clouds – the problem
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将网格拟合到点云——问题
+- en: Real-world depth cameras, such as LiDAR, time-of-flight cameras, and stereo
+    vision cameras, usually output either depth images or point clouds. For example,
+    in the case of time-of-flight cameras, a modulated light ray is projected from
+    the camera to the world, and the depth at each pixel is measured from the phase
+    of the reflected light rays received at the pixel. Thus, at each pixel, we can
+    usually get one depth measurement and one reflected light amplitude measurement.
+    However, other than the sampled depth information, we usually do not have direct
+    measurements of the surfaces. For example, we cannot measure the smoothness or
+    norm of the surface directly.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现实世界中的深度相机，如激光雷达（LiDAR）、飞行时间（ToF）相机和立体视觉相机，通常输出深度图像或点云。例如，在飞行时间相机的情况下，调制的光线从相机投射到世界中，并通过接收到的反射光线的相位测量每个像素的深度。因此，在每个像素处，我们通常可以获得一个深度测量和一个反射光强度测量。然而，除了采样的深度信息外，我们通常没有表面的直接测量。例如，我们无法直接测量表面的光滑度或法线。
+- en: Similarly, in the case of stereo vision cameras, at each time slot, the camera
+    can take two RGB images from the camera pair at roughly the same time. The camera
+    then estimates the depth by finding the pixel correspondences between the two
+    images. The output is thus a depth estimation at each pixel. Again, the camera
+    cannot give us any direct measurements of surfaces.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，在立体视觉相机的情况下，每个时段，相机可以从一对相机中几乎在同一时间拍摄两张RGB图像。然后，相机通过寻找两张图像之间的像素对应关系来估算深度。输出的结果就是每个像素的深度估计。同样，相机无法给我们表面的任何直接测量。
+- en: However, in many real-world applications, surface information is sought. For
+    example, in robotic picking tasks, usually, we need to find regions on an object
+    such that the robotic hands can grasp firmly. In such a scenario, it is usually
+    desirable that the regions are large in size and reasonably flat.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在许多实际应用中，通常需要表面信息。例如，在机器人抓取任务中，通常需要找到物体上的某些区域，使得机器人手臂能够牢固地抓住。在这种情况下，通常希望这些区域具有较大的面积并且相对平坦。
+- en: There are many other scenarios in which we want to fit a (deformable) mesh model
+    to a point cloud. For example, there are some machine vision applications where
+    we have the mesh model for an industrial part and the point cloud measurement
+    from the depth camera has an unknown orientation and pose. In this case, finding
+    a fitting of the mesh model to the point cloud would recover the unknown object
+    pose.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有许多其他场景，我们需要将（可变形的）网格模型拟合到点云。例如，有一些机器视觉应用中，我们有工业部件的网格模型，深度相机的点云测量具有未知的方向和姿态。在这种情况下，找到网格模型与点云的拟合将恢复未知的物体姿态。
+- en: For another example, in human face tracking, sometimes, we want to fit a deformable
+    face mesh model to point cloud measurements, such that we can recover the identity
+    of the human being and/or facial expressions.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 举个例子，在人脸追踪中，有时我们希望将一个可变形的面部网格模型拟合到点云测量数据上，以便我们可以恢复人的身份和/或面部表情。
+- en: Loss functions are central concepts in almost all optimizations. Essentially,
+    to fit a point cloud, we need to design a loss function, such that when the loss
+    function is minimized, the mesh as the optimization variable fits to the point
+    cloud.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 损失函数是几乎所有优化问题中的核心概念。实质上，为了拟合点云，我们需要设计一个损失函数，使得当损失函数被最小化时，作为优化变量的网格能够拟合点云。
+- en: 'Actually, selecting the right loss function is usually a critical design decision
+    in many real-world projects. Different choices of loss function usually result
+    in significantly different system performance. The requirements for a loss function
+    usually include at least the following properties:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，选择合适的损失函数通常是许多实际项目中的一个关键设计决策。不同的损失函数选择通常会导致显著不同的系统性能。损失函数的要求通常至少包括以下几个属性：
+- en: The loss function needs to have desirable numerical properties, such as smooth,
+    convex, without the issue of vanishing gradients, and so on
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 损失函数需要具备良好的数值特性，如光滑、凸性、没有梯度消失问题等。
+- en: The loss function (and its gradients) can be easily computed; for example, they
+    can be efficiently computed on GPUs
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 损失函数（及其梯度）可以轻松计算；例如，它们可以高效地在GPU上计算。
+- en: The loss function is a good measurement of model fitting; that is, minimizing
+    the loss function results in a satisfactory mesh model fitting for the input point
+    clouds
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 损失函数是衡量模型拟合度的良好标准；也就是说，最小化损失函数会导致输入点云的网格模型拟合效果令人满意。
+- en: Other than one primary loss function in such model fitting optimization problems,
+    we usually also need to have other loss functions for regularizing the model fitting.
+    For example, if we have some prior knowledge that the surfaces should be smooth,
+    then we usually need to introduce an additional regularization loss function,
+    such that not-smooth meshes would be penalized more.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了模型拟合优化问题中的一个主要损失函数外，我们通常还需要其他损失函数来正则化模型拟合。例如，如果我们有一些先验知识表明表面应该是光滑的，那么通常需要引入一个额外的正则化损失函数，使得不光滑的网格会受到更多惩罚。
+- en: An example of point cloud measurement using a pedestrian is shown in *Figure
+    3.1*. In the later sections of this chapter, we are going to discuss a deformable
+    mesh-based approach for fitting a mesh model to point clouds. This point cloud
+    is in the `pedestrian.ply` file, which can be downloaded from the book's GitHub
+    page. The point cloud can be visualized by using the provided code snippet in
+    `vis_input.py`.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用行人进行点云测量的示例见于*图 3.1*。在本章的后续部分，我们将讨论一种基于变形网格的方法，用于将网格模型拟合到点云上。该点云存储在 `pedestrian.ply`
+    文件中，可以从本书的 GitHub 页面下载。通过使用 `vis_input.py` 中提供的代码片段，可以将该点云可视化。
+- en: '![Figure 3.1: An example of a 3D point cloud as the output of a depth camera;
+    note that the point density is relatively low ](img/B18217_03_1.png)'
+  id: totrans-31
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 3.1：一个深度相机输出的 3D 点云示例；注意点云密度相对较低](img/B18217_03_1.png)'
+- en: 'Figure 3.1: An example of a 3D point cloud as the output of a depth camera;
+    note that the point density is relatively low'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.1：一个深度相机输出的 3D 点云示例；注意点云密度相对较低
+- en: We have discussed the problem of fitting a mesh to a point cloud. Now, let us
+    talk about how to formulate an optimization problem.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经讨论了将网格拟合到点云的问题。现在，让我们来谈谈如何将其表述为一个优化问题。
+- en: Formulating a deformable mesh fitting problem into an optimization problem
+  id: totrans-34
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将变形网格拟合问题表述为一个优化问题
+- en: In this section, we are going to talk about how to formulate the mesh fitting
+    problem into an optimization problem. One key observation here is that object
+    surfaces such as pedestrians can always be continuously deformed into a sphere.
+    Thus, the approach we are going to take will start from the surface of a sphere
+    and deform the surface to minimize a cost function.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将讨论如何将网格拟合问题表述为优化问题。这里的一个关键观察是，物体表面（如行人）总是可以连续地变形为一个球体。因此，我们将采取的方法是从球体表面开始，通过变形表面来最小化成本函数。
+- en: 'The cost function should be chosen such that it is a good measurement of how
+    similar the point cloud is to the mesh. Here, we choose the major cost function
+    to be the Chamfer set distance. The Chamfer distance is defined between two sets
+    of points as follows:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 成本函数应该选择得当，以便很好地衡量点云与网格的相似性。在这里，我们选择主要的成本函数为 Chamfer 集合距离。Chamfer 距离定义如下：
+- en: '![](img/B18217_03_f1.jpg)'
+  id: totrans-37
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B18217_03_f1.jpg)'
+- en: The Chamfer distance is symmetric and is a sum of two terms. In the first term,
+    for each point *x* in the first point cloud, the closest point *y* in the other
+    point cloud is found. For each such pair *x* and *y*, their distance is obtained
+    and the distances for all the pairs are summed up. Similarly, in the second term,
+    for each *y* in the second point cloud, one *x* is found and the distances between
+    such *x* and *y* pairs are summed up.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Chamfer 距离是对称的，且是两个项的和。在第一项中，对于第一个点云中的每个点 *x*，找到另一个点云中最近的点 *y*。对于每一对 *x* 和 *y*，计算它们之间的距离，并将所有对的距离相加。类似地，在第二项中，对于第二个点云中的每个
+    *y*，找到一个 *x*，并将这些 *x* 和 *y* 对之间的距离相加。
+- en: Generally speaking, the Chamfer distance is the distance between two point clouds.
+    If the two point clouds are identical, or very similar, then the Chamfer distance
+    can be zero or very small. If the two point clouds are far away, then their Chamfer
+    distance can be large.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般而言，Chamfer 距离是两个点云之间的距离。如果两个点云完全相同或非常相似，那么 Chamfer 距离可以为零或非常小。如果两个点云相距较远，则它们的
+    Chamfer 距离可能很大。
+- en: In PyTorch3D, an implementation of Chamfer distance is provided in `pytorch3d.loss.chamfer_distance`.
+    Not only the forward loss function calculation is provided, but we can also compute
+    gradients for back-propagation easily using this implementation.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 PyTorch3D 中，Chamfer 距离的实现位于 `pytorch3d.loss.chamfer_distance`。不仅提供了前向损失函数的计算，我们还可以通过该实现轻松计算反向传播的梯度。
+- en: For fitting meshes to point clouds, we first randomly sample some points from
+    a mesh model and then optimize the Chamfer distances between the sampled points
+    from the mesh model and the input point cloud. The random sampling is achieved
+    by `pytorch3d.ops.sample_points_from_meshes`. Again, we can compute the gradients
+    for back-propagation from `pytorch3d.ops.sample_points_from_meshes`.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于将网格拟合到点云的任务，我们首先从网格模型中随机采样一些点，然后优化网格模型中采样点与输入点云之间的Chamfer距离。随机采样是通过`pytorch3d.ops.sample_points_from_meshes`实现的。同样，我们可以从`pytorch3d.ops.sample_points_from_meshes`中计算用于反向传播的梯度。
+- en: Now, we have a basic version of the optimization problem. However, we may still
+    need some loss functions for the regularization of this problem. We will dive
+    into these issues in the next section.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们有了一个基本的优化问题版本。然而，我们仍然可能需要一些损失函数来对这个问题进行正则化。我们将在下一节中深入探讨这些问题。
+- en: Loss functions for regularization
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 正则化的损失函数
+- en: In the previous section, we successfully formulated the deformable mesh fitting
+    problem into an optimization problem. However, the approach of directly optimizing
+    this primary loss function can be problematic. The issues lie in that there may
+    exist multiple mesh models that can be good fits to the same point cloud. These
+    mesh models that are good fits may include some mesh models that are far away
+    from smooth meshes.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中，我们成功地将可变形网格拟合问题转化为一个优化问题。然而，直接优化这个主要损失函数的方法可能会有问题。问题在于，可能存在多个网格模型，它们都可以很好地拟合相同的点云。这些良好拟合的网格模型可能包括一些与平滑网格相距较远的网格模型。
+- en: On the other hand, we usually have prior knowledge about pedestrians. For example,
+    the surfaces of pedestrians are usually smooth, the surface norms are smooth also.
+    Thus, even if a non-smooth mesh is close to the input point cloud in terms of
+    Chamfer distance, we know with a certain level of confidence that it is far away
+    from the ground truth.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，我们通常有关于行人的先验知识。例如，行人的表面通常是平滑的，表面范数也是平滑的。因此，即使一个非平滑网格在Chamfer距离上接近输入点云，我们也能以一定的信心知道它与真实值相差甚远。
+- en: Machine learning literature has provided solutions for excluding such undesirable
+    non-smooth solutions for several decades. The solution is called **regularization**.
+    Essentially, the loss we want to optimize is chosen to be a sum of multiple loss
+    functions. Certainly, the first term of the sum will be the primary Chamfer distance.
+    The other terms are for penalizing surface non-smoothness and norm non-smoothness.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 机器学习文献在过去几十年中提供了解决方案，以排除这种不希望出现的非平滑解。这个解决方案称为**正则化**。本质上，我们想要优化的损失是选择多个损失函数的和。当然，这些和中的第一个项是主要的Chamfer距离。其他项则是用来惩罚表面非平滑性和范数非平滑性的。
+- en: 'In the next several subsections, we are going to discuss several such loss
+    functions, including the following:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的几个子章节中，我们将讨论几种这样的损失函数，包括以下内容：
+- en: Mesh Laplacian smoothing loss
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网格拉普拉斯平滑损失
+- en: Mesh normal consistency loss
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网格法线一致性损失
+- en: Mesh edge loss
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网格边缘损失
+- en: Mesh Laplacian smoothing loss
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 网格拉普拉斯平滑损失
+- en: 'The mesh Laplacian is a discrete version of the well-known Laplace-Beltrami
+    operator. One version (usually called uniform Laplacian) is as follows:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网格拉普拉斯算子是著名的拉普拉斯-贝尔特拉米算子的离散版本。其一种版本（通常称为统一拉普拉斯）如下：
+- en: '![](img/B18217_03_f2.jpg)'
+  id: totrans-53
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/B18217_03_f2.jpg)'
+- en: In the preceding definition, the Laplacian at the *i*-th vertex is just a sum
+    of differences, where each difference is between the coordinates of the current
+    vertex and those of a neighboring vertex.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的定义中，*i*点的拉普拉斯算子只是差值的总和，每个差值是当前顶点与相邻顶点坐标之间的差。
+- en: The Laplacian is a measurement for smoothness. If the *i*-th vertex and its
+    neighbors lie all within one plane, then the Laplacian should be zero. Here, we
+    are using a uniform version of the Laplacian, where the contribution to the sum
+    from each neighbor is equally weighted. There are more complicated versions of
+    Laplacians, where the preceding contributions are weighted according to various
+    schemes.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拉普拉斯算子是用来度量平滑度的。如果*i*点及其邻居都位于同一平面内，则拉普拉斯算子应该为零。在这里，我们使用的是拉普拉斯算子的统一版本，其中每个邻居对总和的贡献是等权重的。拉普拉斯算子还有更复杂的版本，其中前述贡献会根据不同的方案进行加权。
+- en: Essentially, including this loss function in the optimization would result in
+    smoother solutions. One implementation for the mesh Laplacian smoothing loss (including
+    multiple other versions than the uniform one) can be found at `pytorch3d.loss.mesh_laplacian_smoothing`.
+    Again, gradient computations for back-propagation are enabled.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本质上，将这个损失函数包含到优化过程中，将会产生更平滑的解。网格拉普拉斯平滑损失的一个实现（包括多个不同版本，而不仅仅是均匀版本）可以在 `pytorch3d.loss.mesh_laplacian_smoothing`
+    中找到。同样，反向传播的梯度计算是启用的。
+- en: Mesh normal consistency loss
+  id: totrans-57
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 网格法线一致性损失
+- en: The mesh normal consistency loss is a loss function for penalizing the distances
+    between adjacent normal vectors on the mesh. One implementation can be found at
+    `pytorch3d.loss.mesh_normal_consistency`.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网格法线一致性损失是一个损失函数，用于惩罚网格上相邻法向量之间的距离。一个实现可以在 `pytorch3d.loss.mesh_normal_consistency`
+    中找到。
+- en: Mesh edge loss
+  id: totrans-59
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 网格边缘损失
+- en: Mesh edge loss is for penalizing long edges in meshes. For example, in the mesh
+    model fitting problem we consider in this chapter, we want to eventually obtain
+    a solution, such that the obtained mesh model fits the input point cloud uniformly.
+    In other words, each local region of the point cloud is covered by small triangles
+    of the mesh. Otherwise, the mesh model cannot capture the fine details of slowly
+    varying surfaces, meaning the model may not be that accurate or trustworthy.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网格边缘损失用于惩罚网格中的长边。例如，在本章我们考虑的网格模型拟合问题中，我们希望最终获得一个解，使得所获得的网格模型能够均匀地拟合输入的点云。换句话说，点云的每个局部区域都被网格的小三角形覆盖。否则，网格模型将无法捕捉到缓慢变化表面的细节，意味着模型可能不够准确或可靠。
+- en: The aforementioned problem can be easily avoided by including the mesh edge
+    loss in the objective function. The mesh edge loss is essentially a sum of all
+    the edge lengths in the mesh. One implementation of the mesh edge loss can be
+    found at `pytorch3d.loss.mesh_edge_loss`.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述问题可以通过在目标函数中包含网格边缘损失来轻松避免。网格边缘损失本质上是网格中所有边长的总和。网格边缘损失的一个实现可以在 `pytorch3d.loss.mesh_edge_loss`
+    中找到。
+- en: Now, we have covered all the concepts and mathematics for this mesh fitting
+    problem. Next, let us dive into how the problem can be coded by using Python and
+    PyTorch3D.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们已经涵盖了这个网格拟合问题的所有概念和数学内容。接下来，让我们深入探讨如何使用 Python 和 PyTorch3D 来编写代码解决这个问题。
+- en: Implementing the mesh fitting with PyTorch3D
+  id: totrans-63
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 PyTorch3D 实现网格拟合
+- en: 'The input point cloud is contained in `pedestrian.ply`. The mesh can be visualized
+    using the `vis_input.py` code snippet. The main code snippet for fitting a mesh
+    model to the point cloud is contained in `deform1.py`:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入的点云包含在 `pedestrian.ply` 中。可以使用 `vis_input.py` 代码片段来可视化网格。拟合网格模型到点云的主要代码片段包含在
+    `deform1.py` 中：
+- en: 'We will start by importing the needed packages:'
+  id: totrans-65
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将从导入所需的包开始：
+- en: '[PRE0]'
+  id: totrans-66
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We then declare a PyTorch device. If you have GPUs, then the device would be
+    created to use GPUs. Otherwise, the device has to use CPUs:'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们声明一个 PyTorch 设备。如果你有 GPU，那么设备将会被创建来使用 GPU。否则，设备将只能使用 CPU：
+- en: '[PRE1]'
+  id: totrans-68
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We will load the point cloud from `pedestrian.ply`. Now, `load_ply` is a PyTorch3D
+    function that loads the .`ply` file and outputs `verts` and `faces`. In this case,
+    `verts` is a PyTorch tensor. `faces` is an empty PyTorch tensor because `pedestrian.ply`
+    actually does not contain any faces. The `to` member function moves the tensors
+    to the device; if the device uses GPUs, then `verts` and `faces` are transmitted
+    to the GPU memories:'
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将从 `pedestrian.ply` 加载点云。现在，`load_ply` 是一个 PyTorch3D 函数，它加载 `.ply` 文件并输出 `verts`
+    和 `faces`。在这个例子中，`verts` 是一个 PyTorch 张量，`faces` 是一个空的 PyTorch 张量，因为 `pedestrian.ply`
+    实际上不包含任何面。`to` 成员函数将张量移动到设备上；如果设备使用 GPU，那么 `verts` 和 `faces` 会被传输到 GPU 内存中：
+- en: '[PRE2]'
+  id: totrans-70
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'We then run some normalization and change the tensor shapes for later processing:'
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们运行一些归一化处理并改变张量的形状以便后续处理：
+- en: '[PRE3]'
+  id: totrans-72
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'In the next step, we create a mesh variable called `src_mesh` by using the
+    `ico_sphere` PyTorch3D function. The `ico_sphere` function essentially creates
+    a mesh representing roughly a sphere. This `src_mesh` will be our optimization
+    variable; it will start as a sphere and then be optimized to fit the point cloud:'
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在下一步中，我们使用 `ico_sphere` PyTorch3D 函数创建一个名为 `src_mesh` 的网格变量。`ico_sphere` 函数本质上创建了一个大致表示球形的网格。这个
+    `src_mesh` 将作为我们的优化变量；它将从一个球体开始，然后优化以适应点云：
+- en: '[PRE4]'
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'In the next step, we want to define a `deform_verts` variable. `deform_verts`
+    is a tensor of vertex displacements, where for each vertex in `src_mesh`, there
+    is a vertex displacement of the three-dimensional vector. We are going to optimize
+    `deform_verts` for finding the optimal deformable mesh:'
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在下一步中，我们想定义一个`deform_verts`变量。`deform_verts`是一个顶点位移的张量，对于`src_mesh`中的每个顶点，都有一个三维向量的顶点位移。我们将优化`deform_verts`，以寻找最优的可变形网格：
+- en: '[PRE5]'
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'We define an SGD optimizer with `deform_verts` as the optimization variable:'
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们定义一个SGD优化器，以`deform_verts`作为优化变量：
+- en: '[PRE6]'
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'We define a batch of weights for different loss functions. As we have mentioned,
+    we need multiple loss functions, including the primary one and the regularization
+    loss functions. The final loss will be a weighted sum of the different loss functions.
+    Here is where we define the weights:'
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们定义了一组不同损失函数的权重。如前所述，我们需要多个损失函数，包括主要的损失函数和正则化损失函数。最终的损失将是不同损失函数的加权和。这里是我们定义权重的地方：
+- en: '[PRE7]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: We are then ready for going into the major optimization iterations. We are going
+    to iterate 2,000 times for computing the loss function, computing the gradients,
+    and going along the gradient descent directions. Each iteration starts with `optimizer.zero_grad()`,
+    which will reset all the gradients, the `loss` variable is then computed, and
+    the gradient back-propagation is then computed in `loss.backward()`; the going
+    along the gradient descent direction is done in `optimizer.step()`.
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们就可以进入主要的优化迭代过程。我们将进行2,000次迭代来计算损失函数、计算梯度并沿着梯度下降方向前进。每次迭代从`optimizer.zero_grad()`开始，这将重置所有的梯度，然后计算`loss`变量，接着在`loss.backward()`中计算梯度反向传播；沿着梯度下降方向的更新在`optimizer.step()`中完成。
+- en: For us to be able to compute the Chamfer distance, during each iteration, we
+    randomly sample some points from the deformed mesh model by using a PyTorch3D
+    function called `sample_points_from_meshes`. Note that the `sample_points_from_meshes`
+    function supports gradient back-propagation computations.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了能够计算Chamfer距离，在每次迭代中，我们通过使用PyTorch3D中的`sample_points_from_meshes`函数从变形后的网格模型中随机采样一些点。请注意，`sample_points_from_meshes`函数支持梯度反向传播计算。
+- en: 'We also use three other loss functions for regularization, `mesh_edge_loss`,
+    `mesh_normal_consistency`, and `mesh_laplacian_smooth`. The final `loss` variable
+    is actually the weighted sum of the four loss functions:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还使用三个其他的损失函数进行正则化，`mesh_edge_loss`、`mesh_normal_consistency`和`mesh_laplacian_smooth`。最终的`loss`变量实际上是这四个损失函数的加权和：
+- en: '[PRE8]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'We then extract the obtained vertices and faces from the `new_src_mesh` variable
+    and then resume its original center location and scale:'
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后我们从`new_src_mesh`变量中提取得到的顶点和面，然后恢复它的原始中心位置和比例：
+- en: '[PRE9]'
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Finally, the obtained mesh model is saved in the `deform1.ply` file:'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最终，得到的网格模型保存在`deform1.ply`文件中：
+- en: '[PRE10]'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '![Figure 3.2: Optimized deformed mesh model. Note that we have far more points
+    than the original input point cloud ](img/B18217_03_2.jpg)'
+  id: totrans-89
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 3.2：优化后的变形网格模型。请注意，我们的点数比原始输入点云要多得多](img/B18217_03_2.jpg)'
+- en: 'Figure 3.2: Optimized deformed mesh model. Note that we have far more points
+    than the original input point cloud'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 3.2：优化后的变形网格模型。请注意，我们的点数比原始输入点云要多得多
+- en: The obtained mesh can be visualized on your screen by using `vis1.py`. One screenshot
+    of the obtained mesh is shown in *Figure 3.2*. Note that compared to the original
+    input point cloud, the optimized mesh model actually contains far more points
+    (2,500 compared with 239). The obtained surfaces seem to be smoother than the
+    original input points also.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过使用`vis1.py`在屏幕上可视化得到的网格。优化后的网格的截图如*图 3.2*所示。请注意，与原始输入点云相比，优化后的网格模型实际上包含更多的点（2,500个点对比239个点）。而且得到的表面看起来比原始输入点更加平滑。
+- en: The experiment of not using any regularization loss functions
+  id: totrans-92
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 不使用任何正则化损失函数的实验
+- en: 'What if we don''t use any of these regularization loss functions? We run an
+    experiment using the code in `deform2.py`. The only difference between the code
+    snippet in `deform2.py` and the one in `deform1.py` is the following lines:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们不使用任何正则化损失函数会怎样？我们使用`deform2.py`中的代码运行实验。`deform2.py`中的代码与`deform1.py`中的代码唯一不同的是以下几行：
+- en: '[PRE11]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[PRE12]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '[PRE13]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Note that all the weights have been set to zero, except the one for the Chamfer
+    loss function. Essentially, we are not using any loss functions for regularization.
+    The resulting mesh can be visualized on your screen by running `vis2.py`. A screenshot
+    is shown in *Figure 3.3*:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，所有权重已设置为零，除了Chamfer损失函数的权重。实际上，我们没有使用任何正则化损失函数。通过运行`vis2.py`，可以在屏幕上可视化结果网格。截图显示在*图
+    3.3*中：
+- en: '![Figure 3.3: Mesh obtained without using any loss functions for regularization
+    ](img/B18217_03_3.jpg)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 3.3: 未使用任何正则化损失函数获得的网格](img/B18217_03_3.jpg)'
+- en: 'Figure 3.3: Mesh obtained without using any loss functions for regularization'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '图 3.3: 未使用任何正则化损失函数获得的网格'
+- en: Note that the obtained mesh in *Figure 3.3* is not smooth and is unlikely to
+    be close to the actual ground-truth surfaces.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，*图 3.3*中获得的网格并不平滑，并且不太可能接近实际的真实表面。
+- en: The experiment of using only the mesh edge loss
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 仅使用网格边缘损失的实验
+- en: 'This time, we are going to use the following set of weights. The code snippet
+    is in `deform3.py`:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这次，我们将使用以下一组权重。代码片段在`deform3.py`中：
+- en: '[PRE15]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[PRE18]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The obtained mesh model is in `deform3.ply`. The mesh can be visualized on
+    your screen by using `vis3.py`. A screenshot of the mesh is shown in *Figure 3.4*:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 获得的网格模型位于`deform3.ply`。可以通过使用`vis3.py`在屏幕上可视化网格。网格的截图显示在*图 3.4*中：
+- en: '![Figure 3.4: Obtained mesh using only the mesh_edge_loss regularization ](img/B18217_03_4.jpg)'
+  id: totrans-109
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 3.4: 仅使用网格边缘损失正则化获得的网格](img/B18217_03_4.jpg)'
+- en: 'Figure 3.4: Obtained mesh using only the mesh_edge_loss regularization'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '图 3.4: 仅使用网格边缘损失正则化获得的网格'
+- en: From *Figure 3.4*, we can observe that the obtained mesh is much smoother than
+    the one in *Figure 3.3*. However, it seems that there are some rapid changes in
+    the surface normal. Actually, you can try out other weights on your own to see
+    how these loss functions affect the final outcomes.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从*图 3.4*中，我们可以观察到获得的网格比*图 3.3*中的网格平滑得多。然而，似乎在表面法线方面存在一些急剧变化。实际上，你可以自己尝试其他权重，看看这些损失函数如何影响最终结果。
+- en: Summary
+  id: totrans-112
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we talked about an approach to fitting deformable mesh models
+    to a point cloud. As we have discussed, obtaining meshes from point clouds is
+    usually a standard step in many 3D computer vision pipelines. The fitting approach
+    in this chapter can be used as a simple baseline approach in practice.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论了一种将可变形网格模型拟合到点云的方法。如我们所讨论的，从点云获取网格通常是许多3D计算机视觉管道中的标准步骤。本章中的拟合方法可以作为实践中的简单基准方法。
+- en: From this deformable mesh fitting approach, we learned how to use PyTorch optimization.
+    We also learned about many loss functions and their PyTorch3D implementations,
+    including Chamfer distances, mesh edge loss, mesh Laplacian smoothing loss, and
+    mesh normal consistency loss.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个可变形网格拟合方法中，我们学会了如何使用PyTorch优化。我们还了解了许多损失函数及其在PyTorch3D中的实现，包括Chamfer距离、网格边缘损失、网格拉普拉斯平滑损失和网格法线一致性损失。
+- en: We learned when these loss functions should be used and for what purposes. We
+    saw several experiments for showing how the loss functions affect the final outcome.
+    You are also encouraged to run your own experiments with different combinations
+    of loss functions and weights.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们学会了这些损失函数应该在何时使用以及用于何种目的。我们看到了几个实验，展示了损失函数如何影响最终结果。也鼓励你运行自己的实验，尝试不同的损失函数和权重组合。
+- en: In the next chapter, we will discuss a very exciting 3D deep learning technique
+    called differentiable rendering. Actually, we will have several differentiable-rendering-related
+    chapters in this book. The next chapter will be the first one of these chapters.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，我们将讨论一个非常激动人心的3D深度学习技术——可微分渲染。实际上，我们将在本书中有几章与可微分渲染相关。下一章将是这些章节中的第一章。

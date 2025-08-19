@@ -1,0 +1,1794 @@
+- en: Cruise Control - Automation
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 自适应巡航控制 - 自动化
+- en: In this chapter, we will create a production system, from training to serving
+    a model. Our system will have the ability to distinguish between 37 different
+    species of dogs and cat. A user can upload an image to our system to receive the
+    results. The system can also receive feedback from the user and automatically
+    train itself every day to improve results.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将创建一个生产系统，从训练到提供模型服务。我们的系统将能够区分37种不同的狗和猫品种。用户可以向我们的系统上传图像并接收结果。系统还可以从用户那里接收反馈，并每天自动进行训练以改善结果。
+- en: 'This chapter will focus on several areas:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将重点讲解以下几个方面：
+- en: How to apply transfer learning to a new dataset
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何将迁移学习应用到新数据集
+- en: How to serve a production model with TensorFlow Serving
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用 TensorFlow Serving 提供生产模型服务
+- en: Creating a system with crowd-sourced labeling of the dataset and automatic fine-tuning
+    the model on user data
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建一个通过众包标注数据集并在用户数据上自动微调模型的系统
+- en: An overview of the system
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 系统概览
+- en: 'The following diagram provides an overview of our system:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下图表提供了我们系统的概述：
+- en: '![](img/f70d3bc2-a815-4a92-8c76-8ac66ffc649f.png)'
+  id: totrans-8
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/f70d3bc2-a815-4a92-8c76-8ac66ffc649f.png)'
+- en: 'In this system, we will use an initial dataset to train a convolutional neural
+    network model on a training server. Then, the model will be served in a production
+    server with TensorFlow Serving. On the production server, there will be a Flask
+    server that allows users to upload a new image and correct the label if the model
+    goes wrong. At a defined time in the day, the training server will combine all
+    the user-labeled images with the current dataset to automatically fine-tune the
+    model and send it to the production server. Here is the wireframe of the web interface
+    that allows users to upload and receive the result:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个系统中，我们将使用一个初始数据集在训练服务器上训练一个卷积神经网络模型。然后，模型将在生产服务器上通过 TensorFlow Serving 提供服务。在生产服务器上，会有一个
+    Flask 服务器，允许用户上传新图像并在模型出现错误时修正标签。在一天的某个特定时间，训练服务器将会将所有用户标记过的图像与当前数据集合并，以自动微调模型并将其发送到生产服务器。以下是允许用户上传并接收结果的网页界面框架：
+- en: '![](img/9972d10a-5ab1-456c-849f-1490e4f346ff.png)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/9972d10a-5ab1-456c-849f-1490e4f346ff.png)'
+- en: Setting up the project
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置项目
+- en: In this chapter, we will fine-tune a VGG model that has been trained on `ImageNet`
+    data with 1,000 classes. We have provided an initial project with a pretrained
+    VGG model and some utility files. You can go ahead and download the code from
+    [https://github.com/mlwithtf/mlwithtf/tree/master/chapter_09](https://github.com/mlwithtf/mlwithtf/tree/master/chapter_09).
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将微调一个已经在 `ImageNet` 数据上训练过的 VGG 模型，该数据集有 1,000 个类别。我们已经提供了一个包含预训练 VGG
+    模型和一些实用文件的初始项目。你可以去下载 [https://github.com/mlwithtf/mlwithtf/tree/master/chapter_09](https://github.com/mlwithtf/mlwithtf/tree/master/chapter_09)
+    上的代码。
+- en: 'In the folder `chapter-09`, you will have the following structure:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `chapter-09` 文件夹中，你将看到以下结构：
+- en: '[PRE0]'
+  id: totrans-14
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'There are two files that you should understand:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两个文件是你需要理解的：
+- en: '`VGG16.npz` is the pre-trained model that is exported from the Caffe model.
+    [Chapter 11](1cae2bb8-19d3-4640-aae6-d31d66afb605.xhtml), *Going Further - 21
+    Problems* will show you how to create this file from the Caffe model. In this
+    chapter, we will use this as the initial values for our model. You can download
+    this file from the `README.md` in the `chapter_09` folder.'
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`VGG16.npz` 是从 Caffe 模型导出的预训练模型。[第11章](1cae2bb8-19d3-4640-aae6-d31d66afb605.xhtml)，*深入学习
+    - 21个问题* 将展示如何从 Caffe 模型创建这个文件。在本章中，我们将把它作为模型的初始值。你可以从 `chapter_09` 文件夹中的 `README.md`
+    下载此文件。'
+- en: '`production` is the Flask server that we created to serve as a web interface
+    for users to upload and correct the model.'
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`production` 是我们创建的 Flask 服务器，用作用户上传和修正模型的网页接口。'
+- en: '`debug_print.py` contains some methods that we will use during this chapter
+    to understand the network structure.'
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`debug_print.py` 包含了一些我们将在本章中使用的方法，用于理解网络结构。'
+- en: '`samples_data` contains some images of cats, dogs, and cars that we will use
+    throughout the chapter.'
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`samples_data` 包含了一些我们将在本章中使用的猫、狗和汽车的图像。'
+- en: Loading a pre-trained model to speed up the training
+  id: totrans-20
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 加载预训练模型以加速训练
+- en: In this section, let's focus on loading the pre-trained model in TensorFlow.
+    We will use the VGG-16 model proposed by K. Simonyan and A. Zisserman from the
+    University of Oxford.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一节中，我们将专注于在 TensorFlow 中加载预训练模型。我们将使用由牛津大学的 K. Simonyan 和 A. Zisserman 提出的
+    VGG-16 模型。
+- en: 'VGG-16 is a very deep neural network with lots of convolution layers followed
+    by max-pooling and fully connected layers. In the `ImageNet` challenge, the top-5
+    classification error of the VGG-16 model on the validation set of 1,000 image
+    classes is 8.1% in a single-scale approach:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: VGG-16是一个非常深的神经网络，具有许多卷积层，后面接着最大池化层和全连接层。在`ImageNet`挑战中，VGG-16模型在1000类图像的验证集上的Top-5分类错误率为8.1%（单尺度方法）：
+- en: '![](img/98634c06-1c4f-4443-a69b-1a6df6d9436b.png)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/98634c06-1c4f-4443-a69b-1a6df6d9436b.png)'
+- en: 'First, create a file named `nets.py` in the `project` directory. The following
+    code defines the graph for the VGG-16 model:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，在`project`目录中创建一个名为`nets.py`的文件。以下代码定义了VGG-16模型的图：
+- en: '[PRE1]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'In the preceding code, there are a few things that you should note:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码中，有一些事项需要注意：
+- en: '`_conv2d`, `_max_pool`, `_fully_connected` and `_softmax` are methods that
+    define the convolution, max pooling, fully connected, and softmax layers, respectively.
+    We will implement these methods shortly.'
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`_conv2d`、`_max_pool`、`_fully_connected`和`_softmax`是分别定义卷积层、最大池化层、全连接层和softmax层的方法。我们稍后将实现这些方法。'
+- en: In the `preprocess` name scope, we define a constant tensor, `mean`, which is
+    subtracted from the input image. This is the mean vector that the VGG-16 model
+    is trained on in order to make the image zero mean.
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在`preprocess`命名空间中，我们定义了一个常量张量`mean`，它会从输入图像中减去。这是VGG-16模型训练时所用的均值向量，用于将图像的均值调整为零。
+- en: We then define the convolution, max pooling, and fully connected layers with
+    the parameters.
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 接下来，我们使用这些参数定义卷积层、最大池化层和全连接层。
+- en: In the `fc8` layers, we don't apply ReLU activation to the outputs and we send
+    the outputs to a `softmax` layer to compute the probability over 1,000 classes.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在`fc8`层中，我们不对输出应用ReLU激活，而是将输出送入`softmax`层，以计算1000个类别的概率。
+- en: Now, we will implement `_conv2d`, `_max_pool`, `_fully_connected`, and `_softmax`
+    in the `nets.py` file.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将在`nets.py`文件中实现`_conv2d`、`_max_pool`、`_fully_connected`和`_softmax`方法。
+- en: 'The following code is the code for the `_conv2d` and `_max_pool` methods:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是`_conv2d`和`_max_pool`方法的代码：
+- en: '[PRE2]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Most of the preceding code is self-explanatory if you have read [Chapter 4](ff9f54f4-c5eb-4ea8-bc0c-da5021479d77.xhtml),
+    *Cats and Dogs*, but there are some lines that deserve a bit of explanation:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你阅读过[第4章](ff9f54f4-c5eb-4ea8-bc0c-da5021479d77.xhtml)，*猫和狗*，大部分上面的代码是自解释的，但仍有一些行需要稍作解释：
+- en: '`k_h` and `k_w` are the height and weights of the kernel'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`k_h`和`k_w`是卷积核的高度和宽度。'
+- en: '`c_o` means channel outputs, which is the number of feature maps of the convolution
+    layers'
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`c_o`表示通道输出，即卷积层特征图的数量。'
+- en: '`s_h` and `s_w` are the stride parameters for the `tf.nn.conv2d` and `tf.nn.max_pool`
+    layers'
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`s_h`和`s_w`是`tf.nn.conv2d`和`tf.nn.max_pool`层的步幅参数。'
+- en: '`tf.get_variable` is used instead of `tf.Variable` because we will need to
+    use `get_variable` again when we load the pre-trained weights'
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`tf.get_variable`代替`tf.Variable`，因为在加载预训练权重时我们还需要再次使用`get_variable`。
+- en: 'Implementing the `fully_connected` layers and `softmax` layers are quite easy:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现`fully_connected`层和`softmax`层非常简单：
+- en: '[PRE3]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Using the `_fully_connected` method, we first check the number of dimensions
+    of the input data in order to reshape the input data into the correct shape. Then,
+    we create `weights` and `biases` variables with the  `get_variable` method. Finally,
+    we check the `relu` parameter to decide whether we should apply `relu` to the
+    output with the `tf.nn.relu_layer` or `tf.nn.xw_plus_b`. `tf.nn.relu_layer` will
+    compute `relu(matmul(x, weights) + biases)`. `tf.nn.xw_plus_b` but will only compute
+    `matmul(x, weights) + biases`.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`_fully_connected`方法时，我们首先检查输入数据的维度，以便将输入数据重塑为正确的形状。然后，使用`get_variable`方法创建`weights`和`biases`变量。最后，我们检查`relu`参数，决定是否应使用`tf.nn.relu_layer`或`tf.nn.xw_plus_b`对输出应用`relu`。`tf.nn.relu_layer`将计算`relu(matmul(x,
+    weights) + biases)`，而`tf.nn.xw_plus_b`则只计算`matmul(x, weights) + biases`。
+- en: 'The final method in this section is used to load the pre-trained `caffe` weights
+    into the defined variables:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节的最后一个方法用于将预训练的`caffe`权重加载到已定义的变量中：
+- en: '[PRE4]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'In order to understand this method, we must know how the data is stored in
+    the pre-trained model, `VGG16.npz`. We have created a simple code to print all
+    the variables in the pre-trained model. You can put the following code at the
+    end of `nets.py` and run it with Python `nets.py`:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解这个方法，我们必须了解数据是如何存储在预训练模型`VGG16.npz`中的。我们创建了一段简单的代码来打印预训练模型中的所有变量。你可以将以下代码放在`nets.py`的末尾，并使用Python
+    `nets.py`运行：
+- en: '[PRE5]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Here are a few lines of the results:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是一些结果的代码行：
+- en: '[PRE6]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: As you can see, `op_name` is the name of the layers, and we can access the `weights`
+    and `biases` of each layer with `data_dict[op_name]`.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，`op_name`是层的名称，我们可以通过`data_dict[op_name]`访问每层的`weights`和`biases`。
+- en: 'Let''s take a look at `load_caffe_weights`:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下`load_caffe_weights`：
+- en: We use it with `tf.variable_scope` with `reuse=True` in the parameters so that
+    we can get the exact variables for `weights` and `biases` that were defined in
+    the graph. After that, we run the assign method to set the data for each variable.
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们使用`tf.variable_scope`和`reuse=True`参数，以便我们能获取图中定义的`weights`和`biases`的准确变量。之后，我们运行assign方法为每个变量设置数据。
+- en: The `get_variable` method will give `ValueError` if the variable name is not
+    defined. Therefore, we will use the `ignore_missing` variable to decide whether
+    we should raise an error or not.
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果变量名称未定义，`get_variable`方法将会抛出`ValueError`。因此，我们将使用`ignore_missing`变量来决定是否抛出错误。
+- en: Testing the pre-trained model
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 测试预训练模型
+- en: We have already created a VGG16 neural network. In this section, we will try
+    to use the pre-trained model to perform the classifications of cars, cats, and
+    dogs to check whether the model has been loaded successfully.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经创建了一个VGG16神经网络。在这一部分，我们将尝试使用预训练模型对汽车、猫和狗进行分类，以检查模型是否已成功加载。
+- en: 'In the `nets.py` file, we need to replace the current `__main__` code with
+    the following code:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`nets.py`文件中，我们需要将当前的`__main__`代码替换为以下代码：
+- en: '[PRE7]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'In the preceding code, there are several things that you should note:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的代码中，有几件事需要注意：
+- en: We use the `debug_print`.`print_variables` helper method to visualize all the
+    variables by printing the variable names and shapes.
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们使用`debug_print`.`print_variables`辅助方法，通过打印变量名称和形状来可视化所有变量。
+- en: 'We define a placeholder named `inputs` with the shape `[None, 224, 224, 3]`,
+    which is the required input size of the VGG16 model:'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们定义了一个名为`inputs`的占位符，形状为`[None, 224, 224, 3]`，这是VGG16模型所需的输入大小：
+- en: '[PRE8]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: In `tf.Session()`, we call the `load_caffe_weights` method with `ignore_missing=False`
+    to ensure that we can load all the weights and biases of the pre-trained model.
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在`tf.Session()`中，我们调用`load_caffe_weights`方法并设置`ignore_missing=False`，以确保能够加载预训练模型的所有权重和偏置。
+- en: The image is loaded and resized with the `imread` and `imresize` methods from
+    `scipy`. Then, we use the `sess.run` method with the `feed_dict` dictionary and
+    receive the predictions.
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 图片使用`scipy`中的`imread`和`imresize`方法加载和调整大小。然后，我们使用带有`feed_dict`字典的` sess.run`方法，并接收预测结果。
+- en: 'The following results are the predictions for `car.jpg`, `cat.jpg`, and `dog.jpg`
+    in the `samples_data` that we provided at the beginning of the chapter:'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以下是我们在章节开始时提供的`samples_data`中`car.jpg`、`cat.jpg`和`dog.jpg`的预测结果：
+- en: '[PRE9]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The preceding results are the exact labels of these images. This means that
+    we have successfully loaded the pre-trained VGG16 model in TensorFlow. In the
+    next section, we will show you how to fine-tune the model on our dataset.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述结果是这些图像的准确标签。这意味着我们已经成功加载了在TensorFlow中的预训练VGG16模型。在下一部分，我们将向你展示如何在我们的数据集上微调模型。
+- en: Training the model for our dataset
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为我们的数据集训练模型
+- en: In this section, we will work through the process of creating the dataset, fine-tuning
+    the model, and exporting the model for production.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们将演示如何创建数据集、微调模型以及导出模型以供生产使用。
+- en: Introduction to the Oxford-IIIT Pet dataset
+  id: totrans-67
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Oxford-IIIT Pet 数据集简介
+- en: 'The Oxford-IIIT Pet dataset contains 37 species of dogs and cats. Each class
+    has 200 images with large variations in scale, pose, and lighting. The ground
+    truth data has annotations for species, head position, and pixel segmentation
+    for each image. In our application, we only use the species name as the class
+    name for the model:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Oxford-IIIT Pet 数据集包含37种犬类和猫类，每个类别有200张图像，图像的尺度、姿势和光照变化较大。标注数据包含物种、头部位置和每张图片的像素分割。在我们的应用中，我们只使用物种名称作为模型的类别名称：
+- en: '![](img/682fb671-be0e-4fa6-8895-23a01be38c5b.png)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/682fb671-be0e-4fa6-8895-23a01be38c5b.png)'
+- en: Dataset Statistics
+  id: totrans-70
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据集统计
+- en: 'The following are the dataset for dogs and cats breed:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是狗狗和猫咪品种的数据集：
+- en: 'Dog breeds:'
+  id: totrans-72
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 狗狗品种：
+- en: '| **Breed** | **Total** |'
+  id: totrans-73
+  prefs: []
+  type: TYPE_TB
+  zh: '| **品种** | **总数** |'
+- en: '| American Bulldog | 200 |'
+  id: totrans-74
+  prefs: []
+  type: TYPE_TB
+  zh: '| 美国斗牛犬 | 200 |'
+- en: '| American Pit Bull Terrier  | 200 |'
+  id: totrans-75
+  prefs: []
+  type: TYPE_TB
+  zh: '| 美国比特犬 | 200 |'
+- en: '| Basset Hound | 200 |'
+  id: totrans-76
+  prefs: []
+  type: TYPE_TB
+  zh: '| 巴吉犬 | 200 |'
+- en: '| Beagle  | 200 |'
+  id: totrans-77
+  prefs: []
+  type: TYPE_TB
+  zh: '| 小猎兔犬 | 200 |'
+- en: '| Boxer  | 199 |'
+  id: totrans-78
+  prefs: []
+  type: TYPE_TB
+  zh: '| 拳师犬 | 199 |'
+- en: '| Chihuahua | 200 |'
+  id: totrans-79
+  prefs: []
+  type: TYPE_TB
+  zh: '| 吉娃娃 | 200 |'
+- en: '| English Cocker Spaniel | 196 |'
+  id: totrans-80
+  prefs: []
+  type: TYPE_TB
+  zh: '| 英国可卡犬 | 196 |'
+- en: '| English Setter  | 200 |'
+  id: totrans-81
+  prefs: []
+  type: TYPE_TB
+  zh: '| 英国猎狐犬 | 200 |'
+- en: '| German Shorthaired | 200 |'
+  id: totrans-82
+  prefs: []
+  type: TYPE_TB
+  zh: '| 德国短毛指示犬 | 200 |'
+- en: '| Great Pyrenees  | 200 |'
+  id: totrans-83
+  prefs: []
+  type: TYPE_TB
+  zh: '| 大比利犬 | 200 |'
+- en: '| Havanese | 200 |'
+  id: totrans-84
+  prefs: []
+  type: TYPE_TB
+  zh: '| 哈瓦那犬 | 200 |'
+- en: '| Japanese Chin   | 200 |'
+  id: totrans-85
+  prefs: []
+  type: TYPE_TB
+  zh: '| 日本狆犬 | 200 |'
+- en: '| Keeshond | 199 |'
+  id: totrans-86
+  prefs: []
+  type: TYPE_TB
+  zh: '| 凯斯犬 | 199 |'
+- en: '| Leonberger  | 200 |'
+  id: totrans-87
+  prefs: []
+  type: TYPE_TB
+  zh: '| 莱昂贝格犬 | 200 |'
+- en: '| Miniature Pinscher | 200 |'
+  id: totrans-88
+  prefs: []
+  type: TYPE_TB
+  zh: '| 迷你雪达犬 | 200 |'
+- en: '| Newfoundland  | 196 |'
+  id: totrans-89
+  prefs: []
+  type: TYPE_TB
+  zh: '| 纽芬兰犬 | 196 |'
+- en: '| Pomeranian | 200 |'
+  id: totrans-90
+  prefs: []
+  type: TYPE_TB
+  zh: '| 博美犬 | 200 |'
+- en: '| Pug | 200 |'
+  id: totrans-91
+  prefs: []
+  type: TYPE_TB
+  zh: '| 哈巴狗 | 200 |'
+- en: '| Saint Bernard | 200 |'
+  id: totrans-92
+  prefs: []
+  type: TYPE_TB
+  zh: '| 圣伯纳犬 | 200 |'
+- en: '| Samoyed | 200 |'
+  id: totrans-93
+  prefs: []
+  type: TYPE_TB
+  zh: '| 萨摩耶犬 | 200 |'
+- en: '| Scottish Terrier | 199 |'
+  id: totrans-94
+  prefs: []
+  type: TYPE_TB
+  zh: '| 苏格兰梗 | 199 |'
+- en: '| Shiba Inu | 200 |'
+  id: totrans-95
+  prefs: []
+  type: TYPE_TB
+  zh: '| 柴犬 | 200 |'
+- en: '| Staffordshire Bull Terrier | 189 |'
+  id: totrans-96
+  prefs: []
+  type: TYPE_TB
+  zh: '| 斯塔福郡斗牛梗 | 189 |'
+- en: '| Wheaten Terrier | 200 |'
+  id: totrans-97
+  prefs: []
+  type: TYPE_TB
+  zh: '| 小麦梗 | 200 |'
+- en: '| Yorkshire Terrier | 200 |'
+  id: totrans-98
+  prefs: []
+  type: TYPE_TB
+  zh: '| 约克夏梗 | 200 |'
+- en: '| **Total** | **4978** |'
+  id: totrans-99
+  prefs: []
+  type: TYPE_TB
+  zh: '| **总计** | **4978** |'
+- en: 'Cat breeds:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 猫品种：
+- en: '| **Breed** | **Count** |'
+  id: totrans-101
+  prefs: []
+  type: TYPE_TB
+  zh: '| **品种** | **数量** |'
+- en: '| Abyssinian | 198 |'
+  id: totrans-102
+  prefs: []
+  type: TYPE_TB
+  zh: '| 阿比西尼亚猫 | 198 |'
+- en: '| Bengal | 200 |'
+  id: totrans-103
+  prefs: []
+  type: TYPE_TB
+  zh: '| 孟加拉猫 | 200 |'
+- en: '| Birman | 200 |'
+  id: totrans-104
+  prefs: []
+  type: TYPE_TB
+  zh: '| 伯曼猫 | 200 |'
+- en: '| Bombay | 184 |'
+  id: totrans-105
+  prefs: []
+  type: TYPE_TB
+  zh: '| 孟买猫 | 184 |'
+- en: '| British Shorthair | 200 |'
+  id: totrans-106
+  prefs: []
+  type: TYPE_TB
+  zh: '| 英国短毛猫 | 200 |'
+- en: '| Egyptian Mau | 190 |'
+  id: totrans-107
+  prefs: []
+  type: TYPE_TB
+  zh: '| 埃及猫 | 190 |'
+- en: '| Maine Coon | 200 |'
+  id: totrans-108
+  prefs: []
+  type: TYPE_TB
+  zh: '| 缅因猫 | 200 |'
+- en: '| Persian | 200 |'
+  id: totrans-109
+  prefs: []
+  type: TYPE_TB
+  zh: '| 波斯猫 | 200 |'
+- en: '| Ragdoll | 200 |'
+  id: totrans-110
+  prefs: []
+  type: TYPE_TB
+  zh: '| 拉格多尔猫 | 200 |'
+- en: '| Russian Blue | 200 |'
+  id: totrans-111
+  prefs: []
+  type: TYPE_TB
+  zh: '| 俄罗斯蓝猫 | 200 |'
+- en: '| Siamese | 199 |'
+  id: totrans-112
+  prefs: []
+  type: TYPE_TB
+  zh: '| 暹罗猫 | 199 |'
+- en: '| Sphynx | 200 |'
+  id: totrans-113
+  prefs: []
+  type: TYPE_TB
+  zh: '| 无毛猫 | 200 |'
+- en: '| **Total** | **2371** |'
+  id: totrans-114
+  prefs: []
+  type: TYPE_TB
+  zh: '| **总计** | **2371** |'
+- en: 'Total pets:'
+  id: totrans-115
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 宠物总数：
+- en: '| **Family** | **Count** |'
+  id: totrans-116
+  prefs: []
+  type: TYPE_TB
+  zh: '| **家族** | **数量** |'
+- en: '| Cat | 2371 |'
+  id: totrans-117
+  prefs: []
+  type: TYPE_TB
+  zh: '| 猫 | 2371 |'
+- en: '| Dog | 4978 |'
+  id: totrans-118
+  prefs: []
+  type: TYPE_TB
+  zh: '| 狗 | 4978 |'
+- en: '| **Total** | **7349** |'
+  id: totrans-119
+  prefs: []
+  type: TYPE_TB
+  zh: '| **总计** | **7349** |'
+- en: Downloading the dataset
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 下载数据集
+- en: 'We can get the dataset from the website of the University of Oxford at [http://www.robots.ox.ac.uk/~vgg/data/pets/](http://www.robots.ox.ac.uk/~vgg/data/pets/).
+    We need to download the dataset and ground truth data as `images.tar.gz` and `annotations.tar.gz`.
+    We store the TAR files in the `data/datasets` folder and extract all the `.tar`
+    files. Make sure that the `data` folder has the following structure:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以从牛津大学的网站[http://www.robots.ox.ac.uk/~vgg/data/pets/](http://www.robots.ox.ac.uk/~vgg/data/pets/)获取数据集。我们需要下载数据集和真实标签数据，分别命名为`images.tar.gz`和`annotations.tar.gz`。我们将TAR文件存储在`data/datasets`文件夹中，并解压所有`.tar`文件。确保`data`文件夹具有以下结构：
+- en: '[PRE10]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Preparing the data
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 准备数据
+- en: Before starting the training process, we need to pre-process the dataset into
+    a simpler format, which we will use in the further automatic fine-tuning.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始训练过程之前，我们需要将数据集预处理为更简单的格式，以便在进一步的自动微调中使用。
+- en: 'First, we make a Python package with named scripts in the `project` folder.
+    Then, we create a Python file named `convert_oxford_data.py` and add the following
+    code:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们在`project`文件夹中创建一个名为`scripts`的Python包。然后，我们创建一个名为`convert_oxford_data.py`的Python文件，并添加以下代码：
+- en: '[PRE11]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: In this code, we use `tf.app.flags.FLAGS` to parse arguments so that we can
+    customize the script easily. We also create two `helper` methods to make a directory
+    and read images.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这段代码中，我们使用`tf.app.flags.FLAGS`来解析参数，以便轻松定制脚本。我们还创建了两个`helper`方法来创建目录和读取图像。
+- en: 'Next, we add the following code to convert the Oxford dataset into our preferred
+    format:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们添加以下代码，将Oxford数据集转换为我们喜欢的格式：
+- en: '[PRE12]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Now, we can run the `scripts` with the following code:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以使用以下代码运行`scripts`：
+- en: '[PRE13]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'The script reads the Oxford-IIIT dataset ground truth `data` and creates a
+    new `dataset` in `data/train_data` with the following structure:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脚本读取Oxford-IIIT数据集的真实标签`data`，并在`data/train_data`中创建一个新的`dataset`，其结构如下：
+- en: '[PRE14]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Let''s discuss these a bit:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们稍微讨论一下这些内容：
+- en: '`labels.txt` contains a list of 37 species in our dataset.'
+  id: totrans-135
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`labels.txt`包含了我们数据集中37个物种的列表。'
+- en: '`trainval.txt` contains a list of the images that we will use in the training
+    process, with the format `<class_id> <image_path>`.'
+  id: totrans-136
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`trainval.txt`包含了我们将在训练过程中使用的图像列表，格式为`<class_id> <image_path>`。'
+- en: '`test.txt` contains a list of the images that we will use to check the accuracy
+    of the model. The format of `test.txt` is the same as `trainval.txt`.'
+  id: totrans-137
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`test.txt`包含了我们将用来检验模型准确度的图像列表。`test.txt`的格式与`trainval.txt`相同。'
+- en: '`trainval` and `test` folders contain 37 sub-folders, which are the names of
+    each class and contains all the images of each class.'
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`trainval`和`test`文件夹包含37个子文件夹，这些文件夹分别是每个类别的名称，且每个类别的所有图像都包含在相应的文件夹中。'
+- en: Setting up input pipelines for training and testing
+  id: totrans-139
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置训练和测试的输入管道
+- en: TensorFlow allows us to create a reliable input pipeline for quick and easy
+    training. In this section, we will implement `tf.TextLineReader` to read the train
+    and test text files. We will use `tf.train.batch` to read and preprocess images
+    in parallel.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TensorFlow允许我们创建一个可靠的输入管道，方便快速的训练。在这一部分中，我们将实现`tf.TextLineReader`来读取训练和测试文本文件。我们将使用`tf.train.batch`来并行读取和预处理图像。
+- en: 'First, we need to create a new Python file named `datasets.py` in the `project`
+    directory and add the following code:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要在`project`目录中创建一个名为`datasets.py`的新Python文件，并添加以下代码：
+- en: '[PRE15]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: In the `load_files` method, we use the `tf.TextLineReader` to read each line
+    of the text file, such as `trainval.txt, test.txt`. `tf.TextLineReader` needs
+    a queue of strings to read, so we use `tf.train.string_input_producer` to store
+    the filenames. After that, we pass the line variable into `tf.decode_cvs` in order
+    to get the `label` and `filename`. The image can be easily read with `tf.image.decode_jpeg`.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`load_files`方法中，我们使用`tf.TextLineReader`读取文本文件的每一行，例如`trainval.txt`和`test.txt`。`tf.TextLineReader`需要一个字符串队列来读取数据，因此我们使用`tf.train.string_input_producer`来存储文件名。之后，我们将行变量传入`tf.decode_cvs`，以便获取`label`和`filename`。图片可以通过`tf.image.decode_jpeg`轻松读取。
+- en: Now that we can load the image, we can move forward and create `image` batches
+    and `label` batches for `training`.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经能够加载图片，我们可以继续进行，创建`image`批次和`label`批次用于`training`。
+- en: 'In `datasets.py`, we need to add a new method:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`datasets.py`中，我们需要添加一个新方法：
+- en: '[PRE16]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We first load the `image` and `label` with the `load_files` method. Then, we
+    pass the image through a new preprocessing method, which we will implement shortly.
+    Finally, we pass the `image` and `label` into `tf.train.shuffle_batch` for training
+    and `tf.train.batch` for testing:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先使用`load_files`方法加载`image`和`label`。然后，我们通过一个新的预处理方法处理图片，该方法稍后将实现。最后，我们将`image`和`label`传入`tf.train.shuffle_batch`进行训练，并通过`tf.train.batch`进行测试：
+- en: '[PRE17]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'There are two different approaches to preprocessing in training and testing.
+    In training, we need to augment data to create more training data from the current
+    dataset. There are a few techniques that are used in the preprocessing method:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练和测试中，预处理有两种不同的方法。在训练中，我们需要增强数据，以从当前数据集中创建更多的训练数据。预处理方法中使用了几种技术：
+- en: 'The images in the dataset can have different image resolutions, but we only
+    need 224x224 images. Therefore, we need to resize the image to a reasonable size
+    before performing `random_crop`. The following diagram describes how cropping
+    works. The `_aspect_preserving_resize` method will be implemented shortly:'
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据集中的图片可能有不同的分辨率，但我们只需要224x224的图片。因此，在执行`random_crop`之前，我们需要将图像调整为合适的大小。下图描述了裁剪是如何工作的。`_aspect_preserving_resize`方法将稍后实现：
+- en: '![](img/062d0bd1-3f15-4966-8b71-b3603ad59f01.png)'
+  id: totrans-151
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](img/062d0bd1-3f15-4966-8b71-b3603ad59f01.png)'
+- en: After cropping the image, we pass the image through `tf.image.random_flip_left_right`,
+    `tf.image.random_brightness` and `tf.image.random_contrast` to distort the image
+    and create a new training sample.
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在裁剪图片后，我们通过`tf.image.random_flip_left_right`、`tf.image.random_brightness`和`tf.image.random_contrast`对图片进行失真处理，从而生成新的训练样本。
+- en: In the testing routine, we only need to resize the image with `_aspect_preserving_resize`
+    and `tf.image.resize_image_with_crop_or_pad`. `tf.image.resize_image_with_crop_or_pad`
+    allows us to crop centrally or pad the image to the target `width` and `height`.
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在测试过程中，我们只需要通过`_aspect_preserving_resize`和`tf.image.resize_image_with_crop_or_pad`来调整图片大小。`tf.image.resize_image_with_crop_or_pad`允许我们对图像进行中心裁剪或填充，以匹配目标的`width`和`height`。
+- en: 'Now, we need to add the last two methods into `datasets.py`, as shown here:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们需要将最后两个方法添加到`datasets.py`中，如下所示：
+- en: '[PRE18]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Up to this section, we had to do a lot of work to prepare the `dataset` and
+    `input` pipelines. In the following section, we will define the model for our
+    `dataset`, `loss`, `accuracy` and `training` operations to perform the `training`
+    routine.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经做了很多工作来准备`dataset`和`input`管道。在接下来的部分中，我们将为我们的`dataset`、`loss`、`accuracy`和`training`操作定义模型，以执行`training`过程。
+- en: Defining the model
+  id: totrans-157
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 定义模型
+- en: 'Our application will need to classify `37` classes of dogs and cats. The VGG16
+    Model supports 1,000 different classes. In our application, we will reuse all
+    layers up to the `fc7` layer and train the last layer from scratch. In order to
+    make the model output `37` classes, we need to modify the inference method in
+    `nets.py` as follows:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的应用程序需要对`37`类狗和猫进行分类。VGG16模型支持1,000种不同的类别。在我们的应用中，我们将重用所有层直到`fc7`层，并从头开始训练最后一层。为了使模型输出`37`个类别，我们需要修改`nets.py`中的推理方法，如下所示：
+- en: '[PRE19]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: We add a new parameter, `is_training`, to the method. After the `fc7` layer,
+    we add a `tf.nn.dropout` layer if the inference is training. This dropout layer
+    can help the model regularize better with unseen data and avoid overfitting.
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们向方法中添加了一个新参数`is_training`。在`fc7`层之后，如果推理是训练过程，我们将添加一个`tf.nn.dropout`层。这个dropout层有助于模型在面对未见过的数据时更好地正则化，并避免过拟合。
+- en: The number of outputs in the `fc8` layer is changed from 1,000 to 37\. Besides,
+    the name of the `fc8` layer must be changed to another name; in this case, we
+    choose `fc8-pets`. If we don't change the name of the `fc8` layer, `load_caffe_weights`
+    will still find the new layers and assign the original weights, which is not the
+    same size as our new `fc8` layer.
+  id: totrans-161
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`fc8`层的输出数量从1,000改为37。此外，`fc8`层的名称必须更改为另一个名称；在这种情况下，我们选择`fc8-pets`。如果不更改`fc8`层的名称，`load_caffe_weights`仍然会找到新层并分配原始权重，而这些权重的大小与我们新的`fc8`层不同。'
+- en: The `softmax` layer at the end of the inference method is also removed because
+    the `loss` function that we will use later only needs unnormalized outputs.
+  id: totrans-162
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 推理方法最后的`softmax`层也被移除了，因为我们稍后将使用的`loss`函数只需要未经归一化的输出。
+- en: Defining training operations
+  id: totrans-163
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 定义训练操作
+- en: 'We will define all the operations in a new Python file named `models.py`. First,
+    let''s create some operations to compute `loss` and `accuracy`:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在一个新的Python文件`models.py`中定义所有操作。首先，让我们创建一些操作来计算`loss`和`accuracy`：
+- en: '[PRE20]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: In these methods, `logits` is the output of the model and `labels` is the ground
+    truth data from the `dataset`. In the `compute_loss` method, we use `tf.nn.sparse_softmax_cross_entropy_with_logits`
+    so we don't need to normalize the `logits` with `softmax` methods. Besides, we
+    don't need to make the `labels` a one-hot vector. In the `compute_accuracy` method,
+    we compare the max value in `logits` with `tf.argmax` and compare it with the
+    `labels` to get the `accuracy`.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这些方法中，`logits`是模型的输出，`labels`是来自`dataset`的真实数据。在`compute_loss`方法中，我们使用`tf.nn.sparse_softmax_cross_entropy_with_logits`，因此我们不需要通过`softmax`方法对`logits`进行归一化。此外，我们也不需要将`labels`转换为一个热编码向量。在`compute_accuracy`方法中，我们通过`tf.argmax`将`logits`中的最大值与`labels`进行比较，从而得到`accuracy`。
+- en: 'Next, we are going to define the operations for the `learning_rate` and the
+    `optimizer`:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将定义`learning_rate`和`optimizer`的操作：
+- en: '[PRE21]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: In the `train` method, we configure the `optimizer` to only `compute` and apply
+    `gradients` to some variables defined in the `train_vars` string. This allows
+    us to only update the `weights` and `biases` for the last layer, `fc8`, and freeze
+    other layers. `train_vars` is a string that contains a list of variables split
+    by commas, for example, `models/fc8-pets/weights:0,models/fc8-pets/biases:0`.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`train`方法中，我们配置了`optimizer`仅对`train_vars`字符串中定义的某些变量进行`compute`和应用`gradients`。这样，我们只更新最后一层`fc8`的`weights`和`biases`，而冻结其他层。`train_vars`是一个包含通过逗号分隔的变量列表的字符串，例如`models/fc8-pets/weights:0,models/fc8-pets/biases:0`。
+- en: Performing the training process
+  id: totrans-170
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 执行训练过程
+- en: 'Now we are ready to train the model. Let''s create a Python file named `train.py`
+    in the `scripts` folder. First, we need to define some parameters for the `training`
+    routines:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经准备好训练模型了。让我们在`scripts`文件夹中创建一个名为`train.py`的Python文件。首先，我们需要为`training`过程定义一些参数：
+- en: '[PRE22]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'These variables are self-explanatory. Next, we need to define some operations
+    for `training`, as follows:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些变量是不言自明的。接下来，我们需要定义一些用于`training`的操作，如下所示：
+- en: '[PRE23]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: These operations are created by calling our defined methods in `datasets.py`,
+    `nets.py`, and `models.py`. In this code, we create an input pipeline for training
+    and another pipeline for testing. After that, we create a new `variable_scope`
+    named `models` and create `logits` and `test_logits` with the `nets.inference`
+    method. You must make sure that `scope.reuse_variables` is added because we want
+    to reuse the `weights` and `biases` from training in testing. Finally, we create
+    a `saver` and some directories to save the checkpoints every `save_steps`.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些操作是通过调用我们在`datasets.py`、`nets.py`和`models.py`中定义的方法创建的。在这段代码中，我们为训练创建了一个输入管道，并为测试创建了另一个管道。之后，我们创建了一个新的`variable_scope`，命名为`models`，并通过`nets.inference`方法创建了`logits`和`test_logits`。你必须确保添加了`scope.reuse_variables`，因为我们希望在测试中重用训练中的`weights`和`biases`。最后，我们创建了一个`saver`和一些目录，以便每隔`save_steps`保存检查点。
+- en: 'The last part of the `training` routine is the `training` loop:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`training`过程的最后一部分是`training`循环：'
+- en: '[PRE24]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'The `training` loop is easy to understand. First, we load the pre-trained `VGG16`
+    model with `ignore_missing` set to `True` because we replaced the name of the `fc8`
+    layer before. Then, we loop for `max_steps` steps, print the `loss` every `output_steps`,
+    and print the `test_accuracy` every `eval_steps`. Every `save_steps`, we check
+    and save the checkpoint if the current test accuracy is higher than the previous.
+    We still need to create `models.export_model` to export the model for serving
+    after `training`. However, you may want to check whether the `training` routine
+    works before moving forward. Let''s comment out the following line:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`training`循环很容易理解。首先，我们加载预训练的`VGG16`模型，并将`ignore_missing`设置为`True`，因为我们之前更改了`fc8`层的名称。然后，我们循环`max_steps`步，在每`output_steps`步时打印`loss`，每`eval_steps`步时打印`test_accuracy`。每`save_steps`步，我们检查并保存检查点，如果当前的测试准确率高于之前的准确率。我们仍然需要创建`models.export_model`，以便在`training`之后导出模型供服务使用。不过，在继续之前，你可能想要先检查一下`training`过程是否正常工作。让我们注释掉以下这一行：'
+- en: '[PRE25]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Then, run the `training` script with this command:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，使用以下命令运行`training`脚本：
+- en: '[PRE26]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Here is some output in the console. First, our script loads the pre-trained
+    model. Then, it will output the `loss`:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是控制台中的一些输出。首先，我们的脚本加载了预训练的模型。然后，它会输出`loss`：
+- en: '[PRE27]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Now, let's stop the `training` and uncomment the `export_model` method. We need
+    the `models.export_model` method to export the latest model that has the highest
+    test accuracy to the `export_dir` folder with the name `export_name` and the version
+    `export_version`.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们停止`training`并取消注释`export_model`方法。我们需要`models.export_model`方法将最新的模型（具有最高测试准确率）导出到名为`export_name`、版本为`export_version`的`export_dir`文件夹中。
+- en: Exporting the model for production
+  id: totrans-185
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为生产环境导出模型
+- en: '[PRE28]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'In the `export_model` method, we need to create a new graph to run in production.
+    In production, we don''t need all the variables, as in `training`, and we don''t
+    need an input pipeline. However, we need to export the model with the `export_saved_model`
+    method, as follows:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`export_model`方法中，我们需要创建一个新的图表来在生产中运行。在生产中，我们不需要像`training`那样的所有变量，也不需要输入管道。然而，我们需要使用`export_saved_model`方法导出模型，具体如下：
+- en: '[PRE29]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'With this method, we can create a metagraph of the model for serving in production.
+    We will cover how to serve the model in a later section. Now, let''s run the `scripts`
+    to automatically train and export after 3,000 steps:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过这种方法，我们可以为生产环境创建一个模型的元图。我们将在后面的部分介绍如何在生产中提供模型服务。现在，让我们运行`scripts`，在3000步后自动训练并导出：
+- en: '[PRE30]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'On our system, with Core i7-4790 CPU and one TITAN-X GPU, the training routine
+    takes 20 minutes to finish. Here are a few of the last outputs in our console:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的系统中，使用Core i7-4790 CPU和一块TITAN-X GPU，训练过程需要20分钟才能完成。以下是我们控制台中的最后几条输出：
+- en: '[PRE31]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Great! We have a model with 92.18% test accuracy. We also have the exported
+    model as a `.pb` file. The `export_dir` folder will have the following structure:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很棒！我们有一个具有92.18%测试准确率的模型。我们还得到了一个导出的模型文件（.pb格式）。`export_dir`文件夹将具有以下结构：
+- en: '[PRE32]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: Serving the model in production
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在生产环境中提供模型服务
+- en: In production, we need to create an endpoint so our users can send the image
+    and receive the result. In TensorFlow, we can easily serve our model with TensorFlow
+    Serving. In this section, we will install TensorFlow Serving and create a Flask
+    app that allows users to upload their images via a web interface.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在生产中，我们需要创建一个端点，用户可以通过该端点发送图像并接收结果。在TensorFlow中，我们可以轻松地使用TensorFlow Serving来提供我们的模型服务。在本节中，我们将安装TensorFlow
+    Serving，并创建一个Flask应用，允许用户通过Web界面上传他们的图像。
+- en: Setting up TensorFlow Serving
+  id: totrans-197
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置TensorFlow Serving
+- en: 'In your production server, you need to install TensorFlow Serving and its prerequisites.
+    You can visit the official website of TensorFlow Serving at [https://tensorflow.github.io/serving/setup](https://tensorflow.github.io/serving/setup).
+    Next, we will use the standard TensorFlow Model Server provided in TensorFlow
+    Serving to serve the model. First, we need to build the `tensorflow_model_server`
+    with the following command:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在你的生产服务器中，你需要安装TensorFlow Serving及其前提条件。你可以访问TensorFlow Serving的官方网站：[https://tensorflow.github.io/serving/setup](https://tensorflow.github.io/serving/setup)。接下来，我们将使用TensorFlow
+    Serving提供的标准TensorFlow模型服务器来提供模型服务。首先，我们需要使用以下命令构建`tensorflow_model_server`：
+- en: '[PRE33]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'Copy all the files from `/home/ubuntu/models/pet_model` in your training server
+    into your production server. In our setup, we choose `/home/ubuntu/productions`
+    as our folder to store all the production models. The `productions` folder will
+    have the following structure:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将训练服务器中的`/home/ubuntu/models/pet_model`文件夹中的所有文件复制到生产服务器中。在我们的设置中，我们选择`/home/ubuntu/productions`作为存放所有生产模型的文件夹。`productions`文件夹将具有以下结构：
+- en: '[PRE34]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'We will use `tmux` to keep the model server running. Let''s install `tmux`
+    with this command:'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用`tmux`来保持模型服务器的运行。让我们通过以下命令安装`tmux`：
+- en: '[PRE35]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Run a `tmux` session with this command:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用以下命令运行`tmux`会话：
+- en: '[PRE36]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'In the `tmux` session, let''s change directory to the `tensorflow_serving`
+    directory and run the following command:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`tmux`会话中，让我们切换到`tensorflow_serving`目录并运行以下命令：
+- en: '[PRE37]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'The output of the console should look like this:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 控制台的输出应如下所示：
+- en: '[PRE38]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: As you can see, the model is running on host `0.0.0.0` and port `9000`. In the
+    next section, we will create a simple Python client to send an image to this server
+    via gRPC.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，模型在主机`0.0.0.0`和端口`9000`上运行。在下一节中，我们将创建一个简单的Python客户端，通过gRPC将图像发送到该服务器。
+- en: You should also note that the current serving is only using CPU on the production
+    server. Building TensorFlow Serving with GPUs is beyond the scope of this chapter.
+    If you prefer serving with GPUs, you may want to read [Appendix A](8022db02-d24f-4620-9da7-ae53df279306.xhtml)*,
+    Advanced Installation*, which explains how to build TensorFlow and TensorFlow
+    Serving with GPU support.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还应该注意，当前在生产服务器上使用的是CPU进行服务。使用GPU构建TensorFlow Serving超出了本章的范围。如果你更倾向于使用GPU进行服务，可以阅读[附录A](8022db02-d24f-4620-9da7-ae53df279306.xhtml)*，高级安装*，它解释了如何构建支持GPU的TensorFlow和TensorFlow
+    Serving。
+- en: Running and testing the model
+  id: totrans-212
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 运行和测试模型
+- en: 'In the project repository, we have already provided a package named `production`.
+    In that package, we need to copy the `labels.txt` file into our `dataset`, create
+    a new Python file, `client.py`, and add the following code:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在项目仓库中，我们已经提供了一个名为`production`的包。在这个包中，我们需要将`labels.txt`文件复制到我们的`dataset`中，创建一个新的Python文件`client.py`，并添加以下代码：
+- en: '[PRE39]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'In this code, we create a `process_image` method that will read the image from
+    an image path and use some TensorFlow methods to create a tensor and send it to
+    the model server with gRPC. We also create an `Output` class so that we can easily
+    return it to the `caller` method. At the end of the method, we print the output
+    and the total time so that we can debug it more easily. We can run this Python
+    file to see if the `process_image` works:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此代码中，我们创建了一个`process_image`方法，该方法将从图片路径读取图像，并使用一些TensorFlow方法创建张量，然后通过gRPC将其发送到模型服务器。我们还创建了一个`Output`类，以便我们可以轻松地将其返回给`caller`方法。在方法结束时，我们打印输出和总时间，以便我们可以更轻松地调试。我们可以运行此Python文件，看看`process_image`是否有效：
+- en: '[PRE40]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'The output should look like this:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出应如下所示：
+- en: '[PRE41]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'We get the correct result. However, the time to process is almost 15 seconds
+    for each image. The reason is that we are using TensorFlow Serving in CPU mode.
+    As we mentioned earlier, you can build TensorFlow Serving with GPU support in
+    [Appendix A](8022db02-d24f-4620-9da7-ae53df279306.xhtml), *Advanced Installation*.
+    If you follow that tutorial, you will have the following result:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们得到了正确的结果。然而，每张图片的处理时间几乎是15秒。原因是我们正在使用CPU模式的TensorFlow Serving。如前所述，你可以在[附录A](8022db02-d24f-4620-9da7-ae53df279306.xhtml)中构建支持GPU的TensorFlow
+    Serving，*高级安装*。如果你跟随那个教程，你将得到以下结果：
+- en: '[PRE42]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: The time to process in the first calling time is 493 ms. However, the later
+    calling time will be only about 23 ms, which is so much quicker than the CPU version.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一次调用时的处理时间是493毫秒。然而，之后的调用时间将只有大约23毫秒，比CPU版本快得多。
+- en: Designing the web server
+  id: totrans-222
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设计Web服务器
+- en: In this section, we will set up a Flask server to allow users to upload their
+    images and set the correct label if our model is mistaken. We have provided the
+    code needed in the production package. Implementing a Flask server with database
+    support is beyond the scope of this chapter. In this section, we will describe
+    all the main points about Flask so you can follow and understand better.
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将设置一个Flask服务器，允许用户上传图片，并在模型出错时设置正确的标签。我们已经在生产包中提供了所需的代码。实现带有数据库支持的Flask服务器超出了本章的范围。在本节中，我们将描述Flask的所有要点，以便你能更好地跟随和理解。
+- en: The main flow that allows users to upload and correct labels can be described
+    in the following wireframe.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 允许用户上传和修正标签的主要流程可以通过以下线框图进行描述。
+- en: 'This flow is implemented with the following routes:'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该流程通过以下路由实现：
+- en: '| **Route** | **Method** | **Description** |'
+  id: totrans-226
+  prefs: []
+  type: TYPE_TB
+  zh: '| **路由** | **方法** | **描述** |'
+- en: '| `/` | GET | This route returns a web form for users to upload the image.
+    |'
+  id: totrans-227
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/` | GET | 此路由返回一个网页表单，供用户上传图片。 |'
+- en: '| `/upload_image` | POST | This route gets the image from POST data, saves
+    it to the upload directory, and calls `process_image` in our `client.py` to recognize
+    the image and save the result to the database. |'
+  id: totrans-228
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/upload_image` | POST | 这个路由从 POST 数据中获取图像，将其保存到上传目录，并调用 `client.py` 中的
+    `process_image` 来识别图像并将结果保存到数据库。 |'
+- en: '| `/results<result_id>` | GET | This route returns the result of the corresponding
+    row in the database. |'
+  id: totrans-229
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/results<result_id>` | GET | 这个路由返回数据库中对应行的结果。 |'
+- en: '| `/results<result_id>` | POST | This route saves the label from, user to the
+    database so that we can fine-tune the model later. |'
+  id: totrans-230
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/results<result_id>` | POST | 这个路由将用户的标签保存到数据库，以便我们可以稍后微调模型。 |'
+- en: '| `/user-labels` | GET | This route returns a list of all the user-labeled
+    images. In the fine-tune process, we will call this route to get the list of labeled
+    images. |'
+  id: totrans-231
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/user-labels` | GET | 这个路由返回所有用户标注图像的列表。在微调过程中，我们会调用此路由获取标注图像的列表。 |'
+- en: '| `/model` | POST | This route allows the fine-tune process from the training
+    server to serve a new trained model. This route receives a link of the zipped
+    model, a version number, a checkpoint name, and a model name. |'
+  id: totrans-232
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/model` | POST | 这个路由允许从训练服务器启动微调过程，提供一个新的训练模型。此路由接收压缩模型的链接、版本号、检查点名称以及模型名称。
+    |'
+- en: '| `/model` | GET | This route returns the latest model in the database. The
+    fine-tune process will call this to know which is the latest model and fine-tune
+    from it. |'
+  id: totrans-233
+  prefs: []
+  type: TYPE_TB
+  zh: '| `/model` | GET | 这个路由返回数据库中最新的模型。微调过程将调用此路由来获取最新的模型并从中进行微调。 |'
+- en: 'We should run this server in a `tmux` session with the following command:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们应该在 `tmux` 会话中运行此服务器，使用以下命令：
+- en: '[PRE43]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Testing the system
+  id: totrans-236
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 测试系统
+- en: Now, we can access the server via `http://0.0.0.0:5000`.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以通过 `http://0.0.0.0:5000` 访问服务器。
+- en: First, you will see a form to choose and submit an image.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，你会看到一个表单，用来选择并提交一张图像。
+- en: The website will be redirected to the `/results` page with the corresponding
+    image and its results. The user label field is empty. There is also a short form
+    at the end so that you can submit the corrected label of the model.
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网站会被重定向到 `/results` 页面，显示对应的图像及其结果。用户标签字段为空。页面底部也有一个简短的表单，你可以提交模型的更正标签。
+- en: Automatic fine-tune in production
+  id: totrans-240
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在生产环境中进行自动微调
+- en: After running the system for a while, we will have some user-labeled images.
+    We will create a fine-tune process to automatically run every day and fine-tune
+    the latest model with new data.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在运行系统一段时间后，我们将拥有一些用户标注的图像。我们将创建一个微调过程，使其每天自动运行，并使用新数据微调最新的模型。
+- en: Let's create a file named `finetune.py` in the scripts folder.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在 `scripts` 文件夹中创建一个名为 `finetune.py` 的文件。
+- en: Loading the user-labeled data
+  id: totrans-243
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 加载用户标注的数据
+- en: 'First, we will add the code to download all user-labeled images from the production
+    server:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将添加代码以从生产服务器下载所有用户标注的图像：
+- en: '[PRE44]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'In `download_user_data`, we call the `/user-labels` endpoint to get the list
+    of user-labeled images. The JSON has the following format:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `download_user_data` 中，我们调用 `/user-labels` 端点获取用户标注图像的列表。JSON 的格式如下：
+- en: '[PRE45]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: In this JSON, `label` is the label that the user has chosen, and URL is the
+    link to download the image from. For every image, we will download it into the
+    `tmp` folder and use `imread` and `imsave` from `scipy` to make sure that the
+    image is in JPEG format. We also create a `trainval.txt` and `test.txt` file,
+    as in the training dataset.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个 JSON 中，`label` 是用户选择的标签，URL 是用来下载图像的链接。对于每一张图像，我们会将其下载到 `tmp` 文件夹，并使用 `scipy`
+    中的 `imread` 和 `imsave` 来确保图像是 JPEG 格式。我们还会创建 `trainval.txt` 和 `test.txt` 文件，和训练数据集中的文件一样。
+- en: Performing a fine-tune on the model
+  id: totrans-249
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 对模型进行微调
+- en: 'In order to fine-tune the model, we need to know which one is the latest model
+    and its corresponding checkpoint to restore `weights` and `biases`. Therefore,
+    we call the `/model` endpoint to get the checkpoint name and a version number:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了微调模型，我们需要知道哪个是最新的模型及其对应的检查点，以恢复 `weights` 和 `biases`。因此，我们调用 `/model` 端点来获取检查点名称和版本号：
+- en: '[PRE46]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'The response JSON should look like this:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 响应的 JSON 应该是这样的：
+- en: '[PRE47]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'Now, we will implement the code to fine-tune the model. Let''s start with some
+    parameters:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将实现微调模型的代码。让我们从一些参数开始：
+- en: '[PRE48]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'Then, we will implement the fine-tune loop. In the following code, we call
+    `download_user_data` to download all the user-labeled images and pass `user_dir`
+    into `input_pipeline` so that it will load the new images:'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将实现微调循环。在以下代码中，我们调用 `download_user_data` 来下载所有用户标注的图像，并将 `user_dir` 传递给
+    `input_pipeline`，使其能够加载新图像：
+- en: '[PRE49]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Other parts are quite similar to the training loop. However, instead of loading
+    the weights from the `caffe` model, we use the checkpoint of the latest model
+    and run the test a few times to get its test accuracy.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他部分与训练循环非常相似。但是，我们不是从`caffe`模型中加载权重，而是使用最新模型的检查点，并运行测试多次以获取其测试准确性。
+- en: 'At the end of the fine-tune loop, we need a new method named `archive_and_send_file`
+    to make an archive from the `exported` model and send the link to the production
+    server:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在微调循环的末尾，我们需要一个名为`archive_and_send_file`的新方法来从`exported`模型创建归档，并将链接发送到生产服务器：
+- en: '[PRE50]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: You should note that we create a link with the `source_api` parameter, which
+    is the link to the training server, `http://1.53.110.161:8181`. We will set up
+    a simple Apache Server to support this function. However, in reality, we suggest
+    that you upload the archived model to cloud storage such as Amazon S3\. Now, we
+    will show you the simplest way with Apache.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您应该注意，我们创建了一个带有`source_api`参数的链接，这是指向训练服务器的链接，`http://1.53.110.161:8181`。我们将设置一个简单的Apache服务器来支持此功能。但是，在现实中，我们建议您将归档模型上传到云存储，如Amazon
+    S3。现在，我们将展示使用Apache的最简单方法。
+- en: 'We need to install Apache with the following command:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要使用以下命令安装Apache：
+- en: '[PRE51]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'Now, in `/etc/apache2/ports.conf`, on line 6, we need to add this code to make
+    `apache2` listen on port `8181`:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，在`/etc/apache2/ports.conf`中，第6行，我们需要添加此代码以使`apache2`监听端口`8181`：
+- en: '[PRE52]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Then, add the following code at the beginning of `/etc/apache2/sites-available/000-default.conf`
+    to support downloading from the `/home/ubuntu/models` directory:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在`/etc/apache2/sites-available/000-default.conf`的开头添加以下代码以支持从`/home/ubuntu/models`目录下载：
+- en: '[PRE53]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Finally, we need to restart the `apache2` server:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们需要重新启动`apache2`服务器：
+- en: '[PRE54]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: Up to now, we have set up all the code to perform fine-tuning. Before running
+    the fine-tuning for the first time, we need to send a `POST` request to the `/model`
+    endpoint with the information about our first model because we have already copied
+    the model to the production server.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经设置了所有执行微调所需的代码。在第一次运行微调之前，我们需要向`/model`端点发送`POST`请求，以获取关于我们第一个模型的信息，因为我们已经将模型复制到生产服务器。
+- en: 'In the `project` repository, let''s run the `finetune` script:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`project`代码库中，让我们运行`finetune`脚本：
+- en: '[PRE55]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'The last few lines in the console will look like the following:'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 控制台中的最后几行将如下所示：
+- en: '[PRE56]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'As you can see, the new model has a test accuracy of 91%. The model is also
+    exported and archived to `/home/ubuntu/models/pet-model/2.zip`. The code is also
+    calling the `/model` endpoint to post the link to the production server. In the
+    logging of the Flask app in the production server, we will get the following results:'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所见，新模型的测试准确率为91%。该模型也被导出并存档到`/home/ubuntu/models/pet-model/2.zip`。代码还在调用`/model`端点将链接发布到生产服务器。在生产服务器的Flask应用日志中，我们将得到以下结果：
+- en: '[PRE57]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'This means that our Flask app had downloaded the `2.zip` file from the training
+    server and extracted the content to `/home/ubuntu/productions/2`. In the `tmux`
+    session for TensorFlow Serving, you will also get the following results:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着我们的Flask应用程序已从训练服务器下载了`2.zip`文件，并将其内容提取到`/home/ubuntu/productions/2`。在TensorFlow
+    Serving的tmux会话中，您还将获得以下结果：
+- en: '[PRE58]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: This output indicates that the TensorFlow model server has successfully loaded
+    `version 2` of the `pet-model` and unloaded `version 1`. This also means that
+    we have served the new model, which was trained on the training server and sent
+    to the production server via the `/model` endpoint.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此输出表明TensorFlow模型服务器已成功加载`pet-model`的`version 2`并卸载了`version 1`。这也意味着我们已经为在训练服务器上训练并通过`/model`端点发送到生产服务器的新模型提供了服务。
+- en: Setting up cronjob to run every day
+  id: totrans-280
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置每天运行的cron任务
+- en: Finally, we need to set up the fine-tuning to run every day and automatically
+    upload the new model to the server. We can achieve this easily by creating a `crontab`
+    in the training server.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们需要设置每天运行的微调，并自动将新模型上传到服务器。我们可以通过在训练服务器上创建`crontab`轻松实现这一点。
+- en: 'First, we need to run the `crontab` command:'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要运行`crontab`命令：
+- en: '[PRE59]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'Then, we can just add the following line to define the time that we want `finetune.py`
+    to run:'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们只需添加以下行来定义我们希望`finetune.py`运行的时间：
+- en: '[PRE60]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: As we defined, the Python command will run at 3 a.m. every day.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们所定义的，Python命令将每天凌晨3点运行。
+- en: Summary
+  id: totrans-287
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'In this chapter, we have implemented a complete real-life production, from
+    training to serving a deep learning model. We also created a web interface in
+    a Flask app so that users can upload their images and receive results. Our model
+    can automatically be fine-tuned every day to improve the quality of the system.
+    There are a few things that you can consider to improve the overall system:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们实现了一个完整的真实生产环境，从训练到服务深度学习模型。我们还在 Flask 应用中创建了一个 web 界面，用户可以上传他们的图像并获得结果。我们的模型可以每天自动进行微调，以提高系统的质量。以下是一些你可以考虑的改进方案：
+- en: The model and checkpoints should be saved in cloud storage.
+  id: totrans-289
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 模型和检查点应保存在云存储中。
+- en: The Flask app and TensorFlow Serving should be managed by another, better process
+    management system, such as Supervisor.
+  id: totrans-290
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Flask 应用和 TensorFlow Serving 应由另一个更好的进程管理系统来管理，例如 Supervisor。
+- en: There should be a web interface so that the team can approve the labels that
+    users select. We shouldn't rely completely on users to decide the training set.
+  id: totrans-291
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应该有一个 web 界面，供团队审批用户选择的标签。我们不应完全依赖用户来决定训练集。
+- en: TensorFlow Serving should be built with GPU support to achieve the best performance.
+  id: totrans-292
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: TensorFlow Serving 应该构建为支持 GPU 以实现最佳性能。

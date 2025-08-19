@@ -1,0 +1,1494 @@
+- en: '9'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '9'
+- en: Implementing Model Servers
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现模型服务器
+- en: In [*Chapter 8*](B17519_08.xhtml#_idTextAnchor121), *Considering Hardware for
+    Inference*, we discussed hardware options and optimizations for serving DL models
+    that are available to you as part of the Amazon SageMaker platform. In this chapter,
+    we will focus on another important aspect of engineering inference workloads –
+    choosing and configuring model servers.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [*第 8 章*](B17519_08.xhtml#_idTextAnchor121)，《*考虑推理硬件*》中，我们讨论了为服务深度学习（DL）模型提供的硬件选项和优化，这些选项作为
+    Amazon SageMaker 平台的一部分供您使用。在本章中，我们将关注工程推理工作负载的另一个重要方面——选择和配置模型服务器。
+- en: Model servers, similar to application servers for regular applications, provide
+    a runtime context to serve your DL models. You, as a developer, deploy trained
+    models to the model server, which exposes the deployed models as REST or gRPC
+    endpoints. The end users of your DL models then send inference requests to established
+    endpoints and receive a response with predictions. The model server can serve
+    multiple end users simultaneously. It also provides configurable mechanisms to
+    optimize inference latency and throughput to meet specific SLAs.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模型服务器类似于常规应用程序的应用服务器，为您的 DL 模型提供运行时环境。作为开发者，您将训练好的模型部署到模型服务器，后者将已部署的模型暴露为 REST
+    或 gRPC 端点。DL 模型的最终用户随后会向这些已建立的端点发送推理请求，并收到包含预测结果的响应。模型服务器可以同时为多个最终用户提供服务。它还提供可配置的机制，以优化推理延迟和吞吐量，满足特定的服务水平协议（SLA）。
+- en: 'In [*Chapter 1*](B17519_01.xhtml#_idTextAnchor013), *Introducing Deep Learning
+    with Amazon SageMaker*, we discussed that Amazon SageMaker Managed Hosting has
+    several mechanisms to deploy models: real-time inference endpoints, batch transform
+    jobs, and asynchronous inference. In all these cases, you will need to select
+    a model server to manage inference runtime and model deployment. However, model
+    server configuration for these use cases will likely be different, since they
+    have different inference traffic profiles and latency/throughput requirements.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [*第 1 章*](B17519_01.xhtml#_idTextAnchor013)，《*介绍 Amazon SageMaker 深度学习*》中，我们讨论了
+    Amazon SageMaker 托管服务的几种模型部署机制：实时推理端点、批量转换作业和异步推理。在所有这些情况下，您都需要选择一个模型服务器来管理推理运行时和模型部署。然而，这些使用案例的模型服务器配置可能会有所不同，因为它们具有不同的推理流量特征和延迟/吞吐量要求。
+- en: 'Amazon SageMaker provides several model server solutions as part of its DL
+    Inference Containers. In this chapter, we will focus on three popular model servers
+    designed to productionalize DL inference workloads: **TensorFlow Serving** (**TFS**),
+    **PyTorch** **TorchServe** (**PTS**), and **NVIDIA Triton**.'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Amazon SageMaker 提供了多种模型服务器解决方案，作为其深度学习推理容器的一部分。在本章中，我们将重点介绍三种流行的模型服务器，这些服务器旨在将深度学习推理工作负载投入生产：**TensorFlow
+    Serving** (**TFS**)、**PyTorch TorchServe** (**PTS**) 和 **NVIDIA Triton**。
+- en: 'In this chapter, we will cover the following topics:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论以下主题：
+- en: Using TFS
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 TFS
+- en: Using PTS
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 PTS
+- en: Using NVIDIA Triton
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 NVIDIA Triton
+- en: After reading this chapter, you will know how to deploy your TensorFlow and
+    PyTorch models and configure your model servers for your inference requirements.
+    We will also discuss the functional limitations of using model servers as part
+    of SageMaker Managed Hosting.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 阅读完本章后，您将了解如何部署您的 TensorFlow 和 PyTorch 模型，并根据您的推理需求配置模型服务器。我们还将讨论将模型服务器作为 SageMaker
+    托管服务一部分时的功能限制。
+- en: Technical requirements
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: 'In this chapter, we will provide code samples so that you can develop practical
+    skills. The full code examples are available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/).'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将提供代码示例，帮助您培养实践技能。完整的代码示例可在此处查看：[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/)。
+- en: 'To follow along with this code, you will need the following:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了跟随本章的代码，您需要具备以下内容：
+- en: An AWS account and IAM user with permission to manage Amazon SageMaker resources.
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 拥有一个 AWS 账户和具有管理 Amazon SageMaker 资源权限的 IAM 用户。
+- en: Have a SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker-compatible
+    environment established.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 已建立 SageMaker Notebook、SageMaker Studio Notebook 或本地兼容 SageMaker 的环境。
+- en: Access to GPU training instances in your AWS account. Each example in this chapter
+    will provide the recommended instance types for you to use. You may need to increase
+    your compute quota for *SageMaker Training Job* to have GPU instances enabled.
+    In this case, please follow the instructions at [https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml).
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问你 AWS 账户中的 GPU 训练实例。本章中的每个示例将提供推荐的实例类型供你使用。你可能需要增加 *SageMaker 训练任务* 的计算配额，以启用
+    GPU 实例。在这种情况下，请按照 [https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml)
+    上的说明操作。
+- en: You must install the required Python libraries by running `pip install -r requirements.txt`.
+    The file that contains the required libraries can be found in the `chapter9` directory.
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你必须通过运行 `pip install -r requirements.txt` 来安装所需的 Python 库。包含所需库的文件可以在 `chapter9`
+    目录中找到。
+- en: In this chapter, we will provide examples of compiling models for inference,
+    which requires access to specific accelerator types. Please review the instance
+    recommendations as part of the model server examples.
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将提供编译模型进行推理的示例，这需要访问特定的加速器类型。请在模型服务器示例中查看实例推荐。
+- en: Using TFS
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 TFS
+- en: '**TFS** is a native model server for TensorFlow 1, TensorFlow 2, and Keras
+    models. It is designed to provide a flexible and high-performance runtime environment
+    with an extensive management API and operational features (such as logging and
+    metrics). AWS provides TFS as part of TensorFlow inference containers ([https://github.com/aws/deep-learning-containers/tree/master/tensorflow/inference/docker](https://github.com/aws/deep-learning-containers/tree/master/tensorflow/inference/docker)).'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**TFS** 是一个原生的模型服务器，支持 TensorFlow 1、TensorFlow 2 和 Keras 模型。它旨在提供一个灵活且高性能的运行时环境，配备了广泛的管理
+    API 和操作功能（例如日志记录和度量）。AWS 提供了 TFS 作为 TensorFlow 推理容器的一部分 ([https://github.com/aws/deep-learning-containers/tree/master/tensorflow/inference/docker](https://github.com/aws/deep-learning-containers/tree/master/tensorflow/inference/docker))。'
+- en: Reviewing TFS concepts
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 回顾 TFS 概念
+- en: TFS has a concept known as **servable** that encapsulates all model and code
+    assets required for inference. To prepare servable for TFS serving, you need to
+    package the trained model into **SavedModel** format. A SavedModel contains a
+    complete TensorFlow program, including trained parameters and computation. It
+    does not require the original model building code to run, which makes it useful
+    for sharing or deploying across the TFS ecosystem (for example, using TFLite,
+    TensorFlow.js, or TFS). You can package more than one model as well as specific
+    model lookups or embeddings in a single servable.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TFS 有一个叫做 **servable** 的概念，它封装了推理所需的所有模型和代码资产。为了将 servable 准备好供 TFS 服务使用，你需要将训练好的模型打包成
+    **SavedModel** 格式。SavedModel 包含了一个完整的 TensorFlow 程序，包括训练过的参数和计算逻辑。它不需要原始的模型构建代码就能运行，这使得它在
+    TFS 生态系统中共享或部署变得十分方便（例如，使用 TFLite、TensorFlow.js 或 TFS）。你也可以在一个 servable 中打包多个模型以及特定的模型查找或嵌入。
+- en: TFS loads and exposes your servable via REST or gRPC endpoints. The Server API
+    defines a list of endpoints to perform classification and regression inference.
+    Additionally, each servable has an associated **signature** that defines the input
+    and output tensors for your model, as well as the model type (regression or classification).
+    Many common models have standard signatures that depend on the type of task (for
+    example, image classification, object detection, text classification, and so on).
+    TFS allows you to have custom signatures as well.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TFS 通过 REST 或 gRPC 端点加载并暴露你的 servable。服务器 API 定义了一系列端点，用于执行分类和回归推理。此外，每个 servable
+    都有一个关联的 **signature**，它定义了模型的输入和输出张量，以及模型类型（回归或分类）。许多常见模型都有标准的 signature，这些 signature
+    取决于任务类型（例如，图像分类、物体检测、文本分类等）。TFS 还允许你拥有自定义的 signature。
+- en: Integrating TFS with SageMaker
+  id: totrans-24
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将 TFS 与 SageMaker 集成
+- en: Amazon SageMaker provides a managed hosting environment where you can manage
+    your inference endpoints with uniform management and invocation APIs, regardless
+    of the underlying model server. This approach sets certain limitations on native
+    model server functionality. In this section, we will review how SageMaker integrates
+    with TFS and the limitations you should be aware of.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Amazon SageMaker 提供了一个托管的环境，在这个环境中，无论底层的模型服务器如何，你都可以通过统一的管理和调用 API 来管理推理端点。这种方法对原生模型服务器功能设定了一些限制。在本节中，我们将回顾
+    SageMaker 如何与 TFS 集成以及你应了解的限制。
+- en: 'When deploying TFS on SageMaker, you will not have access to TFS’s native management
+    API to manage your servable life cycle (loading and unloading models, promoting
+    the model version, and more). Also, you will not have direct access to the TFS
+    Serving API. Instead, you will need to call your SageMaker endpoint using the
+    standard SageMaker invocation interface. Then, the SageMaker HTTP server (a part
+    of the DL TFS container) translates your requests into TFS format and passes them
+    to the TFS Serving APIs. Note that you can provide custom pre-processing, prediction,
+    and post-processing logic in your inference script. SageMaker supports both the
+    REST and gRPC serving APIs. The following diagram shows this TFS integration:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当在 SageMaker 上部署 TFS 时，您将无法访问 TFS 的本地管理 API 来管理您的可服务对象生命周期（加载和卸载模型、推动模型版本等）。此外，您也无法直接访问
+    TFS 服务 API。相反，您需要使用标准的 SageMaker 调用接口来调用您的 SageMaker 端点。然后，SageMaker HTTP 服务器（DL
+    TFS 容器的一部分）将您的请求转换为 TFS 格式，并将其传递给 TFS 服务 API。请注意，您可以在推理脚本中提供自定义的预处理、预测和后处理逻辑。SageMaker
+    支持 REST 和 gRPC 服务 API。下图展示了这种 TFS 集成：
+- en: '![Figure 9.1 – TFS integration with SageMaker Managed Hosting ](img/B17519_09_001.jpg)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图 9.1 – TFS 与 SageMaker 托管集成](img/B17519_09_001.jpg)'
+- en: Figure 9.1 – TFS integration with SageMaker Managed Hosting
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 9.1 – TFS 与 SageMaker 托管集成
+- en: 'There are several things to keep in mind when working with TFS on SageMaker:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 SageMaker 上使用 TFS 时，有几件事需要注意：
+- en: As mentioned previously, SageMaker doesn’t allow you to access the TFS Management
+    API. However, it does allow to you provide the configuration of TFS via environmental
+    variables.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如前所述，SageMaker 不允许您访问 TFS 管理 API。然而，它允许您通过环境变量提供 TFS 的配置。
+- en: SageMaker supports hosting multiple models with TFS. For this, you need to prepare
+    separate servables for each model and then create a multi-model archive.
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SageMaker 支持使用 TFS 托管多个模型。为此，您需要为每个模型准备单独的可服务对象，然后创建一个多模型归档。
+- en: 'You can use REST headers and a request body to specify which models TFS should
+    use to serve specific requests. For instance, the following request tells TFS
+    to use `model2` to serve this request:'
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以使用 REST 头部和请求体来指定 TFS 应使用哪些模型来处理特定请求。例如，以下请求告诉 TFS 使用 `model2` 来处理此请求：
+- en: '[PRE0]'
+  id: totrans-33
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: SageMaker supports default TFS input and output formats for your inference requests.
+    Additionally, SageMaker also supports application/JSON, text/CSV, and application/JSON
+    Lines.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 支持默认的 TFS 输入和输出格式来处理您的推理请求。此外，SageMaker 还支持 application/JSON、text/CSV
+    和 application/JSON Lines 格式。
+- en: Note that once you deploy the endpoint with the TFS model server, you won’t
+    be able to directly change the TFS configuration or served models. For this, you
+    will need to use the SageMaker Management API to create a new endpoint or endpoint
+    variant with the desired configuration. We will discuss managing SageMaker inference
+    resources in production in [*Chapter 10*](B17519_10.xhtml#_idTextAnchor154), *Operationalizing
+    Inference Workloads*.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，一旦您使用 TFS 模型服务器部署端点后，您将无法直接更改 TFS 配置或服务的模型。为此，您需要使用 SageMaker 管理 API 来创建一个新端点或端点变体，并使用所需的配置。我们将在[*第
+    10 章*](B17519_10.xhtml#_idTextAnchor154)，*推理工作负载的操作化*中讨论如何在生产中管理 SageMaker 推理资源。
+- en: Optimizing TFS
+  id: totrans-36
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化 TFS
+- en: TFS provides a set of mechanisms to optimize your model serving based on your
+    requirements, the runtime environment, and available hardware resources. It implies
+    that TFS tuning is use-case-specific and typically requires testing and benchmarking
+    to achieve desired performance. In this section, we will review several mechanisms
+    that you can use to tune TFS performance.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TFS 提供了一系列机制，以根据您的需求、运行时环境和可用硬件资源优化模型服务。这意味着 TFS 调优是特定用例的，通常需要测试和基准测试才能实现预期的性能。在本节中，我们将回顾几种可以用来调优
+    TFS 性能的机制。
+- en: Using TFS batching
+  id: totrans-38
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 TFS 批处理
+- en: TFS supports automatic batching, where you can put several inference requests
+    in a single batch. This can improve your server throughput, especially when using
+    GPU instances (remember, GPUs are very good for parallel computations). How you
+    configure batching will be different depending on the type of hardware device.
+    TFS supports different batching schedules for different servables.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TFS 支持自动批处理，您可以将多个推理请求放在一个批次中。这可以提高您的服务器吞吐量，尤其是在使用 GPU 实例时（请记住，GPU 非常适合并行计算）。如何配置批处理会根据硬件设备的类型有所不同。TFS
+    为不同的可服务对象支持不同的批处理调度。
+- en: 'To configure TFS batching on SageMaker, you can use the following environment
+    variables:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 SageMaker 上配置 TFS 批处理，您可以使用以下环境变量：
+- en: '`SAGEMAKER_TFS_ENABLE_BATCHING` to enable the TFS batching feature. This defaults
+    to `false`, which means that batching is not enabled.'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_ENABLE_BATCHING` 用于启用 TFS 批处理功能。默认值为 `false`，意味着批处理未启用。'
+- en: '`SAGEMAKER_TFS_MAX_BATCH_SIZE` defines the maximum size of the batch. This
+    defaults to `8`.'
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_MAX_BATCH_SIZE` 定义了批次的最大大小。默认值为 `8`。'
+- en: '`SAGEMAKER_TFS_BATCH_TIMEOUT_MICROS` defines how long to wait to accumulate
+    a full batch in microseconds. This defaults to `1000`.'
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_BATCH_TIMEOUT_MICROS` 定义了在微秒内等待以积累完整批次的时间。默认值为 `1000`。'
+- en: '`SAGEMAKER_TFS_NUM_BATCH_THREADS` sets how many batches to process simultaneously.
+    This defaults to the number of instance CPUs.'
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_NUM_BATCH_THREADS` 设置了同时处理多少个批次。默认值为实例 CPU 的数量。'
+- en: '`SAGEMAKER_TFS_MAX_ENQUEUED_BATCHES` defines how many batches can be enqueued
+    at the same time.'
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_MAX_ENQUEUED_BATCHES` 定义了同一时间可以排队的批次数量。'
+- en: 'You can review the detailed documentation on the TFS batching feature here:
+    [https://github.com/tensorflow/serving/blob/master/tensorflow_serving/batching/README.md](https://github.com/tensorflow/serving/blob/master/tensorflow_serving/batching/README.md).'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在这里查看 TFS 批处理功能的详细文档：[https://github.com/tensorflow/serving/blob/master/tensorflow_serving/batching/README.md](https://github.com/tensorflow/serving/blob/master/tensorflow_serving/batching/README.md)。
+- en: Using the gRPC serving API
+  id: totrans-47
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 gRPC 服务 API
+- en: 'As discussed earlier, TFS supports two types of APIs: REST and gRPC. While
+    both APIs have the same functionality, the gRPC API typically has better performance
+    due to the use of HTTP/2 network protocol and more efficient payload representations
+    via the ProtoBuf format.'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，TFS 支持两种类型的 API：REST 和 gRPC。虽然这两种 API 功能相同，但由于使用了 HTTP/2 网络协议和通过 ProtoBuf
+    格式进行更高效的负载表示，gRPC API 通常具有更好的性能。
+- en: 'While the SageMaker Invocation API only supports the REST API, you can still
+    use gRPC for inter-container communication between SageMaker’s HTTP frontend server
+    and TFS (refer to *Figure 9.1* for an illustration of this). Note that in this
+    case, you will need to provide some code to translate the SageMaker payload into
+    gRPC format and send it to TFS. However, even in this case, AWS reports a decrease
+    in the overall latency by at least 75% for image classification tasks. Refer to
+    this article for details: [https://aws.amazon.com/blogs/machine-learning/reduce-compuer-vision-inference-latency-using-grpc-with-tensorflow-serving-on-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/reduce-compuer-vision-inference-latency-using-grpc-with-tensorflow-serving-on-amazon-sagemaker/).
+    The performance benefits will vary based on the model and payload size.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 SageMaker 调用 API 仅支持 REST API，但你仍然可以使用 gRPC 进行 SageMaker HTTP 前端服务器与 TFS
+    之间的容器间通信（有关此内容的示意图，请参见 *图 9.1*）。请注意，在这种情况下，你需要提供一些代码将 SageMaker 负载转换为 gRPC 格式并将其发送到
+    TFS。然而，即便如此，AWS 报告称，在图像分类任务中，整体延迟至少降低了 75%。详情请参考本文：[https://aws.amazon.com/blogs/machine-learning/reduce-compuer-vision-inference-latency-using-grpc-with-tensorflow-serving-on-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/reduce-compuer-vision-inference-latency-using-grpc-with-tensorflow-serving-on-amazon-sagemaker/)。性能提升会根据模型和负载大小有所不同。
+- en: Configuring resource utilization with TFS
+  id: totrans-50
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 TFS 配置资源利用率
+- en: 'TFS provides the following parameters for configuring hardware resources allocation:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TFS 提供以下参数来配置硬件资源分配：
+- en: '`SAGEMAKER_TFS_INSTANCE_COUNT` defines how many instances of the TFS serving
+    process will be spawned. Changing this parameter may increase your CPU and GPU
+    utilization and ultimately improve your latency/throughput characteristics.'
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_INSTANCE_COUNT` 定义了将生成多少个 TFS 服务进程实例。改变此参数可能会增加 CPU 和 GPU 利用率，并最终改善延迟/吞吐量特性。'
+- en: '`SAGEMAKER_TFS_FRACTIONAL_GPU_MEM_MARGIN` defines the fraction of GPU memory
+    available to initialize the CUDA/cuDNN library. The remaining memory will be distributed
+    equally between TFS processes.'
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_FRACTIONAL_GPU_MEM_MARGIN` 定义了可用于初始化 CUDA/cuDNN 库的 GPU 内存的比例。剩余内存将平均分配给
+    TFS 进程。'
+- en: '`SAGEMAKER_TFS_INTER_OP_PARALLELISM` determines how many threads are used when
+    running independent non-blocking compute operations in your model graphs.'
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_INTER_OP_PARALLELISM` 决定在运行模型图中的独立非阻塞计算操作时使用多少线程。'
+- en: '`SAGEMAKER_TFS_INTRA_OP_PARALLELISM` determines how many threads are used when
+    running operations that can be parallelized interally.'
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TFS_INTRA_OP_PARALLELISM` 决定在运行可以内部并行化的操作时使用多少线程。'
+- en: Now, let’s review how we can use TFS on SageMaker using a practical example.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们通过一个实际例子来回顾如何在 SageMaker 上使用 TFS。
+- en: Implementing TFS serving
+  id: totrans-57
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现 TFS 服务
+- en: In this example, we will take one of the pre-trained models from TensorFlow
+    Hub, convert it into **SavedModel** format, and then package it with the custom
+    inference for deployment on SageMaker. We will review how we can use both the
+    REST and gRPC APIs and how to define the TFS configuration when it’s deployed
+    on SageMaker Managed Hosting. For this task, we will use the popular EfficientNetV2
+    model architecture to classify images.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本示例中，我们将从 TensorFlow Hub 获取一个预训练的模型，将其转换为 **SavedModel** 格式，然后与自定义推理一起打包，部署到
+    SageMaker 上。我们将回顾如何使用 REST 和 gRPC API，以及如何在部署到 SageMaker 管理型托管时定义 TFS 配置。为了完成这项任务，我们将使用流行的
+    EfficientNetV2 模型架构来进行图像分类。
+- en: 'The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/1_TensorFlow_Serving.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/1_TensorFlow_Serving.ipynb).'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整代码可以在这里找到：[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/1_TensorFlow_Serving.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/1_TensorFlow_Serving.ipynb)。
+- en: Preparing the training model
+  id: totrans-60
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 准备训练模型
+- en: 'We will start by loading the model artifacts from TensorFlow Hub. You can read
+    about the EfficientNetV2 model on its model page here: [https://tfhub.dev/google/imagenet/efficientnet_v2_imagenet1k_s/classification/2](https://tfhub.dev/google/imagenet/efficientnet_v2_imagenet1k_s/classification/2).
+    To download the model, we can use the TensorFlow Hub API, as shown in the following
+    code block:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从 TensorFlow Hub 加载模型工件。您可以在其模型页面阅读有关 EfficientNetV2 模型的信息，地址是：[https://tfhub.dev/google/imagenet/efficientnet_v2_imagenet1k_s/classification/2](https://tfhub.dev/google/imagenet/efficientnet_v2_imagenet1k_s/classification/2)。为了下载模型，我们可以使用
+    TensorFlow Hub API，如下所示的代码块所示：
+- en: '[PRE1]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: This model expects a dense 4D tensor of the `float32` dtype with a shape of
+    `[batch, height, weight, color]`, where `height` and `weight` have a fixed length
+    of `384`, and `color` has a length of `3`. `batch` can be variable.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该模型期望一个密集的 4D 张量，数据类型为 `float32`，形状为 `[batch, height, weight, color]`，其中 `height`
+    和 `weight` 的固定长度为 `384`，`color` 的长度为 `3`。`batch` 可以是可变的。
+- en: 'To test the model locally, you need to convert the image (or a batch of images)
+    into the expected 4D tensor, run it through the model, and apply the `softmax`
+    function to get the label probabilities, as shown here:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在本地测试模型，您需要将图像（或一批图像）转换为期望的 4D 张量，将其通过模型运行，并应用 `softmax` 函数以获取标签概率，如下所示：
+- en: '[PRE2]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Now that we have performed smoke testing on the model, we need to package it
+    in SageMaker/TFS-compatible formats.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经对模型进行了基本的烟雾测试，接下来需要将其打包为 SageMaker/TFS 兼容的格式。
+- en: Packaging the model artifacts
+  id: totrans-67
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 打包模型工件
+- en: 'As discussed earlier, TFS expects your model to be converted into SavedModel
+    format. Additionally, SageMaker expects the model artifact to be packaged into
+    a `tar.gz` archive with the following structure:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，TFS 期望您的模型被转换为 SavedModel 格式。此外，SageMaker 期望模型工件被打包成一个 `tar.gz` 压缩包，并具有以下结构：
+- en: '[PRE3]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The following code creates the appropriate directory structure and exports
+    the trained model in SavedModel format:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下代码创建了适当的目录结构并将训练好的模型导出为 SavedModel 格式：
+- en: '[PRE4]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Note that in our example, we will only use a single version of a single model.
+    Next, we need to prepare an inference script for preprocessing, running predictions,
+    and postprocessing between the SageMaker HTTP frontend and the TFS server.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在我们的示例中，我们将只使用单个版本的单个模型。接下来，我们需要为预处理、运行预测和后处理准备一个推理脚本，用于在 SageMaker HTTP
+    前端与 TFS 服务器之间进行交互。
+- en: Developing the inference code
+  id: totrans-73
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 开发推理代码
+- en: 'SageMaker expects your processing code to be named `inference.py` and placed
+    in the `/code` directory in the model archive. Our inference code needs to implement
+    either the `input_handler()` and `output_handler()` functions or a single `handler()`
+    function. In our case, we have chosen to implement a single `handler()` method
+    to process incoming requests and send it to the appropriate TFS API:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 期望您的处理代码被命名为 `inference.py` 并放置在模型归档中的 `/code` 目录下。我们的推理代码需要实现 `input_handler()`
+    和 `output_handler()` 函数，或一个单一的 `handler()` 函数。在我们的例子中，我们选择实现一个单一的 `handler()`
+    方法来处理传入的请求并将其发送到适当的 TFS API：
+- en: '[PRE5]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: As you can see, depending on whether we want to use the gRCP API or the REST
+    API, the processing and prediction code will be slightly different. Note that
+    the `context` `namedtuple` object provides necessary details about the TFS configuration,
+    such as the endpoint path and ports, model name and version, and more.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，依据我们选择使用 gRPC API 还是 REST API，处理和预测代码会略有不同。请注意，`context` `namedtuple` 对象提供了有关
+    TFS 配置的必要细节，例如端点路径和端口、模型名称和版本等。
+- en: If we choose to use the TFS REST API, we need to convert the incoming request
+    into the expected TFS format, serialize it into JSON, and then generate a POST
+    request.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果选择使用 TFS REST API，我们需要将传入的请求转换为预期的 TFS 格式，将其序列化为 JSON，然后生成一个 POST 请求。
+- en: 'To use the gRPC API, we will need to convert the incoming REST payload into
+    a `protobuf` object. For this, we will use the following helper function:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要使用 gRPC API，我们需要将传入的 REST 负载转换为`protobuf`对象。为此，我们将使用以下辅助函数：
+- en: '[PRE6]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Here, we use the `prediction_service_pb2()` and `predict_pb2()` TFS methods
+    to communicate with the gRPC API. Here, the `stub` object converts parameters
+    during the RPC. The `grpc_request` object defines what TFS API to invoke and call
+    the parameters.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们使用`prediction_service_pb2()`和`predict_pb2()` TFS 方法与 gRPC API 进行通信。`stub`对象在
+    RPC 过程中转换参数。`grpc_request`对象定义了要调用的 TFS API 以及传递的参数。
+- en: 'To choose what TFS API to call, we implemented a simple mechanism that allows
+    you to provide the `USE_GRPC` environment variable via a SageMaker Model object:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了选择要调用的 TFS API，我们实现了一个简单的机制，允许你通过 SageMaker 模型对象提供`USE_GRPC`环境变量：
+- en: '[PRE7]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Once we have our `inference.py` code ready, we can add it to the model package
+    and create a `tar.gz` model archive. This can be done by running the following
+    Bash code from a Jupyter notebook:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦我们的`inference.py`代码准备好后，我们可以将其添加到模型包中，并创建一个`tar.gz`模型归档。可以通过在 Jupyter notebook
+    中运行以下 Bash 代码来完成此操作：
+- en: '[PRE8]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Now, our model has been packaged according to TFS and SageMaker requirements
+    and we are ready to deploy it.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们的模型已经按照 TFS 和 SageMaker 的要求打包完毕，准备进行部署。
+- en: Deploying the TFS model
+  id: totrans-86
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 部署 TFS 模型
+- en: 'To deploy the TFS model, follow these steps:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部署 TFS 模型，请按照以下步骤操作：
+- en: 'We will start by uploading our model archive to Amazon S3 so that SageMaker
+    can download it to the serving container at deployment time. We can use a SageMaker
+    `Session()` object to do this:'
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将首先把模型归档上传到 Amazon S3，以便 SageMaker 在部署时将其下载到服务容器中。我们可以使用 SageMaker 的`Session()`对象来执行此操作：
+- en: '[PRE9]'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Then, we can use the SageMaker SDK TensorFlowModel object to configure the
+    TFS environment. Note that we are providing the TFS configuration via the `env`
+    dictionary:'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们可以使用 SageMaker SDK 的 TensorFlowModel 对象来配置 TFS 环境。请注意，我们通过`env`字典提供 TFS
+    配置：
+- en: '[PRE10]'
+  id: totrans-91
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Once the model has been configured, we are ready to deploy the endpoint. Here,
+    we will use one of the GPU instances, but you can experiment with CPU instances
+    as well.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置好模型后，我们可以准备部署端点。在这里，我们将使用一个 GPU 实例，但你也可以尝试使用 CPU 实例。
+- en: Before we can run predictions, we need to convert the image (or several images)
+    into a 4D TFS tensor and then convert it into a NumPy `ndarray` that the `.predict()`
+    method knows how to serialize into the application/JSON content type. A sample
+    method to process images into TFS format has been provided in the sample notebook.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们能够运行预测之前，我们需要将图像（或多个图像）转换为 4D TFS 张量，并将其转换为 NumPy `ndarray`，这样`.predict()`方法才能将其序列化为
+    application/JSON 内容类型。样本笔记本中提供了一个将图像处理为 TFS 格式的方法示例。
+- en: 'In the following code, we are running predictions and then mapping the resulting
+    softmax scores to labels:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下代码中，我们正在运行预测，并将结果的 softmax 分数映射到标签：
+- en: '[PRE11]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: After running this code, you should have an output that contains labels and
+    their normalized probabilities.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行此代码后，你应该得到包含标签及其归一化概率的输出。
+- en: In this section, we reviewed how to use the TFS model server on Amazon SageMaker.
+    TFS is a highly configurable production-grade model server that should be considered
+    a great candidate when it comes to hosting TensorFlow models. We also discussed
+    some implementation specifics of Sagemaker/TFS integration that should be accounted
+    for when engineering your model server. Once you have your TensorFlow model(s)
+    running on SageMaker, it’s recommended to perform benchmarking and tune the TFS
+    configuration based on your specific use case requirements.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们回顾了如何在Amazon SageMaker上使用TFS模型服务器。 TFS是一个高度可配置的生产级模型服务器，当涉及到托管TensorFlow模型时，它应该被视为一个很好的选择。
+    我们还讨论了一些Sagemaker / TFS集成的实现细节，这些细节在设计您的模型服务器时应予以考虑。 一旦您在SageMaker上运行您的TensorFlow模型，建议进行基准测试，并根据您特定的用例需求调整TFS配置。
+- en: In the next section, we will review the native model server for PyTorch models
+    – TorchServe.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分中，我们将审查用于PyTorch模型的本地模型服务器 - TorchServe。
+- en: Using PTS
+  id: totrans-99
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用PTS
+- en: '**PTS** is a native model server for PyTorch models. PTS was developed in collaboration
+    between Meta and AWS to provide a production-ready model server for the PyTorch
+    ecosystem. It allows you to serve and manage multiple models and serve requests
+    via REST or gRPC endpoints. PTS supports serving TorchScripted models for better
+    inference performance. It also comes with utilities to collect logs and metrics
+    and optimization tweaks. SageMaker supports PTS as part of PyTorch inference containers
+    ([https://github.com/aws/deep-learning-containers/tree/master/pytorch/inference/docker](https://github.com/aws/deep-learning-containers/tree/master/pytorch/inference/docker)).'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**PTS**是PyTorch模型的本地模型服务器。 PTS是Meta和AWS合作开发的，旨在为PyTorch生态系统提供一个生产就绪的模型服务器。
+    它允许您通过REST或gRPC端点提供服务和管理多个模型。 PTS支持为了更好的推断性能提供TorchScripted模型。 它还配备了收集日志和指标以及优化调整的实用程序。
+    SageMaker将PTS作为PyTorch推断容器的一部分支持（[https://github.com/aws/deep-learning-containers/tree/master/pytorch/inference/docker](https://github.com/aws/deep-learning-containers/tree/master/pytorch/inference/docker)）。'
+- en: Integration with SageMaker
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 与SageMaker集成
+- en: 'PTS is a default model server for PyTorch models on Amazon SageMaker. Similar
+    to TFS, SageMaker doesn’t expose native PTS APIs to end users for model management
+    and inference. The following diagram shows how to integrate SageMaker and PTS:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PTS是Amazon SageMaker上PyTorch模型的默认模型服务器。 与TFS类似，SageMaker不向最终用户公开原生PTS API以进行模型管理和推断。
+    下图显示了如何集成SageMaker和PTS：
+- en: '![Figure 9.2 – PTS architecture on SageMaker ](img/B17519_09_002.jpg)'
+  id: totrans-103
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图9.2 - SageMaker上的PTS架构](img/B17519_09_002.jpg)'
+- en: Figure 9.2 – PTS architecture on SageMaker
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.2 - SageMaker上的PTS架构
+- en: 'Let’s highlight these integration details:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们突出这些集成细节：
+- en: SageMaker supports a limited number of PTS configs out of the box. If you need
+    to have more flexibility with your PTS configuration, you may need to extend the
+    SageMaker PyTorch Inference container. Alternatively, you can package the PTS
+    configs as part of your model package and provide the path to it via the `TS_CONFIG_FILE`
+    environment variable. However, with the latter approach, you won’t be able to
+    manipulate all the settings (for example, the JVM config).
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SageMaker原生支持有限数量的PTS配置。 如果您需要对PTS配置更具灵活性，可能需要扩展SageMaker PyTorch推断容器。 或者，您可以将PTS配置作为模型包的一部分打包，并通过`TS_CONFIG_FILE`环境变量提供路径。
+    但是，通过后一种方法，您将无法操纵所有设置（例如，JVM配置）。
+- en: PTS requires you to package model artifacts and handler code into a MAR archive.
+    SageMaker has slightly different requirements regarding the model archive, which
+    we will discuss in the following code example.
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PTS要求您将模型工件和处理程序代码打包到MAR存档中。 SageMaker对于模型存档有略有不同的要求，我们将在以下代码示例中讨论。
+- en: SageMaker supports hosting multiple models at the same time. For this, you need
+    to set the `ENABLE_MULTI_MODEL` environment variable to `true` and package your
+    models into a single archive.
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SageMaker支持同时托管多个模型。 为此，您需要将`ENABLE_MULTI_MODEL`环境变量设置为`true`，并将您的模型打包到单个存档中。
+- en: SageMaker provides a mechanism to configure PTS via endpoint environmental variables.
+    Let’s review the available config parameters.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker通过端点环境变量提供配置PTS的机制。 让我们回顾一下可用的配置参数。
+- en: Optimizing PTS on SageMaker
+  id: totrans-110
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在SageMaker上优化PTS
+- en: 'PTS supports two primary mechanisms for performance optimization: server-side
+    batching and spawning multiple model threads. These settings can be configured
+    via the following environmental variables:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PTS支持两种主要的性能优化机制：服务器端批处理和生成多个模型线程。 可以通过以下环境变量配置这些设置：
+- en: '`SAGEMAKER_TS_BATCH_SIZE` to set the maximum size of server-side batches.'
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TS_BATCH_SIZE` 设置服务器端批次的最大大小。'
+- en: '`SAGEMAKER_TS_MAX_BATCH_DELAY` to set the maximum delay that the server will
+    wait to complete the batch in microseconds.'
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TS_MAX_BATCH_DELAY` 设置服务器等待完成批次的最大延迟（以微秒为单位）。'
+- en: '`SAGEMAKER_TS_RESPONSE_TIMEOUT` sets the time delay for a timeout in seconds
+    if an inference response is not available.'
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TS_RESPONSE_TIMEOUT` 设置推理响应不可用时的超时时间延迟（以秒为单位）。'
+- en: '`SAGEMAKER_TS_MIN_WORKERS` and `SAGEMAKER_TS_MAX_WORKERS` configure the minimum
+    and the maximum number of model worker threads on CPU or GPU devices, respectively.
+    You can read some of the considerations on setting up these in the PyTorch documentation
+    at [https://github.com/pytorch/serve/blob/master/docs/performance_guide.md](https://github.com/pytorch/serve/blob/master/docs/performance_guide.md).'
+  id: totrans-115
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SAGEMAKER_TS_MIN_WORKERS` 和 `SAGEMAKER_TS_MAX_WORKERS` 分别配置 CPU 或 GPU 设备上模型工作线程的最小和最大数量。你可以在
+    PyTorch 文档中阅读有关如何设置这些参数的注意事项，链接如下：[https://github.com/pytorch/serve/blob/master/docs/performance_guide.md](https://github.com/pytorch/serve/blob/master/docs/performance_guide.md)。'
+- en: Additionally, PTS supports inference profiling using the PyTorch TensorBoard
+    plugin, which we discussed in [*Chapter 7*](B17519_07.xhtml#_idTextAnchor110),
+    *Operationalizing Deep Learning Training*. This plugin allows you to profile your
+    PyTorch inference code and identify potential bottlenecks.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，PTS 支持使用 PyTorch TensorBoard 插件进行推理分析，这在[*第 7 章*](B17519_07.xhtml#_idTextAnchor110)中讨论过，*深度学习训练的生产化*。该插件可以让你分析
+    PyTorch 推理代码，找出潜在的瓶颈。
+- en: Serving models with PTS
+  id: totrans-117
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 PTS 提供模型服务
+- en: 'Let’s review how to deploy PyTorch models using PTS on SageMaker. We will use
+    the Distilbert model that has been trained on the Q&A NLP task from HuggingFace
+    Models. The sample code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_PyTorch_Torchserve.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_PyTorch_Torchserve.ipynb).'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回顾一下如何使用 PTS 在 SageMaker 上部署 PyTorch 模型。我们将使用 HuggingFace 模型库中已在问答 NLP 任务上训练的
+    Distilbert 模型。示例代码可以在这里找到：[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_PyTorch_Torchserve.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_PyTorch_Torchserve.ipynb)。
+- en: Packaging the model for PTS on SageMaker
+  id: totrans-119
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在 SageMaker 上为 PTS 打包模型
+- en: 'When using the PTS model server on SageMaker, you may choose to use one of
+    two options:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 SageMaker 上使用 PTS 模型服务器时，你可以选择以下两种选项之一：
+- en: Deploy your model using the `PyTorchModel` class from the Python SageMaker SDK.
+    In this case, your model archive needs to provide only the necessary model artifacts
+    (for example, model weights, lookups, tokenizers, and so on). As part of the `PyTorchModel`
+    object configuration, you will provide your inference code and other dependencies,
+    and SageMaker will automatically package it for PTS.
+  id: totrans-121
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 Python SageMaker SDK 中的 `PyTorchModel` 类部署你的模型。在这种情况下，你的模型归档只需要提供必要的模型工件（例如模型权重、查找表、分词器等）。作为
+    `PyTorchModel` 对象配置的一部分，你将提供推理代码和其他依赖项，SageMaker 会自动为 PTS 打包它。
+- en: 'You can also package your model along with the inference code in a single archive.
+    While this approach requires some additional work, it allows you to create a model
+    package and deploy models without using the SageMaker SDK. SageMaker expects the
+    following directory structure in this case:'
+  id: totrans-122
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你也可以将模型与推理代码一起打包在一个归档文件中。虽然这种方法需要额外的工作，但它允许你创建模型包并部署模型，而无需使用 SageMaker SDK。在这种情况下，SageMaker
+    期望以下目录结构：
+- en: '[PRE12]'
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'In this example, we will use the first option:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将使用第一个选项：
+- en: 'The following Bash script will download the required HuggingFace model artifacts
+    and package them into a single `tar.gz archive`:'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以下 Bash 脚本将下载所需的 HuggingFace 模型工件，并将它们打包成一个 `tar.gz 归档` 文件：
+- en: '[PRE13]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Then, we need to upload the model archive to Amazon S3 using the following
+    code:'
+  id: totrans-127
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们需要使用以下代码将模型归档上传到 Amazon S3：
+- en: '[PRE14]'
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Next, we need to prepare some code to load models from the uploaded model artifacts
+    and perform inference and data processing. This code is called the **inference
+    handler** in PTS terminology.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要准备一些代码，从上传的模型工件中加载模型并执行推理和数据处理。这段代码在 PTS 术语中被称为 **推理处理程序**。
+- en: Preparing the inference handler
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 准备推理处理程序
+- en: 'SageMaker requires you to provide some code to load the model and run predictions
+    so that you can preprocess incoming inference requests and post-process the response.
+    To perform these operations, you need to implement the `model_fn()`, `predict_fn()`,
+    `input_fn()`, and `output_fn()` methods. You can find implementations of the inference
+    handler using the HuggingFace Pipeline API here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_src/pipeline_predictor.py](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_src/pipeline_predictor.py).'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker 要求您提供一些代码以加载模型并运行预测，以便您可以预处理传入的推理请求并后处理响应。为了执行这些操作，您需要实现 `model_fn()`、`predict_fn()`、`input_fn()`
+    和 `output_fn()` 方法。您可以在此找到使用 HuggingFace Pipeline API 的推理处理器实现：[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_src/pipeline_predictor.py](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_src/pipeline_predictor.py)。
+- en: Deploying the model to a SageMaker endpoint
+  id: totrans-132
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 将模型部署到 SageMaker 端点
+- en: 'Deploying the model on PTS using the SageMaker SDK is straightforward. To configure
+    PTS, we can use the `"env"` dictionary to set the appropriate environment variables
+    in the serving container. Note that here, we explicitly reference the inference
+    code via the `"entry_point"` parameter. Follow these steps:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 SageMaker SDK 在 PTS 上部署模型非常简单。为了配置 PTS，我们可以使用 `"env"` 字典在服务容器中设置适当的环境变量。请注意，在这里，我们通过
+    `"entry_point"` 参数显式引用推理代码。按照以下步骤操作：
+- en: 'As a prerequisite, you can add any other dependencies (for example, custom
+    libraries or `requirements.txt`) to the `"source_dir"` location. The SageMaker
+    SDK will automatically merge these assets with the model data into the MAR archive
+    required by PTS:'
+  id: totrans-134
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 作为前提条件，您可以将任何其他依赖项（例如自定义库或 `requirements.txt`）添加到 `"source_dir"` 位置。SageMaker
+    SDK 将自动将这些资产与模型数据合并到 PTS 所需的 MAR 存档中：
+- en: '[PRE15]'
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Now, we can define the endpoint configuration and supported serializers and
+    deserializers for the request/response pair:'
+  id: totrans-136
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们可以定义请求/响应对的端点配置以及支持的序列化器和反序列化器：
+- en: '[PRE16]'
+  id: totrans-137
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Now, we can run prediction by calling the `.predict()` method:'
+  id: totrans-138
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们可以通过调用 `.predict()` 方法进行预测：
+- en: '[PRE17]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'We can also confirm that our PTS configurations have been applied properly.
+    For this, you can open your SageMaker endpoint log stream and search for a log
+    line, as shown here:'
+  id: totrans-140
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们还可以确认我们的 PTS 配置已正确应用。为此，您可以打开 SageMaker 端点日志流，并搜索如下所示的日志行：
+- en: '[PRE18]'
+  id: totrans-141
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: In this section, we discussed how PTS can be used to serve PyTorch models. In
+    real production systems, you will probably prefer to convert your model into TorchScript
+    format and further experiment with batching and worker scaling options to optimize
+    your specific use case requirements.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们讨论了如何使用 PTS 来服务 PyTorch 模型。在实际生产系统中，您可能更愿意将模型转换为 TorchScript 格式，并进一步尝试批处理和工作节点扩展选项，以优化您的特定用例需求。
+- en: In the next section, we will review a feature-rich framework-agnostic model
+    server called NVIDIA Triton.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一节中，我们将回顾一个功能丰富的框架无关的模型服务器，称为 NVIDIA Triton。
+- en: Using NVIDIA Triton
+  id: totrans-144
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 NVIDIA Triton
+- en: '**NVIDIA Triton** is an open source model server developed by NVIDIA. It supports
+    multiple DL frameworks (such as TensorFlow, PyTorch, ONNX, Python, and OpenVINO),
+    as well various hardware platforms and runtime environments (NVIDIA GPUs, x86
+    and ARM CPUs, and AWS Inferentia). Triton can be used for inference in cloud and
+    data center environments and edge or mobile devices. Triton is optimized for performance
+    and scalability on various CPU and GPU platforms. NVIDIA provides a specialized
+    utility for performance analysis and model analysis to improve Triton’s performance.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**NVIDIA Triton** 是由 NVIDIA 开发的一个开源模型服务器。它支持多种深度学习框架（如 TensorFlow、PyTorch、ONNX、Python
+    和 OpenVINO），以及各种硬件平台和运行时环境（NVIDIA GPUs、x86 和 ARM CPUs，以及 AWS Inferentia）。Triton
+    可用于云和数据中心环境中的推理，以及边缘设备或移动设备。Triton 在多种 CPU 和 GPU 平台上进行了性能和可扩展性优化。NVIDIA 提供了一种专门的工具，用于性能分析和模型分析，以提高
+    Triton 的性能。'
+- en: Integration with SageMaker
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 与 SageMaker 的集成
+- en: 'You can use Triton model servers by utilizing a pre-built SageMaker DL container
+    with it. Note that SageMaker Triton containers are not open source. You can find
+    the latest list of Triton containers here: [https://github.com/aws/deep-learning-containers/blob/master/available_images.md#nvidia-triton-inference-containers-sm-support-only](https://github.com/aws/deep-learning-containers/blob/master/available_images.md#nvidia-triton-inference-containers-sm-support-only).'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过使用预构建的SageMaker DL容器来使用Triton模型服务器。请注意，SageMaker Triton容器不是开源的。你可以在这里找到最新的Triton容器列表：[https://github.com/aws/deep-learning-containers/blob/master/available_images.md#nvidia-triton-inference-containers-sm-support-only](https://github.com/aws/deep-learning-containers/blob/master/available_images.md#nvidia-triton-inference-containers-sm-support-only)。
+- en: 'SageMaker doesn’t require you to provide inference custom code when deploying
+    models on Triton. However, you will need to provide a Triton `config.pbtxt` file
+    for each model you intend to serve. This config specifies the API contract for
+    the inference request/response pair and other parameters on how the model needs
+    to be served. You can review the possible configuration parameters by reading
+    the official Triton documentation: [https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md).'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SageMaker在部署模型到Triton时不要求提供推理自定义代码。然而，你需要为每个你打算提供服务的模型提供一个Triton `config.pbtxt`文件。该配置指定了推理请求/响应对的API契约以及模型如何提供服务的其他参数。你可以通过阅读官方Triton文档来查看可能的配置参数：[https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md)。
+- en: Also, note that, unlike TFS and PTS, at the time of writing, SageMaker doesn’t
+    support hosting multiple independent models on Triton. However, you can still
+    have multiple versions of the same model or organize several models into a pipeline.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同时需要注意的是，与TFS和PTS不同，写本文时，SageMaker尚不支持在Triton上托管多个独立的模型。但是，你仍然可以有同一个模型的多个版本，或者将多个模型组织成一个管道。
+- en: Optimizing Triton inference
+  id: totrans-150
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化Triton推理
+- en: 'Triton provides several utilities to improve your performance:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Triton提供多种工具来提高你的性能：
+- en: '**Model Analyzer** allows you to understand the GPU memory utilization of your
+    models so that you can understand how to run multiple models on a single GPU'
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型分析器**允许你了解模型的GPU内存使用情况，以便你了解如何在单个GPU上运行多个模型。'
+- en: '**Performance Analyzer** allows you to analyze your Triton inference and throughput'
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**性能分析器**允许你分析Triton的推理和吞吐量。'
+- en: You won’t be able to run Performance Analyzer directly against SageMaker Triton
+    Endpoint since the SageMaker inference API doesn’t match the Triton inference
+    API. To bypass this limitation, you can run the Triton container locally on an
+    instance of SageMaker Notebook with the target hardware accelerator and run an
+    analysis against it.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你无法直接在SageMaker Triton Endpoint上运行性能分析器，因为SageMaker推理API与Triton推理API不匹配。为了解决这个限制，你可以在具有目标硬件加速器的SageMaker
+    Notebook实例上本地运行Triton容器，并对其进行分析。
+- en: 'Triton provides the following optimization features:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Triton提供以下优化功能：
+- en: '**Dynamic batching**: This puts multiple inference requests into a batch to
+    increase Triton throughput. This feature is similar to the batching we discussed
+    for TFS and PTS model servers.'
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**动态批处理**：将多个推理请求合并到一个批处理中，以提高Triton的吞吐量。这个功能类似于我们为TFS和PTS模型服务器讨论的批处理。'
+- en: '**Model instances**: This specifies how many copies of each model will be available
+    for inference. By default, a single instance of the model is loaded. Having more
+    than one copy of the model typically results in better latency/throughout as it
+    allows you to overlap memory transfer operations (for example, CPU to/from GPU)
+    with inference compute. Having multiple instances also allows you to use all the
+    available GPU resources more efficiently.'
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**模型实例**：指定每个模型将有多少副本可用于推理。默认情况下，加载一个模型实例。拥有多个模型副本通常会提高延迟/吞吐量，因为它允许你将内存传输操作（例如，CPU与GPU之间的传输）与推理计算重叠。拥有多个实例也能更有效地使用所有可用的GPU资源。'
+- en: Both parameters can be configured via the `config.pbtxt` file. Let’s gain some
+    practical experience in using Triton on SageMaker.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个参数可以通过`config.pbtxt`文件进行配置。让我们在SageMaker上获得一些使用Triton的实际经验。
+- en: Serving models with Triton on SageMaker
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在SageMaker上使用Triton提供模型服务
+- en: 'In this example, we will deploy the image classification PyTorch ResNet50 model
+    using Triton. Our target hardware accelerator will be `ml.g4dn` instances. First,
+    we need to compile the model to the TensorRT runtime; then, the compiled model
+    will be packaged and deployed to the Triton model server. The sample code is available
+    here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/3_NVIDIA_Triton_Server.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/3_NVIDIA_Triton_Server.ipynb).'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将使用Triton部署图像分类PyTorch ResNet50模型。我们的目标硬件加速器将是`ml.g4dn`实例。首先，我们需要将模型编译为TensorRT运行时；然后，编译后的模型将被打包并部署到Triton模型服务器。示例代码可以在此处找到：[https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/3_NVIDIA_Triton_Server.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/3_NVIDIA_Triton_Server.ipynb)。
+- en: 'Note that the model compilation process described in the following subsection
+    is specific to the PyTorch framework. If you choose to use the TensorFlow model,
+    your model compilation and configuration will be different. You can refer to the
+    Triton TensorFlow backend repository for details: [https://github.com/triton-inference-server/tensorflow_backend](https://github.com/triton-inference-server/tensorflow_backend).'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，以下小节中描述的模型编译过程是针对PyTorch框架的。如果你选择使用TensorFlow模型，则你的模型编译和配置会有所不同。你可以参考Triton
+    TensorFlow后端的仓库获取详细信息：[https://github.com/triton-inference-server/tensorflow_backend](https://github.com/triton-inference-server/tensorflow_backend)。
+- en: Compiling the model for Triton
+  id: totrans-162
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 为Triton编译模型
+- en: 'There are several ways you can compile your eager PyTorch model into TensorRT
+    format, such as by converting your PyTorch model into ONNX format. Another way
+    is to use the PyTorch JIT compiler to convert your eager model into TorchScript
+    format natively. Recently, the PyTorch and NVIDIA teams have implemented an optimized
+    way to compile your PyTorch model into a TensorRT runtime using the **Torch-TensorRT
+    compiler**. This approach has several advantages as it allows you to use TensorRT-specific
+    optimizations such as the GP16 and INT8 reduced precision types and NVIDIA GPU
+    weight sparsity:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种方法可以将你的PyTorch模型编译为TensorRT格式，例如将PyTorch模型转换为ONNX格式。另一种方法是使用PyTorch JIT编译器将你的eager模型本地转换为TorchScript格式。最近，PyTorch和NVIDIA团队实施了一种优化方式，使用**Torch-TensorRT编译器**将PyTorch模型编译为TensorRT运行时。这个方法有几个优点，它允许你使用TensorRT特定的优化，例如GP16和INT8精度降低类型以及NVIDIA
+    GPU权重稀疏性：
+- en: '![Figure 9.3 – Compiling the PyTorch model using TensorRT-Torch ](img/B17519_09_003.jpg)'
+  id: totrans-164
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图9.3 – 使用TensorRT-Torch编译PyTorch模型](img/B17519_09_003.jpg)'
+- en: Figure 9.3 – Compiling the PyTorch model using TensorRT-Torch
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图9.3 – 使用TensorRT-Torch编译PyTorch模型
+- en: 'To compile the PyTorch model using TensorRT-Torch, we need two components:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用TensorRT-Torch编译PyTorch模型，我们需要两个组件：
+- en: A runtime environment for compilation. It’s highly recommended to use NVIDIA’s
+    latest PyTorch containers for this purpose. Note that you will need to run this
+    container on an instance with an NVIDIA GPU available. For instance, you can run
+    this sample on a SageMaker Notebook whose type is `g4dn`.
+  id: totrans-167
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于编译的运行时环境。强烈建议使用NVIDIA的最新PyTorch容器来完成此操作。请注意，你需要在具有NVIDIA GPU的实例上运行此容器。例如，你可以在`g4dn`类型的SageMaker
+    Notebook上运行此示例。
+- en: Compilation code. This code will be executed inside the NVIDIA PyTorch Docker
+    container.
+  id: totrans-168
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 编译代码。此代码将在NVIDIA PyTorch Docker容器内执行。
+- en: 'Now, let’s review the compilation code:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们回顾一下编译代码：
+- en: 'We will start by loading the model from PyTorch Hub, setting it to evaluation
+    mode, and placing it on the GPU device:'
+  id: totrans-170
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 我们将首先从PyTorch Hub加载模型，将其设置为评估模式，并将其放置在GPU设备上：
+- en: '[PRE19]'
+  id: totrans-171
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Next, we will compile it using the TensorRT-Torch compiler. As part of the
+    compiler configuration, we will specify the expected inputs and target precision.
+    Note that since we plan to use dynamic batching for our model, we will provide
+    several input shapes with different values for the batch dimensions:'
+  id: totrans-172
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们将使用TensorRT-Torch编译器进行编译。在编译器配置中，我们将指定预期的输入和目标精度。请注意，由于我们计划使用动态批处理进行模型处理，因此我们将提供多个具有不同批次维度值的输入形状：
+- en: '[PRE20]'
+  id: totrans-173
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Finally, we will save our model to disk:'
+  id: totrans-174
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，我们将把模型保存到磁盘：
+- en: '[PRE21]'
+  id: totrans-175
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: To execute this script, you need to start a Docker container with the `docker
+    run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -it --rm
+    -v $PWD/chapter9/3_src:/workspace/3_src nvcr.io/nvidia/pytorch:22.05-py3` command.
+  id: totrans-176
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要执行此脚本，您需要通过以下命令启动一个Docker容器：`docker run --gpus all --ipc=host --ulimit memlock=-1
+    --ulimit stack=67108864 -it --rm -v $PWD/chapter9/3_src:/workspace/3_src nvcr.io/nvidia/pytorch:22.05-py3`。
+- en: Your console session will open inside a container, where you can execute the
+    compilation script by running the `python 3_src/compile_tensorrt.py` command.
+  id: totrans-177
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 您的控制台会话将在容器内打开，在这里您可以通过运行`python 3_src/compile_tensorrt.py`命令执行编译脚本。
+- en: The resulting `model.pt` file will be available outside of the Docker container
+    in the `3_src` directory.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成的`model.pt`文件将可在Docker容器外部的`3_src`目录中找到。
+- en: Preparing the model config
+  id: totrans-179
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 准备模型配置
+- en: 'Previously, we mentioned that Triton uses a configuration file with a specific
+    convention to define model signatures and runtime configuration. The following
+    code is for a `config.pbtxt` file that we can use to host the ResNet50 model.
+    Here, we define batching parameters (the max batch size and dynamic batching config),
+    input and output signatures, as well as model copies and the target hardware environment
+    (via the `instance_group` object):'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前，我们提到Triton使用一个特定约定的配置文件来定义模型签名和运行时配置。以下代码是一个`config.pbtxt`文件，我们可以用它来托管ResNet50模型。在这里，我们定义了批处理参数（最大批量大小和动态批处理配置）、输入和输出签名、模型副本以及目标硬件环境（通过`instance_group`对象）：
+- en: '[PRE22]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Refer to the Triton configuration for more details: [https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md).'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 详细了解Triton配置，请参考：[https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md)。
+- en: Packaging the model artifacts
+  id: totrans-183
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 打包模型工件
+- en: 'To deploy the compiled model with its configuration, we need to bundle everything
+    into a single `tar.gz` archive and upload it to Amazon S3\. The following code
+    shows the directory structure within the model archive:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了部署带有其配置的编译模型，我们需要将所有内容打包成一个`tar.gz`压缩包，并上传到Amazon S3。以下代码展示了模型归档中的目录结构：
+- en: '[PRE23]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Once the model package has been uploaded to Amazon S3, we can deploy our Triton
+    endpoint.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦模型包上传到Amazon S3，我们可以部署我们的Triton端点。
+- en: Deploying the Triton endpoint
+  id: totrans-187
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 部署Triton端点
+- en: 'The Triton inference container is not supported by the SageMaker Python SDK.
+    Hence, we will need to use the boto3 SageMaker client to deploy the model. Follow
+    these steps:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Triton推理容器不被SageMaker Python SDK支持。因此，我们需要使用boto3 SageMaker客户端来部署模型。请按照以下步骤操作：
+- en: 'First, we need to identify the correct Triton image. Use the following code
+    to find the Triton container URI based on your version of the Triton server (we
+    used `22.05` for both model compilation and serving) and your AWS region:'
+  id: totrans-189
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先，我们需要识别正确的Triton镜像。使用以下代码根据您使用的Triton服务器版本（我们使用了`22.05`用于模型编译和服务）以及您的AWS区域来查找Triton容器的URI：
+- en: '[PRE24]'
+  id: totrans-190
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Next, we can create the model, which defines the model data and serving container,
+    as well as other parameters, such as environment variables:'
+  id: totrans-191
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 接下来，我们可以创建模型，定义模型数据和服务容器，以及其他参数，如环境变量：
+- en: '[PRE25]'
+  id: totrans-192
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'After that, we can define the endpoint configuration:'
+  id: totrans-193
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 然后，我们可以定义端点配置：
+- en: '[PRE26]'
+  id: totrans-194
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Now, we are ready to deploy our endpoint:'
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 现在，我们准备好部署我们的端点：
+- en: '[PRE27]'
+  id: totrans-196
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Once the endpoint has been deployed, you can check SageMaker’s endpoint logs
+    to confirm that the Triton server has started and that the model was successfully
+    loaded.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦端点部署完毕，您可以检查SageMaker的端点日志，以确认Triton服务器已启动并且模型已成功加载。
+- en: Running inference
+  id: totrans-198
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 运行推理
+- en: 'To run inference, we must construct a payload according to the model signature
+    defined in `config.pbtxt`. Take a look at the following inference call. The response
+    will follow a defined output signature as well:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了运行推理，我们必须根据`config.pbtxt`中定义的模型签名构造有效负载。请查看以下推理调用。响应也将遵循已定义的输出签名：
+- en: '[PRE28]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: This section described the basic functionality of the Triton model server and
+    how to use it on Amazon SageMaker. It’s recommended that you refer to the Triton
+    documentation to learn advanced features and optimization techniques. Keep in
+    mind that depending on your chosen model format and DL framework, your model configuration
+    will be different. You can review the AWS detailed benchmarking for the Triton
+    server for the BERT model at [https://aws.amazon.com/blogs/machine-learning/achieve-hyperscale-performance-for-model-serving-using-nvidia-triton-inference-server-on-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/achieve-hyperscale-performance-for-model-serving-using-nvidia-triton-inference-server-on-amazon-sagemaker/).
+    These benchmarks provide a good starting point for experimenting with and tuning
+    Triton-hosted models.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节描述了 Triton 模型服务器的基本功能以及如何在 Amazon SageMaker 上使用它。建议您参考 Triton 文档，以了解高级功能和优化技术。请记住，根据您选择的模型格式和深度学习框架，您的模型配置将有所不同。您可以查看
+    AWS 针对 BERT 模型的 Triton 服务器详细基准测试，链接地址为 [https://aws.amazon.com/blogs/machine-learning/achieve-hyperscale-performance-for-model-serving-using-nvidia-triton-inference-server-on-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/achieve-hyperscale-performance-for-model-serving-using-nvidia-triton-inference-server-on-amazon-sagemaker/)。这些基准测试为您提供了实验和调优
+    Triton 托管模型的良好起点。
+- en: Summary
+  id: totrans-202
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we discussed how to use popular model servers – TensorFlow
+    Serving, PyTorch TorchServe, and NVIDIA Triton – on Amazon SageMaker. Each model
+    server provides rich functionality to deploy and tune your model inference. The
+    choice of a specific model server may be driven by the DL framework, target hardware
+    and runtime environments, and other preferences. NVIDIA Triton supports multiple
+    model formats, target hardware platforms, and runtimes. At the same time, TensorFlow
+    Serving and TorchServe provide native integration with their respective DL frameworks.
+    Regardless of which model server you choose, to ensure optimal utilization of
+    compute resources and inference performance, it’s recommended to plan how you
+    load test and benchmark your model with various server configurations.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们讨论了如何在 Amazon SageMaker 上使用流行的模型服务器——TensorFlow Serving、PyTorch TorchServe
+    和 NVIDIA Triton。每个模型服务器都提供了丰富的功能，用于部署和调优模型推理。选择特定模型服务器的原因可能由深度学习框架、目标硬件和运行时环境以及其他偏好决定。NVIDIA
+    Triton 支持多种模型格式、目标硬件平台和运行时。同时，TensorFlow Serving 和 TorchServe 提供与各自深度学习框架的原生集成。无论选择哪个模型服务器，为了确保计算资源和推理性能的最佳利用，建议规划如何通过各种服务器配置对模型进行负载测试和基准测试。
+- en: In the next chapter, [*Chapter 10*](B17519_10.xhtml#_idTextAnchor154), *Operationalizing
+    Inference Workloads*, we will discuss how to move and manage inference workloads
+    in production environments. We will review SageMaker’s capabilities for optimizing
+    your inference workload costs, perform A/B testing, scale in and out endpoint
+    resources based on inference traffic patterns, and advanced deployment patterns
+    such as multi-model and multi-container endpoints.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章，[*第10章*](B17519_10.xhtml#_idTextAnchor154)，*推理工作负载的操作化*，我们将讨论如何在生产环境中迁移和管理推理工作负载。我们将回顾
+    SageMaker 在优化推理工作负载成本、进行 A/B 测试、根据推理流量模式进行端点资源的弹性伸缩，以及多模型和多容器端点等高级部署模式方面的能力。
