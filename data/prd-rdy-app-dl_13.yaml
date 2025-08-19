@@ -1,0 +1,1189 @@
+- en: '10'
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '10'
+- en: Improving Inference Efficiency
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 提高推理效率
+- en: When a **deep learning** (**DL**) model is deployed on an edge device, inference
+    efficiency is often unsatisfactory. These issues mostly come from the size of
+    the trained network, as it requires a lot of computation. Therefore, many engineers
+    and scientists often sacrifice accuracy for speed when deploying a DL model on
+    an edge device. Furthermore, they focus on reducing the model size as edge devices
+    often have limited storage space.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当**深度学习**（**DL**）模型部署在边缘设备上时，推理效率通常令人不满意。这些问题主要源于训练网络的大小，因为它需要大量计算。因此，许多工程师和科学家在将DL模型部署到边缘设备上时通常会在速度和准确性之间进行权衡。此外，他们专注于减少模型大小，因为边缘设备通常具有有限的存储空间。
+- en: 'In this chapter, we will introduce techniques for improving the inference latency
+    while maintaining the original performance as much as possible. First, we will
+    cover **network quantization**, a technique that decreases the network size by
+    using data formats of lower precision for model parameters. Next, we will talk
+    about **weight sharing**, which is also known as weight clustering. It is a very
+    interesting concept where a few model weight values are shared across the whole
+    network, reducing the necessary disk space to store the trained model. We will
+    also talk about **network pruning**, which involves eliminating unnecessary connections
+    within the network. While these three techniques are the most popular, we will
+    also introduce two other interesting subjects: **knowledge distillation** and
+    **network architecture search**. These two techniques achieve model size reduction
+    and inference latency improvement by modifying the network architecture directly
+    during training.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将介绍一些技术，以改善推理延迟，同时尽可能保持原始性能。首先，我们将讨论**网络量化**，这是一种通过使用较低精度的数据格式来减小网络尺寸的技术。接下来，我们将谈论**权重共享**，也被称为权重聚类。这是一个非常有趣的概念，其中少量模型权重值在整个网络中共享，从而减少存储训练模型所需的磁盘空间。我们还将讨论**网络修剪**，它涉及消除网络内部的不必要连接。虽然这三种技术最受欢迎，但我们还将介绍另外两个有趣的主题：**知识蒸馏**和**网络架构搜索**。这两种技术通过直接在训练期间修改网络架构来实现模型大小的减小和推理延迟的改进。
+- en: 'In this chapter, we are going to cover the following main topics:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将介绍以下主要内容：
+- en: Network quantization – reducing the number of bits used for model parameters
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网络量化 – 减少模型参数使用的位数
+- en: Weight sharing – reducing the number of distinct weight values
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 权重共享 – 减少不同权重值的数量
+- en: Network pruning – eliminating unnecessary connections within the network
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网络修剪 – 消除网络内部的不必要连接
+- en: Knowledge distillation – obtaining a smaller network by mimicking the prediction
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 知识蒸馏 – 通过模仿预测获得更小的网络
+- en: Network Architecture Search – finding the most efficient network architecture
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网络架构搜索 – 寻找最有效的网络架构
+- en: Technical requirements
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 技术要求
+- en: You can download the supplemental material for this chapter from this book’s
+    GitHub repository at [https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/tree/main/Chapter_10](https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/tree/main/Chapter_10).
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从本书的GitHub存储库下载本章的补充材料，链接为[https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/tree/main/Chapter_10](https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/tree/main/Chapter_10)。
+- en: Before we deep dive into the individual techniques, we would like to introduce
+    two libraries built on top of **TensorFlow** (**TF**). The first is **TensorFlow
+    Lite** (**TF Lite**), which handles the TF model deployment on mobile, microcontrollers,
+    and other edge devices ([https://www.tensorflow.org/lite](https://www.tensorflow.org/lite)).
+    Some of the techniques we will be describing are only available for TF Lite. The
+    other library is called TensorFlow Model Optimization Toolkit. This library is
+    designed to provide various optimization techniques for TF models ([https://www.tensorflow.org/model_optimization](https://www.tensorflow.org/model_optimization)).
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入讨论各个技术之前，我们想介绍两个构建在**TensorFlow**（**TF**）之上的库。第一个是**TensorFlow Lite**（**TF
+    Lite**），它负责在移动设备、微控制器和其他边缘设备上部署TF模型（[https://www.tensorflow.org/lite](https://www.tensorflow.org/lite)）。我们将描述的一些技术仅适用于TF
+    Lite。另一个库称为TensorFlow Model Optimization Toolkit。此库旨在为TF模型提供各种优化技术（[https://www.tensorflow.org/model_optimization](https://www.tensorflow.org/model_optimization)）。
+- en: Network quantization – reducing the number of bits used for model parameters
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络量化 – 减少模型参数使用的位数
+- en: If we look at DL model training in detail, you will notice that the model learns
+    to deal with noisy inputs. In other words, the model tries to construct a generalization
+    for the data it is trained with so that it can generate reasonable predictions
+    even with some noise in the incoming data. Additionally, the DL model ends up
+    using a particular range of numeric values for inference after the training. Following
+    this line of thought, network quantization aims to use simpler representations
+    for these values.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们详细看一下 DL 模型训练，您会注意到模型学习处理噪声输入。换句话说，模型试图为其训练的数据构建一般化，以便即使在传入数据中存在一些噪声时，它也能生成合理的预测。此外，DL
+    模型在训练后最终会使用特定范围的数值进行推断。基于这种思路，网络量化旨在为这些值使用更简单的表示。
+- en: 'As shown in *Figure 10.1*, network quantization, also called model quantization,
+    is the process of remapping a range of numeric values that the model interacts
+    with to a number system that can be represented with fewer bits – for example,
+    using 8 bits instead of 32 bits to represent a float. Such modifications pose
+    an additional advantage in DL model deployment as edge devices are often missing
+    stable support for arithmetic based on 32-bit floating-point numbers:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如 *图 10.1* 所示，网络量化，也称为模型量化，是将模型与之交互的数值范围重新映射到可以用较少比特表示的数字系统的过程 - 例如，使用 8 位而不是
+    32 位来表示浮点数。这样的修改在 DL 模型部署中具有额外的优势，因为边缘设备通常不支持基于 32 位浮点数的稳定算术：
+- en: '![Figure 10.1 – An illustration of the number system remapping from float 32
+    to int 8 in network quantization'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 10.1 – 展示网络量化中从浮点 32 到整数 8 的数字系统重映射的插图'
+- en: '](img/B18522_10_01.jpg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18522_10_01.jpg)'
+- en: Figure 10.1 – An illustration of the number system remapping from float 32 to
+    int 8 in network quantization
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 10.1 – 展示网络量化中从浮点 32 到整数 8 的数字系统重映射的插图
+- en: Unfortunately, network quantization involves more than converting a number from
+    high precision into lower precision. This is because DL model inference involves
+    arithmetic that produces numbers with higher precision than the precision of the
+    inputs. In this chapter, we will look at various options in network quantization
+    that overcome the challenge in different ways. If you are interested in learning
+    more about network quantization, we recommend *A Survey of Quantization Methods
+    for Efficient Neural Network Inference*, by Gholami et al.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，网络量化涉及的不仅仅是将高精度数字转换为低精度。这是因为 DL 模型推断涉及产生比输入精度更高的数字的算术。在本章中，我们将探讨网络量化中以不同方式克服挑战的各种选项。如果您对了解更多关于网络量化的信息感兴趣，我们推荐阅读
+    Gholami 等人的《用于高效神经网络推断的量化方法综述》。
+- en: Network quantization techniques can be categorized into two areas. The first
+    is post-training quantization, while the other is quantization-aware training.
+    The former is designed to quantize a model that has already been trained, while
+    the latter minimizes the accuracy decrease due to quantization process by training
+    a model with lower precision.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络量化技术可以分为两个领域。第一个是后训练量化，另一个是量化感知训练。前者旨在量化已经训练过的模型，而后者通过以较低精度训练模型来减少由量化过程引起的精度降低。
+- en: 'Fortunately, these two techniques are both available in standard DL frameworks:
+    TF and PyTorch. In the following sections, we will look at how to perform network
+    quantization in these frameworks.'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幸运的是，这两种技术在标准 DL 框架中都可用：TF 和 PyTorch。在接下来的章节中，我们将看看如何在这些框架中执行网络量化。
+- en: Performing post-training quantization
+  id: totrans-22
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 执行后训练量化
+- en: First, we will look at how TF and PyTorch support post-training quantization.
+    The modification is simple as it only requires a few additional lines of code.
+    Let’s start with TF.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将看看 TF 和 PyTorch 如何支持后训练量化。修改非常简单，只需要几行额外的代码。让我们从 TF 开始。
+- en: Performing post-training quantization in TensorFlow
+  id: totrans-24
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 中执行后训练量化
+- en: 'By default, a DL model uses floats of 32 bits for the necessary computations
+    and variables. In the following example, we will demonstrate dynamic range quantization
+    where only the fixed parameters (such as weights) are quantized to use 16 bits
+    instead of 32 bits. Please note that you will need to install TF Lite for post-training
+    quantization in TF:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，DL 模型在必要的计算和变量中使用 32 位浮点数。在以下示例中，我们将演示动态范围量化，其中仅将固定参数（如权重）量化为使用 16 位而不是
+    32 位。请注意，您需要安装 TF Lite 来进行 TF 中的后训练量化：
+- en: '[PRE0]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: From the quantization, we get a TF Lite model. In the preceding code snippet,
+    we are using the `tf.lite.TFLiteConverter.from_saved_model` function to load a
+    trained TF model and obtain a quantized TF Lite model. Before we trigger the conversion,
+    we need to configure a few things. First, we must set the optimization strategy
+    for quantizing the model weights (`converter.optimizations = [tf.lite.Optimize.DEFAULT]`).
+    Then, we need to specify that we want 16-bit weights from the quantization (`converter.target_spec.supported_types
+    = [tf.float16]`). Actual quantization happens when the `convert` function is triggered.
+    In the preceding code, if we don’t specify a 16-bit float type for `supported_types`,
+    we would be quantizing the model to use integers of 8 bits.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从量化中，我们获得了一个TF Lite模型。在上述代码片段中，我们使用`tf.lite.TFLiteConverter.from_saved_model`函数加载训练好的TF模型，并获取了一个量化的TF
+    Lite模型。在触发转换之前，我们需要配置一些东西。首先，我们必须设置量化模型权重的优化策略（`converter.optimizations = [tf.lite.Optimize.DEFAULT]`）。然后，我们需要指定我们希望从量化中获取16位权重（`converter.target_spec.supported_types
+    = [tf.float16]`）。实际的量化发生在触发`convert`函数时。在上述代码中，如果我们不为`supported_types`指定16位浮点类型，我们将使用8位整数量化模型。
+- en: 'Next, we would like to introduce full integer quantization, where every component
+    for the model inference (inputs, activations, as well as weights) is quantized
+    to lower precision. For this type of quantization, you need to provide a representative
+    dataset to estimate the ranges for the activations. Let’s look at the following
+    example:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们想介绍全整数量化，其中模型推断的每个组件（输入、激活以及权重）都被量化为较低的精度。对于这种类型的量化，您需要提供一个代表性数据集来估计激活的范围。让我们看下面的示例：
+- en: '[PRE1]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The preceding code is almost self-explanatory. Again, we are using the `TFLiteConverter`
+    class for the quantization. First, we configure the optimization strategy (`converter.optimizations
+    = [tf.lite.Optimize.DEFAULT]`) and provide a representative dataset (`converter.representative_dataset
+    = representative_dataset`). Next, we set TF optimizations to be performed in integer
+    representation. Additionally, we need to specify input and output data types by
+    configuring `target_spec`, `inference_input_type`, and `inference_output_type`.
+    Again, the `convert` function in the last line triggers the quantization process.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述代码几乎是自说明的。再次使用`TFLiteConverter`类进行量化。首先，我们配置优化策略（`converter.optimizations
+    = [tf.lite.Optimize.DEFAULT]`），并提供一个代表性数据集（`converter.representative_dataset =
+    representative_dataset`）。接下来，我们设置TF优化以进行整数表示。此外，我们还需要通过配置`target_spec`、`inference_input_type`和`inference_output_type`来指定输入和输出数据类型。最后一行的`convert`函数触发量化过程。
+- en: The two types of post-training quantization in TF are explained thoroughly at
+    [https://www.tensorflow.org/model_optimization/guide/quantization/post_training](https://www.tensorflow.org/model_optimization/guide/quantization/post_training).
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TF中的两种后训练量化类型被详细解释在[https://www.tensorflow.org/model_optimization/guide/quantization/post_training](https://www.tensorflow.org/model_optimization/guide/quantization/post_training)。
+- en: Next, we will look at how PyTorch achieves post-training quantization.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将看看PyTorch如何实现后训练量化。
+- en: Performing post-training quantization in PyTorch
+  id: totrans-33
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在PyTorch中执行后训练量化
+- en: 'In the case of PyTorch, there are two different post-training quantization
+    methods: **dynamic quantization** and **static quantization**. They differ by
+    when the quantization occurs, and have different advantages and disadvantages.
+    In this section, we will provide a high-level description of each algorithm, along
+    with code samples.'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于PyTorch，在后训练量化中有两种不同的方法：**动态量化**和**静态量化**。它们的区别在于量化发生的时间点，并且具有不同的优缺点。在本节中，我们将为每种算法提供高级描述以及代码示例。
+- en: Dynamic quantization – quantizing the model at runtime
+  id: totrans-35
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 动态量化 - 在运行时对模型进行量化
+- en: First, we will look at dynamic quantization, the simplest form of quantization
+    available in PyTorch. This type of algorithm applies the quantization on weights
+    ahead of time while quantization on activations occurs dynamically during inference.
+    Therefore, dynamic quantization is often used in situations where the model execution
+    is mainly throttled by loading weights while computing matrix multiplication is
+    not an issue. This type of quantization is often used for LSTM or Transformer
+    networks.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将详细介绍动态量化，在PyTorch中是可用的最简单形式的量化。这种类型的算法在权重上提前应用量化，而在推断期间动态进行激活的量化。因此，动态量化通常用于模型执行主要受加载权重限制的情况，而计算矩阵乘法不是问题。这种类型的量化通常用于LSTM或Transformer网络。
+- en: 'Given a trained model, dynamic quantization can be achieved as follows. The
+    complete example is available at [https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html](https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html):'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 给定训练好的模型，可以按如下方式实现动态量化。完整示例可在[https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html](https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html)找到：
+- en: '[PRE2]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: To apply dynamic quantization, you need to pass the trained model to the `torch.quantization.quantize_dynamic`
+    function. The other two parameters refer to a set of modules that the quantization
+    will be applied to (`qconfig_spec={torch.nn.Linear}`) and the target data type
+    of the quantized tensors (`dtype=torch.qint8`). In this example, we will quantize
+    the `Linear` layers to use 8-bit integers.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要应用动态量化，您需要将训练好的模型传递给`torch.quantization.quantize_dynamic`函数。另外两个参数分别指定要应用量化的模块集（`qconfig_spec={torch.nn.Linear}`）和量化张量的目标数据类型（`dtype=torch.qint8`）。在此示例中，我们将`Linear`层量化为8位整数。
+- en: Next, let’s look at static quantization.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们看一下静态量化。
+- en: Static quantization – determining optimal quantization parameters using a representative
+    dataset
+  id: totrans-41
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 静态量化 - 使用代表性数据集确定最佳量化参数
+- en: The other type of quantization is called static quantization. Like full integer
+    quantization of TF, this type of quantization minimizes the model performance
+    degradation by estimating the range of numbers that the model interacts with using
+    a representative dataset.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种量化方法称为静态量化。像 TF 的完全整数量化一样，这种量化通过使用代表性数据集估计模型与之交互的数字范围，以最小化模型性能下降。
+- en: 'Unfortunately, static quantization requires a bit more coding than dynamic
+    quantization. First, you need to insert `torch.quantization.QuantStub` and `torch.quantization.DeQuantStub`
+    operations before and after the network for the necessary tensor conversions,
+    respectively:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，静态量化比动态量化需要更多的编码。首先，您需要在网络前后插入`torch.quantization.QuantStub`和`torch.quantization.DeQuantStub`操作，以进行必要的张量转换：
+- en: '[PRE3]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'In the preceding network, we have a single `Linear` layer but also have two
+    additional operations initialized in the `__init__` function: `torch.quantization.QuantStub`
+    and `torch.quantization.DeQuantStub`. The former operation is applied to the input
+    tensor to indicate the start of the quantization. The latter operation is applied
+    as the last operation in the `forward` function to indicate the end of the quantization.
+    The following code snippet describes the first step of static quantization – the
+    calibration process:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述网络中，我们有一个单独的`Linear`层，但在`__init__`函数中还有两个额外的操作初始化：`torch.quantization.QuantStub`和`torch.quantization.DeQuantStub`。前者用于输入张量以指示量化的开始。后者作为`forward`函数中的最后一个操作以指示量化的结束。以下代码片段描述了静态量化的第一步
+    - 校准过程：
+- en: '[PRE4]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The preceding code snippet starts with a trained model, `model_fp32`. To convert
+    the model into an intermediate format for the calibration process, you need to
+    attach a quantization config (`model_fp32.qconfig`) and pass the model to the
+    `torch.quantization.prepare` method. If the model inference runs on a server instance,
+    you must set the `qconfig` property of the model to `torch.quantization.get_default_qconfig('fbgemm')`.
+    If the target environment is a mobile device, you must pass in `'qnnpack'` to
+    the `get_default_qconfig` function. The calibration process can be achieved by
+    passing the representative dataset to the generated model, `model_fp32_prepared`.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述代码片段以训练好的模型`model_fp32`开头。为了将模型转换为用于校准过程的中间格式，您需要附加一个量化配置（`model_fp32.qconfig`）并将模型传递给`torch.quantization.prepare`方法。如果模型推断在服务器实例上运行，则必须将模型的`qconfig`属性设置为`torch.quantization.get_default_qconfig('fbgemm')`。如果目标环境是移动设备，则必须向`get_default_qconfig`函数传入`'qnnpack'`。通过将代表性数据集传递给生成的模型`model_fp32_prepared`，可以实现校准过程。
+- en: 'The last step is to convert the calibrated model into a quantized model:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一步是将校准模型转换为量化模型：
+- en: '[PRE5]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The `torch.quantization.convert` operation in the preceding line of code quantizes
+    the calibrated model (`model_fp32_prepared`) and generates a quantized version
+    of the model (`model_int8`).
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述代码行中，`torch.quantization.convert`操作量化了校准模型（`model_fp32_prepared`）并生成了模型的量化版本（`model_int8`）。
+- en: Other details on static quantization can be found at [https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于静态量化的其他详细信息可在[https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html)找到。
+- en: In the next section, we will describe how to perform quantization-aware training
+    in TF and PyTorch.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分，我们将描述如何在 TF 和 PyTorch 中执行量化感知训练。
+- en: Performing quantization-aware training
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 执行量化感知训练
+- en: 'Post-training quantization can reduce the model size significantly. However,
+    it may also reduce the model accuracy significantly. Therefore, the following
+    question arises: can we recover some of the lost accuracy? The answer to this
+    problem might be **quantization-aware training** (**QAT**). In this case, the
+    model is quantized before training so that it can learn the generalization directly
+    using the weights and activations of lower precision.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 后训练量化可以显著减少模型大小。然而，它可能会大幅降低模型的准确性。因此，以下问题产生了：我们能否恢复部分丢失的准确性？这个问题的答案可能是**量化感知训练**（**QAT**）。在这种情况下，模型在训练之前被量化，以便可以直接使用较低精度的权重和激活进行泛化学习。
+- en: First, let’s see how we can achieve this in TF.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们看看如何在 TF 中实现这一点。
+- en: Quantization-aware training in TensorFlow
+  id: totrans-56
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: TensorFlow 中的量化感知训练
+- en: 'TF provides QAT through TensorFlow Model Optimization Toolkit. The following
+    code snippet describes how you can set up QAT in TF:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TF 通过 TensorFlow Model Optimization Toolkit 提供量化感知训练（QAT）。以下代码片段描述了如何在 TF 中设置
+    QAT：
+- en: '[PRE6]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: As you can see, we have used the `tfmot.quantization.keras.quantize_model` function
+    to set up a model for QAT. The output model needs to be compiled using the `compile`
+    function and can be trained using the `fit` function, as in the case of a normal
+    TF model. Surprisingly, this is all you need. The trained model will be already
+    quantized and should provide higher accuracy than the one generated from post-training
+    quantization.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，我们使用了 `tfmot.quantization.keras.quantize_model` 函数来设置 QAT 模型。输出模型需要使用 `compile`
+    函数进行编译，并可以使用 `fit` 函数进行训练，就像普通 TF 模型一样。令人惊讶的是，这就是您所需的全部。训练过的模型已经被量化，并应该提供比后训练量化生成的模型更高的准确性。
+- en: 'For more details, please refer to the original documentation: [https://www.tensorflow.org/model_optimization/guide/quantization/training_comprehensive_guide](https://www.tensorflow.org/model_optimization/guide/quantization/training_comprehensive_guide).'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欲了解更多详情，请参阅原始文档：[https://www.tensorflow.org/model_optimization/guide/quantization/training_comprehensive_guide](https://www.tensorflow.org/model_optimization/guide/quantization/training_comprehensive_guide)。
+- en: Next, we will look at the PyTorch case.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将看一下 PyTorch 的情况。
+- en: Quantization-aware training in PyTorch
+  id: totrans-62
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: PyTorch 中的量化感知训练
+- en: QAT in PyTorch goes through a similar process. Throughout the training process,
+    the necessary calculations are achieved numbers that are clamped and rounded to
+    simulate the effect of quantization. The complete details can be found at [https://pytorch.org/docs/stable/quantization.html#quantization-aware-training-for-static-quantization](https://pytorch.org/docs/stable/quantization.html#quantization-aware-training-for-static-quantization).
+    Let’s look at how to set up a QAT for PyTorch model.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 PyTorch 中，QAT 经历了类似的过程。在训练过程中，会对必要的计算进行处理，这些计算会被夹紧和四舍五入，以模拟量化效果。完整的细节可以在 [https://pytorch.org/docs/stable/quantization.html#quantization-aware-training-for-static-quantization](https://pytorch.org/docs/stable/quantization.html#quantization-aware-training-for-static-quantization)
+    找到。让我们看看如何为 PyTorch 模型设置 QAT。
+- en: 'The setup for QAT is almost identical to what we went through for static quantization
+    in the *Static quantization – determining optimal quantization parameters using
+    a representative dataset* section. The same modification is necessary for the
+    model for both static quantization and QAT; the `torch.quantization.QuantStub`
+    and `torch.quantization.DeQuantStub` operations have to be inserted into the model
+    definition to indicate the region for the quantization. The main difference comes
+    from the intermediate representation of the network since QAT involves updating
+    the model parameters throughout training. The following code snippet describes
+    the difference better:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置 QAT 的过程几乎与我们在“静态量化 - 使用代表性数据集确定最佳量化参数”部分所经历的过程相同。对于静态量化和 QAT，模型都需要进行相同的修改；需要在模型定义中插入
+    `torch.quantization.QuantStub` 和 `torch.quantization.DeQuantStub` 操作，以指示量化区域。主要区别来自网络的中间表示，因为
+    QAT 包括在整个训练过程中更新模型参数。以下代码片段更好地描述了这种差异：
+- en: '[PRE7]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'In the preceding example, we are using the same network we defined in the *Static
+    quantization – determining optimal quantization parameters using a representative
+    dataset* section: `OriginalModel`. The model should be in `train` mode for QAT
+    (`model_fp32.train()`). Here, we assume that the model will be deployed on a server
+    instance: `torch.quantization.get_default_qat_qconfig(''fbgemm'')`. In the case
+    of QAT, the intermediate representation of the model is created by passing the
+    original model to the `torch.quantization.prepare_qat` function. You need to train
+    the intermediate representation (`model_fp32_prepared`) instead of the original
+    model (`model_fp32`). Once the training is completed, you can use the `torch.quantization.convert`
+    function to generate the quantized model.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，我们使用了在*Static quantization – determining optimal quantization parameters
+    using a representative dataset*部分定义的相同网络：`OriginalModel`。模型应处于 QAT（`model_fp32.train()`）的`train`模式。在这里，我们假设模型将部署在服务器实例上：`torch.quantization.get_default_qat_qconfig('fbgemm')`。在
+    QAT 的情况下，模型的中间表示是通过将原始模型传递给 `torch.quantization.prepare_qat` 函数来创建的。您需要训练中间表示（`model_fp32_prepared`）而不是原始模型（`model_fp32`）。完成训练后，您可以使用
+    `torch.quantization.convert` 函数生成量化模型。
+- en: Overall, we have investigated how TF and PyTorch provide QAT to minimize the
+    degradation in model accuracy from the quantization.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总体而言，我们研究了 TF 和 PyTorch 如何提供 QAT 以最小化量化对模型精度的降低。
+- en: Things to remember
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需记住的事项
+- en: a. Network quantization is a simple technique that reduces the inference latency
+    by representing the numbers it deals with in lower precision.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: a. 网络量化是一种简单的技术，通过将处理数字的精度降低来减少推断延迟。
+- en: 'b. There are two types of network quantization: post-training quantization,
+    which applies quantization to a model that is already trained, and QAT, which
+    minimizes the degradation in accuracy by training the model with lower precision.'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: b. 有两种类型的网络量化：后训练量化，将量化应用于已经训练好的模型，以及 QAT，通过低精度训练模型来最小化精度降低。
+- en: c. TF and PyTorch support both post-training quantization and QAT with minimal
+    modifications in the training code.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: c. TF 和 PyTorch 支持在训练代码中进行最小修改的后训练量化和 QAT。
+- en: 'In the next section, we will look at another option for improving inference
+    latency: weight sharing.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的部分中，我们将看看另一种改善推断延迟的选项：权重共享。
+- en: Weight sharing – reducing the number of distinct weight values
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 权重共享 - 减少不同权重值的数量
+- en: '**Weight sharing** or **weight clustering** is another technique that can significantly
+    reduce the size of the model. The idea behind this technique is rather simple:
+    let’s cluster the weights into groups (or clusters) and use the centroid values
+    instead of individual weight values. In this case, we can store the value of each
+    centroid instead of storing every value for the weights. Therefore, we can compress
+    the model size significantly and possibly speed up the inference process. The
+    key idea behind weight sharing is graphically presented in *Figure 10.2* (adapted
+    from the official TF blog post on weight clustering API: [https://blog.tensorflow.org/2020/08/tensorflow-model-optimization-toolkit-weight-clustering-api.html](https://blog.tensorflow.org/2020/08/tensorflow-model-optimization-toolkit-weight-clustering-api.html)):'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**权重共享**或**权重聚类**是另一种可以显著减小模型大小的技术。这种技术背后的想法相当简单：让我们将权重聚合成组（或簇），并使用中心值而不是单独的权重值。在这种情况下，我们可以仅存储每个中心点的值，而不是每个权重值。因此，我们可以显著压缩模型大小，并可能加快推断过程。权重共享的关键思想在*Figure
+    10.2*中有图形化展示（改编自官方 TF 博客文章关于权重聚类 API: [https://blog.tensorflow.org/2020/08/tensorflow-model-optimization-toolkit-weight-clustering-api.html](https://blog.tensorflow.org/2020/08/tensorflow-model-optimization-toolkit-weight-clustering-api.html))：'
+- en: '![Figure 10.2 – An illustration of weight sharing'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 10.2 - 权重共享的示例插图'
+- en: '](img/B18522_10_02.jpg)'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18522_10_02.jpg)'
+- en: Figure 10.2 – An illustration of weight sharing
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 10.2 - 权重共享的示例插图
+- en: Let’s learn how to perform weight sharing in TF before looking at how to do
+    the same in PyTorch.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们先学习如何在 TF 中执行权重共享，然后再看如何在 PyTorch 中执行相同操作。
+- en: Performing weight sharing in TensorFlow
+  id: totrans-79
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在 TensorFlow 中执行权重共享
+- en: TF provides weight sharing for both the `Sequential` and `Functional` TF models
+    through TensorFlow Model Optimization Toolkit ([https://www.tensorflow.org/model_optimization/guide/clustering/clustering_example](https://www.tensorflow.org/model_optimization/guide/clustering/clustering_example)).
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TF 提供了针对 `Sequential` 和 `Functional` TF 模型的权重共享，通过 TensorFlow Model Optimization
+    Toolkit ([https://www.tensorflow.org/model_optimization/guide/clustering/clustering_example](https://www.tensorflow.org/model_optimization/guide/clustering/clustering_example))
+    实现。
+- en: 'First, you need to define the clustering configuration, as shown in the following
+    code snippet:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，您需要定义如下代码片段所示的聚类配置：
+- en: '[PRE8]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: As you can see, weight clustering involves the `tfmot.clustering.keras.cluster_weights`
+    function. We need to provide the trained model (`tf_model`) and a clustering configuration
+    (`clustering_params`). The clustering configuration defines the number of clusters
+    and how each cluster will be initialized. In this example, we are generating 10
+    clusters that have been initialized using linear centroid initialization (cluster
+    centroids will be evenly spaced between the minimum and maximum values). Other
+    cluster initialization options can be found at [https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/clustering/keras/CentroidInitialization](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/clustering/keras/CentroidInitialization).
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，权重聚类涉及`tfmot.clustering.keras.cluster_weights`函数。 我们需要提供训练好的模型（`tf_model`）和一个聚类配置（`clustering_params`）。
+    聚类配置定义了集群的数量以及如何初始化每个集群。 在此示例中，我们生成了10个集群，并使用线性质心初始化（集群质心将均匀分布在最小值和最大值之间）。 可以在[https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/clustering/keras/CentroidInitialization](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/clustering/keras/CentroidInitialization)找到其他集群初始化选项。
+- en: 'After the model with clustered weights is generated, you can remove all the
+    variables that are not needed during inference using the `tfmot.clustering.keras.strip_clustering`
+    function:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成带有聚类权重的模型后，您可以使用`tfmot.clustering.keras.strip_clustering`函数删除推断期间不需要的所有变量：
+- en: '[PRE9]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Next, we will look at how to perform weight sharing in PyTorch.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将看看如何在PyTorch中执行权重共享。
+- en: Performing weight sharing in PyTorch
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在PyTorch中执行权重共享
+- en: 'Unfortunately, PyTorch does not support weight sharing. Instead, we will provide
+    a high-level description of a possible implementation. In this example, we will
+    try to implement the operation described in *Figure 10.2*. First, we will add
+    a custom function called `cluster_weights` to the model implementation, which
+    you can call after the training for clustering the weights. Then, the `forward`
+    method will need to be modified slightly, as described in the following code snippet:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，PyTorch不支持权重共享。 相反，我们将提供可能实现的高级描述。 在此示例中，我们将尝试实现描述在*Figure 10.2*中的操作。 首先，在模型实现中添加一个名为`cluster_weights`的自定义函数，您可以在训练后调用该函数以对权重进行聚类。
+    然后，`forward`方法将需要稍作修改，如下面的代码片段所述：
+- en: '[PRE10]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'The preceding code should be self-explanatory as it is pseudocode with comments
+    explaining the key operations. First, the model is trained as if it’s a normal
+    model. When the `cluster_weights` function is triggered, the weights are clustered,
+    and the necessary information for weight sharing is stored within the class; the
+    cluster index for each weight is stored in `self.weights_cluster`, and the centroid
+    values for each cluster are stored in `self.weights_mapping`. When the model is
+    in `eval` mode, the `forward` operation uses a different set of weights that are
+    constructed from `self.weights_cluster` and `self.weights_mapping`. Additionally,
+    you can add functionality for dropping the existing weights to reduce the model
+    size during deployment. We provide a complete implementation in our repository:
+    [https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/blob/main/Chapter_10/weight_sharing_pytorch.ipynb](https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/blob/main/Chapter_10/weight_sharing_pytorch.ipynb).'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的代码应该是自解释的，因为它是带有注释的伪代码，解释了关键操作。 首先，模型被训练，就像是正常模型一样。 当触发`cluster_weights`函数时，权重被聚类，并且权重共享所需的信息存储在类内部；每个权重的集群索引存储在`self.weights_cluster`中，并且每个集群的质心值存储在`self.weights_mapping`中。
+    当模型处于`eval`模式时，`forward`操作使用从`self.weights_cluster`和`self.weights_mapping`构建的不同权重集。
+    另外，您可以添加功能以丢弃部署期间不需要的现有权重以减小模型大小。 我们在我们的存储库中提供了完整的实现：[https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/blob/main/Chapter_10/weight_sharing_pytorch.ipynb](https://github.com/PacktPublishing/Production-Ready-Applied-Deep-Learning/blob/main/Chapter_10/weight_sharing_pytorch.ipynb).
+- en: Things to remember
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住的事情
+- en: a. Weight sharing reduces the model size by grouping the distinct weight values
+    and replacing them with the centroid values.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: a. 权重共享通过将不同的权重值分组并用质心值替换来减小模型大小。
+- en: b. TF provides weight sharing through TensorFlow Model Optimization Toolkit,
+    but PyTorch does not provide any support.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: b. TF通过TensorFlow Model Optimization Toolkit提供了权重共享，但PyTorch不提供任何支持。
+- en: Next, let’s learn about another popular technique called network pruning.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们学习另一种流行的技术，称为网络修剪。
+- en: Network pruning – eliminating unnecessary connections within the network
+  id: totrans-95
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络修剪 - 消除网络内不必要的连接
+- en: '**Network pruning** is an optimization process that eliminates unnecessary
+    connections. This technique can be applied after training, but it can also be
+    applied during training where the decrease in model accuracy can be further reduced.
+    With fewer connections, fewer weights are necessary. As a result, we can reduce
+    the model size as well as the inference latency. In the following sections, we
+    will present how to apply network pruning in TF and PyTorch.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**网络修剪**是一种优化过程，可以消除不必要的连接。这种技术可以在训练后应用，但也可以在训练期间应用，从而进一步减少模型精度下降。连接更少意味着需要的权重更少。因此，我们可以减小模型大小以及推断延迟。在接下来的章节中，我们将介绍如何在TF和PyTorch中应用网络修剪。'
+- en: Network pruning in TensorFlow
+  id: totrans-97
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 希望这个翻译能够满足你的要求！
+- en: 'Like model quantization and weight sharing, network pruning for TF is available
+    through TensorFlow Model Optimization Toolkit. Therefore, the first thing you
+    need for network pruning is to import the toolkit with the following line of code:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像模型量化和权重共享一样，TF的网络修剪可以通过TensorFlow模型优化工具包实现。因此，进行网络修剪的第一步是使用以下代码行导入该工具包：
+- en: '[PRE11]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'To apply network pruning during training, you must modify your model using
+    the `tfmot.sparsity.keras.prune_low_magnitude` function:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在训练过程中应用网络修剪，您必须使用`tfmot.sparsity.keras.prune_low_magnitude`函数修改您的模型：
+- en: '[PRE12]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: In the preceding code, we have configured network pruning by providing a model
+    and a set of parameters, `pruning_params`, to the `prune_low_magnitude` function.
+    As you can see, we have applied `PolynomialDecay` pruning, which initiates the
+    network at a particular sparsity (`initial_sparsity`) and constructs a network
+    of the target sparsity throughout the training process ([https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PolynomialDecay](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PolynomialDecay)).
+    As shown in the last line, the `prune_low_magnitude` function returns another
+    model that performs network pruning during training.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前述代码中，我们通过为`prune_low_magnitude`函数提供模型和一组参数`pruning_params`来配置网络修剪。正如您所见，我们应用了`PolynomialDecay`修剪，该修剪通过在训练过程中从特定稀疏性（`initial_sparsity`）开始构建到目标稀疏性的网络（[https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PolynomialDecay](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PolynomialDecay)）。正如最后一行所示，`prune_low_magnitude`函数返回另一个在训练期间执行网络修剪的模型。
+- en: 'Before we take a look at the modifications we need to make for the training
+    loop, we would like to introduce another pruning configuration, `tfmot.sparsity.keras.ConstantSparsity`
+    ([https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/ConstantSparsity](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/ConstantSparsity)).
+    This pruning configuration applies constant sparsity pruning throughout the training
+    process. To apply this type of network pruning, you can simply modify `pruning_params`
+    as shown in the following code snippet:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们查看需要进行训练循环修改之前，我们想介绍另一种修剪配置，即`tfmot.sparsity.keras.ConstantSparsity`（[https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/ConstantSparsity](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/ConstantSparsity)）。该修剪配置通过整个训练过程应用恒定稀疏性修剪。要应用此类型的网络修剪，您可以简单地按照以下代码片段修改`pruning_params`：
+- en: '[PRE13]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'As shown in the following code snippet, the training loop requires one additional
+    modification for the callback configurations; we need to use a Keras callback
+    that applies pruning for every optimizer step – that is, `tfmot.sparsity.keras.UpdatePruningStep`:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如下代码片段所示，训练循环需要进行一项额外的修改以进行回调配置；我们需要使用一个Keras回调函数，该函数对每个优化器步骤应用修剪 - 即`tfmot.sparsity.keras.UpdatePruningStep`：
+- en: '[PRE14]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: The preceding code compiles the model that’s been prepared for network pruning
+    and carries out the training. Please keep in mind that the key change comes from
+    the `tfmot.sparsity.keras.UpdatePruningStep` callback specified for the `fit`
+    function.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述代码编译了已准备好进行网络修剪和进行训练的模型。请记住，关键变化来自于为`fit`函数指定的`tfmot.sparsity.keras.UpdatePruningStep`回调函数。
+- en: 'Finally, you can update the trained model to only remember the sparse weights
+    by passing the model through the `tfmot.sparsity.keras.strip_pruning` function.
+    All `tf.Variable` instances that is not necessary for model inference will be
+    dropped:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，你可以通过将模型传递到 `tfmot.sparsity.keras.strip_pruning` 函数来更新训练过的模型，以仅保留稀疏权重。所有不必要用于模型推理的
+    `tf.Variable` 实例都将被丢弃：
+- en: '[PRE15]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'The presented examples can be directly applied to the `Functional` and `Sequential`
+    TF models. To apply pruning to specific layers or a subset of a model, you need
+    to make the following modifications:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供的示例可以直接应用于 `Functional` 和 `Sequential` TF 模型。要对特定层或模型子集应用修剪，需要进行以下修改：
+- en: '[PRE16]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: First, we have defined an `apply_pruning_to_dense` wrapper function that applies
+    the `prune_low_magnitude` function to the target layers. Then, all we need to
+    do is to pass the original model and the `apply_pruning_to_dense` function to
+    the `tf.keras.models.clone_model` function, which generates the new model by running
+    the provided function on the given model.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们定义了一个 `apply_pruning_to_dense` 包装函数，将 `prune_low_magnitude` 函数应用于目标层。然后，我们只需将原始模型和
+    `apply_pruning_to_dense` 函数传递给 `tf.keras.models.clone_model` 函数，该函数通过在给定模型上运行提供的函数来生成新模型。
+- en: It is worth mentioning that the `tfmot.sparsity.keras.PrunableLayer` abstract
+    class exists, which is designed for custom network pruning. More details on this
+    can be found at [https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PrunableLayer](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PrunableLayer)
+    and [https://www.tensorflow.org/model_optimization/guide/pruning/comprehensive_guide#custom_training_loop](https://www.tensorflow.org/model_optimization/guide/pruning/comprehensive_guide#custom_training_loop).
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得一提的是，存在 `tfmot.sparsity.keras.PrunableLayer` 抽象类，专为自定义网络修剪而设计。关于此类的更多详细信息，请参见
+    [https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PrunableLayer](https://www.tensorflow.org/model_optimization/api_docs/python/tfmot/sparsity/keras/PrunableLayer)
+    和 [https://www.tensorflow.org/model_optimization/guide/pruning/comprehensive_guide#custom_training_loop](https://www.tensorflow.org/model_optimization/guide/pruning/comprehensive_guide#custom_training_loop)。
+- en: Next, we will look at how pruning can be performed in PyTorch.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将看一下如何在 PyTorch 中进行修剪。
+- en: Network pruning in PyTorch
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: PyTorch 中的网络修剪
+- en: 'PyTorch supports post-training network pruning through the `torch.nn.utils.prune`
+    module. Given a trained network, pruning can be achieved by passing the model
+    to the `global_unstructured` function. Once the model has been pruned, a binary
+    mask is attached, which represents the set of parameters that are pruned. The
+    mask is applied to the target parameter before the `forward` operation, eliminating
+    unnecessary computations. Let’s take a look at an example:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PyTorch 通过 `torch.nn.utils.prune` 模块支持训练后的网络修剪。给定一个训练好的网络，可以通过将模型传递给 `global_unstructured`
+    函数来实现修剪。一旦模型被修剪，就会附加一个二进制掩码，该掩码表示被修剪的参数集合。在 `forward` 操作之前，掩码被应用于目标参数，从而消除不必要的计算。让我们看一个例子：
+- en: '[PRE17]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: As shown in the preceding code snippet, the first parameter of the `global_unstructured`
+    function defines the network components that the pruning will be applied to (`parameters_to_prune`).
+    The second parameter defines the pruning algorithm (`pruning_method`). The last
+    parameter, `amount`, indicates the percentage of parameters to prune. In this
+    example, we are pruning the lowest 20% of the connections based on the L1 norm.
+    If you are interested in other algorithms, you can find the complete list at [https://pytorch.org/docs/stable/nn.html#utilities](https://pytorch.org/docs/stable/nn.html#utilities).
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前面的代码片段所示，`global_unstructured` 函数的第一个参数定义了将应用修剪的网络组件 (`parameters_to_prune`)。第二个参数定义了修剪算法
+    (`pruning_method`)。最后一个参数 `amount` 表示要修剪的参数百分比。在本例中，我们基于 L1 范数修剪了连接的最低 20%。如果你对其他算法感兴趣，你可以在
+    [https://pytorch.org/docs/stable/nn.html#utilities](https://pytorch.org/docs/stable/nn.html#utilities)
+    找到完整列表。
+- en: PyTorch also supports pruning per layer, as well as iterative pruning. You can
+    also define a custom pruning algorithm. The necessary details for the aforementioned
+    functionalities can be found at https://pytorch.org/tutorials/intermediate/pruning_tutorial.html#pruning-tutorial.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PyTorch 还支持每层修剪以及迭代修剪。你还可以定义一个自定义修剪算法。关于上述功能的详细信息可以在 https://pytorch.org/tutorials/intermediate/pruning_tutorial.html#pruning-tutorial
+    找到。
+- en: Things to remember
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要记住的事情
+- en: a. Network pruning is an optimization process that reduces the model size by
+    eliminating unnecessary connections in the network.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: a. 网络修剪是通过消除网络中不必要的连接来减小模型大小的优化过程。
+- en: b. Both TF and PyTorch support model-level and layer-level network pruning.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: b. TensorFlow 和 PyTorch 都支持模型级和层级的网络修剪。
+- en: In this section, we described how to eliminate unnecessary connections within
+    a network to improve inference latency. In the next section, we will learn about
+    a technique called knowledge distillation, which generates a new model instead
+    of modifying the existing model.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们描述了如何消除网络中的不必要连接以提高推理延迟。在下一节中，我们将学习一种名为知识蒸馏的技术，该技术生成一个新模型而不是修改现有模型。
+- en: Knowledge distillation – obtaining a smaller network by mimicking the prediction
+  id: totrans-124
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 知识蒸馏 – 通过模仿预测获得较小的网络
+- en: 'The idea of knowledge distillation was first introduced in 2015 by Hinton et
+    al. in their publication titled *Distilling the Knowledge in a Neural Network*.
+    In classification problems, Softmax activation is often used as the last operation
+    of the network to represent the confidence for each class as a probability. Since
+    the class with the highest probability is used for the final prediction, the probabilities
+    for the other classes have been considered unimportant. However, the authors believe
+    that they still consist of meaningful information representing how the model interprets
+    the input. For example, if two classes constantly report similar probabilities
+    for multiple samples, the two classes likely have many characteristics in common
+    that makes the distinction between the two difficult. Such information becomes
+    more fruitful when the network is deep because it can extract more information
+    from the data it has seen. Building up from this idea, the authors propose a technique
+    for transferring knowledge of a trained model to a model of a smaller size: knowledge
+    distillation.'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 知识蒸馏的概念最早由希尔顿等人在其题为*Distilling the Knowledge in a Neural Network*的出版物中于2015年首次引入。在分类问题中，Softmax
+    激活通常作为网络的最后操作，以将每个类别的置信度表示为概率。由于最高概率的类别用于最终预测，因此其他类别的概率被认为不重要。然而，作者认为它们仍包含有意义的信息，代表了模型对输入的解释。例如，如果两个类别在多个样本中报告类似的概率，则这两个类别可能具有许多共同的特征，使得区分两者变得困难。当网络较深时，这些信息变得更加丰富，因为它可以从其已见过的数据中提取更多信息。基于这一思想，作者提出了一种将已训练模型的知识转移到较小尺寸模型的技术：知识蒸馏。
+- en: 'The process of knowledge distillation is often referred to as the teacher sharing
+    the knowledge with a student; the original model is referred to as a teacher model,
+    while the smaller model is referred to as a student. As shown in the following
+    diagram, the student model is trained from two different labels constructed from
+    a single input. One label is the ground-truth label, referred to as the hard label.
+    The other label is called the soft label. The soft label is the output probability
+    of the teacher model. The main contribution of the knowledge distillation comes
+    from soft labels filling the missing information in hard labels:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 知识蒸馏的过程通常被称为老师与学生分享知识；原始模型称为老师模型，而较小的模型称为学生。如下图所示，学生模型从单个输入构建的两个不同标签中进行训练。一个标签是地面实况标签，称为硬标签。另一个标签称为软标签。软标签是老师模型的输出概率。知识蒸馏的主要贡献来自软标签填补硬标签中缺失信息的能力：
+- en: '![Figure 10.3 – Overview of the knowledge distillation process'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图 10.3 – 知识蒸馏过程概述'
+- en: '](img/B18522_10_03.jpg)'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '](img/B18522_10_03.jpg)'
+- en: Figure 10.3 – Overview of the knowledge distillation process
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 10.3 – 知识蒸馏过程概述
+- en: From many experiments evaluating the benefit of knowledge distillation, it has
+    been proven that achieving comparable performance using a smaller network is possible.
+    Surprisingly, the simpler network architecture leads to regularization in some
+    cases and results in the student model performing better than the teacher model.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从许多评估知识蒸馏好处的实验中可以证明，使用较小的网络可以达到可比较的性能。令人惊讶的是，在某些情况下，更简单的网络结构导致正则化，并使学生模型表现优于教师模型。
+- en: 'Since the first appearance of this technique, many variations have been introduced.
+    The first set of variations comes from how the knowledge is defined: response-based
+    knowledge (network outputs), feature-based knowledge (intermediate representations),
+    and relation-based knowledge (relationships between layers or data samples). The
+    other set of variations focuses on how to achieve the knowledge transfer: offline
+    distillation (training a student model from a pre-trained teacher model), online
+    distillation (sharing the knowledge as both models get trained), and self-distillation
+    (sharing the knowledge within a single network). We believe that a paper titled
+    *Knowledge distillation: A survey* written by Gou et al. can be a good starting
+    point if you are willing to explore this domain further.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自该技术首次出现以来，已经引入了许多变体。第一组变体来自于如何定义知识：基于响应的知识（网络输出），基于特征的知识（中间表示），以及基于关系的知识（层次或数据样本之间的关系）。另一组变体集中在如何实现知识传输上：离线蒸馏（从预训练的教师模型训练学生模型），在线蒸馏（在两个模型训练时共享知识），以及自蒸馏（在单个网络内部共享知识）。如果你希望进一步探索这个领域，我们认为由Gou等人撰写的名为*知识蒸馏：一项调查*的论文可能是一个很好的起点。
+- en: Unfortunately, due to the complexity of the training setup, there isn’t a framework
+    that supports knowledge distillation out of the box. However, it can still be
+    a great option if the model network is complex while the output structure is simple.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于训练设置的复杂性，目前没有一个直接支持知识蒸馏的框架。然而，如果模型网络复杂而输出结构简单，这仍然是一个很好的选择。
+- en: Things to remember
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要记住的事情
+- en: a. Knowledge distillation is a technique for transferring the knowledge of a
+    trained model to a model of a smaller size.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: a. 知识蒸馏是一种将训练模型的知识转移到较小模型的技术。
+- en: 'b. In knowledge distillation, the original model is referred to as a teacher
+    model while the smaller model is referred to as a student. The student model is
+    trained from two labels: ground-truth labels and the output of the teacher model.'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: b. 在知识蒸馏中，原始模型称为教师模型，而较小模型称为学生模型。学生模型从两个标签进行训练：地面真实标签和教师模型的输出。
+- en: 'Finally, we introduce a technique that modifies the network architecture to
+    reduce the number of model parameters: network architecture search.'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们介绍了一种修改网络架构以减少模型参数数量的技术：网络架构搜索。
+- en: Network Architecture Search – finding the most efficient network architecture
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络架构搜索 – 寻找最有效的网络架构
+- en: '**Neural Architecture Search (NAS)** is the process of finding the best organization
+    of the layers for the given problem. As the search space of the possible network
+    architectures is extremely large, it is not feasible to evaluate every possible
+    network architecture. Therefore, there is a need for a clever way to identify
+    a promising network architecture and evaluate the candidates. Therefore, NAS methods
+    are developed along three different aspects:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**神经架构搜索（NAS）**是为给定问题找到最佳层次结构的过程。由于可能的网络架构搜索空间极其庞大，评估每种可能的网络架构是不可行的。因此，需要一种聪明的方法来识别有前途的网络架构并评估候选者。因此，NAS方法从三个不同的方面发展：'
+- en: '**Search space**: How to construct a search space of a reasonable size'
+  id: totrans-139
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**搜索空间**: 如何构建一个合理大小的搜索空间'
+- en: '**Search strategy**: How to explore the search space efficiently'
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**搜索策略**: 如何高效探索搜索空间'
+- en: '**Performance estimation strategy**: How to estimate the performance efficiently
+    without training the model completely'
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**性能估算策略**: 如何在不完全训练模型的情况下有效估算性能'
+- en: 'Even though NAS is a fast-growing field of research, a few tools are available
+    for TF and PyTorch models:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管NAS是一个快速发展的研究领域，但针对TF和PyTorch模型仅有少量工具可用：
+- en: Optuna ([https://dzlab.github.io/dltips/en/tensorflow/hyperoptim-optuna](https://dzlab.github.io/dltips/en/tensorflow/hyperoptim-optuna/))
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Optuna ([https://dzlab.github.io/dltips/zh/tensorflow/hyperoptim-optuna](https://dzlab.github.io/dltips/zh/tensorflow/hyperoptim-optuna/))
+- en: Syne-Tune, which can be used with SageMaker ([https://aws.amazon.com/blogs/machine-learning/run-distributed-hyperparameter-and-neural-architecture-tuning-jobs-with-syne-tune](https://aws.amazon.com/blogs/machine-learning/run-distributed-hyperparameter-and-neural-architecture-tuning-jobs-with-syne-tune/))
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Syne-Tune，可以与SageMaker一起使用 ([https://aws.amazon.com/blogs/machine-learning/run-distributed-hyperparameter-and-neural-architecture-tuning-jobs-with-syne-tune](https://aws.amazon.com/blogs/machine-learning/run-distributed-hyperparameter-and-neural-architecture-tuning-jobs-with-syne-tune/))
+- en: Katib ([https://www.kubeflow.org/docs/components/katib/hyperparameter](https://www.kubeflow.org/docs/components/katib/hyperparameter)),
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Katib ([https://www.kubeflow.org/docs/components/katib/hyperparameter](https://www.kubeflow.org/docs/components/katib/hyperparameter)),
+- en: '**Neural Network Intelligence** (**NNI**) ([https://github.com/Microsoft/nni/blob/b6cf7cee0e72671672b7845ab24fcdc5aed9ed48/docs/en_US/GeneralNasInterfaces.md#example-enas-macro-search-space](https://github.com/Microsoft/nni/blob/b6cf7cee0e72671672b7845ab24fcdc5aed9ed48/docs/en_US/GeneralNasInterfaces.md#example-enas-macro-search-space))'
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**神经网络智能** (**NNI**) ([https://github.com/Microsoft/nni/blob/b6cf7cee0e72671672b7845ab24fcdc5aed9ed48/docs/en_US/GeneralNasInterfaces.md#example-enas-macro-search-space](https://github.com/Microsoft/nni/blob/b6cf7cee0e72671672b7845ab24fcdc5aed9ed48/docs/en_US/GeneralNasInterfaces.md#example-enas-macro-search-space))'
+- en: SigOpt ([https://sigopt.com/blog/simple-neural-architecture-search-nas-intel-sigopt](https://sigopt.com/blog/simple-neural-architecture-search-nas-intel-sigopt/))
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SigOpt ([https://sigopt.com/blog/simple-neural-architecture-search-nas-intel-sigopt](https://sigopt.com/blog/simple-neural-architecture-search-nas-intel-sigopt/))
+- en: 'The simplistic version of NAS implementation involves defining a search space
+    from a random layer of organizations. Then, we simply pick the model with the
+    best performance. To reduce the overall search time, we can apply early stopping
+    based on a particular evaluation metric, which will quickly halt the training
+    when the evaluation metric is no longer changing. Such setup reformulates NAS
+    into a hyperparameter tuning problem where the model architecture has become a
+    parameter. We can further improve the search algorithm by applying one of the
+    following techniques:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简化版NAS实现包括从随机层次组织定义搜索空间。然后，我们简单选择表现最佳的模型。为了减少总体搜索时间，我们可以根据特定评估指标应用早停，这将在评估指标不再改变时快速停止训练。这样的设置将NAS重新构造为一个超参数调整问题，其中模型架构已成为一个参数。我们可以通过应用以下技术之一进一步改进搜索算法：
+- en: Bayesian optimization
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 贝叶斯优化
+- en: '**Reinforcement learning** (**RL**)'
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '**强化学习** (**RL**)'
+- en: Gradient-based methods
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于梯度的方法
+- en: Hierarchical-based methods
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于层次的方法
+- en: 'If you want to explore this space further, we recommend implementing NAS on
+    your own. First, you can exploit the hyperparameter tuning techniques that were
+    introduced in [*Chapter 7*](B18522_07.xhtml#_idTextAnchor162), *Revealing the
+    Secret of Deep Learning Models*. You can start with a random parameter search
+    or a Bayesian optimization approach combined with early stopping. Then, we suggest
+    looking into the RL-based implementation. We also recommend reading a paper called
+    *A Comprehensive Survey of Neural Architecture Search: Challenges and Solutions*,
+    written by Pengzhen Ren et al.'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想进一步探索这个领域，我们建议自己实施NAS。首先，您可以利用在[*第7章*](B18522_07.xhtml#_idTextAnchor162)中介绍的超参数调整技术。您可以从随机参数搜索或结合早停的贝叶斯优化方法开始。然后，我们建议研究基于RL的实现。我们还建议阅读一篇名为*神经架构搜索综述：挑战与解决方案*的论文，作者是任鹏振等人。
+- en: Things to remember
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要记住的事情
+- en: a. NAS is the process of finding the best network architecture for the underlying
+    problem.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: a. NAS 是找到解决方案的最佳网络架构的过程。
+- en: 'b. NAS consists of three components: search space, search strategy, and performance
+    estimation strategy. It involves evaluating networks of different architectures
+    and finding the best one.'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: b. NAS 包括三个组成部分：搜索空间、搜索策略和性能估计策略。它涉及评估不同架构的网络并找到最佳架构。
+- en: 'c. A few tools for NAS exist: Optuna, Syne-Tune, Katib, NNI, and SigOpt.'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: c. NAS 的几个工具包括：Optuna、Syne-Tune、Katib、NNI 和 SigOpt。
+- en: In this section, we introduced NAS and how it can generate a network of smaller
+    size.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们介绍了NAS及其如何生成更小网络的方式。
+- en: Summary
+  id: totrans-159
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 概述
+- en: 'In this chapter, we covered a set of techniques that you can use to improve
+    inference latency by reducing the model size. We introduced the three most popular
+    techniques, along with complete examples in TF and PyTorch: network quantization,
+    weight sharing, and network pruning. We also described techniques that reduce
+    the model size by modifying the network architecture directly: knowledge distillation
+    and NAS.'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了一系列技术，可以通过减少模型大小来改善推理延迟。我们介绍了三种最流行的技术，以及在TF和PyTorch中的完整示例：网络量化、权重共享和网络修剪。我们还描述了通过直接修改网络架构来减少模型大小的技术：知识蒸馏和NAS。
+- en: In the next chapter, we will explain how to deploy TF and PyTorch models on
+    mobile devices where the techniques described in this section can be useful.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将解释如何在移动设备上部署TF和PyTorch模型，在这一节描述的技术将会很有用。
