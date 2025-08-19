@@ -1,6 +1,6 @@
-# 1
 
-# 开始使用 spaCy
+
+# 第一章：开始使用 spaCy
 
 在本章中，我们将全面介绍使用 `Python` 和 `spaCy` 进行自然语言处理（`NLP`）应用开发。首先，我们将了解 NLP 开发如何与 Python 相辅相成，以及 spaCy 作为 Python 库提供的内容概述。
 

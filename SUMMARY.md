@@ -108,6 +108,7 @@
 +   [TensorFlow Lite，ML Kit 和 Flutter 移动深度学习](docs/mobi-dl-tflite/README.md)
 +   [精通 Sklearn 和 TensorFlow 预测性分析](docs/ms-pred-anal-skl-tf/README.md)
 +   [精通 Python 强化学习](docs/ms-rl-py/README.md)
++   [精通 Spacy](docs/ms-spacy-2e/README.md)
 +   [精通 Transformers](docs/ms-tfm/README.md)
 +   [AWS 人工智能服务的自然语言处理](docs/nlp-aws-ai-svc/README.md)
 +   [Java 自然语言处理](docs/nlp-java/README.md)
