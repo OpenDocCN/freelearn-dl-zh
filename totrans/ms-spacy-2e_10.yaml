@@ -1,0 +1,593 @@
+- en: '10'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Training an Entity Linker Model with spaCy
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Entity linking** is the NLP task that maps textual mentions to unique identifiers
+    in external knowledge bases. This chapter explores how to train an entity linking
+    model using spaCy and the best practices on how to create good datasets for NLP
+    training. We will also learn how to use a custom corpus reader to train a spaCy
+    component. With this knowledge, you can customize any of the spaCy components
+    to use while training your models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will cover the following in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the concept and importance of entity linking in NLP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Best practices for creating high-quality datasets for NLP training
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training an **EntityLinker** component with spaCy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Utilizing a custom corpus reader to train a spaCy component
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will be able to develop NLP models that integrate
+    with external knowledge bases, enhancing accuracy and applicability in real-world
+    scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All the data and the code for this chapter can be found at [https://github.com/PacktPublishing/Mastering-spaCy-Second-Edition](https://github.com/PacktPublishing/Mastering-spaCy-Second-Edition)
+    .
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the entity linking task
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Entity linking is the task of identifying the entity mentioned and linking
+    it to the corresponding entry in each knowledge base. For example, the **Washington**
+    entity can refer to the person George Washington or the US state. With entity
+    linking or entity resolution, our goal is to map the entity to the correct real-world
+    representation. As spaCy’s documentation says, the **EntityLinker** spaCy architecture
+    requires three main components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A **knowledge base** ( **KB** ) to store the unique identifiers, synonyms, and
+    prior probabilities
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A **candidate generation step** to produce the likely identifiers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A **machine learning model** to select the most likely ID from the list of candidates
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In KB, each textual mention (alias) is represented as a **Candidate** object
+    that may or may not be linked to an entity. A prior probability is assigned to
+    each candidate **(alias,** **entity)** pair.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the spaCy **EntityLinker** architecture, first, we initialize a KB with the
+    language shared **Vocab** and the length of the fixed-size entity vectors. Then,
+    we need to set the model. The **spacy.EntityLinker.v2** class uses the **spacy.HashEmbedCNN.v2**
+    model as the default model architecture, which is spaCy’s standard **tok2vec**
+    layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **spacy.HashEmbedCNN.v2** architecture is defined by a **MultiHashEmbed**
+    embedding layer and a **MaxoutWindowEncoder** encoding layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **MultiHashEmbed** embedding layer uses subword features and constructs
+    an embedding layer that separately embeds lexical attributes ( **"NORM"** , **"PREFIX"**
+    , **"SUFFIX"** , etc.) using hash embedding. The hash embedding is intended to
+    solve the problem of embedding size. In the paper *Hash Embeddings for Efficient
+    Word Representations* ( [https://arxiv.org/pdf/1709.03933](https://arxiv.org/pdf/1709.03933)
+    ), Svenstrup, Hansen, and Winther point out that even for moderately small embedding
+    sizes (300 dimensions), if the vocabulary is large (3 million words and phrases
+    as in Google Word2Vec), the total number of parameters is close to 1 billion.
+    Using hash embedding is memory-efficient because it’s a compact data structure,
+    requiring less storage space than bag-of-words representation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **MaxoutWindowEncoder** encoding layer encodes context using convolutions.
+    The two main parameters this layer takes are **window_size** and **depth** . The
+    **window_size** parameter sets the number of words to concatenate around each
+    token to construct the convolution. The **depth** parameter sets the number of
+    convolutional layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**spacy.HashEmbedCNN.v2** and all the other spaCy layers are defined using
+    the Thinc API. Let’s see the code that defines these layers (for learning purposes
+    only since we just need to point to this definition in our **config.cfg** file):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can see that the layer is using **MultiHashEmbed** to embed the text and
+    the **MaxoutWindowEncoder** layer to encode the embeddings providing a final linear
+    output for the model. Next, let’s see the code for the **EntityLinker.v2** architecture
+    itself:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The parameters of the **build_nel_encoder()** method are the **tok2vec** model
+    and the output dimension, **nO** , determined by the length of the vectors encoding
+    each entity in the KB. When we don’t set **nO** , it’s automatically set when
+    **initialize** is called. We will define the **tok2vec** model in the **config.cfg**
+    file like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now you have an idea of how spaCy and Thinc interact under the hood to create
+    the **EntityLinker** model architecture. If you ever need to change the parameters
+    or try different models, you have an idea of where to go to change these settings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In business settings, we usually start with no datasets available, forcing us
+    to create our own datasets. Having good quality datasets is a key component to
+    training models with good performance, so it’s important to learn the fundamentals
+    for creating good datasets. Let’s talk about this in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Best practices for creating a good NLP corpus
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Due to fine-tuning techniques, fortunately, we don’t need huge amounts of data
+    to train models today. However, good datasets are still very important because
+    they are critical to guaranteeing and evaluating the performance of our NLP systems.
+    For instance, biases and cultural nuances deeply embedded within language can
+    inadvertently shape AI outputs if not carefully curated. In the article *How to
+    make a racist AI without really trying* ( [https://blog.conceptnet.io/posts/2017/how-to-make-a-racist-ai-without-really-trying/](https://blog.conceptnet.io/posts/2017/how-to-make-a-racist-ai-without-really-trying/)
+    ), the researcher Robyn Speer provides a great tutorial on sentiment analysis
+    and shows us that we can produce racist AI solutions by simply reusing embeddings
+    that were trained on biased data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Usually, the annotation process for NLP tasks consists mainly of the following
+    steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Define the problem or the task. What problem are we trying to solve? This question
+    will guide us on how to select samples for labeling, how to label the data consistently,
+    and so on.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Identify and prepare a selection of the representative texts as starting material
+    for the corpus.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Define an annotation scheme and annotate a fragment of the corpus to determine
+    the feasibility of the data to solve the task.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Annotate a large portion of the corpus.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It’s always a good practice to define the annotation instructions to ensure
+    the dataset is annotated consistently. This is important because we need this
+    consistency so the machine learning algorithms can generalize effectively. Andrew
+    Ng tells an example of the importance of consistency in the annotation process
+    in the course *Machine Learning in Production* ( [https://www.coursera.org/learn/introduction-to-machine-learning-in-production](https://www.coursera.org/learn/introduction-to-machine-learning-in-production)
+    ), where a computer vision model was not achieving the performance they were expecting,
+    and after running some error analysis, they found out that it was due to inconsistencies
+    in the labeling process. The task was to find flaws in steel sheet images, and
+    some annotations labeled a whole area with flaws while others labeled the flaws
+    individually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To build good quality NLP datasets, we can borrow some principles from data
+    quality dimensions. The first characteristic of a good labeled dataset is **consistency**
+    . The data should have a consistent structure and unity in terms of formatting,
+    labeling, and categorization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A good dataset should also be **representative** of the target application domain.
+    If we’re working on a pipeline to extract information from the business documentation
+    of a company, it may not be a good idea to use legal texts to train an embedding
+    model for that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third and final characteristic of a good dataset is that it’s **well-documented**
+    . We should be explicit and transparent about how we gathered and selected the
+    data, what the labeling instructions were, and who annotated the data. This documentation
+    is very important because it allows for transparency, reproducibility, and bias
+    management.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the upcoming section we create a small dataset, we’ve created a small dataset
+    with sentences from news websites that mention the entities we want to disambiguate
+    (Taylor Swift, Taylor Lautner, and Taylor Fritz). The labeling task was to label
+    the **Taylor** mentions in the news sentences to each of the persons mentioned.
+    Unfortunately, in real life, we usually don’t deal with easy scenarios like this,
+    and these are the moments when following the consistency, representativeness,
+    and well-documented principles to build the datasets will become much more important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how to create a corpus, let’s get back to spaCy and learn how
+    to train our **EntityLinker** component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training an EntityLinker component with spaCy
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The first step to train the model is to create the KB. We want to create a
+    pipeline that will detect whether a reference to *Taylor* means a reference to
+    Taylor Swift (singer), Taylor Lautner (actor), or Taylor Fritz (tennis player).
+    Each of them has its own page and identifier on Wikidata so we will use Wikidata
+    as our KB source. To create the KB, we need to create an instance of the **InMemoryLookupKB**
+    class passing the shared **Vocab** object and the size of the embeddings that
+    we`ll use to encode the entities. Let’s create our KB:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we will choose the **Language** object ( **en_core_web_md** ) and add
+    a **SpanRuler** component to match all the **taylor** mentions (this will be used
+    to create the corpus):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will save both the KB and the model to disk, so let’s define these files:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'And finally, we can start the KB creation. First, we instantiate the kb object
+    passing **Vocab** and the size of the vectors. The **en_core_web_md** model has
+    vectors of 300 dimensions so we set this size for the entity vectors:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now that we have the KB, we can use the **add_entity()** method to add the
+    entities and the **add_alias()** method to add the mention (in our case, the mention
+    will be **Taylor** ) with the prior probabilities for each entity. Let’s create
+    the code to do all of that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we create two dictionaries, one with Wikidata IDs for each of our entities
+    and another with their descriptions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, it’s time to add the entities to the KB. Each Wikidata QID will have a
+    vector representation of the entity’s description. To add the entity, we use the
+    **add_entity()** method and, for now, we can set an arbitrary value for the **freq**
+    parameter (we will tell spaCy to ignore this frequency on the **config.cfg** file
+    we’ll use to train the model):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can add the mentions ( **alias** ) to the KB. If the **Taylor Swift**
+    entity appears in the text, we have no doubt it’s referring to Taylor Swift the
+    singer. Similarly, if the **Taylor Lautner** entity appears in the text, we have
+    no doubt it’s referring to the actor Taylor Lautner. We add this information to
+    the KB by setting the probabilities of these entities to **1** :'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'When the name and the surname of the entities are present, we have no doubt
+    about who is who, but what if the text mentions only **Taylor** ? We will set
+    the initial probabilities to be equal for all our three entities (30% for each
+    since the sum of the probabilities must not exceed 100%):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Our KB is not all set. Let’s print the entities and the aliases to check whether
+    everything is okay:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, it’s time to save the KB and the **nlp** model to disk so we can use them
+    later:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'With **InMemoryLookupKB** all set, we can now prepare the training data for
+    spaCy. The CSV file we’ll work with has columns called **text** (the sentence),
+    **person** and **label** (the name of the entity), **ent_start** and **ent_end**
+    (the position of the tokens in the sentence), and the Wikidata **QID** . The data
+    has 49 sentences and we will use 80% for training (we will split this into **train**
+    and **dev** sets) and 20% for testing. We will prepare the data in two steps:
+    first, creating the **Doc** objects and then adding them to the **DocBin** train
+    and **dev** objects.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To create the **Doc** objects, we will wrap each sentence in a **Doc** object
+    and create **Span** objects using the data from the CSV file. This **Span** object
+    has a **kb_id** parameter we will use to set the Wikidata QID of the entity. Let’s
+    go ahead and do that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we load the CSV file and get 80% of the rows for training and the rest
+    for testing:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we instantiate the pipeline we were working with to create the KB, wrap
+    the sentences in it to create the **Doc** objects, and create the **Span** objects
+    for the entities. We will use two lists, one to store **docs** and the other to
+    store **QIDs** :'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will use the **QIDs** list to split the sentences into **train** and **dev**
+    **DocBin** objects. To do that, we will get the indexes of each QID, use the first
+    eight sentences for **train** , and leave the rest for **dev** . Let’s do that
+    in the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we import the objects and create our empty **DocBin** objects:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we loop through each entity QID, get the indexes of their sentences, and
+    add them to each **DocBin** object:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'And now we can save the **DocBin** files to disk:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'With the **train** and **dev** sets ready, we can go ahead and train the model.
+    We will use the same configuration file that spaCy’s Nel Emerson tutorial uses
+    ( [https://github.com/explosion/projects/tree/v3/tutorials/nel_emerson](https://github.com/explosion/projects/tree/v3/tutorials/nel_emerson)
+    ). You can get this file in the Github repository here: [https://github.com/PacktPublishing/Mastering-spaCy-Second-Edition/tree/main/chapter_10](https://github.com/PacktPublishing/Mastering-spaCy-Second-Edition/tree/main/chapter_10)
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you need to refresh your understanding of spaCy’s training process, you can
+    refer to [*Chapter 6*](B22441_06.xhtml#_idTextAnchor087) . One new thing we will
+    need to do to train the **EntityLinker** component is to use a custom file with
+    additional code that should be used for training. We’ll do this because we need
+    to create **Example** objects the way **EntityLinker** needs. Let’s talk more
+    about this in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training with a custom corpus reader
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'spaCy’s **Corpus** class manages annotated corpora for data loading during
+    training. The default corpus reader ( **spacy.Corpus.v1** ) creates the **Example**
+    objects using the **make_doc()** method of the **Language** class. This method
+    only tokenizes the text. To train the **EntityLinker** component, it needs to
+    have the entities available in the doc. That’s why we will create our own corpus
+    reader in a file called **custom_functions.py** . The reader should receive as
+    parameters the path to the **DocBin** file and the **nlp** object. Inside the
+    method, we will loop through each **Doc** to create the examples. Let’s go ahead
+    and create this method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we disable the **EntityLinker** component of the pipeline and then get
+    all the docs from the **DocBin** file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we will create the **Example** objects for each doc. The first parameter
+    of **Example** is the text processed by the **nlp** object and the second is the
+    **doc** with the annotated entities:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To reference this reader in the **config.cfg** file, we need to register it
+    using the **@spacy.registry** decorator. Let’s import the libraries we will need
+    and register the reader:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We use the **partial** function so that when the spaCy code uses the reader
+    internally, we only need to pass the **nlp** object. Now, we can reference this
+    **MyCorpus.v1** reader in the **config.cfg** file like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here is the full source code of our **custom_functions.py** file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To make the reader available when we call the **train** CLI command, we need
+    to provide the source code that contains the Python code we’ve created. We do
+    this using the **code** parameter. First, we get the **config.cfg** file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can run the full command to train our **EntityLinker** pipeline:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now that we have the trained model, we need to test it. Let’s do that in the
+    next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing the entity linking model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To test the model, we will load it from the path we saved it on using the **train**
+    command and call the **nlp** object on the doc we want to disambiguate the entities.
+    The entity linker model adds **kb_id** to the entities and we can use it to see
+    which of the *Taylors* the model predicted. Let’s use some of the **df_test**
+    sentences to evaluate the model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we load the model :'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we process the sentences. The **doc.ents** entities have the **kb_id**
+    attribute with the hash of the entity and the **kb_id_** attribute with the plain
+    text QID. Let’s process the text:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can show the entities using **displacy** :'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '*Figure 10* *.1* shows the result. **Q26876** is the Wikidata ID for Taylor
+    Swift, so the model was right this time.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 10.1 – The Taylor Swift entity disambiguated correctly by the model](img/B22441_10_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.1 – The Taylor Swift entity disambiguated correctly by the model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s test the model with another sentence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Figure 10* *.2* shows the result. **Q23359** is the Wikidata ID for Taylor
+    Lauter, so the model was also right on this one.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 10.2 – The Taylor Lautner entity disambiguated correctly by the model](img/B22441_10_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.2 – The Taylor Lautner entity disambiguated correctly by the model
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’re taking it easy on the model by only evaluating these simple sentences
+    because the goal here was only to demonstrate how to obtain the results from the
+    model. Training this component was quite a journey; congratulations!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned how to train an **EntityLinker** component using
+    spaCy. We saw some implementation details to learn more about the **HashEmbedCNN.v2**
+    layer and the **EntityLinker.v2** architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also discussed some characteristics of high-quality datasets for NLP training,
+    stressing the importance of consistency, representativeness, and thorough documentation.
+    Finally, we saw how to create a custom corpus reader used to train the entity
+    linking model. With this knowledge, you can customize any other spaCy component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next and final chapter, you will learn how to combine spaCy with other
+    cool open source libraries to create great NLP applications. See you there!
+  prefs: []
+  type: TYPE_NORMAL
