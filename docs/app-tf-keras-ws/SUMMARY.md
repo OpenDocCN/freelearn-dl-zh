@@ -1,0 +1,7 @@
++   [TensorFlow 和 Keras 应用研讨会](README.md)
++   [前言](app-tf-keras-ws_0.md)
++   [第一章：1\. 神经网络与深度学习简介](app-tf-keras-ws_1.md)
++   [第二章：2\. 实际深度学习：预测比特币价格](app-tf-keras-ws_2.md)
++   [第三章：3. 实际深度学习：评估比特币模型](app-tf-keras-ws_3.md)
++   [第四章：4\. 产品化](app-tf-keras-ws_4.md)
++   [附录](app-tf-keras-ws_5.md)

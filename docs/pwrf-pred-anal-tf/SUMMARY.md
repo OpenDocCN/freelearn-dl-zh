@@ -1,0 +1,7 @@
++   [TensorFlow 强大的预测性分析](README.md)
++   [前言](pwrf-pred-anal-tf_0.md)
++   [第一章：从数据到决策——开始使用 TensorFlow](pwrf-pred-anal-tf_1.md)
++   [第二章：将数据整理到位——用于预测分析的监督学习](pwrf-pred-anal-tf_2.md)
++   [第三章：聚类你的数据 – 用于预测分析的无监督学习](pwrf-pred-anal-tf_3.md)
++   [第四章：使用强化学习进行预测分析](pwrf-pred-anal-tf_4.md)
++   [附录 A. 评估答案](pwrf-pred-anal-tf_5.md)

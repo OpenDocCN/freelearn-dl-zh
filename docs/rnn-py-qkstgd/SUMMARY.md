@@ -1,0 +1,8 @@
++   [Python 循环神经网络快速启动指南](README.md)
++   [前言](rnn-py-qkstgd_0.md)
++   [第一章：引入循环神经网络](rnn-py-qkstgd_1.md)
++   [第二章：使用 TensorFlow 构建你的第一个 RNN](rnn-py-qkstgd_2.md)
++   [第三章：生成你自己的书籍章节](rnn-py-qkstgd_3.md)
++   [第四章：创建一个西班牙语到英语的翻译器](rnn-py-qkstgd_4.md)
++   [第五章：构建你的个人助手](rnn-py-qkstgd_5.md)
++   [第六章：提高你的 RNN 性能](rnn-py-qkstgd_6.md)

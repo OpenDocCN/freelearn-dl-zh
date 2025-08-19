@@ -1,0 +1,7 @@
++   [Python 人工智能初学者项目](README.md)
++   [前言](py-ai-proj-bg_0.md)
++   [第一章：创建您自己的预测模型](py-ai-proj-bg_1.md)
++   [第二章：使用随机森林进行预测](py-ai-proj-bg_2.md)
++   [第三章：评论分类的应用](py-ai-proj-bg_3.md)
++   [第四章：神经网络](py-ai-proj-bg_4.md)
++   [第五章：深度学习](py-ai-proj-bg_5.md)
