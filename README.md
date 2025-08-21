@@ -33,4 +33,4 @@ freelearn-dl-zh <port>
 
 ## 赞助我
 
-![](https://imgconvert.csdnimg.cn/aHR0cDovL2hvbWUuYXBhY2hlY24ub3JnL2ltZy9hYm91dC9kb25hdGUuanBn?x-oss-process=image/format,png)
+![](https://img-blog.csdnimg.cn/20200112005920729.png)
