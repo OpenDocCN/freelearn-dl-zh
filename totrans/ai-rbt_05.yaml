@@ -1,0 +1,1736 @@
+- en: '5'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Picking Up and Putting Away Toys using Reinforcement Learning and Genetic Algorithms
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter is where the robots start to get challenging – and fun. What we
+    want to do now is have the robot’s manipulator arm start picking up objects. Not
+    only that, but instead of preprogramming arm moves and grasping actions, we want
+    the robot to be able to learn how to pick up objects, and how to move its arm
+    without hitting itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How would you teach a child to pick up toys in their room? Would you offer a
+    reward for completing the task, such as “*If you pick up your toys, you will get
+    a treat?*” Or would you offer a threat of punishment, such as “*If you don’t pick
+    up your toys, you can’t play games on your tablet.*” This concept, offering positive
+    feedback for good behavior and negative feedback for undesirable actions, is called
+    **reinforcement learning**. That is one of the ways we will train our robot in
+    this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If this sounds something like a game, where you get positive points for reaching
+    a goal and lose points for missing a goal, then you are right. We have some concept
+    of winning that we are trying to achieve, and we create some sort of point system
+    to reinforce – that is to say, reward – behavior when the robot does what we want
+    it to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing the software
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Setting up the solution
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing Q-learning for grasping objects
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing **genetic algorithms** (**GAs**) for path planning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Alternative robot arm ML approaches
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The exercise in this chapter does not require any new software or tools that
+    we haven’t already seen in previous chapters. We will start by using Python and
+    ROS 2\. You will need an IDE for Python (IDLE or Visual Studio Code) to edit the
+    source code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since this chapter is all about moving the robot arm, you will need a robot
+    arm to execute the code. The one I used is the **LewanSoul Robot xArm**, which
+    I purchased from Amazon.com. This arm uses digital servos, which makes the programming
+    much easier, and provides us with position feedback, so we know what position
+    the arm is in. The arm I purchased can be found at [http://tinyurl.com/xarmRobotBook](http://tinyurl.com/xarmRobotBook)
+    at the time of publication.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don’t want to buy a robot arm (or can’t), you can run this code against
+    a simulation of a robot arm using ROS 2 and **Gazebo**, a simulation engine. You
+    can find instructions at [https://community.arm.com/arm-research/b/articles/posts/do-you-want-to-build-a-robot](https://community.arm.com/arm-research/b/articles/posts/do-you-want-to-build-a-robot).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You’ll find the code for this chapter in the GitHub repository for this book,
+    at [https://github.com/PacktPublishing/Artificial-Intelligence-for-Robotics-2e](https://github.com/PacktPublishing/Artificial-Intelligence-for-Robotics-2e).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Task analysis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Our tasks for this chapter are pretty straightforward. We will use a robot
+    arm to pick up the toys we identified in the previous chapter. This can be divided
+    into the following tasks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we build an interface to control the robot arm. We are using **ROS 2**
+    to connect the various parts of the robot together, so this interface is how the
+    rest of the system sends commands and receives data from the arm. Then we get
+    into teaching the arm to perform its function, which is picking up toys. The first
+    level of capability is picking up or grasping toys. Each toy is slightly different,
+    and the same strategy won’t work every time. Also, the toy might be in different
+    orientations, so we have to adapt to how the toy is presented to the robot’s end
+    effector (a fancy name for its hand). So rather than write a lot of custom code
+    that may or may not work all the time, we want to create a structure so that the
+    robot can learn for itself.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The next problem we face is to have the arm move. It’s not just that the arm
+    has positions, but it also has to have a path from a start point to an end point.
+    The arm is not a monolithic part – it’s composed of six different motors (as shown
+    in *Figure 5**.3*) that each do something different. Two of the motors – the grip
+    and the wrist – don’t move the arm at all; they only affect the hand. So our arm
+    path is controlled by four motors. The other big problem is that the arm can collide
+    with the body of the robot if we are not careful, so our path planning for the
+    arm has to avoid collisions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will use a completely different technique for learning arm paths. A **GA**
+    is a technique for machine learning that uses an analog of evolution to *evolve*
+    complex behaviors out of simple movements.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now let’s talk a bit first about what we have to work with. We have a `600`,
+    and (after a short time interval to permit the motor to move) we see that the
+    servo position is `421`, then something is preventing the motor from reaching
+    the goal we set for it. This information will be very valuable for training the
+    robot arm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can use **forward kinematics**, which means summing up all the angles and
+    levers of the arm to deduce where the hand is located (I’ll provide the code for
+    that later in the chapter). We can use this hand location as our desired state
+    – our **reward criteria**. We will give the robot points, or rewards, based on
+    how close the hand is to the desired position and orientation we want. We want
+    the robot to figure out what it takes to get to that position. We need to give
+    the robot a way to test out different theories or actions that will result in
+    the arm moving.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will begin by just working with the robot hand, or to use the fancy robot
+    term, the **end effector**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram shows how we are trying to align our robot arm to pick
+    up a toy by rotating the wrist:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1 – Storyboard for picking up a toy](img/B19846_05_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.1 – Storyboard for picking up a toy
+  prefs: []
+  type: TYPE_NORMAL
+- en: For grasping, we have three actions to work with. We position the arm to pick
+    up the toy, we adjust the angle of the hand by rotating the hand with the wrist
+    servo, and we close the hand in order to grasp the object. If the hand closes
+    completely, then we missed the toy and the hand is empty. If the toy is keeping
+    the gripper from closing because we picked it up, then we have success and have
+    grabbed the toy. We’ll be using this process to teach the robot to use different
+    hand positions to pick up toys based on their shape.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing the software
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The first steps in designing the robot arm control software are to establish
+    a coordinate frame (how we measure movement), after which we set up our solution
+    space by creating states (arm positions) and actions (movements that change positions).
+    The following diagram shows the coordinate frame for the robot arm:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2 – Robot arm coordinate frame](img/B19846_05_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.2 – Robot arm coordinate frame
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s define the coordinate frame of the robot – our reference that we use to
+    measure movement – as shown in the preceding diagram. The X direction is toward
+    the front of the robot, so movement forward and backward is along the X-axis.
+    Horizontal movement (left or right) is along the Y-axis. Vertical movement (up
+    and down) is in the Z direction. We place the zero point – the origin of our coordinates
+    – down the center of the robot arm with zero Z (Z=0) on the floor. So, if I say
+    the robot hand is moving positively in X, then it is moving away from the front
+    of the robot. If the hand (the end of the arm) is moving in Y, then it is moving
+    left or right.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we must have a set of names that we will call the servo motors in the arm.
+    We’ll do a bit of anthropomorphic naming, and give the arm parts anatomical titles.
+    The motors are numbered in the control system and the servos on my robot arm are
+    labeled:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Motor 1* opens and closes the gripper. We may also call the gripper the hand.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Motor 2* is wrist rotate, which rotates the hand.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Motor 3* is the wrist pitch (up and down) direction.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We’ll call *Motor 4* the elbow. The elbow flexes the arm in the middle, just
+    as you expect.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Motor 5* is the shoulder pitch servo, which moves the arm up and down, rotating
+    around the Y-axis when the arm is pointing straight ahead.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Motor 6* is at the base of the arm, so we’ll call it the shoulder yaw (right
+    or left) servo. It rotates the entire arm about the Z-axis. I’ve decided not to
+    move this axis, since the entire base of the robot can rotate due to the omni
+    wheels. We’ll just move the arm up and down to simplify the problem. The navigation
+    system we develop in [*Chapter 8*](B19846_08.xhtml#_idTextAnchor235) will point
+    the arm in the correct direction.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We will start by defining an interface to the robot arm that the rest of the
+    robot control system can use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.3 – Robot arm motor nomenclature](img/B19846_05_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.3 – Robot arm motor nomenclature
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, pitch refers to up/down motion while yaw refers to right/left motion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll use two terms that are common in the robot world to describe how we calculate
+    where the arm is based on the data we have:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Forward Kinematics** (**FK**) is the process of starting at the base of the
+    robot arm and working out toward the gripper, calculating the position and orientation
+    of each joint in turn. We take the position of the joint and the angle it is at,
+    and add the length of the arm between that joint and the next joint. The process
+    of doing this calculation, which produces an X-Y-Z position and a pitch-roll-yaw
+    orientation of the end of the robot’s fingers, is called forward kinematics because
+    we calculate forward from the base and out to the arm.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Inverse Kinematics** (**IK**) takes a different approach. We know the position
+    and orientation of either where the hand is, or where we want it to be. Then we
+    calculate backward up the arm to determine what joint angles would produce that
+    hand position. IK is a bit trickier because there may be more than one solution
+    (combination of joint positions) that may produce a given hand result. Try this
+    with your own arm. Grasp a doorknob. Now move your arm while keeping your hand
+    on the doorknob. There are multiple combinations of your joints that result in
+    your hand being in the same position and orientation. We won’t be using IK here
+    in this book, but I wanted you to be familiar with the term, which is often used
+    in robot arms to drive the position of robot end effectors (grippers or hands).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For a more in-depth explanation of these concepts, you can refer to [https://control.com/technical-articles/robot-manipulation-control-with-inverse-and-forward-kinematics/](https://control.com/technical-articles/robot-manipulation-control-with-inverse-and-forward-kinematics/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s discuss how we can put the arm in motion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the solution
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We will call the act of setting the motors to a different position an **action**,
+    and we will call the position of the robot arm and hand the **state**. An action
+    applied to a state results in the arm being in a new state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We are going to have the robot associate states (a beginning position of the
+    hand) and an action (the motor commands used when at that state) with the probability
+    of generating either a positive or negative **outcome** – we will be training
+    the robot to figure out which sets of actions result in maximizing the **reward**.
+    What’s a reward? It’s just an arbitrary value that we use to define whether the
+    learning the robot accomplished was positive – something we wanted – or negative
+    – something we did not want. If the action resulted in positive learning, then
+    we increment the reward, and if it does not, then we decrement the reward. The
+    robot will use an algorithm to both try and maximize the reward, and to incrementally
+    learn a task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s understand this process better by exploring the role played by machine
+    learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Machine learning for robot arms
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Since incremental learning was also part of neural networks, we will use some
+    of the same tools we used before in our neural network to propagate a reward to
+    each step in a chain of movements that result in the hand moving to some location.
+    In reinforcement learning, this is called **discounting the reward** – distributing
+    portions of rewards to the step in a multi-step process. Likewise, the combination
+    of a state and an action is called a **policy** – because we are telling the robot,
+    “when you are in this position, and want to go to that position, do this action.”
+    Let’s understand this concept better by looking more closely at our process for
+    learning with the robot arm:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We set our goal position of the robot hand, which is the position of the robot
+    hand in X and Z coordinates in millimeters from the rotational center of the arm.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The robot will try a series of movements to try and get close to that goal.
+    We will not be giving the robot the motor positions it needs to get to that goal
+    – the robot must learn. The initial movements will be totally randomly generated.
+    We will restrict the delta movement (analogous to the learning rate from the previous
+    chapter) to some small size so we don’t get wild flailing of the arm.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At each incremental movement, we will score the movement based on whether or
+    not the arm moved closer to the goal position.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The robot will remember these movements by associating the beginning state and
+    the action (movement) with the reward score.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Later, we will train a neural network to generate probabilities of positive
+    outcomes based on the inputs of starting state and movement action. This will
+    allow the arm to learn which sequences of movement achieve positive results. Then
+    we will be able to predict which movement will result in the arm moving correctly
+    based on the starting position.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You can also surmise that we must add a reward for accomplishing the task quickly
+    – we want the results to be efficient, and so we will add rewards for taking the
+    shortest time to complete the task – or, you could say, we subtract a reward for
+    each step needed to get to the goal so that the process with the fewest steps
+    gets the most reward.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We calculate rewards using the **Q-function**, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*Q = Q(s,a)+ (reward(s,a) + g ** *max(Q(s’,a’))*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: where *Q* represents the reward the robot will get (or expects to get) from
+    a particular action. *Q(s,a)* is the final reward that we expect overall for an
+    action given the starting state. *reward(s,a)* is the reward for that action (the
+    small, incremental step we take now). *g* is a discount function that rewards
+    getting to the goal quicker, that is, with a fewer number of steps (the more steps
+    you have, the more *g* discounts (removes the reward)), and *max(Q(s’,a’))* selects
+    the action that results in the largest reward out of the set of actions available
+    at that state. In the equation, *s* and *a* represent the current state and action,
+    and *s’* and *a’* represent the subsequent state and action, respectively. This
+    is my version of Bellman’s equation for decision-making, with some adaptations
+    for this particular problem. I added a discount for longer solutions (with more
+    steps, thus taking longer to execute) to reward quicker arm movement (fewer steps),
+    and left out the learning rate (alpha) as we are taking whole steps for each state
+    (we don’t have intermediate states to learn).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s understand how we can teach the robot arm how to learn movement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How do we pick actions?
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'What actions can the robot arm perform? As shown in *Figure 5**.3*, we have
+    six motors, and we have three options for each motor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can do nothing – that is, not move at all
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can move counterclockwise, which will make our motor angle smaller
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can move clockwise, which makes our motor angle larger
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most servo motors treat positive position changes as clockwise rotation. Thus,
+    if we command the rotation to change from 200 to 250 degrees, the motor will turn
+    clockwise 50 degrees.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our action space for each motion of the robot arm is to move each motor either
+    clockwise, counterclockwise, or not at all. This gives us 729 combinations with
+    6 motors (*3*6 possible actions). That is quite a lot. The software interface
+    we are going to build refers to the robot arm motors by number with *1* being
+    the hand and *6* being the shoulder rotation motor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s reduce this number and just consider the motions of three of the motors
+    – the `[-1, 0, 1]`. We will use a value of just +/-1 or 0 in the action matrix
+    to step the motors in small increments. The x-y coordinates of the hand can be
+    computed from the sums of the angles of each joint times the length of the arm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is a Python function to compute the position of the robot hand, given
+    that each arm segment is 10 cm long. You can substitute the length of your robot
+    arm segments. This function turns the motor angles representing the hand position
+    from degrees into x-y coordinates in centimeters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The actions of the arm (possible movements) make up the action space of our
+    robot arm, which is the set of all possible actions. What we will be doing in
+    this chapter is investigating various ways of picking which action to perform
+    and when in order to accomplish our tasks, and using machine learning to do it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another way of looking at this process is that we are generating a **decision
+    tree**. You are probably familiar with the concept. We have a bit of a unique
+    application when applying this to a robot arm, because our arm is a series of
+    joints connected together, and moving one moves all of the other joints farther
+    out on the arm. When we move Motor 5, Motors 4 and 3 move position in space, and
+    their angles and distances to the ground and to our goal change. Each possible
+    motor move adds 27 new branches to our decision tree, and can generate 27 new
+    arm positions. All we have to do is pick which one to keep.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rest of this chapter will deal with just how we go about selecting our motions.
+    It’s time to start writing some code now. The first order of business is to create
+    an interface to the robot arm that the rest of the robot can use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the interface to the arm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As previously noted, we are using ROS 2 as our interface service, which creates
+    a **Modular Open System Architecture** (**MOSA**). This turns our components into
+    *plug-and-play* devices that can be added, removed, or modified, much like the
+    apps on a smartphone. The secret to making that happen is to create a useful,
+    generic interface, which we will do now.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: I’m creating my own interface to ROS 2 that is just for this book. We won’t
+    be using any other ROS packages with this arm – just what we create, so I wanted
+    the very minimum interface to get the job done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll be creating this interface in Python. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, create a **package** for the robot arm in ROS 2\. A package is a portable
+    organization unit for functionality in ROS 2\. Since we have multiple programs
+    and multiple functions for the robot arm, we can bundle them together:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We need to install the drivers for xArm so we can use them in Python:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now we go to our new source directory:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Open the editor and let’s start coding. First, we need some imports:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`rclpy` is the ROS 2 Python interface. `xarm` is the interface to the robot
+    arm, while `time` of course is a time module that we will use to set timers. Finally,
+    we use some standard ROS message formats with which to communicate.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Next, we are going to create some predefined named positions of the arm as
+    shortcuts. This is a simple way to put the arm where we need it. I’ve defined
+    five arm preset positions we can call:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.4 – Robot arm positions](img/B19846_05_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.4 – Robot arm positions
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s describe these positions in some detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*High Carry* is the position we want the arm to be at when we are carrying
+    an object such as a toy. The arm is over the robot, and the hand is elevated.
+    This helps to keep the toy from falling out of the hand.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Neutral Carry* is the standard position when the robot is driving so that
+    the arm is not in front of the camera.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Pick Up* is a combination of *Grasp* and *Grasp Close* (which are not shown
+    individually in the figure). The former is an arm position that puts the hand
+    on the ground so we can pick up an object. The arm is as far out in front of the
+    robot as it will go and touches the ground. The latter just closes the end effector
+    to grab a toy.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Drop Off* is the arm position high above the robot to put a toy in the toy
+    box, which is quite tall.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Align* (not shown) is a utility mode to check the alignment of the arm. All
+    the servos are set to their middle position and the arm should point at the ceiling
+    in a straight line. If it does not, you need to adjust the arm using the utility
+    that came with it.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s see how we can set up the ROS interface. The numbers are the servo motor
+    positions (angles) in units from `0` (fully counterclockwise) to `1000` (fully
+    clockwise). The `9999` code means to not change the servo in that position so
+    we can create commands that don’t change the positions of parts of the arm, such
+    as the gripper:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we can start defining our robot arm control class. We’ll start with the
+    class definition and the initialization function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'There is quite a bit going on here to set up our ROS interface for the robot
+    arm:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: First of all, we call up the object class structure (`super`) to initialize
+    our ROS 2 node with the name `xarm_manager`.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then we create a publisher for the arm position information, helpfully called
+    `xarm_pos`. Here, POS stands for position. This publishes the arm position in
+    servo units, which go from `0` (fully counterclockwise) to `1000` (fully clockwise).
+    We also publish the arm angles in degrees, in case we need that information, as
+    `xarm_angle`. The center of the servo travel is 0 degrees (`500` in servo units).
+    Counterclockwise positions are negative angles while clockwise positions are positive
+    angles. I just used integer degrees (no decimal points) since we don’t need that
+    level of precision for the arm. Our High Carry position in servo units is `[666,501,195,867,617,500]`,
+    and in servo angles is `[41,0,-76,91,29,0]`. We publish our outputs and subscribe
+    to our inputs.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Our inputs, or subscriptions, provide the outside interface to the arm. I thought
+    through how the arm might be used, and came up with the interface I wanted to
+    see. In our case, we have a very simple arm, and need only a few commands. First
+    of all, we have a string command called `RobotCmd`, which lets us create commands
+    to control the mode or state of the robot. This will be used for a lot of commands
+    for the robot, and not just for the arm. I’ve created several arm mode commands
+    that we’ll cover in a few paragraphs. The usefulness of `RobotCmd` is we can send
+    any string on this input and process it on the receiving end. It’s a very flexible
+    and useful interface. Note that for each subscriber, we create a function call
+    to a callback routine. When the data is published on the interface, the callback
+    routine is called in our program (`xarm_mgr.py`) automatically:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The next part of the interface allows us to move the base of the arm in yaw,
+    and operate the hand and wrist independently. In this chapter, we are starting
+    with training just the gripper, so it helps to have an independent interface to
+    rotate, open, and close the gripper. Operating the hand does not change the coordinate
+    position of the gripper, so this can be separated. Likewise, we move the hand
+    in yaw – right and left – to line up with toys to be grasped. We are going to
+    start with this function locked off, and we’ll add the yaw function later. This
+    is controlled by the computer vision system that we designed in the previous chapter,
+    so it needs a separate interface. We have the `xarmWrist` command to rotate the
+    wrist, `xarmEffector` to open and close the gripper fingers, and `xarmBase` to
+    move the base of the arm right or left:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The last command interface lets us move the arm to any position we specify.
+    Normally, we command the arm to move using an array of numbers, like this: `[100,500,151,553,117,500]`.
+    I’ve added a *secret feature* to this command. Since we may want to move the arm
+    without either changing the yaw angle (which comes from the vision system) or
+    the hand position (which may or may not be holding a toy), we can send commands
+    that move the arm but don’t affect some of the servos, such as the hand. I used
+    the value `9999` as the *don’t-move-this-servo* value. So if the arm position
+    command reads `[9999, 9999, 500, 807, 443, 9999]` then the yaw position (*Motor
+    6*) and the hand position (*Motors 0* and *1*) don’t change:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now that we have all of our publish and subscribe interfaces defined, we can
+    open the USB interface to the robot arm and see whether it is responding. If not,
+    we’ll throw an error message:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the quick cheat guide to the servos in the `xarmPos` command array:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`[grip open/close, wrist rotate, wrist pitch, elbow pitch, shoulder pitch,`
+    `shoulder yaw]`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our next function in the source code is to set up a telemetry timer. We want
+    to periodically publish the arm’s position for the rest of the robot to use. We’ll
+    create a timer callback that executes periodically at a rate we specify. Let’s
+    start with once a second. This is an informational value and we are not using
+    it for control – the servo controller takes care of that. This is the code we
+    need:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The `timer_period` is the interval between interrupts. The `self.timer` class
+    variable is a function pointer to the timer function, and we point it at another
+    function, `self.timer_callback`, which we’ll define in the next code block. Every
+    second, the interrupt will go off and call the `timer_callback` routine.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Our next bit of code is part of the hardware interface. Since we are initializing
+    the arm controller, we need to open the hardware connection to the arm, which
+    is a USB port using the **human interface device** (**HID**) protocol:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We first create a `try` block so we can handle any exceptions. The robot arm
+    may not be powered on, or it may not be connected, so we have to be prepared to
+    handle this. We create an arm object (`self.arm`) that will be our interface to
+    the hardware. If the arm opens successfully, then we return. If not, we run through
+    the `except` routine:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: First, we log that we did not find the arm in the ROS error log. The ROS logging
+    function is very versatile and provides a handy place to store information that
+    you need for debugging.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then we set the arm to a null object (`None`) so that we don’t throw unnecessary
+    errors later in the program, and we can test to see whether the arm is connected.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The next block of code is our timer callback that publishes telemetry about
+    the arm. Remember that we defined two output messages, the arm position and arm
+    angle. We can service them both here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We are using the `Int32MultiArray` datatype so that we can publish the arm position
+    data as an array of integers. We collect the data from the arm by calling `self.arm.getPosition(servoNumber)`.
+    We append the output to our array, and when we are done, call the ROS publish
+    routine `(self.<topic name>.publish(msg))`. We do the same thing for the arm angle,
+    which we can get by calling `arm.getPosition(servoNumber, True)` to return an
+    angle instead of servo units.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now we can handle receiving commands from other programs. Next, we are going
+    to be creating a control panel for the robot that can send commands and set modes
+    for the robot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This section is pretty straightforward. We receive a string message containing
+    a command, and we parse the message to see whether it is something this program
+    recognizes. If so, we process the message and perform the appropriate command.
+    If we get `ARM MID_CARRY`, which is a command to position the arm to the middle
+    position, then we send a `setArm` command using the `MidCarry` global variable,
+    which has the servo positions for all six motors.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Next, we write the code for the robot to receive and execute the wrist servo
+    command, which rotates the gripper. This command goes to *Motor 2*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This function call is executed when the `xarmWrist` topic is published. This
+    command just moves the wrist rotation, which we would use to align the fingers
+    of the hand to the object we are picking up. I added some exception handling for
+    invalid values, along with limit checking on the range of the input, which I consider
+    a standard practice for external inputs. We don’t want the arm to do something
+    weird with an invalid input, such as if someone was able to send a string on the
+    `xarmWrist` topic instead of an integer. We also check whether the range of the
+    data in the command is valid, which in this case is from `0` to `1000` servo units.
+    If we get an out-of-bounds error, we clamp the command to the allowed range using
+    the `min` and `max` functions.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The end effector command and base command (which controls the left-right rotation
+    of the entire arm) work exactly the same way:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The `setArm` command lets us send one comment to set the position of every servo
+    motor at once, with one command. We send an array of six integers, and this program
+    relays that to the servo motor controller.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: As mentioned before, I put in a special value, `9999`, that tells this bit of
+    code to not move that motor. This lets us send commands to the arm that move some
+    of the servos, or just one of them. This lets us move the up/down axis and left/right
+    axis of the end of the arm independently, which is important.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Another thing that is important is that while this bit of Python code executes
+    almost instantly, the servo motors take a finite amount of time to move. We have
+    to throw in some delays between the servo commands so that the servo controller
+    can process them and send them to the right motor. I’ve discovered that the value
+    `0.1` (1/10 of a second) between commands works. If you leave this value out,
+    only one servo will move, and the arm will not process the rest of the commands.
+    The servos use a serial interface in a daisy chain fashion, which means they relay
+    messages to each other. Each servo is plugged into one other servo, which is a
+    big improvement over all the servos being plugged in individually.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We can finish up our arm control code with `MAIN` – the executable part of
+    the program:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, we initialize `rclpy` (ROS 2 Python interface) to connect our program
+    to the ROS infrastructure. Then we create an instance of our `xarm` control class
+    we created. We’ll call it `xarmCtr`. Then we just have to tell ROS 2 to execute.
+    We don’t even need a loop. The program will perform publish and subscribe calls,
+    and our timer sends out telemetry, which is all included in our `xarmControl`
+    object. When we fall out of spin, we are done with the program, so we shut down
+    the ROS node, and then the program.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now we are ready to start training our robot arm! To do this, we are going to
+    use three different methods to train our arm to pick up objects. In the first
+    stage, we will just train the robot hand – the end effector – to grasp objects.
+    We will use Q-learning, a type of RL, to accomplish this. We will have the robot
+    try to pick up items, and we will reward, or give points, if the robot is successful
+    and subtract points if it fails. The software will try to maximize the reward
+    to get the most points, just like playing a game. We will generate different policies,
+    or action plans, to make this happen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing Q-learning for grasping objects
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Training a robot arm end effector to pick up an oddly shaped object using the
+    **Q-learning** RL technique involves several steps. Here’s a step-by-step explanation
+    of the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Define the state space and action space:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Define the state space**: This includes all the relevant information about
+    the environment and the robot arm, such as the position and orientation of the
+    object, the position and orientation of the end effector, and any other relevant
+    sensor data'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Define the action space**: These are the possible actions the robot arm can
+    take, such as rotating the end effector, moving it in different directions, or
+    adjusting its gripper'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Set up the Q-table**: Create a Q-table that represents the state-action pairs
+    and initialize it with random values. The Q-table will have a row for each state
+    and a column for each action. As we test each position that the arm moves to,
+    we will store the reward that was computed by the Q-learning equation (introduced
+    in the *Machine learning for robot arms* section) in this table so that we can
+    refer to it later. We will search the Q-table by state and action to see which
+    state-action pair results in the largest reward.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Define the reward function**: Define a reward function that provides feedback
+    to the robot arm based on its actions. The reward function should encourage the
+    arm to pick up the object successfully and discourage undesirable behavior.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Start the training loop**: Start the training loop, which consists of multiple
+    episodes. Each episode represents one iteration of the training process:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Reset the environment and set the initial state
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Select an action based on the current state using an exploration-exploitation
+    strategy such as epsilon-greedy, where you explore random actions with a certain
+    probability (epsilon) or choose the action with the highest Q-value
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Execute the selected action and observe the new state and the reward
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Update the Q-value in the Q-table using the Q-learning update equation, which
+    incorporates the reward, the maximum Q-value for the next state, and the learning
+    rate (alpha) and discount factor (gamma) parameters
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Update the current state to the new state
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Repeat the previous steps until the episode terminates, either by successfully
+    picking up the object or reaching a maximum number of steps
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Exploration and exploitation**: Adjust the exploration rate (represented
+    by epsilon) over time to gradually reduce exploration and favor exploitation of
+    the learned knowledge. This allows the robot arm to initially explore different
+    actions and gradually focus on exploiting the learned information to improve performance.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Repeat training**: Continue the training loop for multiple episodes until
+    the Q-values converge or the performance reaches a satisfactory level.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Perform testing**: After training, use the learned Q-values to make decisions
+    on the actions to take in a testing environment. Apply the trained policy to the
+    robot arm end effector, allowing it to pick up the oddly shaped object based on
+    the learned knowledge.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Q-learning for training a robot arm end effector requires a combination
+    of software and hardware components, such as simulation environments, robotic
+    arm controllers, and sensory input interfaces. The specifics of the implementation
+    can vary depending on the robot arm platform and the tools and libraries being
+    used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing the code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now we’ll implement the seven-step process we just described by building the
+    code that will train the arm, using the robot arm interface we made in the previous
+    section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we include our imports – the functions we’ll need to implement our training
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`rclpy` is the ROS 2 Python interface. We use `Detection2D` to talk to the
+    vision system from the previous chapter (YOLOV8). I’ll explain the `pickle` reference
+    when we get to it.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Next, let’s define some functions we’ll be using later:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The learning rate is used in reinforcement learning just like in other machine
+    learning algorithms to adjust how fast the system makes changes as a result of
+    inputs. We’ll start with `0.1`. If this value is too big, we will have big jumps
+    in our training that can cause erratic outputs. If it’s too small, we’ll have
+    to do a lot of repetitions. `actionSpace` is the list of possible hand actions
+    that we are teaching. These values are the angle of the wrist in degrees. Note
+    that `-90` and `+90` are the same as far as grasping is concerned.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The `round4` function is used to round off the aspect ratio of the bounding
+    box. When we detect a toy, as you may remember, the object recognition system
+    draws a box around it. We use that bounding box as a clue to how the toy is oriented
+    relative to the robot. We want a limited number of aspect angles to train for,
+    so we’ll round this off to the nearest `0.25`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The `SortbyQ` function is a custom sort key that we’ll use to sort our training
+    to put the highest reward – represented by the letter `Q` – first.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'In this step, we’ll declare the class that will teach the robot to grasp objects.
+    We’ll call the class `LearningHand`, and we’ll make it a node in ROS 2:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here we initialize the object by passing up the `init` function to the parent
+    class (with `super`). We give the node the name `armQLearn`, which is how the
+    rest of the robot will find it.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Our ROS interface subscribes to several topics. We need to talk to the robot
+    arm, so we subscribe to `xarm_pos` (arm position). We need to subscribe (like
+    every program that talks to the robot) to `RobotCmd`, which is our master mode
+    command channel. We also need to be able to send commands on `RobotCmd`, so we
+    create a publisher on that topic. Finally, we use a ROS parameter to set the value
+    of how many repetitions we want for each learning task.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'This next block of code completes the setup for the learning function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We set the learning system mode to `idle`, which just means “wait for the user
+    to start learning.” We create the arm interface by instantiating the `ArmInterface`
+    class object we imported. Next, we need to set up our learning matrix, which stores
+    the possible aspects (things we can see) and the possible actions (things we can
+    do). The last element, which we set to 0 here, is the `Q` value, which is where
+    we store our training results.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The following set of functions helps us to command the arm:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`sndCmd` (send command) publishes on the `RobotCmd` topic and sets arm modes.
+    `SetHandAngle`, as you expect, sets the angle of the wrist servo. `armPosCallback`
+    receives the arm’s current position, which is published by the arm control program.
+    `setActionPairs` allows us to create new action pairs to learn.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now we are ready to do the arm training. This is a combined human and robot
+    activity, and is really a lot of fun to do. We’ll try the same aspect 20 times:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This initiates the training program on the robot arm. We start by training based
+    on aspect. We first look at our `stateActionPairs` to sort on the highest `Q`
+    value for this aspect. We use our custom `SortbyQ` function to sort the list of
+    `stateActionPairs`. We set the hand angle to the angle with the highest `Q`, or
+    expected reward.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'This part of the program is the physical motion the robot arm will go through:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We start by telling the arm to move to the *Mid Carry* position – halfway up.
+    Then we wait 1 second for the arm to complete its motion, and then we move the
+    arm to the grasp position. The next step moves the wrist to the angle that we
+    got from the `Q` function. Then we close the gripper with the `ARM GRASP_CLOSE`
+    command. Now we raise the arm to see whether the gripper can lift the toy, using
+    the `ARM MID_CARRY` instruction. If we are successful, the robot arm will now
+    be holding toy. If not, the gripper will be empty.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now we can check to see whether the gripper has an object in it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: If the grip of the robot hand is correct, the toy will prevent the gripper from
+    closing. We check the hand position (which the arm sends twice a second) to see
+    the position. For my particular arm, the position that corresponds to 650 servo
+    units or greater is completely closed. Your arm may vary, so check to see what
+    the arm reports for a fully closed and empty gripper. We set the `gripSuccess`
+    variable as appropriate.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now we do the machine learning part. We use my special modified Bellman equation
+    introduced in the *Machine learning for robot arms* section to adjust the Q value
+    for this state-action pair:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Since we are not using a future reward value (we get the complete reward from
+    this one action of closing the gripper and raising the arm), we don’t need the
+    expected future reward, only a present reward. We multiply the `gripSuccess` value
+    (`+1` or `-1`) by the learning rate and add this to the old Q score to get a new
+    Q score. Each success increments the reward while any failure leads to a decrement.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'To finish our learning function, we insert the updated Q value back into the
+    learning table that matches the aspect angle and the wrist angle we tested:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: If this state-action pair is not in the table (which it should be), then we
+    add it. I put this in just to keep the program from erroring out if we give a
+    strange arm angle. Finally, we pause the program and wait for the user to hit
+    the *Enter* key in order to continue.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let’s now look at the rest of the program, which is pretty straightforward.
+    We have to do some housekeeping, service some calls, and make our main training
+    loop:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This `cmdCallBack` receives commands from the `RobotCmd` topic. The only two
+    commands we service in this program are `GoLearnHand`, which starts the learning
+    process, and `StopLearnHand`, which lets you stop training.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'This section is our arm interface to the robot arm and sets up the publish/subscribe
+    interface we need to command the arm:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We subscribe to `xarm_pos` (arm position in servo units) and `xarm_angle` (arm
+    position in degrees). I added the ability to set the robot arm position on the
+    `xarm` topic, but you may not need that.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: For each subscription we need a callback function. We have `armPosCallback`
+    and `armAngleCallback,` which will be called when the arm publishes its position,
+    which I set to happen at 2 Hertz, or twice a second. You can increase this rate
+    in the `xarm_mgr` program if you feel it necessary.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now we get to the main program. For a lot of ROS programs, this main section
+    is pretty brief. We have an extra routine we need to put here. To save the training
+    function after we do our training, I came up with this solution – to *pickle*
+    the state-action pairs and put them into a file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: When we run this program, we need to load this file and set our action-pairs
+    table to these saved values. I set up a `try`/`except` block to send an error
+    message when this training file is not found. This will happen the first time
+    you run the program, but we’ll create a new file in just a moment for next time.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: We also instantiate our class variables for the arm trainer and the arm interface,
+    which creates the main part of our training program.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'This is the meat of our training loop. We set the aspect and number of trial
+    repetitions that we train on:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Start with the toy parallel to the front of the robot. Do 20 trials of picking
+    it up, and then move the toy 45 degrees to the right for the next part. Then perform
+    20 more trials. Then the toy is moved to be 90 degrees to the robot. Run 20 trials.
+    Finally set the toy at -45 degrees (to the left) for the final set and run 20
+    times. Welcome to machine learning!
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'You’ll probably guess that the last thing we do is save our training data,
+    like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This completes our training program. Repeat this training for as many types
+    of toys as you have, and you should have a trained arm that consistently picks
+    up toys at a variety of angles to the robot. Start with a selection of toys you
+    want the robot to pick up. Set the angle of the toy to the robot at 0 – let’s
+    say this is with the longest part of the toy parallel to the front of the robot.
+    Then we send `GoLearnHand` on `RobotCmd` to put the robot arm in learning mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have tried out Q-learning in a couple of different configurations, with a
+    limited amount of success in training our robot. The main problem with Q-learning
+    is that we have a very large number of possible states, or positions, that the
+    robot arm can be in. This means that gaining a lot of knowledge about any one
+    position by repeated trials is very difficult. Next, we are going to introduce
+    a different approach using GAs to generate our movement actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing GAs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Moving the robot arm requires the coordination of three motors simultaneously
+    to create a smooth movement. We need a mechanism to create different combinations
+    of motor movement for the robot to test. We could just use random numbers, but
+    that would be inefficient and could take thousands of trials to get to the level
+    of training we want.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What if we had a way of trying different combinations of motor movement, and
+    then pitting them against one another to pick the best one? It would be a sort
+    of Darwinian *survival of the fittest* for arm movement scripts – such as a GA
+    process. Let’s explore how we can apply this concept to our use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding how the GA process works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Here are the steps involved in our GA process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We do a trial run to go from position 1 (neutral carry) to position 2 (pickup).
+    The robot moves the arm 100 times before getting the hand into the right position.
+    Why 100? We need a large enough sample space to allow the algorithm to explore
+    different solutions. With a value of 50, the solution did not converge satisfactorily,
+    while a value of 200 yielded the same result as 100.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We score each movement based on the percentage of goal accomplishment, indicating
+    how much this movement contributed to the goal.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We take the 10 best moves and put them in a database.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We run the test again and do the same thing – now we have 10 more *best moves*
+    and 20 moves in the database.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We take the five best from the first set and cross them with the five best from
+    the second set – plus five moves chosen at random and five more made up of totally
+    random moves. Crossing two solutions refers to the process of taking a segment
+    from the first set and a segment from the second set. In genetic terms, this is
+    like taking half the *DNA* from each of two *parents* to make a new *child*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We run that sequence of moves, and then take the 10 best individual moves and
+    continue on.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Through the process of selection, we should quickly get down to a sequence that
+    performs the task. It may not be optimal, but it will work. We are managing our
+    *gene pool* (a list of trial solutions to our problem) to create a solution to
+    a problem by successive approximation. We want to keep a good mix of possibilities
+    that can be combined in different ways to solve the problem of moving our arm
+    to its goal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can actually use several methods of **cross-breeding** our movement sequences.
+    What I described is a simple cross – half the first parent’s genetic material
+    and half the second parent’s material (if you will pardon the biological metaphor).
+    We could instead use quarters – ¼ first, ¼ second, ¼ first, ¼ second – to have
+    two crosses. We could also randomly grab bits from one or the other. We will stick
+    with the half/half strategy for now, but you are free to experiment to your heart’s
+    content. In essence, in all of these options, we are taking a solution, breaking
+    it in half, and randomly combining it with half of a solution from another trial.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You are about to issue an objection: what if the movement takes less than 10
+    steps? Easy – when we get to the goal, we stop, and discard the remaining steps.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: We are not looking for a perfect or optimum task execution, but just something
+    good enough to get the job done. For a lot of real-time robotics, we don’t have
+    the luxury of time to create a perfect solution, so any solution that gets the
+    job done is adequate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why did we add the five additional random sample moves, and five totally random
+    moves? This also mimics natural selection – the power of mutation. Our genetic
+    code (the DNA in our bodies) is not perfect, and sometimes inferior material gets
+    passed along. We also experience random mutations from bad copies of genes, cosmic
+    rays, and viruses. We are introducing some random factors to *bump* the tuning
+    of our algorithm – the element of natural selection – in case we converge on a
+    local minimum or miss some simple path because it has not occurred yet to our
+    previous movements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But why on Earth are we going to all this trouble? The GA process can do something
+    very difficult for a piece of software – it can innovate or evolve new solutions
+    out of primitive actions by basically trying stuff until it finds out what works
+    and what does not. We have provided another machine learning process to add to
+    our toolbox, but one that can create solutions we, the programmers, had not preconceived.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s dive into the GA process. In the interest of transparency, we are
+    going to build our own GA process from scratch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll be building our own tools in this version, but there are some prebuilt
+    toolsets that can help you to create GAs, such as `pip` `install deap`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a GA process
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We loosely adopt the concept of the *survival of the fittest* to decide which
+    plans are the fittest and get to survive and propagate. I’m giving you a sandbox
+    in which to play genetic engineer, where you have access to all of the parts and
+    nothing is hidden behind the curtain. You will find that for our problem, the
+    code is not all that complex:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll start by creating the `computefitness` function, the one that scores our
+    genetic material. **Fitness** is our criteria for grading our algorithm. We can
+    change the fitness to our heart’s content to tailor our output to our needs. In
+    this case, we are making a path in space for the robot arm from the starting location
+    to the ending goal location. We evaluate our path in terms of how close any point
+    of the path comes to our goal. Just as in our previous programs, the movement
+    of the robot is constituted as 27 combinations of the three motors going clockwise,
+    counterclockwise, or not moving. We divide the movement into small steps, each
+    three motor units (1.8 degrees) of so of motion. We string together a whole group
+    of these steps to make a path. The fitness function steps along the path and computes
+    the hand position at each step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The `predictReward` function makes a trial computation of where the robot hand
+    has moved as a result of that step. Let’s say we move *Motor 1* clockwise three
+    steps, leave *Motor 2* alone, and move *Motor 3* counterclockwise three steps.
+    This causes the hand to move slightly up and out. We score each step individually
+    by how close it comes to the goal. Our score is computed out of 100; 100 is exactly
+    at the goal, and we take away one point for each 1/100th of the distance the arm
+    is away from the goal, up to a maximum of 340 mm. Why 340? That is the total length
+    of the arm. We score the total movement a bit differently than you might think.
+    Totaling up the rewards make no difference, as we want the point of closest approach
+    to the goal. So we pick the single step with the highest reward and save that
+    value. We throw away any steps after that, since they will only take us further
+    away. Thus we automatically prune our paths to end at the goal.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'I used the term `allele` to indicate a single step out of the total path, which
+    I called `chrom`, short for chromosome:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'How do we create our paths to start with? The `make_new_individual` function
+    builds our initial population of chromosomes, or paths, out of random numbers.
+    Each chromosome contains a path made up of a number from 0 to 26 that represents
+    all the valid combinations of motor commands. We set the path length to be a random
+    number from 10 to 60:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We use the `roulette` function to pick a portion of our population to continue.
+    Each generation, we select from the top 50% of scoring individuals to donate their
+    DNA to create the next generation. We want the reward value of the path, or chromosome,
+    to weigh the selection process; the higher the reward score, the better chance
+    of having children. This is part of our selection process:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We start by building our initial population out of random parts. Their original
+    fitness will be very low: about 13% or less. We maintain a pool of 300 individual
+    paths, which we call chromosomes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here we set up the loop to go through 100 generations of our natural selection
+    process. We begin by computing the fitness of each individual and adding that
+    score to a fitness list with an index pointing back to the chromosome:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We sort the fitness in inverse order to get the best individuals. The largest
+    number should be first:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We keep the top 50% of the population and discard the bottom 50%. The bottom
+    half is out of the gene pool as being unfit:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We pull out the top performer from the whole list and put it into the **hall
+    of fame** (**HOF**). This will eventually be the output of our process. In the
+    meantime, we use the HOF or **HOF fitness** (**HOFF**) value as a measure of the
+    fitness of this generation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We store the HOFF value in a `trainingData` list so we can graph the results
+    at the end of the program:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'At this phase, we have deleted the bottom 50% of our population, removing the
+    worst performers. Now we need to replace them with the children of the best performers
+    of this generation. We are going to use crossover as our mating technique. There
+    are several types of genetic mating that can produce successful offspring. Crossover
+    is popular and a good place to start, as well as being easy to code. All we are
+    doing is picking a spot in the genome and taking the first half from one parent,
+    and the second half from the other. We pick our parents to *mate* randomly from
+    the remaining population, weighted proportionally to their fitness. This is referred
+    to as **roulette wheel selection**. The better individuals are weighted more heavily
+    and are more likely to be selected for breeding. We create 140 new individuals
+    as children of this generation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Our next step is **mutation**. In real natural selection, there is a small
+    chance that DNA will get corrupted or changed by cosmic rays, miscopying of the
+    sequence, or other factors. Some mutations are beneficial, and some are not. We
+    create our version of this process by having a small chance (1/100 or so) that
+    one gene in our new child path is randomly changed into some other value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now that we have done all our processing, we add this new child path to our
+    population, and get ready for the next generation to be evaluated. We record some
+    data and loop back to the start:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'So, how did we do with our mad genetic experiment? The following output chart
+    speaks for itself:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 5.5 – Learning curve for the \uFEFFGA solution](img/B19846_05_5.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.5 – Learning curve for the GA solution
+  prefs: []
+  type: TYPE_NORMAL
+- en: The GA, for all it seems like a bit of voodoo programming, works quite well
+    as a machine learning tool for this specific case of training our robot arm. Our
+    solution peaked at 99.76% of the goal (about 2 mm) after just 90 generations or
+    so, which is quite fast for an AI learning process. You can see the smooth nature
+    of the learning that shows that this approach can be used to solve path-planning
+    problems for our robot arm. I have to admit that I was quite skeptical about this
+    process, but it seems to work quite well for this particular problem domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The programming really was not too hard, and you can spend some time improving
+    the process by tweaking the parameters of the GA. What if we had a smaller population?
+    What if we changed the fitness criteria? Get in there, muck about, and see what
+    you can learn.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternative robot arm ML approaches
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The realm of robot arm control via machine learning is really just getting started.
+    There are a couple of research avenues I wanted to bring to your attention as
+    you look for further study. One way to approach our understanding of robot movement
+    is to consider the balance between *exploitation* and *exploration*. Exploitation
+    is getting the robot to its goal as quickly as possible. Exploration is using
+    the space around the robot to try new things. The path-planning program may have
+    been stuck on a local minimum (think of this as a blind alley), and there could
+    be better, more optimal solutions available that had not been considered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is also more than one way to teach a robot. We have been using a form
+    of self-exploration in our training. What if we could show the robot what to do
+    and have it learn by example? We could let the robot observe a human doing the
+    same task, and have it try to emulate the results. Let’s discuss some alternative
+    methods in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Google’s SAC-X
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Google is trying a slightly different approach to the robot arm problem. In
+    their **Scheduled Auxiliary Control** (**SAC- X**) program, they surmise that
+    it can be quite difficult to assign reward points to individual movements of the
+    robot arm. They break down a complex task into smaller auxiliary tasks, and give
+    reward points for those supporting tasks to let the robot build up to a complicated
+    challenge. If we were stacking blocks with a robot arm, we might separate picking
+    up the block as one task, moving with the block in hand as another, and so on.
+    Google referred to this as a *sparse reward* problem if reinforcement was only
+    used on the main task, stacking a block on top of another. You can imagine how,
+    in the process of teaching a robot to stack blocks, there would be thousands of
+    failed attempts before a successful move resulted in a reward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Amazon Robotics Challenge
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Amazon has millions and millions of boxes, parts, bits, and other things on
+    its shelves. The company needs to get the stuff from the shelves into small boxes
+    so they can ship it to you as fast as possible when you order it. For the last
+    few years, Amazon has sponsored the *Amazon Robotics Challenge*, where teams from
+    universities were invited to use robot arms to pick up items off a shelf and,
+    you guessed it, put them into a box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you consider that Amazon sells almost everything imaginable, this is a
+    real challenge. In 2017, a team from Queensland, Australia, won the challenge
+    with a low-cost arm and a really good hand-tracking system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Our task for this chapter was to use machine learning to teach the robot how
+    to use its robot arm. We used two techniques with some variations. We used a variety
+    of reinforcement learning techniques, or Q-learning, to develop a movement path
+    by selecting individual actions based on the robot’s arm state. Each motion was
+    scored individually as a reward, and as part of the overall path as a value. The
+    process stored the results of the learning in a Q-matrix that could be used to
+    generate a path. We improved our first cut of the reinforcement learning program
+    by indexing, or encoding, the motions from a 27-element array of possible combinations
+    of motors as numbers from 0 to 26, and likewise indexing the robot state to a
+    state lookup table. This resulted in a 40x speedup of the learning process. Our
+    Q-learning approach struggled with the large number of states that the robot arm
+    could be in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our second technique was a GA. We created individual random paths to make a
+    population. We created a fitness function to score each path against our goal
+    and kept the top performers from each generation. We then crossed genetic material
+    from two somewhat randomly selected individuals to create a new child path. The
+    GA also simulated mutation by having a slight chance of random changes in the
+    steps of a path. The results for the GA showed no problem with the state space
+    complexity of our robot arm and generated a valid path after just a few generations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why do we go to all of this trouble? We use machine learning techniques when
+    other empirical methods are either difficult, not reliable, or don’t produce solutions
+    in a reasonable amount of time. We can also tackle much more complex tasks with
+    these techniques that might be intractable to a brute-force or math-only solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we’ll be adding a voice interface to the robot with natural
+    language processing, so you can talk to the robot and it will listen – and talk
+    back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In Q-learning, what does the Q stand for?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Hint**: You will have to research this yourself.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What could we do to limit the number of states that the Q-learning algorithm
+    has to search through?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What effect does changing the learning rate have on the learning process?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What function or parameter serves to penalize longer paths in the Q-learning
+    equation? What effect does increasing or decreasing this function have?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the genetic algorithm, how would you go about penalizing longer paths so
+    that shorter paths (fewer number of steps) would be preferred?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Look up the SARSA variation of Q-learning. How would you implement the SARSA
+    technique into program 2.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What effect does changing the learning rate in the genetic algorithm have? What
+    are the upper and lower bounds of the learning rate?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In a genetic algorithm, what effect does reducing the population have?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Python Deep Learning* by Zocca, Spacagna, Slater, and Roelants, Packt Publishing'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Artificial Intelligence with Python* by Prateek Joshi, Packt Publishing'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*AI Junkie: Genetic Algorithm – A Brief Overview*, retrieved from [http://www.ai-junkie.com/ga/intro/gat2.html](http://www.ai-junkie.com/ga/intro/gat2.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Basic Reinforcement Learning Tutorial 2:* *SARSA*: [https://github.com/vmayoral/basic_reinforcement_learning/tree/master/tutorial2](https://github.com/vmayoral/basic_reinforcement_learning/tree/master/tutorial2)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Google DeepMind Blog: Learning by Playing (Robot Arm (**SAC-X))*: [https://deepmind.com/blog/learning-playing/](https://deepmind.com/blog/learning-playing/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

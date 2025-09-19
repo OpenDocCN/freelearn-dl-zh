@@ -1,0 +1,510 @@
+- en: '14'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Generating Video Using Stable Diffusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Harnessing the power of the Stable Diffusion model, we can generate high-quality
+    images using techniques such as LoRA, text embedding, and ControlNet. A natural
+    progression from static images is toward dynamic content, that is, videos. Can
+    we generate consistent videos using the Stable Diffusion model?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Stable Diffusion model’s UNet architecture, while effective for single-image
+    processing, lacks contextual awareness when dealing with multiple images. Consequently,
+    generating identical or consistently related images with the same prompt and parameters
+    but different seeds is challenging. The resulting images may vary significantly
+    in color, shape, or style due to the randomness introduced by the model’s nature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One might consider an image-to-image pipeline or a ControlNet approach, where
+    a video clip is segmented into individual images, and each image is processed
+    sequentially. However, maintaining consistency across the entire sequence, especially
+    when applying significant changes (such as transforming a realistic video into
+    a cartoon), remains a challenge. Even with pose alignment, the output video may
+    still exhibit noticeable flickering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A breakthrough came with the publication of *AnimateDiff: Animating Your Personalized
+    Text-to-Image Diffusion Models without Specific Tuning* [1] by Yuwei Gao and colleagues.
+    This work paved the way for generating consistent images from text, thereby enabling
+    the creation of short videos.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will explore the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The principles of text-to-video generation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Practical applications of AnimateDiff
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Utilizing Motion LoRA to control animation motion
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will understand the theoretical aspects of video
+    generation, the inner workings of AnimateDiff, and why this methodology is effective
+    in creating consistent and coherent images. With the provided sample code, you
+    will be able to generate a 16-frame video. You can then apply Motion LoRA to manipulate
+    the animation’s motion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please note that the results of this chapter cannot be fully appreciated in
+    a static format like paper or PDF. For the best experience, we encourage you to
+    engage with the associated sample code, run it, and observe the generated video.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will employ `AnimateDiffPipeline`, available in the `Diffusers`
+    library, to generate videos. You won’t need to install any extra tools or packages,
+    as Diffusers (after version 0.23.0) offers all the required components and classes.
+    Throughout the chapter, I will guide you through the usage of these features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To export the result in MP4 video format, you will also need to install the
+    `opencv-python` package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Also, note that the `AnimateDiffPipeline` will require at least 8 GB of VRAM
+    to generate a 16-frame 256x256 video clip.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The principles of text-to-video generation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Stable Diffusion UNet, while effective for generating single images, falls
+    short when it comes to generating consistent images due to its lack of contextual
+    awareness. Researchers have proposed solutions to overcome this limitation, such
+    as incorporating temporal information from the preceding one or two frames. However,
+    this approach still fails to ensure pixel-level consistency, leading to noticeable
+    differences between consecutive images and flickering in the generated video.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To address this inconsistency problem, the authors of AnimateDiff trained a
+    separated motion model – a zero-initialized convolution side model – similar to
+    the ControlNet model. Further, rather than controlling an image, the motion model
+    is applied to a series of continuous frames, as shown in *Figure 14**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.1: The architecture of AnimatedDiff](img/B21263_14_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 14.1: The architecture of AnimatedDiff'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The process involves training a motion modeling module on video datasets to
+    extract motion priors while keeping the base Stable Diffusion model frozen. Motion
+    priors are the prior knowledge about motion in order to guide the generation or
+    customization of videos. During the training stage, a **motion module** (also
+    called **Motion UNet**) is added to the Stable Diffusion UNet. Similar to normal
+    Stable Diffusion V1.5 UNet training, this Motion UNet will work on all frames
+    simultaneously. We can treat them as images in one batch from the same video clip.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For instance, if we feed in a video with 16 frames, the motion module with attention
+    headers will be trained to consider all 16 frames. If we look into the implementation
+    source code, `TransformerTemporalModel` [4] is the core component of `MotionModules`
+    [3].
+  prefs: []
+  type: TYPE_NORMAL
+- en: During the inference, the time when we want to generate videos, the motion module
+    will be loaded and its weights will be merged into Stable Diffusion UNet. When
+    we want to generate a video with 16 frames, the pipeline will first initialize
+    16 random latents with Gaussian noise – 𝒩(0,1). Without the motion module, the
+    Stable Diffusion UNet will remove noise and generate 16 independent images. However,
+    with the help of the motion module with the Transformer attention header built
+    inside, the motion UNet attempts to create 16 correlated frames. You may ask,
+    why are the images correlated? That is because the frames in the training video
+    are correlated. After the denoising stage, the decoder D from the VAE will convert
+    the 16 latents into pixel images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Motion UNet is responsible for introducing correlations between successive
+    frames in the generated video. It is similar to the correlation of different areas
+    in one image. This is because the attention header pays attention to different
+    parts of the image, and the model learned this knowledge during the training stage.
+    Likewise, during the video generation, the model learned the correlation between
+    frames during the training stage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At its core, this approach involves designing an attention mechanism that operates
+    on a sequence of continuous images. By learning the relationships between frames,
+    AnimateDiff can generate more consistent and coherent images from text. Furthermore,
+    since the base Stable Diffusion model remains locked, various Stable Diffusion
+    extension techniques, such as LoRA, textual embedding, ControlNet, and image-to-image
+    generation, can be applied to AnimateDiff as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Anything that works for standard Stable Diffusion, in theory, should also work
+    for AnimateDiff to AnimateDiff as well!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before moving on to the next section, be aware that the AnimateDiff model requires
+    a minimum of 12 GB of VRAM to generate a 16-frame, 256x256 video clip. To truly
+    grasp the concept, writing code to utilize AnimateDiff is highly recommended.
+    Now, let’s proceed to generate a short video (in GIF and MP4 format) using AnimateDiff.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practical applications of AnimateDiff
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The original AnimateDiff code and model were released as a standalone GitHub
+    repository [2]. While the author provided sample code and Google Colab to demonstrate
+    the results, users still needed to manually pull the code and download the model
+    file to use it, being cautious about package versions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In November 2023, Dhruv Nair [9] merged an AnimateDiff Pipeline for Diffusers,
+    allowing users to generate video clips using the AnimateDiff pertained model without
+    leaving the `Diffusers` package. Here’s how to use the AnimatedDiff pipeline from
+    Diffusers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install this specific version of Diffusers with the integrated AnimateDiff
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: At the time of writing this chapter, the version of Diffusers with the latest
+    AnimateDiff code is 0.23.0\. By specifying this version number, you can ensure
+    that the sample code runs smoothly and error-free, as it was tested against this
+    particular version.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'You can also try installing the latest version of Diffusers, as it may have
+    added more features to the pipeline by the time you read this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load up the motion adapter. We will use the pre-trained motion adapter model
+    from the author of the original paper:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load up an AnimateDiff pipeline from a Stable Diffusion v1.5-based checkpoint
+    model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use a proper scheduler. The scheduler plays an important role in the process
+    of generating coherent images. An comparative study conducted by the author of
+    the paper shows different schedulers can lead to different results. Experimentation
+    shows that the `EulerAncestralDiscreteScheduler` scheduler with the following
+    setting can generate relatively good results:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: To optimize VRAM usage, you can employ two strategies. First, use `pipe.enable_vae_slicing()`
+    to configure the VAE to decode one frame at a time, thereby reducing memory consumption.
+    Additionally, utilize `pipe.enable_model_cpu_offload()` to offload idle sub-models
+    to the CPU, further decreasing VRAM usage.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Generate coherent images:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE37]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE38]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE39]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE40]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE41]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE42]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now, you should be able to see a GIF file generated using the 16 frames produced
+    by AnimateDiff. This GIF uses 16 256x256 images. You can apply the image super-resolution
+    techniques introduced in [*Chapter 11*](B21263_11.xhtml#_idTextAnchor214) to upscale
+    the image and create a 512x512 GIF. I will not duplicate the code in this chapter.
+    It is highly recommended to leverage the skills learned in [*Chapter 11*](B21263_11.xhtml#_idTextAnchor214)
+    to further enhance the quality of video generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Utilizing Motion LoRA to control animation motion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Besides the motion adapter model, the author of the paper also introduced Motion
+    LoRA to control the motion style. Motion LoRA is the same LoRA adapter we introduced
+    in [*Chapter 8*](B21263_08.xhtml#_idTextAnchor153). As mentioned before, the AnimateDiff
+    pipeline supports all other community-shared LoRAs. You can find these Motion
+    LoRAs on the author’s Hugging Face repository [8].
+  prefs: []
+  type: TYPE_NORMAL
+- en: These Motion LoRAs can be used to control the camera view. Here, we will use
+    zoom-in LoRA – `guoyww/animatediff-motion-lora-zoom-in` – as an example. The zoom-in
+    will guide the model to generate a video with zoom-in motion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The usage is simply one additional line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is the complete generation code. We are mostly reusing the code from the
+    previous section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should see a zoom-in GIF clip is generated under the same folder, named
+    `animation_origin_256_w_lora_zoom_in.gif` and an MP4 video clip is generated named
+    `animation_origin_256_w_lora_zoom_in.mp4`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Every day, the quality and duration of text-to-video samples circulating on
+    social networks are improving. It’s likely that by the time you read this chapter,
+    the function of the technologies metioned in this chapter will have surpassed
+    what was described here. However, one constant is the concept of training a model
+    to apply an attention mechanism to a sequence of images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the time of writing, OpenAI’s Sora [9] has just been released. This technology
+    can generate high-quality videos based on the Transformer Diffusion architecture.
+    This is a similar methodology to that used in AnimatedDiff, which combines the
+    Transformer and diffusion models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What sets AnimatedDiff apart is its openness and adaptability. It can be applied
+    to any community model with the same base checkpoint version, a feature not currently
+    offered by any other solution. Furthermore, the authors of the paper have completely
+    open-sourced the code and model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter primarily discussed the challenges of text-to-image generation,
+    then introduced AnimatedDiff, explaining how and why it works. We also provided
+    a sample code to use the AnimatedDiff pipeline from the Diffusers package to generate
+    a GIF clip from 16 coherent images on your own GPU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will explore the solutions for generating text descriptions
+    from an image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Yuwei Guo, Ceyuan Yang, Anyi Rao, Yaohui Wang, Yu Qiao, Dahua Lin, and Bo Dai,
+    *AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without
+    Specific* *Tuning*: [https://arxiv.org/abs/2307.04725](https://arxiv.org/abs/2307.04725)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Original AnimateDiff code repository: [https://github.com/guoyww/AnimateDiff](https://github.com/guoyww/AnimateDiff)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Diffusers Motion modules implementation: [https://github.com/huggingface/diffusers/blob/3dd4168d4c96c429d2b74c2baaee0678c57578da/src/diffusers/models/unets/unet_motion_model.py#L50](https://github.com/huggingface/diffusers/blob/3dd4168d4c96c429d2b74c2baaee0678c57578da/src/diffusers/models/unets/unet_motion_model.py#L50'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: )
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hugging Face Diffusers TransformerTemporalModel implementation: [https://github.com/huggingface/diffusers/blob/3dd4168d4c96c429d2b74c2baaee0678c57578da/src/diffusers/models/transformers/transformer_temporal.py#L41](https://github.com/huggingface/diffusers/blob/3dd4168d4c96c429d2b74c2baaee0678c57578da/src/diffusers/models/transformers/transformer_temporal.py#L41)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[4] Dhruv Nair, [https://github.com/DN6](https://github.com/DN6)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'AnimateDiff proposal pull request: [https://github.com/huggingface/diffusers/pull/5413](https://github.com/huggingface/diffusers/pull/5413)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'animatediff-motion-adapter-v1-5-2: [https://huggingface.co/guoyww/animatediff-motion-adapter-v1-5-2](https://huggingface.co/guoyww/animatediff-motion-adapter-v1-5-2)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Yuwei Guo’s Hugging Face repository: [https://huggingface.co/guoyww](https://huggingface.co/guoyww)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Video generation models as world simulators: [https://openai.com/research/video-generation-models-as-world-simulators](https://openai.com/research/video-generation-models-as-world-simulators)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

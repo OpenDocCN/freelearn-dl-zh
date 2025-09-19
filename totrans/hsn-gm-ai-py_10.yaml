@@ -1,0 +1,1293 @@
+- en: Policy Gradient Methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Previously, our **reinforcement learning** (**RL**) methods have focused on
+    finding the maximum or best value for choosing a particular action in any given
+    state. While this has worked well for us in previous chapters, it certainly is
+    not without its own problems, one of which is always determining when to actually
+    take the max or best action, hence our exploration/exploitation trade-off. As
+    we have seen, the best action is not always the best and it can be better to take
+    the average of the best. However, mathematically averaging is dangerous and tells
+    us nothing about what the agent actually sampled in the environment. Ideally,
+    we want a method that can learn the distribution of actions for each state in
+    the environment. This introduces a new class of methods in RL known as **Policy
+    Gradient** (**PG**) methods and this will be our focus in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will take a look at PG methods and how they improve on our
+    previous attempts in many different ways. We first look at understanding the intuition
+    behind PG methods and then look to the first method, REINFORCE. After that, we
+    will explore the class of advantage functions and introduce ourselves to actor-critic
+    methods. From there, we will move on to looking at **Deep Deterministic Policy
+    Gradient** methods and how they can be used to solve Lunar Lander. Then, we will
+    progress to an advanced method known as **Trust Region Policy Optimization** and
+    how it estimates returns based on regions of trust.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Following is a summary of the main topics we will focus on in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding policy gradient methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing REINFORCE
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using advantage actor-critic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building a deep deterministic policy gradient
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring trust region policy optimization
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PG methods are mathematically far more complex than our previous attempts and
+    go deeper into statistical and probabilistic methods. While we will focus on understanding
+    the intuition and not the mathematics behind these methods, it may still be confusing
+    to some readers. If you find this, you may find a refresher on statistics and
+    probability will help. In the next section, we look to begin our understanding
+    of the intuition behind PG methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All of the code for this entire chapter was originally sourced from this GitHub
+    repository: [https://github.com/seungeunrho/minimalRL](https://github.com/seungeunrho/minimalRL).
+    The original author did an excellent job of sourcing the original collection.
+    As per usual, the code has been significantly modified to fit the style of this
+    book and the other code to be consistent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding policy gradient methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'One thing we need to understand about PG methods is why we need them and what
+    the intuition is behind them. Then, we can cover some of the mathematics very
+    briefly before diving into the code. So, let''s cover the motivation behind using
+    PG methods and what they hope to achieve beyond the other previous methods we
+    have looked at. I have summarized the main points of why/what PG methods do and
+    try to solve:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Deterministic versus stochastic functions**: We often learn early in science
+    and mathematics that many problems require a single or deterministic answer. In
+    the real world, however, we often equate some amount of error to deterministic
+    calculations to quantify their accuracy. This quantification of how accurate a
+    value is can be taken a step further with stochastic or probabilistic methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Stochastic methods are often used to quantify expectation of risk or uncertainty
+    and they do this by finding the distribution that describes a range of values. Whereas
+    previously we used a value function to find the optimum state-value that described
+    an action, now we want to understand the distribution that generated that value.
+    The following diagram shows an example of a deterministic versus stochastic function
+    output, a distribution next to the mean, median, mode, and max values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5cfb41d8-97a3-488f-851d-8fea1ee8cb20.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: A skewed normal distribution
+  prefs: []
+  type: TYPE_NORMAL
+- en: Previously, we assumed that our agent was always sampling from a perfectly normal
+    distribution. This assumption allowed us to use the max or even mean (average)
+    values. However, a normal distribution is never just normal and in most cases,
+    an environment may not even be distributed close to normal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Deterministic versus stochastic environments**: The other problem we have
+    with our assumption of everything being normally distributed is that it often
+    isn''t and, in the real world, we often need to interpret an environment as random
+    or stochastic. Our previous environments have been for the most part static, meaning
+    they change very little between episodes. Real-world environments are never entirely
+    static and, in games, that is certainly the case. So, we need an algorithm that
+    can respond to random changes in the environment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Discrete versus continuous action spaces**: We have already spent some time
+    considering discrete versus continuous observation spaces and learned how to handle
+    these environments with discretization and deep learning, except real-world environments
+    and/or games are not always discrete. That is, instead of discrete actions such
+    as up, down, left, and right, we now need to consider continuous actions such
+    as left 10-80%, right 10-90%, up 10-90%, and so on. Fortunately, PG methods provide
+    a mechanism that makes continuous actions easier to implement. Reciprocally, discrete
+    action spaces are doable but don''t train as well as continuous.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PG methods work much better in continuous action spaces due to the nature of
+    the algorithm itself. They can be used to solve discrete action space environments
+    but they generally will not perform as well as the other methods we will cover
+    later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we understand why we need PG methods, we need to move on to the how
+    in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Policy gradient ascent
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The basic intuition behind PG methods is we move from finding a value function
+    that describes a deterministic policy to a stochastic policy with parameters used
+    to define a policy distribution. Thinking this way, we can now assume that our
+    policy function needs to be defined so that our policy, π, can be set by adjusting
+    parameters θ so that we understand the probability of taking a given action in
+    a state. Mathematically, we can simply define this like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/00f9e2d1-8818-4ab3-a261-6c999c443811.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You should consider the mathematics we cover in this chapter the minimum you
+    need to understand the code. If you are indeed serious about developing your own
+    extensions to PG methods, then you likely want to spend some time exploring the
+    mathematics further using *An Introduction to Reinforcement Learning* (Barto/Sutton,
+    2nd edition, 2017).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'π denotes the policy determined by parameters θ, where we plan to find those
+    parameters easily enough with a deep learning network. Now, we have seen previously
+    how we used deep learning to minimize the loss of a network with gradient descent
+    and we will now turn the problem upside down. We now want to find the parameters
+    that give us the best probability of taking an action for a given state that should
+    maximize an action to 1.0 or 100%. That means instead of reducing a number, we
+    now need to maximize it using gradient ascent. This also transforms our update
+    from a value to a parameter that describes the policy and we rewrite our update
+    equations like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4f8529fd-d471-4a6f-b120-93ceebfb8fbd.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the equation, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/13e8748f-339a-4b34-a29a-839da749f190.png) The parameter''s value at
+    the previous time step'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/74b55c70-2a06-4368-8361-495ce087eda0.png) The learning rate'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/809ad4df-d51c-4332-8e7d-db6729c249d0.png) The calculated update gradient
+    for action *a**, or the optimal action'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The intuition here is that we are pushing toward the action that will yield
+    the best policy. However, what we find is that making a further assumption of
+    assuming all pushes are equal is just as egregious. After all, we should be able
+    to introduce those deterministic predictions of value back into the preceding
+    equation as a further guide to the real value. We can do this by updating the
+    last equation like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b4d273e3-613f-495c-926a-3a729c361454.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, we now introduce the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/88a4e9d4-32e1-4fa5-8033-fddde0e88f8e.png): This becomes our guess at
+    a Q value for the given state and action pair.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hence, state-action pairs with higher estimated Q values will benefit more
+    than those that do not, except, we now have to take a step back and reconsider
+    our old friend the exploration/exploitation dilemma and consider how our algorithm/agent
+    needs to select actions. We no longer want our agent to take just the best or
+    random action but, instead, use the learnings of the policy itself. That means
+    a couple of things. Our agent now needs to continually sample and learn off of
+    the same policy meaning PG is on policy but it also means we need to update our
+    update equation to account for this like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/361bcbbc-97b1-4c07-8f62-21f759b2eaee.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, we now introduce the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0ab082c0-c579-4786-a43a-f0aac23e503b.png): This is the probability
+    of a given action in a given state—essentially, what the policy itself predicts.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dividing by the policy's probability of taking an action in a given state accounts
+    for how frequently that action may be taken. Hence, if an action is twice as popular
+    as another, it will be updated only half as much, but likely for twice the number
+    of times. Again, this tries to eliminate skewing of actions that get sampled more
+    often and allow for the algorithm to weight those rare but beneficial actions
+    more accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you understand the basic intuition of our new update and process, we
+    can see how this works in practice. Implementing PG methods in practice is more
+    difficult mathematically but fortunately, deep learning alleviates that for us
+    by providing gradient ascent as we will see when we tackle our first practical
+    algorithm in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing REINFORCE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The first algorithm we will look at is known as **REINFORCE**. It introduces
+    the concept of PG in a very elegant manner, especially in PyTorch, which masks
+    many of the mathematical complexities of this implementation. REINFORCE also works
+    by solving the optimization problem in reverse. That is, instead of using gradient
+    ascent, it reverses the mathematics so we can express the problem as a loss function
+    and hence use gradient descent. The update equation now transforms to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8d747008-3ce8-4cb7-9ede-4bb66720b5fa.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, we now assume the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4217bf51-fd01-413c-9ae3-048cbf1b2a4d.png) This is the advantage over
+    the baseline expressed by ![](img/68346397-7b2a-47a9-89fd-3e0e0f38d3aa.png); we
+    will get to the advantage function in more detail shortly.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/93e9f09b-c099-4b70-8751-c51453a078ed.png) This is the gradient now
+    expressed as a loss and is equivalent to ![](img/0a3b256d-6a7d-44c2-a32c-60c9c7cc198b.png),
+    assuming with the chain rule and the derivation of *1/x = log x*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Essentially, we flip the equation using the chain rule and the property *1/x
+    = log x*. Again, breaking down the mathematics in detail is outside the scope
+    of this book, but the critical intuition here is the use of the log function as
+    a derivation trick to invert our equation into a loss function combined with the
+    advantage function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**REINFORCE** stands for **REward Increment = Non-negative Factor *x* Offset Reinforcement *x *Characteristic E****ligibility**. The
+    acronym attempts to describe the mathematical intuition of the algorithm itself,
+    where the non-negative factor represents the advantage function, ![](img/5940afc2-e6d5-4774-bcd9-c2749e24b14e.png). Offset
+    reinforcement is the gradient itself denoted by ![](img/2763d48c-1832-4d50-b259-747bfdc4cb5b.png). Then,
+    we introduce characteristic eligibility, which reverts back to our learning of
+    TD and eligibility traces using ![](img/274a93f2-167b-4ccd-9d92-986c6638dab3.png).
+    Scaling this whole factor by ![](img/93a38c62-f037-42e7-a4f0-6f8c3f1aa219.png) or
+    the learning rate allows us to adjust how quickly the algorithm/agent learns.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Being able to intuitively tune the hyperparameters, the learning rate (alpha)
+    and discount factor (gamma), should be a skill you have already started to master.
+    However, PG methods bring a different intuition into how an agent wants/needs
+    to learn. As such, be sure to spend an equal amount of time understanding how
+    tuning these values has changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Of course, as game programmers, the best way for us to understand this is to
+    work with the code and that is exactly what we will do in the next exercise. Open
+    example `Chapter_8_REINFORCE.py` and follow the exercise here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'REINFORCE in PyTorch becomes a nice compact algorithm and the entire code listing
+    is shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: As usual, we start with our usual imports with one new addition from `torch.distributions`
+    called `Categorical`. Now, `Categorical` is used to sample our action space from
+    a continuous probability back to discrete action value. After that, we initialize
+    our base hyperparameters, `learning_rate` and `gamma`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Next, we come to a new class called `REINFORCE`, which encapsulates the functionality
+    of our agent algorithm. We have seen most of this code before in DQN and DDQN
+    configurations. However, we want to focus on the training function, `train_net`,
+    shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`train_net` is where we use the loss calculation to push back (backpropagate)
+    errors in the policy network. Notice, in this class, we don''t use a replay buffer
+    but instead, just use a list called `data`. It should also be clear that we push
+    all of the values in the list back through the network.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'After the class definition, we jump to creating the environment and setting
+    up some additional variables, shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can see we are back to playing the Lunar Lander environment. The other variables
+    are similar to ones we used before to control the amount of training and how often
+    we output results. If you change this to a different environment, you will most
+    likely need to adjust these values.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Again, the training iteration code is quite similar to our previous examples
+    with one keen difference and that is how we sample and execute actions in the
+    environment. Here is the code that accomplishes this part:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The main thing to notice here is we are extracting the probability of an action
+    from the policy generated by REINFORCE using `pi.act`. After that, we convert
+    this probability into a categorical or discrete bin of values with `Categorical`. We
+    then extract the discrete action value using `m.sample()`. This conversion is
+    necessary for a discrete action space such as the Lunar Lander v2 environment.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Later, we will see how we can use this in a continuous space environment without
+    the conversion. If you scroll up to the `play_game` function, you will note that
+    the same code block is used to extract the action from the policy when playing
+    the game. Pay special attention to the last line where `pi.put_data` is used to
+    store the results and notice how we are using `torch.log` on the `prop[action]`
+    value. Remember, by using the log function here, we convert or reverse the need
+    to use gradient ascent to maximize an action value. Instead, we can use gradient
+    descent and `backprop` on our policy network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Run the code as you normally do and observe the results. This algorithm will
+    generally train quickly.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The elegance of this algorithm especially in PyTorch obfuscates the complex
+    mathematics here beautifully. Unfortunately, that may not be a good thing unless
+    you understand the intuition. In the next section, we explore the advantage function
+    we mentioned earlier in the last exercise and look at how this relates to actor-critic
+    methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using advantage actor-critic
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We have already discussed the concept of advantage a few times throughout a
+    few previous chapters including the last exercise. Advantage is often thought
+    of as understanding the difference between applying different agents/policies
+    to the same problem. The algorithm learns the advantage and, in turn, the benefits
+    it provides to enhancing reward. This is a bit abstract so let's see how this
+    applies to one of our previous algorithms like DDQN. With DDQN, advantage was
+    defined by understanding how to narrow the gap in moving to a known target or
+    goal. Refer back to [Chapter 7](42d53358-6f57-4f67-96ce-d8587cbe7cc5.xhtml), *Going
+    Deeper with DDQN*, if you need a refresher.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The concept of advantage can be extended to what we refer to as actor-critic
+    methods. With actor-critic, we define advantage by training two networks, one
+    as an actor; that is, it makes decisions on the policy, and another network critiques
+    those decisions based on expected returns. The goal now will not only be to optimize
+    the actor and critic but to do so in a manner to reduce the number of surprises. You
+    can think of a surprise as a time when the agent may expect some reward but instead
+    doesn''t or possibly receives more reward. With AC methods, the goal is to minimize
+    surprises and it does this by using a value-based approach (DQN) as the critic
+    and a PG (REINFORCE) method as the actor. See the following diagram to see how
+    this comes together:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5796624f-66f6-4219-b37d-a50ad7a3ea96.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Explaining actor-critic methods
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we jump in and see how AC can be applied to our previous
+    PG example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Actor-critic
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'AC methods use a combination of networks to predict the output of the value
+    and policy functions, where our value function network resembles DQN and our policy
+    function is defined using a PG method such as REINFORCE. Now, for the most part,
+    this is as simple as it sounds; however, there are several details in the way
+    in which we code these implementations that require some attention. We will, therefore,
+    cover the details of this implementation as we review the code. Open `Chapter_8_ActorCritic.py`
+    and follow the next exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As this code follows the same pattern as previous examples, we will only need
+    to cover a few sections in detail. The first section of importance is the new
+    `ActorCritic` class at the top of the file and shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Starting at the `init` function, we can see that we construct three `Linear`
+    network layers: `fc1` and `fc_pi` for `policy` and `fc_v` for `value`. Then, right
+    after `init`, we see the `pi` and `v` functions. These functions do the forward
+    pass for each network (`pi` and `v`). Notice how both networks share `fc1` as
+    an input layer. That means that the first layer in our network will be used to
+    encode network state in a form both the actor and critic networks will share. Sharing
+    layers like this is common in more advanced network configurations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Next, we see the `put_data` function, which just puts memories into a replay
+    or experience buffer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After that, we have an imposing function called `make_batch`, which just builds
+    the batches of data we use in experience replay.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We will skip over the `ActorCritic` training function, `train_net`, and jump
+    down to the iteration training code shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: You may not have noticed, but our last exercise used episodic training or what
+    we refer to as Monte Carlo or off-policy training. This time, our training takes
+    place on-policy, and that means our agent acts as soon as it receives new updates.
+    Otherwise, the code is quite similar to many other examples we have and will run.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Run the example as you normally would. Training may take a while, so start it
+    running and jump back to this book.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we understand the basic layout of the example code, it is time to get
+    into the details of training in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training advantage AC
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Using advantage and training multiple networks to work together as you may
+    imagine is not trivial. Therefore, we want to focus a whole exercise on understanding
+    how training works in AC. Open up `Chapter_8_ActorCritic.py` again and follow
+    the exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our main focus will be the `train_net` function in the `ActorCritic` class
+    we saw before. Starting with the first two lines, we can see this is where the
+    training batch is first made and we calculate `td_target`. Recall we covered the
+    form of TD error calculation check when we implemented DDQN:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we calculate the change or delta between our target and the value function.
+    Again, this was covered in DDQN and the code to do this is shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After that, we do a forward pass over the π network with `self.pi` and then
+    gather the results. The gather function essentially aligns or gathers data. Interested
+    readers should consult the PyTorch site for further documentation on `gather`.
+    The code for this step is here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we calculate the loss with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Loss is calculated using the updated policy method where we use log to inverse
+    optimize for our actions. Recall, in our previous discussion, the introduction
+    of the ![](img/aafe4f10-5c43-4378-8061-8031f956c590.png)function. This function
+    denotes the advantage function where we take the negative log of the policy and
+    add it to the output of the L1 squared errors from the value function, `v`, and
+    `td_target`. The `detach` function on the tensors just allows for the network
+    to not update those values when training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Finally, we push the loss back through the network with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: There's nothing new here. The code first zeroes out the gradients, then calculates
+    the mean loss of the batch and pushes that backward with a call to `backward`,
+    finishing with stepping the optimizer using `step`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You will need to tune the hyperparameters in this example to train an agent
+    to complete the environment. Of course, you are more than up to the challenge
+    by now. In the next section, we will move up and look at another class of PG methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a deep deterministic policy gradient
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the problems we face with PG methods is that of variability or too much
+    randomness. Of course, we might expect that from sampling from a stochastic or
+    random policy. The **Deep Deterministic Policy Gradient** (**DDPG**) method was
+    introduced in a paper titled *Continuous control with deep reinforcement learning*,
+    in 2015 by Tim Lillicrap. It was meant to address the problem of controlling actions
+    through continuous action spaces, something we have avoided until now. Remember
+    that a continuous action space differs from a discrete space in that the actions
+    may indicate a direction but also an amount or value that expresses the effort
+    in that direction whereas, with discrete actions, any action choice is assumed
+    to always be at 100% effort.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, why does this matter? Well, in our previous chapter exercises, we explored
+    PG methods over discrete action spaces. By using these methods in discrete spaces,
+    we essentially buffered or masked the problem of variability by converting action
+    probabilities into discrete values. However, in environments with continuous control
+    or continuous action spaces, this does not work so well. Enter DDPG. The answer
+    is in the name: deep deterministic policy gradient, which, in essence, means we
+    are introducing determinism back into a PG method to rectify the problem of variability.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last two PG methods we will cover in this chapter, DDPG and TRPO, are generally
+    considered need-specific and in some cases too complex to implement effectively. Therefore,
+    in the past few years, these methods have not seen much use in more state-of-the-art
+    development. The code for these methods has been provided for completeness but
+    the explanations may be rushed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s see how this looks in code by opening `Chapter_8_DDPG.py` and following
+    the next exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The full source code for this example is too large to list in full. Instead,
+    we will go through the relevant sections in the exercise, starting with the hyperparameters,
+    here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: It looks like we have introduced a few new hyperparameters but we really only
+    introduce one new one called `tau`. The other variables, `lr_mu` and `lr_q`, are
+    learning rates for two different networks.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Next, we jump past the `ReplayBuffer` class, which is something we have seen
+    before for storing experiences, then past the other code until we come to the
+    environment setup and more variable definitions, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'First, we see the setup of a new environment, `Pendulum`. Now, `Pendulum` is
+    a continuous control environment that requires learning continuous space actions.
+    After that, `memory` and `ReplayBuffer` are created, followed by the creation
+    of a couple of classes called `QNet` and `MuNet`. Next, more control/monitoring
+    parameters are initialized. Just before the last line, we see the creation of
+    two optimizers, `mu_optimizer` and `q_optimizer`, for the `MuNet` and `QNet` networks
+    respectively. Finally, on the last line, we see the creation of a new tensor called
+    `ou_noise`. There is a lot of new stuff going on here but we will see how this
+    all comes together shortly:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, move down to the top of the train loop shown in the preceding lines. We
+    make sure that the algorithm can loop entirely through an episode. Hence, we set
+    the range in the inner loop to a value higher than the iterations the agent is
+    given in the environment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next comes the trial and error training code. Notice that the `a` action is
+    taken from the network called `mu`. Then, in the next line, we add the `ou_noise`
+    value to it. After that, we let the agent take a step, put the results in memory,
+    and update the score and state. The noise value we use here is based on the Ornstein-Uhlenbeck
+    process and is generated by the class of the same name. This process generates
+    a moving stochastic value that tends to converge to the value ![](img/29efbecd-091a-4a5a-823e-d5b784d76923.png) or
+    `mu`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Recall that we initialized this value to zeroes in the earlier instantiation
+    of the `OrnsteinUhlenbeckNoise` class. The intuition here is that we want the
+    noise to converge to 0 over the experiment. This has the effect of controlling
+    the amount of exploration the agent performs. More noise yields more uncertainty
+    in the actions it selects and hence the agent selects more randomly. You can think
+    of noise in an action now as the amount of uncertainty an agent has in that action
+    and how much more it needs to explore to reduce that uncertainty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Ornstein-Uhlenbeck process is used for noise here because it converges in
+    a random but predictable manner, in that it always converges. You could, of course,
+    use any value you like here for the noise, even something more deterministic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Staying inside the training loop, we jump to the section that performs the
+    actual training using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can see here that once the memory `ReplayBuffer` is above `2000`, the agent
+    begins training in loops of 10. First, we see a call to the `train` function with
+    the various networks/models constructed, `mu`, `mu_target`, `q`, and `q_target`; `memory`;
+    and the `q_optimizer` and `mu_optimizer` optimizers. Then, there are two calls
+    to the `soft_update` function with the various models. `soft_update`, shown here,
+    just converges the input model to the target in an iterative fashion using `tau`
+    to scale the amount of change per iteration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This convergence from some acting model to a target is not new but, with the
+    introduction of AC, it does complicate things. Before we get to that though, let''s
+    run the sample and see it in action. Run the code as you normally would and wait:
+    this one can take a while. If your agent reaches a high enough score, you will
+    be rewarded with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/cf2ad031-a0b2-411c-94fc-929479f40949.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: An example of the Pendulum environment
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the sample runs pay particular attention to how the score is being updated
+    on the screen. Try and get a sense of how this may look graphically. In the next
+    section, we will explore the finer details of this last example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training DDPG
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now, as you may have noticed in the last example, `Chapter_8_DDPG.py` is using
+    four networks/models to train, using two networks as actors and two as critics,
+    but also using two networks as targets and two as current. This gives us the following
+    diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a09bd1f4-973d-4c20-b4a6-d11ea0d3237e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Diagram of actor-critic target-current networks
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each oval in the preceding diagram represents a complete deep learning network.
+    Notice how the critic, the value or Q network implementation, is taking both environment
+    outputs reward and state. The critic then pushes a value back to the actor or
+    policy target network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Open example `Chapter_8_DDPG.py` back up and follow the next exercise to see
+    how this comes together in code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will first look at our definition of the critic or the `QNet` network class
+    shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The construction of this network is also a little different and what happens
+    here is the `fc_s` layer encodes the state, then `fc_a` encodes the actions. These
+    two layers are joined in the forward pass to create a single Q layer, `fc_q`,
+    which is then output through the last layer, `fc_3`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If you need help picturing these types of networks, it can be and is often helpful
+    to draw them out. The key here is to look at the code in the train function, which
+    describes how the layers are joined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Moving from the critic, we move to the actor network as defined by the `MuNet`
+    class and shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`MuNet` is a fairly simple implementation of a network that encodes the state
+    from 3 values to 128 input neurons, `fc1`, followed by 64 hidden layer neurons, `fc2`,
+    and then finally output to a single value on the output layer, `fc_mu`. The only
+    note of interest is the way we translate `fc_mu`, the output layer in the `forward`
+    function, into the `mu` output value. This is done to account for the control
+    range in the `Pendulum` environment, which takes action values in the range -2
+    to 2\. If you convert this sample into another environment, be sure to account
+    for any change in action space values.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Next, we will move down to the start of the `train` function, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `train` function takes all of the networks, memory, and optimizer as inputs.
+    In the first line, it extracts the `s` state, `a` action, `r` reward, `s_prime`
+    next state, and `done_mask` from the `replayBuffer` memory:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first block of code inside the function calculates the target value based
+    on the output of the `q_target` network, which takes as input the last state, `s_prime`,
+    and `mu_target` output from the last state. Then, we calculate the `q_loss` loss based
+    on the output of the `q` network with an input state and action using the `target`
+    values as the target. This somewhat abstract conversion is to convert the value
+    from stochastic into deterministic. On the last three lines, we see the typical
+    optimizer code for zeroing the gradient and doing a backprop pass:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Calculating the `mu_loss`policy loss is much simpler and all we do is take the
+    output of the `q` network using the state and output action from the `mu` network.
+    A couple of things to note is that we make the loss negative and take the mean
+    or average. Then, we finish the function with a typical optimizer backprop on `mu_loss`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the agent is still running from the previous exercise, examine the results
+    with this newfound knowledge. Consider how or what hyperparameters you could tune
+    to improve the results of this example.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For some, the pure code explanation of DDPG may be a bit abstract but hopefully
+    not. Hopefully, by this point, you can read the code and assume the mathematics
+    or intuition you need to understand the concepts. In the next section, we will
+    look to what is considered one of the more complicated methods in DRL, the **Trust
+    Region Policy Optimization** (**TRPO**) method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring trust region policy optimization
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'PG methods suffer from several technical issues, some of which you may have
+    already noticed. These issues manifest themselves in training and you may have
+    already observed this in lack of training convergence or wobble. This is caused
+    by several factors we can summarize here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Gradient ascent versus gradient descent**: In PG, we use gradient ascent
+    to assume the maximum action value is at the top of a hill. However, our chosen
+    optimization methods (SGD or ADAM) are tuned for gradient descent or looking for
+    values at the bottom of hills or flat areas, meaning they work well finding the
+    bottom of a trough but do poorly finding the top of a ridge, especially if the
+    ridge or hill is steep. A comparison of this is shown here:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/b74693d2-6ad3-45b6-b363-9016b555cd1d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: A comparison of gradient descent and ascent
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding the peak, therefore, becomes the problem, especially in environments
+    that require fine control or narrow discrete actions. This often appears as training
+    wobble, where the agent keeps increasing in score but then falls back several
+    steps every so often.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Policy versus parameter space mapping**: By its very nature, we will often
+    be required to map a policy to some known action space either through continuous
+    or discretization transformation. This step, unsurprisingly, is not without issue.
+    Discretizing action space can be especially problematic and further compounds
+    the hill-climbing problem from earlier.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Static versus dynamic learning rate**: In part due to the optimizer problem
+    we mentioned earlier, we also tend to find that using a static learning rate is
+    problematic. That is, we often find that we need to decrease the learning rate
+    as the agent continues to find the peak of those maximum action hills.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Policy sampling efficiency**: PG methods restrict us from updating the policy
+    more than once per trajectory. If we try to update more frequently, after *x*
+    number of steps, for instance, we see training diverge. Therefore, we are restricted
+    to one update per trajectory or episode. This can provide for very poor sample
+    efficiency especially in training environments with multiple steps.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TRPO and another PG method called **proximal policy optimization**, which we
+    will look at in [Chapter 9](2f6812c0-fd1f-4eda-9df2-6c67c8077aec.xhtml), *Asynchronous
+    Action and the Policy*, attempt to resolve all of the previous issues using several
+    common strategies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for this TRPO implementation was sourced directly from [https://github.com/ikostrikov/pytorch-trpo](https://github.com/ikostrikov/pytorch-trpo)
+    and, at the time of writing, the code was only modified slightly to allow for
+    easier running. This is a great example and worthy of further exploration and
+    enhancements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before we get to reviewing each of these strategies, let''s open the code for
+    and follow the next exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: TRPO is a hefty algorithm not easily run in a single file. We will start by
+    looking at the code structure by opening the TRPO folder in the source folder
+    for this chapter. This example covers code in several files and we will only review
+    small snippets here. It is recommended you quickly review the source fully before
+    continuing.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Refer to the `main.py`file; this is the startup file. `main` takes several parameters
+    defined within this file as inputs when running.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Scroll to about the middle and you will see where the environment is constructed
+    on the main policy and value networks, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, scroll down further until you come to that familiar training loop. For
+    the most part, this should look similar to other examples, except for the introduction
+    of another `while` loop, shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: This code assures that one agent episode consists of a given number of steps
+    determined by `batch_size`. However, we still don't break the inner training loop
+    until the environment says the episode is done. However, now, an episode or trajectory
+    update is not done until the provided `batch_size` is reached. This attempts to
+    solve the PG method sampling problem we talked about earlier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Do a quick review of each of the source files; the list here summarizes the
+    purpose of each:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`main.py`: This is the startup source file and main point of agent training.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`conjugate_gradients.py`: This is a helper method to conjugate or join gradients.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`models.py`: This file defines the network class Policy (actor) and value (the
+    critic). The construction of these networks is a little unique so be sure to see
+    how.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`replay_memory.py`: This is a helper class to contain replay memory.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`running_state.py`: This is a helper class to compute the running variance
+    of the state, essentially, running estimates of mean and standard deviation. This
+    can be beneficial for an arbitrary sampling of a normal distribution.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`trpo.py`: This is the code specific to TRPO and is meant to address those
+    PG problems we mentioned earlier.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`utils.py`: This provides some helper methods.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Use the default start parameters and run `main.py` as you normally would a
+    Python file and watch the output, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/fdc9d012-3339-4c9d-ac24-976eb98af9f9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The output of the TRPO sample
+  prefs: []
+  type: TYPE_NORMAL
+- en: The output from this particular implementation is more verbose and displays
+    factors that monitor performance over the issues we mentioned PG methods suffer
+    from. In the next few sections, we will walk through exercises that show how TRPO
+    tries to address these problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Jonathan Hui ([https://medium.com/@jonathan_hui](https://medium.com/@jonathan_hui))
+    has several excellent posts on Medium.com that discuss various implementations
+    of DRL algorithms. He does an especially good job of explaining the mathematics
+    behind TRPO and other more complex methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conjugate gradients
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The fundamental problem we need to address with policy methods is the conversion
+    to a natural gradient form of gradient ascent. Previously, we handled conjugating
+    this gradient by simply applying the log function. However, this does not yield
+    a natural gradient. Natural gradients are not susceptible to model parameterization
+    and provide an invariant method to compute stable gradients. Let''s look at how
+    this is done in code by opening up our IDE to the TRPO example again and following
+    the next exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Open the `trpo.py` file in the `TRPO` folder. The three functions in this file
+    are meant to address the various problems we encounter with PG. The first problem
+    we encounter is to reverse the gradient and the code to do that is shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `conjugate_gradients` function is used iteratively to produce a natural
+    more stable gradient we can use for the ascent.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Scroll down to the `trpo_step` function and you will see how this method is
+    used as shown in the code here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This outputs a `stepdir` tensor denoting the gradient used to step the network.
+    We can see by the input parameters the output conjugate gradient will be solved
+    over 10 iterations using an approximation function, `Fvp`, and the inverse of
+    the loss gradient, `loss_grad`. This is entangled with some other optimizations
+    so we will pause here for now.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Conjugate gradients are one method we can use to better manage the gradient
+    descent versus gradient ascent problem we encounter with PG methods. Next, we
+    will look at further optimization again to address problems with gradient ascent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trust region methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A further optimization we can apply to gradient ascent is using trust regions
+    or controlled regions of updates. These methods are of course fundamental to TRPO
+    given the name but the concept is further extended to other policy-based methods.
+    In TRPO, we extend regions of trust over the approximation functions using the **Minorize-Maximization**
+    or **MM** algorithm. The intuition of MM is that there is a lower bound function
+    that we can always expect the returns/reward to be higher than. Hence, if we maximize
+    this lower bound function, we also attain our best policy. Gradient descent by
+    default is a line search algorithm but this again introduces the problem of overshooting.
+    Instead, we can first approximate the step size and then establish a region of
+    trust within that step. This trust region then becomes the space we optimize for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The analogy we often use to explain this involves asking you to think of yourself
+    climbing a narrow ridge. You run the risk of falling off either side of the ridge
+    so using normal gradient descent or line search becomes dangerous. Instead, you
+    decide that to avoid falling you want to step on the center of the ridge or the
+    center region you trust. The following screenshot taken from a blog post by Jonathan
+    Hui shows this concept further:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9dcd8c89-aaae-4fdd-b0a7-86f70eb29def.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: A comparison of line search versus Trust region
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can see how this looks in code by opening up the TRPO folder and following
+    the next exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Open up `trpo.py` again and scroll down to the following block of code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `linesearch` function is used to find how far up the ridge we want to locate
+    the next region of trust. This function is used to indicate the distance to the
+    next region of trust and is executed with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice the use of `neggdotstepdir`. This value is calculated from the step
+    direction, `stepdir`, we calculated in the last exercise with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have a direction with `neggdotstepdir` and an amount with `linesearch`,
+    we can determine the trust region with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `set_flat_params_to` function is in `utils.py` and the code is shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: This code essentially flattens the parameters into the trust region. This is
+    the trust region we test to determine whether the next step is within, using the
+    `linesearch` function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now we understand the concept of trust regions and the need to properly control
+    step size, direction, and amount when using PG methods. In the next section, we
+    will look at the step itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The TRPO step
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As you can see now, taking a step or update with TRPO is not trivial and things
+    are still going to get more complicated. The step itself requires the agent to
+    learn several factors from updating the policy and value function to also attain
+    an advantage, also known as actor-critic. Understanding the actual details of
+    the step function is beyond the scope of this book and you are again referred
+    to those external references. However, it may be helpful to review what constitutes
+    a step in TRPO and how this may compare complexity wise to other methods we look
+    at in the future. Open up the sample TRPO folder again and follow the next exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Open up the `main.py` file and find the following line of code, around line
+    130:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This last line of code is within the `update_params` function, which is where
+    the bulk of the training takes place.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'You can further see at almost the bottom of the `main.py` file a call to the
+    `update_params` function with `batch`, `batch` being a sample from `memory`, as
+    shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Scroll back up to the `update_params` function and notice the first loop that
+    builds `returns`, **`deltas`**, and `advantages` with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how we reverse the rewards and then loop through them to build our various
+    lists `returns`, **`deltas`**, and `advantages`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: From there, we flatten the parameters and set the value network, the critic.
+    Then, we calculate the advantages and actions mean and standard deviation. We
+    do this as we are working with distributions and not deterministic values.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After that, we use the `trpo_step` function to take a training step or update
+    in the policy.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You may have noticed the use of `kl` in the source code. This stands for KL
+    divergence and is something we will explore in a later chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Keep the example running for around 5,000 training iterations. This may take
+    some time so be patient. It is worth running to completion, if not just once.
+    The TRPO example in this section is meant to be experimented with and used with
+    various control environments. In the next section, be sure to review the experiments
+    you can play with to explore more about this method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exercises
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Use the exercises for your enjoyment and learning and to gain additional experience. Deep
+    learning and deep reinforcement learning are very much areas where your knowledge
+    will only improve by working with the examples. Don't expect to be a natural with
+    training agents; it takes a lot of trial and error. Fortunately, the amount of
+    experience we need is not as much as our poor agents require but still expect
+    to put some time in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Open example `Chapter_8_REINFORCE.py` back up and alter the hyperparameters
+    to see what effect this has on training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Open example `Chapter_8_ActorCritic.py` back up and alter the hyperparameters
+    to see what effect this has on training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Open example `Chapter_8_DDPG.py` back up and alter the hyperparameters to see
+    what effect this has on training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you convert the **REINFORCE** or `ActorCritic` examples to use continuous
+    action spaces? Attempt to do this for new environments such as `LunarLanderContinous-v2`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set up example `Chapter_8_DDPG.py` to use the `LunarLanderContinuous-v2` or
+    another continuous environment. You will need to modify the action state from
+    `3` to the environment you choose.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Tune the hyperparameters for the `Chapter_8_DDPG.py` example. This will require
+    you to learn and understand that new parameter, `tau`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Tune the hyperparameters for the **TRPO** example. This will require you to
+    learn how to set the hyperparameters from the command line and then tweak those
+    parameters. You should not be modifying any code to complete this exercise.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enable the MuJoCo environments and run one of these environments with the TRPO
+    example.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Add plotting output to the various examples.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Convert one of the single-file examples into use a main method that takes arguments
+    and allows a user to train hyperparameters dynamically, instead of modifying source
+    code.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Be sure to complete from 1-3 of the preceding exercises before moving on to
+    the next section and end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we introduced policy gradient methods, where we learned how
+    to use a stochastic policy to drive our agent with the REINFORCE algorithm. After
+    that, we learned that part of the problem of sampling from a stochastic policy
+    is the randomness of sampling from a stochastic policy. We found that this could
+    be corrected using dual agent networks, with one that represents the acting network
+    and another as a critic. In this case, the actor is the policy network that refers
+    back to the critic network, which uses a deterministic value function. Then, we
+    saw how PG could be improved upon by seeing how DDPG works. Finally, we looked
+    at what is considered one of the more complex methods in DRL, TRPO, and saw how
+    it tries to manage the several shortcomings of PG methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuing with our look at PG methods, we will move on to explore next-generation
+    methods such as PPO, AC2, AC2, and ACER in the next chapter.
+  prefs: []
+  type: TYPE_NORMAL

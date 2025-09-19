@@ -1,0 +1,473 @@
+- en: '7'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Optimizing Performance and VRAM Usage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we covered the theory behind the Stable Diffusion
+    models, introduced the Stable Diffusion model data format, and discussed conversion
+    and model loading. Even though the Stable Diffusion model conducts denoising in
+    the latent space, by default, the model’s data and execution still require a lot
+    of resources and may throw a `CUDA Out of memory` error from time to time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To enable fast and smooth image generation using Stable Diffusion, there are
+    some techniques to optimize the overall process, boost the inference speed, and
+    also reduce VRAM usage. In this chapter, we are going to cover the following optimization
+    solutions and discuss how well these solutions work in practice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using float16 or bfloat16 data type
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling VAE tiling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling Xformers or using PyTorch 2.0
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling sequential CPU offload
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling model CPU offload
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Token** **merging** (**ToMe**)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By using some of these solutions, you can enable your GPU with even 4 GB RAM
+    to run a Stable Diffusion model smoothly. Please refer to [*Chapter 2*](B21263_02.xhtml#_idTextAnchor037)
+    for detailed software and hardware requirements for running Stable Diffusion models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the baseline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before heading to the optimization solutions, let’s take a look at the speed
+    and VRAM usage with the default settings so that we know how much VRAM usage has
+    been reduced or how much the speed has been improved after applying an optimization
+    solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s use a non-cherry-picked number `1` as the generator seed to exclude the
+    impacts from the randomly generated seed. The tests are conducted on an RTX 3090
+    with 24 GB VRAM running Windows 11, with another GPU for rendering all other windows
+    and the UI so that the RTX 3090 can be dedicated to the Stable Diffusion pipelines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: By default, PyTorch enables **TensorFloat32** (**TF32**) mode for convolutions
+    [4] and **float32** (**FP32**) mode for matrix multiplications. The preceding
+    code generates a 512x512 image using 8.4 GB VRAM with a generation speed of 7.51iteration/second.
+    In the following sections, we will measure the VRAM usage and the generation speed
+    improvements after adopting an optimization solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimization solution 1 – using the float16 or bfloat16 data type
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In PyTorch, floating point tensors are created in FP32 precision by default.
+    The TF32 data format was developed for Nvidia Ampere and later CUDA devices. TF32
+    can achieve faster matrix multiplications and convolutions with slightly less
+    accurate computation [5]. Both FP32 and TF32 are historic artifact settings and
+    are required for training, but it is rare that networks need this much numerical
+    accuracy for inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of using the TF32 and FP32 data types, we can load and run the Stable
+    Diffusion model weights in float16 or bfloat16 precision to save VRAM usage and
+    improve speed. But what are the differences between float16 and bfloat16, and
+    which one should we use?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'bfloat16 and float16 are both half-precision floating-point data formats, but
+    they have some differences:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Range of values**: bfloat16 has a larger positive range than float16\. The
+    maximum positive value for bfloat16 is approximately 3.39e38, while for float16
+    it’s approximately 6.55e4\. This makes bfloat16 more suitable for models that
+    require a large dynamic range.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Precision**: Both bfloat16 and float16 have a 3-bit exponent and a 10-bit
+    mantissa (fraction). However, bfloat16 uses the leading bit as a sign bit, while
+    float16 uses it as part of the mantissa. This means that bfloat16 has a smaller
+    relative precision than float16, especially for small numbers.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: bfloat16 is typically useful for deep neural networks. It provides a good balance
+    between range, precision, and memory usage. It’s supported by many modern GPUs
+    and can significantly reduce memory usage and increase training speed compared
+    to using single precision (FP32).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In Stable Diffusion, we can use bfloat16 or float16 to boost the inference
+    speed and reduce the VRAM usage at the same time. Here is some code that loads
+    a Stable Diffusion model with bfloat16:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: We use the `text2img_pipe` pipeline object to generate an image that uses only
+    4.7 GB VRAM, with 19.1 denoising iterations per second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that if you are using a CPU, you should not use `torch.float16` because
+    the CPU does not have hardware support for float16.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimization solution 2 – enabling VAE tiling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Stable Diffusion VAE tiling is a technique that can be used to generate large
+    images. It works by splitting an image into small tiles and then generating each
+    tile separately. This technique allows the generation of large images without
+    using too much VRAM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the result of tiled encoding and decoding will differ unnoticeably
+    from the non-tiled version. Diffusers’ implementation of VAE tiling uses overlap
+    tiles to blend edges to form a much smoother output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can turn on VAE tiling by adding the one-line code, `text2img_pipe.enable_vae_tiling()`,
+    before inferencing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Turning VAE tiling on or off does not seem to have much impact on the generated
+    image. The only difference is that the VRAM usage, without VAE tiling, generates
+    a 1024x1024 image that takes 7.6 GB VRAM. On the other hand, turning on the VAE
+    tiling reduces the VRAM usage to 5.1 GB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The VAE tiling happens between the image pixel space and latent space, and the
+    overall process has a minimal impact on the denoising loop. Testing shows in the
+    case of generating fewer than 4 images, there is an unnoticeable impact on the
+    performance, which can reduce VRAM usage by 20% to 30%. It would be a good idea
+    to always turn it on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimization solution 3 – enabling Xformers or using PyTorch 2.0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we provide a text or prompt to generate an image, the encoded text embedding
+    will be fed to the Transformer multi-header attention component of the diffusion
+    UNet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inside the Transformer block, the self-attention and cross-attention headers
+    will try to compute the attention score (via the `QKV` operation). This is computation-heavy
+    and will also use a lot of memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The open source `Xformers` [2] package from Meta Research is built to optimize
+    the process. In short, the main differences between Xformers and standard Transformers
+    are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Hierarchical attention mechanism**: Xformers use a hierarchical attention
+    mechanism, which consists of two layers of attention: a coarse layer and a fine
+    layer. The coarse layer attends to the input sequence at a high level, while the
+    fine layer attends to the input sequence at a low level. This allows Xformers
+    to learn long-range dependencies in the input sequence while also being able to
+    focus on local details.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Reduced number of heads**: Xformers use a smaller number of heads than standard
+    Transformers. A head is a unit of computation in the attention mechanism. Xformers
+    use 4 heads, while standard Transformers use 12 heads. This reduction in the number
+    of heads allows Xformers to reduce the memory requirements while still maintaining
+    performance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Enabling Xformers for Stable Diffusion using the `Diffusers` package is quite
+    simple. Add one line of code, as shown in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you are using PyTorch 2.0+, you may not notice the performance boost or VRAM
+    usage drop. That is because PyTorch 2.0 includes a natively built attention optimization
+    feature similar to the Xformers implementation. If a historical PyTorch before
+    version 2.0 is being used, enabling Xformers will noticeably boost the inference
+    speed and reduce VRAM usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimization solution 4 – enabling sequential CPU offload
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As we discussed in [*Chapter 5*](B21263_05.xhtml#_idTextAnchor097), one pipeline
+    includes several sub-models:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Text embedding model used to encode text to embeddings
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Image latent encoder/decoder used to encode the input guidance image and decode
+    latent space to pixel images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The UNet will loop the inference denoising steps
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The safety checker model checks the safety of the generated content
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The idea of sequential CPU offload is offloading idle submodels to CPU RAM when
+    it finishes its task and is idle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is an example of how it works step by step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Load the CLIP text model to the GPU VRAM and encode the input prompt to embeddings.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Offload the CLIP text model to CPU RAM.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load the VAE model (the image to latent space encoder and decoder) to the GPU
+    VRAM and encode the start image if the current task is an image-to-image pipeline.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Offload the VAE to the CPU RAM.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load UNet to loop through the denoising steps (load and offload unused sub-modules
+    weights data too).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Offload UNet to the CPU RAM.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load the VAE model from CPU RAM to GPU VRAM to perform latent space to image
+    decoding.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the preceding steps, we can see that through all the processes, only one
+    sub-model will stay in the VRAM, which can effectively reduce the usage of VRAM.
+    However, the loading and offloading will significantly reduce the inference speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Enabling sequential CPU offload is as simple as one line of code, as shown
+    in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Imagine the possibility of creating a tailored pipeline that efficiently utilizes
+    the VRAM for denoising with UNet. By strategically shifting the text encoder/decoder,
+    VAE models, and safety checker models to the CPU during idle periods, while keeping
+    the UNet model in the VRAM, significant speed enhancements are achievable. The
+    feasibility of this approach is evident in the custom implementation provided
+    in the code that comes with the book, which remarkably reduces VRAM usage to as
+    low as 3.2 GB (even for generating a 512x512 image) while maintaining a comparable
+    processing speed, with no noticeable degradation in performance!
+  prefs: []
+  type: TYPE_NORMAL
+- en: The custom pipeline code provided in this chapter did almost the same thing
+    as `enable_sequential_cpu_offload()`. The only difference is keeping the UNet
+    in VRAM until the end of denoising. That is why the inference speed remains fast.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With proper model load and offload management, we can reduce the VRAM usage
+    from 4.7 GB to 3.2 GB while maintaining inference speeds that are indistinguishable
+    from those achieved without model offloading.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimization solution 5 – enabling model CPU offload
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Full model offloading moves the whole model data to and off GPU instead of moving
+    weights only. If this is not enabled, all model data will stay in GPU before and
+    after forward inference; clearing the CUDA cache won’t free up VRAM either. This
+    could lead to a `CUDA Out of memory` error if you are loading up other models,
+    say, an upscale model to further process the image. The model-to-CPU offload method
+    can mitigate the `CUDA Out of` `memory` problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Based on the idea behind this method, an additional one to two seconds will
+    be spent on moving the model between CPU RAM and GPU VRAM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To enable this method, remove `pipe.to("cuda")` and add `pipe.enable_model_cpu_offload()`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: When offloading the model, the GPU hosts a single primary pipeline component,
+    usually the text encoder, UNet, or VAE, while the remaining components are idle
+    on the CPU memory. Components such as UNet, which undergo multiple iterations,
+    remain on the GPU until their utilization is no longer required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The model CPU offload method can reduce the VRAM usage to 3.6 GB and keep a
+    relatively good inference speed. If you give the preceding code a test run, you
+    will find the inference speed is relatively slow at the beginning and gradually
+    speeds up to its normal iteration speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the end of image generation, we can use the following code to manually move
+    the model weights data out of VRAM to CPU RAM:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: After executing the preceding code, you will find your GPU VRAM usage level
+    has significantly reduced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s take a look at Token Merging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimization solution 6 – Token Merging (ToMe)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Token Merging** (**ToMe**) was first posited by Daniel et al [3]. It is a
+    technique that can be used to speed up the inference time of Stable Diffusion
+    models. ToMe works by merging redundant tokens in the model, which means that
+    the model has less work to do compared with non-merging models. This can lead
+    to noticeable speed improvements without sacrificing image quality.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ToMe works by first identifying redundant tokens in the model. This is done
+    by looking at the similarity between tokens. If two tokens are very similar, then
+    they are probably redundant. Once redundant tokens have been identified, they
+    are merged. This is done by averaging the values of the two tokens.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, if a model has 100 tokens and 50 of those tokens are redundant,
+    then merging the redundant tokens can reduce the number of tokens that the model
+    has to process by 50%.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ToMe can be used with any Stable Diffusion model. It does not require any additional
+    training. To use ToMe, we need to first install the following package from its
+    original inventor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, import the `ToMe` package to enable it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The performance improvement is dependent on how many redundant tokens are found.
+    In the preceding code, the `ToMe` package improves the iteration speed from around
+    19 iterations per second to 20 iterations per second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's worth noting that the `ToMe` package may produce a slightly altered image
+    output, although this difference has no discernible impact on image quality. This
+    is because ToMe merges tokens, which can influence the conditional embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have introduced six techniques to enhance the performance
+    of Stable Diffusion and minimize VRAM usage. The amount of VRAM is often the most
+    significant hurdle in running a Stable Diffusion model, with `CUDA Out of memory`
+    being a common issue. The techniques we have discussed can drastically reduce
+    VRAM usage while maintaining the same inference speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling the float16 data type can halve VRAM usage and nearly double the inference
+    speed. VAE tiling allows the generation of large images without excessive VRAM
+    usage. Xformers can further decrease VRAM usage and increase inference speed by
+    implementing an intelligent two-layer attention mechanism. PyTorch 2.0 provides
+    native features such as Xformers and automatically enables them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sequential CPU offload can significantly reduce VRAM usage by offloading a sub-model
+    and its sub-modules to CPU RAM, albeit at the cost of slower inference speed.
+    However, we can use the same concept to implement our sequential offload mechanism
+    to save VRAM usage while keeping the inference speed nearly the same. Model CPU
+    offload can offload the entire model to the CPU, freeing up VRAM for other tasks,
+    and only reloading the models back to VRAM when necessary. **Token Merging**,
+    or **ToMe**, reduces redundant tokens and boosts inference speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By applying these solutions, you could potentially run a pipeline that outperforms
+    any other models in the world. The AI landscape is constantly evolving, and by
+    the time you read this, new solutions may have emerged. However, understanding
+    the internal workings allows us to tune and optimize the image generation process
+    according to your needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we are going to explore of the most exciting topics, community-shared
+    LoRAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Hugging Face, memory, and speed: [https://huggingface.co/docs/diffusers/optimization/fp16](https://huggingface.co/docs/diffusers/optimization/fp16)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'facebookresearch, xformers: [https://github.com/facebookresearch/xformers](https://github.com/facebookresearch/xformers)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Daniel Bolya, Judy Hoffman; Token Merging for Fast Stable Diffusion: [https://arxiv.org/abs/2303.17604](https://arxiv.org/abs/2303.17604)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'What Every User Should Know About Mixed Precision Training in PyTorch: [https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/#picking-the-right-approach](https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/#picking-the-right-approach'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: )
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Accelerating AI Training with NVIDIA TF32 Tensor Cores: [https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

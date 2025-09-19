@@ -1,0 +1,1543 @@
+- en: '5'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Understanding How Stable Diffusion Works
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 4*](B21263_04.xhtml#_idTextAnchor081), we dove into the internal
+    workings of the diffusion model with some math formulas. If you are not used to
+    reading the formulas every day, it can be scary, but once you get familiar with
+    those symbols and Greek letters, the benefit of fully understanding those formulas
+    is huge. Math formulas and equations not only help us understand the core of the
+    process in a precise and concise form, but they also enable us to read more papers
+    and works from others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While the original diffusion model is more like a proof of a concept, it shows
+    the huge potential of the multi-step diffusion model compared with a one-pass
+    neural network. However, some drawbacks come with the original diffusion model,
+    **denoising diffusion probabilistic models** (**DDPM**) [1], and later Classifier
+    Guidance denoising. Let me list two:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To train a diffusion model with Classifier Guidance requires training a new
+    classifier, and we can’t reuse a pre-trained classifier. Also, in diffusion model
+    training, training a classifier with 1,000 categories is already not easy.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pre-trained model inferences in pixel space are computationally expensive, not
+    to mention training a model. Using a pre-trained model to generate 512x512 images
+    in pixel space on a home computer with 8 GB of VRAM, without memory optimization,
+    is not possible.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In 2022, researchers proposed **Latent Diffusion models**, Robin et al [2].
+    The model nicely solved both the classification problem and the performance problem.
+    The Latent Diffusion model was later known as Stable Diffusion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will take a look at how Stable Diffusion solved the preceding
+    problems and led to state-of-the-art developments in the field of image generation.
+    We will specifically cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stable Diffusion in latent space
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating latent vectors using Diffusers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating text embeddings using CLIP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating time step embeddings
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Initializing Stable Diffusion UNet
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing a text-to-image Stable Diffusion inference pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing a text-guided image-to-image Stable Diffusion inference pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Putting all the code together
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s dive into the core of Stable Diffusion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The sample code for this chapter is tested using version 0.20.0 of the Diffusers
+    package. To ensure the code runs smoothly, please use Diffusers v0.20.0\. You
+    can install it using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Stable Diffusion in latent space
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Instead of processing diffusion in pixel space, Stable Diffusion uses latent
+    space to represent an image. What is latent space? In short, latent space is the
+    vector representation of an object. To use an analogy, before you go on a blind
+    date, a matchmaker could provide you with your counterpart’s height, weight, age,
+    hobbies, and so on in the form of a vector:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can take this vector as the latent space of your blind date counterpart.
+    A real person’s true property dimension is almost unlimited (you could write a
+    biography for one). The latent space can be used to represent a real person with
+    only a limited number of features, such as height, weight, and age.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the case of the Stable Diffusion training stage, a trained encoder model,
+    usually denoted as ℇ *(E)*, is used to encode an input image in a latent vector
+    representation. After the reverse diffusion process, the latent space is decoded
+    by a decoder in pixel space. The decoder is usually denoted as D *(D)*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Both training and sampling work take place in the latent space. The training
+    process is shown in *Figure 5**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1: Training Stable Diffusion model in latent space](img/B21263_05_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.1: Training Stable Diffusion model in latent space'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.1* illustrates the training process of the Stable Diffusion model.
+    It shows a high-level overview of how the model is trained.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is a step-by-step breakdown of the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Inputs**: The model is trained using images, caption text, and time step
+    embeddings (specifying at which step the denoising happens).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Image encoder**: The input image is passed through an encoder. The encoder
+    is a neural network that processes the input image and converts it into a more
+    abstract and compressed representation. This representation is often referred
+    to as a “latent space” because it captures the image’s underlying characteristics,
+    but not the pixel-level details.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Latent space**: The encoder outputs a vector that represents the input image
+    in the latent space. The latent space is typically a lower-dimensional space than
+    the input space (the pixel space of the image), which allows for faster processing
+    and more efficient representation of the input data. The whole training happens
+    in the latent space.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Iterate N steps**: The training process involves iterating through the latent
+    space multiple times (*N* steps). This iterative process is where the model learns
+    to refine the latent space representation and make small adjustments to match
+    the desired output image.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**UNet**: After each iteration, the model uses UNet to generate an output image
+    based on the current latent space vector. UNet generates the predicted noise and
+    incorporates the input text embedding, step information, and potentially other
+    embeddings.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**The loss function**: The model’s training process also involves a loss function.
+    This measures the difference between the output image and the desired output image.
+    As the model iterates, the loss is continually calculated, and the model makes
+    adjustments to its weights to minimize this loss. This is how the model learns
+    from its mistakes and improves over time.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Refer to [*Chapter 21*](B21263_21.xhtml#_idTextAnchor405) for more detailed
+    steps on model training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The process of inferencing from UNet is shown in *Figure 5**.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2: Stable Diffusion inferencing in latent space](img/B21263_05_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.2: Stable Diffusion inferencing in latent space'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stable Diffusion not only supports text-guided image generation; it also supports
+    image-guided generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 5**.2*, starting from the left side, we can see that both text and
+    an image are used to guide the image generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we provide a text input, Stable Diffusion uses CLIP [3] to generate an
+    embedding vector, which will be fed into UNet, using the attention mechanism.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we provide an image as the guiding signal, the input image will be encoded
+    to latent space and then concatenate with the randomly generated Gaussian noise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is all up to us to provide guidance; we can provide either text, an image,
+    or both. We can even generate images without providing any images; in this “empty”
+    guidance case, the UNet model will decide what to generate based on the randomly
+    initialized noise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the two essential inputs provided text embeddings and the initial image
+    latent noise (with or without the initial image’s encoded vectors in latent space),
+    UNet kicks off to remove noise from the initial image in the latent space. After
+    several denoising steps, with the help of a decoder, Stable Diffusion can output
+    a vivid image in pixel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The process is similar to the training process but without sending the loss
+    value back to update the weights. Instead, after a number of denoising steps (*N*
+    steps), the latent decoder (**Variational Autoencoder** (**VAE**) [4]) converts
+    the image from latent space to visible pixel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s take a look at what those components (the text encoder, image Encoder,
+    UNet, and image decoder) look like, and then we’ll build one of our own Stable
+    Diffusion pipelines step by step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating latent vectors using diffusers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section, we are going to use a pre-trained Stable Diffusion model to
+    encode an image into latent space so that we have a concrete impression of what
+    a latent vector looks and feels like. Then, we will decode the latent vector back
+    into an image. This operation will also establish the foundation for building
+    the image-to-image custom pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`load_image` function from `diffusers` to load an image from local storage
+    or a URL. In the following code, we load an image named `dog.png` from the same
+    directory of the current program:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Pre-process the image**: Each pixel of the loaded image is represented by
+    a number ranging from 0 to 255\. The image encoder from the Stable Diffusion process
+    handles image data ranging from -1.0 to 1.0\. So, we first need to make the data
+    range conversion:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, if we use Python code, `image_array.shape`, to check the `image_array`
+    data shape, we will see the shape of the image data as – `(512,512,3)`, arranged
+    as `(width, height, channel)`, instead of the commonly used `(channel, width,
+    height).` Here, we need to convert the image data shape to `(channel, width, height)`
+    or `(3,512,512)`, using the `transpose()` function:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The `2` is in the first position of `2, 0, 1`, which means moving the original
+    third dimension (indexed as `2`) to the first dimension. The same logic applies
+    to `0` and `1`. The original `0` dimension is now converted to the second position,
+    and the original `1` is now in the third dimension.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: With this transpose operation, the NumPy array, `image_array_cwh`, is now in
+    the `(``3,512,512)` shape.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The Stable Diffusion image encoder handles image data in batches, which, in
+    this instance is four-dimensional data with the batch dimension in the first position;
+    we need to add the batch dimension here:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`torch` **and move to CUDA**: We will convert the image data to latent space
+    using CUDA. To achieve this, we will need to load the data into the CUDA VRAM
+    before handing it off to the next step model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Load the Stable Diffusion image encoder VAE**: This VAE model is used to
+    convert the image from pixel space to latent space:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Encode the image into a latent vector**: Now, everything is ready, and we
+    can encode any image into a latent vector as PyTorch tensor:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Check the data and shape of the latent data:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We can see that the latent is in the `(4, 64, 64)` shape, with each element
+    in the range of `-1.0` to `1.0`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Stable Diffusion processes all the denoising steps on a 64x64 tensor with 4-channel
+    for a 512x512 image generation. The data size is way less than its original image
+    size, 512x512 with three color channels.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Decode latent to image (optional)**: You may be wondering, can I convert
+    the latent data back to the pixel image? Yes, we can do this with lines of code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE37]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE38]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE39]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE40]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE41]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE42]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE43]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE44]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE45]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE46]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE47]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE48]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE49]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE50]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE51]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE52]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE53]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE54]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE55]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE56]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE57]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE58]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE59]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The `diffusers` Stable Diffusion pipeline will finally generate a latent tensor.
+    We will follow similar steps to recover a denoised latent for an image in the
+    latter part of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating text embeddings using CLIP
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To generate the text embeddings (the embeddings contain the image features),
+    we need first to tokenize the input text or prompt and then encode the token IDs
+    into embeddings. Here are steps to achieve this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Get the prompt** **token IDs**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE61]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE62]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE63]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE64]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE65]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE66]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE67]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE68]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE69]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE70]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE71]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE72]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE73]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE74]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The preceding code will convert the `a running dog` text prompt to a token ID
+    list as a `torch` tensor object – `tensor([[49406, 320,` `2761,` `1929, 49407]])`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Encode the token IDs** **into embeddings**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE75]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE76]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE77]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE78]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE79]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE80]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE81]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE82]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE83]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE84]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Check the** **embedding data**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE85]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE86]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can see the data of `prompt_embeds` as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE87]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE88]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE89]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE90]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE91]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE92]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Its shape is `torch.Size([1, 5, 768])`. Each token ID is encoded into a 768-dimension
+    vector.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`prompt` and `prompt`/`negative` `prompt` cases:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE93]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE94]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE95]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE96]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE97]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE98]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE99]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE100]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE101]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE102]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE103]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE104]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE105]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE106]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE107]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE108]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE109]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`torch` vector:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE110]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE111]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Next, we will initialize the time step data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initializing time step embeddings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We introduced the scheduler in [*Chapter 3*](B21263_03.xhtml#_idTextAnchor064).
+    By using the scheduler, we can sample key steps for image generation. Instead
+    of denoising 1,000 steps to generate an image in the original diffusion model
+    (DDPM), by using a scheduler, we can generate an image in a mere 20 steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we are going to use the Euler scheduler to generate time step
+    embeddings, and then we’ll take a look at what the time step embeddings look like.
+    No matter how good the diagram that tries to plot the process is, we can only
+    understand how it works by reading the actual data and code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Initialize a scheduler from the scheduler configuration for** **the model**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE112]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE113]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE114]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE115]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE116]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE117]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The preceding code will initialize a scheduler from the checkpoint’s scheduler
+    config file. Note that you can also create a scheduler, as we discussed in [*Chapter
+    3*](B21263_03.xhtml#_idTextAnchor064), like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE118]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE119]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE120]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE121]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE122]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE123]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE124]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE125]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: However, this will require you to load a model first, which is not only slow
+    but also unnecessary; the only thing we need is the model’s scheduler.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Sample the steps for the image** **diffusion process**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE126]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE127]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE128]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE129]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE130]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will see the 20-step value as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE131]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE132]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE133]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE134]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE135]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE136]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE137]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE138]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE139]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE140]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE141]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE142]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE143]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE144]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE145]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE146]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE147]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE148]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE149]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE150]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE151]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, the scheduler takes 20 steps out of the 1,000 steps, and those 20 steps
+    may be enough to denoise a complete Gaussian distribution for image generation.
+    This step sampling technique also contributes to Stable Diffusion performance
+    boosting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initializing the Stable Diffusion UNet
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The UNet architecture [5] was introduced by Ronneberger et al. for biomedical
+    image segmentation purposes. Before the UNet architecture, a convolution network
+    was commonly used for image classification tasks. When using a convolution network,
+    the output is a single class label. However, in many visual tasks, the desired
+    output should include localization too, and the UNet model solved this problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The U-shaped architecture of UNet enables efficient learning of features at
+    different scales. UNet’s skip connections directly combine feature maps from different
+    stages, allowing a model to effectively propagate information across various scales.
+    This is crucial for denoising, as it ensures the model retains both fine-grained
+    details and global context during noise removal. These features make UNet a good
+    candidate for the denoising model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `Diffuser` library, there is a class named `UNet2DconditionalModel`;
+    this is a conditional 2D UNet model for image generation and related tasks. It
+    is a key component of diffusion models and plays a crucial role in the image generation
+    process. We can load a UNet model in just several lines of code, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE152]'
+  prefs: []
+  type: TYPE_PRE
+- en: Together with the UNet model we have just loaded up, we have all the components
+    required by Stable Diffusion. Not that hard, right? Next, we are going to use
+    those building blocks to build two Stable Diffusion pipelines – one text-to-image
+    and another image-to-image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing a text-to-image Stable Diffusion inference pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'So far, we have all the text encoder, image VAE, and denoising UNet model initialized
+    and loaded into the CUDA VRAM. The following steps will chain them together to
+    form the simplest and working Stable Diffusion text-to-image pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Initialize a latent noise**: In *Figure 5**.2*, the starting point of inference
+    is randomly initialized Gaussian latent noise. We can create one of the latent
+    noise with this code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE153]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE154]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE155]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE156]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE157]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE158]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE159]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE160]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: During the training stage, an initial noise sigma is used to help prevent the
+    diffusion process from becoming stuck in local minima. When the diffusion process
+    starts, it is very likely to be in a state where it is very close to a local minimum.
+    `init_noise_sigma = 14.6146` is used to help avoid this. So, during the inference,
+    we will also use `init_noise_sigma` to shape the initial latent.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE161]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE162]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE163]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Loop through UNet**: With all those components prepared, we are finally at
+    the stage of feeding the initial latents to UNet to generate the target latent
+    we want:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE164]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE165]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE166]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE167]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE168]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE169]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE170]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE171]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE172]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE173]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE174]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE175]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE176]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE177]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE178]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE179]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE180]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE181]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE182]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE183]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE184]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE185]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The preceding code is a simplified denoising loop of `DiffusionPipeline` from
+    the `diffusers` package, removing all those edging cases and only keeping the
+    core of the inferencing.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The algorithm works by iteratively adding noise to a latent representation of
+    an image. In each iteration, the noise is guided by a text prompt, which helps
+    the model generate images that are more similar to the prompt.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The preceding code first defines a few variables:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The `guidance_scale` variable controls the amount of guidance that is applied
+    to the noise.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `latents_sd` variable stores the latent representation of the image that
+    is generated. The time steps variable stores a list of time steps at which the
+    noise will be added.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The main loop of the code iterates over the time steps. In each iteration, the
+    code first expands the latent representation to include two copies of itself.
+    This is done because the Stable Diffusion algorithm uses a classifier-free guidance
+    mechanism, which requires two copies of the latent representation.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The code then calls the `unet` function to predict the noise residual for the
+    current time step.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The code then performs guidance on the noise residual. This involves adding
+    a scaled version of the text-conditioned noise residual to the unconditional noise
+    residual. The amount of guidance that is applied is controlled by the `guidance_scale`
+    variable.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Finally, the code calls the `scheduler` function to update the latent representation
+    of the image. The `scheduler` function is a function that controls the amount
+    of noise that is added to the latent representation at each time step.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: As mentioned previously, the preceding code is a simplified version of the Stable
+    Diffusion algorithm. In practice, the algorithm is much more complex, and it incorporates
+    a number of other techniques to improve the quality of the generated images.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`latent_to_img` function to recover the image from the latent space:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE186]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE187]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE188]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE189]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE190]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE191]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE192]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE193]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE194]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE195]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE196]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE197]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE198]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE199]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE200]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE201]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE202]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE203]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE204]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE205]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE206]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE207]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE208]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE209]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The `latent_to_img` function performs actions in the following sequence:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: It calls the `vae_model.decode` function to decode the latent vector into an
+    image. The `vae_model.decode` function is a function that is trained on a dataset
+    of images. It can be used to generate new images that are similar to the images
+    in the dataset.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Normalizes the image data to a range of `0` to `1`. This is done because the
+    `Image.fromarray` function expects image data to be in this range.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Moves the image data from the GPU to the CPU. Then, it converts the image data
+    from a torch tensor to a NumPy array. This is done because the `Image.fromarray`
+    function only accepts NumPy arrays as input.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Flips the dimensions of the image array so that it is in the (width, height,
+    channel) format, the format that the `Image.fromarray` function expects.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Maps the image data to a range from `0` to `255` and converts it to an integer
+    type.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calls the `Image.fromarray` function to create a Python imaging library (PIL)
+    image object from the image data.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The `latents_2 = (1 / 0.18215) * latents_sd` line of code is needed when decoding
+    the latent to image because the latents are scaled by a factor of `0.18215` during
+    training. This scaling is done to ensure that latent space has a unit variance.
+    When decoding, the latents need to be scaled back to their original scale to reconstruct
+    the original image.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Then, you should be able to see something like this if everything is going
+    well:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.3: A running dog, generated by a custom Stable Diffusion pipeline](img/B21263_05_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.3: A running dog, generated by a custom Stable Diffusion pipeline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we are going to implement an image-to-image Stable Diffusion
+    pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing a text-guided image-to-image Stable Diffusion inference pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The only thing we need to do now is concatenate the starting image with the
+    starting latent noise. The `latents_input` Torch tensor is the latent we encoded
+    from a dog image earlier in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE210]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'That is all that is necessary; use the same code from the text-to-image pipeline,
+    and you should generate something like *Figure 5**.4*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4: A running dog, generated by a custom image-to-image Stable Diffusion
+    pipeline](img/B21263_05_04.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.4: A running dog, generated by a custom image-to-image Stable Diffusion
+    pipeline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the preceding code uses `strength = 0.7`; the strength denotes the
+    weight of the original latent noise. If you want an image more similar to the
+    initial image (the image you provided to the image-to-image pipeline), use a lower
+    strength number; otherwise, increase it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we moved on from the original diffusion model, DDPM, and explained
+    what Stable Diffusion is and why it is faster and better than the DDPM model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As suggested by the paper *High-Resolution Image Synthesis with Latent Diffusion
+    Models* [6] that introduced Stable Diffusion, the biggest feature that differentiates
+    Stable Diffusion from its predecessor is the “*Latent*.” This chapter explained
+    what latent space is and how Stable Diffusion training and inference work internally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For a comprehensive understanding, we created components using methods such
+    as encoding the initial image into latent data, converting input prompts to token
+    IDs and embedding them to text embeddings using the CLIP text model, using the
+    Stable Diffusion scheduler to sample detailed steps for inference, creating the
+    initial noise latent, concatenating initial noise latent with the initial image
+    latent, putting all the components together to build a custom text-to-image Stable
+    Diffusion pipeline, and extending the pipeline to enable a text-guided image-to-image
+    Stable Diffusion pipeline. We created these components one by one, and finally,
+    we built two Stable Diffusion pipelines – one text-to-image pipeline and an extended
+    text-guided image-to-image pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By completing this chapter, you should not only have a general understanding
+    of Stable Diffusion but also be able to freely build your own pipelines to meet
+    specific requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we are going to introduce solutions to load Stable Diffusion
+    models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Jonathan Ho, Ajay Jain, Pieter Abbeel, Denoising Diffusion Probabilistic Models:
+    [https://arxiv.org/abs/2006.11239](https://arxiv.org/abs/2006.11239)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Robin et al, High-Resolution Image Synthesis with Latent Diffusion Models:
+    [https://arxiv.org/abs/2112.10752](https://arxiv.org/abs/2112.10752)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Alec et al, Learning Transferable Visual Models From Natural Language Supervision:
+    [https://arxiv.org/abs/2103.00020](https://arxiv.org/abs/2103.00020)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'VAEs: [https://en.wikipedia.org/wiki/Variational_autoencoder](https://en.wikipedia.org/wiki/Variational_autoencoder)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'UNet2DConditionModel document from Hugging Face: [https://huggingface.co/docs/diffusers/api/models/unet2d-cond](https://huggingface.co/docs/diffusers/api/models/unet2d-cond)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Robin et al, High-Resolution Image Synthesis with Latent Diffusion Models:
+    [https://arxiv.org/abs/2112.10752](https://arxiv.org/abs/2112.10752)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Additional reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Jonathan Ho, Tim Salimans, Classifier-Free Diffusion Guidance: [https://arxiv.org/abs/2207.12598](https://arxiv.org/abs/2207.12598)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Stable Diffusion with Diffusers: [https://huggingface.co/blog/stable_diffusion](https://huggingface.co/blog/stable_diffusion)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Olaf Ronneberger, Philipp Fischer, Thomas Brox, UNet: Convolutional Networks
+    for Biomedical Image Segmentation: [https://arxiv.org/abs/1505.04597](https://arxiv.org/abs/1505.04597)'
+  prefs: []
+  type: TYPE_NORMAL

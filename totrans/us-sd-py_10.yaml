@@ -1,0 +1,2128 @@
+- en: '10'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Overcoming 77-Token Limitations and Enabling Prompt Weighting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: From [*Chapter 5*](B21263_05.xhtml#_idTextAnchor097), we know that Stable Diffusion
+    utilizes OpenAI’s CLIP model as its text encoder. The CLIP model’s tokenization
+    implementation, as per the source code [6], has a context length of 77 tokens.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This 77-token limit in the CLIP model extends to Hugging Face Diffusers, restricting
+    the maximum input prompt to 77 tokens. Unfortunately, it’s not possible to assign
+    keyword weights within these input prompts due to this constraint without some
+    modifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For instance, let’s say you give a prompt string that produces more than 77
+    tokens, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Diffusers will show up a warning message, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can’t highlight the cat by providing the weight, such as in the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: By default, the `Diffusers` package does not include functionality for overcoming
+    the 77-token limitation or assigning weights to individual tokens, as stated in
+    its documentation. This is because Diffusers aims to serve as a versatile toolbox,
+    providing essential features that can be utilized in various projects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nonetheless, using the core functionalities offered by Diffusers, we can develop
+    a custom prompt parser. This parser will help us circumvent the 77-token restriction
+    and assign weights to each token. In this chapter, we will delve into the structure
+    of text embeddings and outline a method to surpass the 77-token limit while also
+    assigning weight values to each token.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the 77-token limitation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Overcoming the 77-token limitation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling long prompts with weighting
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Overcoming the 77-token limitation using community pipelines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you want to start using a full feature pipeline supporting long prompt weighting,
+    please turn to the *Overcoming the 77-token limitation using the community* *pipelines*
+    section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By the end of the chapter, you will be able to use weighted prompts without
+    size limitations and know how to implement them using Python.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the 77-token limitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The Stable Diffusion (v1.5) text encoder uses the CLIP encoder from OpenAI
+    [*2*]. The CLIP text encoder has a 77-token limit, and this limitation propagates
+    to the downstream Stable Diffusion. We can reproduce the 77-token limitation with
+    the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can take out the encoder from Stable Diffusion and verify it. Let’s say
+    we have the prompt `a photo of a cat and dog driving an aircraft` and we multiply
+    it by 20 to make the prompt’s token size larger than 77:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Reuse the pipeline we initialized at the beginning of the chapter and take
+    out `tokenizer` and `text_encoder`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use `tokenizer` to get the token IDs from the prompt:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Since we set `truncation = False`, `tokenizer` will convert any length string
+    to token IDs. The preceding code will output a token list with a length of 181\.
+    `return_tensors = 'pt'` will tell the function to return the result in a `[1,181]`
+    tensor object.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Try encoding the token IDs to `embeddings`:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will see a `RuntimeError` message that says the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: From the preceding steps, we can see that CLIP’s text encoder only accepts 77
+    tokens at a time.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now, let’s take a look at the first and last tokens. If we take away `*20`
+    and only tokenize the prompt `a photo cat and dog driving an aircraft`, when we
+    print out the token IDs, we will see 10 token IDs instead of 8:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the preceding token IDs, the first (`49406`) and last (`49407`) are automatically
+    added. We can use `tokenizer._convert_id_to_token` to convert the token IDs to
+    a string:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can see that the two additional tokens are added to the prompt:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Why do we need to check this? Because we need to remove the automatically added
+    beginning and end tokens when concatenating tokens. Next, let’s proceed to the
+    steps to overcome the 77-token limitation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overcoming the 77-tokens limitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Fortunately, the Stable Diffusion UNet doesn’t enforce this 77-token limitation.
+    If we can get the embeddings in batches, concatenate those chunked embeddings
+    into one tensor, and provide it to the UNet, we should be able to overcome the
+    77-token limitation. Here’s an overview of the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extract the text tokenizer and text encoder from the Stable Diffusion pipeline.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Tokenize the input prompt, regardless of its size.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Eliminate the added beginning and end tokens.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Pop out the first 77 tokens and encode them into embeddings.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Stack the embeddings into a tensor of size `[1,` `x, 768]`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now, let’s implement this idea using Python code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Take out the text tokenizer and text encoder:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We can reuse the tokenizer and text encoder from the Stable Diffusion pipeline.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Tokenize any size of input prompt:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE37]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the preceding code, we did the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: We set `truncation = False` to allow tokenization beyond the default 77-token
+    limit. This ensures that the entire prompt is tokenized, regardless of its size.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The tokens are returned as a Python list instead of a torch tensor. Tokens in
+    the Python list will make it easier for us to add additional elements. Note that
+    the token list will be converted to a torch tensor before providing it to the
+    text encoder.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There are two additional parameters, `padding = "max_length"` and `max_length
+    = len(tokens)`. We use these to make sure prompt tokens and negative prompt tokens
+    are the same size.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Remove the beginning and end tokens.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The tokenizer will automatically add two additional tokens: the beginning token
+    (`49406`) and the end token (`49407`).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'In the subsequent step, we will segment the token sequence and feed the chunked
+    tokens to the text encoder. Each chunk will have its own beginning and end tokens.
+    But before that, we will need to exclude them initially from the long original
+    token list:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE39]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: And then add these beginning and end tokens back to the chunked tokens, each
+    chunk with a size of size `75`. We will add the beginning and the end tokens back
+    in *step 4*.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Encode the 77-sized chunked tokens into embeddings:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE41]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE42]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE43]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE44]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE45]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE46]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE47]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE48]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE49]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE50]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE51]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE52]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE53]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE54]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE55]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE56]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE57]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE58]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE59]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE60]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE61]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE62]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE63]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE64]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE65]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE66]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE67]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE68]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE69]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE70]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The preceding code loops through the token list, taking out 75 tokens at a time.
+    Then, it adds the beginning and end tokens to the 75-token list to create a 77-token
+    list. Why 77 tokens? Because the text encoder can encode 77 tokens to embeddings
+    at one time.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Inside the `for` loop, the first part handles the prompt embeddings, and the
+    second part handles the negative embeddings. Even though we give an empty negative
+    prompt, to enable classification-free guidance diffusion, we still need a negative
+    embedding list with the same size of positive prompt embeddings (inside of the
+    denoising loop, the conditioned latent will subtract the unconditional latent,
+    which is generated from the negative prompt).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Stack the embeddings to a `[1,x,768]` size torch tensor.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Before this step, the `embeds` list holds data like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The Stable Diffusion pipeline’s embedding parameters accept tensors in the size
+    of `torch.Size([1,x,768])`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We still need to convert the list to a three-dimension tensor using these two
+    lines of code:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE72]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE73]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE74]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the preceding code, we have the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`embeds` and `neg_embeds` are lists of PyTorch tensors. The `torch.cat()` function
+    is used to concatenate these tensors along the dimension specified by `dim`. In
+    this case, we have `dim=1`, which means the tensors are concatenated along their
+    second dimension (since Python uses 0-based indexing).'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`prompt_embeds` is a tensor that contains all the embeddings from `embeds`
+    concatenated together. Similarly, `prompt_neg_embeds` contains all the embeddings
+    from `neg_embeds` concatenated together.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By now, we have a functioning text encoder that can convert whatever length
+    of prompt to embeddings, which can be used by a Stable Diffusion pipeline. Next,
+    let’s put all the code together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Putting all the code together into a function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s go a step further to put all the previous code in a packed function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE75]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s create a long prompt to test whether the preceding function works or
+    not:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE76]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The result is shown in *Figure 10**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.1: Cute cat running on the grass, using a long prompt](img/B21263_10_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.1: Cute cat running on the grass, using a long prompt'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If our new function works for long prompts, the generated image should reflect
+    additional appended prompts. Let’s extend the prompt to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE77]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The new prompt will generate an image as shown in *Figure 10**.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.2: Cute cat running on the grass, with the additional prompt of
+    pure white cat](img/B21263_10_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.2: Cute cat running on the grass, with the additional prompt of pure
+    white cat'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the new appended prompt works and there are more white elements
+    added to the cat; however, it is still not pure white as requested in the prompt.
+    We will solve this with prompt weighting, which we’ll cover in the upcoming section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling long prompts with weighting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We just built a whatever size of text encoder for a Stable Diffusion pipeline
+    (v1.5-based). All of those steps are paving the way to build long prompts with
+    a weighting text encoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A weighted Stable Diffusion prompt refers to the practice of assigning different
+    levels of importance to specific words or phrases within a text prompt used for
+    generating images through the Stable Diffusion algorithm. By adjusting these weights,
+    we can control the degree to which certain concepts influence the generated output,
+    allowing for greater customization and refinement of the resulting images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The process typically involves scaling up or down the text embedding vectors
+    associated with each concept in the prompt. For instance, if you want the Stable
+    Diffusion model to emphasize a particular subject while deemphasizing another,
+    you would increase the weight of the former and decrease the weight of the latter.
+    Weighted prompts enable us to better direct the image generation toward desired
+    outcomes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The core of adding weight to the prompt is simply vector multiplication:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: weighted _ embeddings = [embedding1, embedding2, ..., embedding768] × weight
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before that, we still need to do some preparations to make a weighted prompt
+    embedding, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`a (white) cat` into a list like this: `[[''a '', 1.0], [''white'', 1.1], [''cat'',
+    1.0]]`. We’ll adopt the prevalent prompt format used in the Automatic1111 **Stable
+    Diffusion** (**SD**) WebUI, as defined in the open source SD WebUI [4].'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Token and weight extraction**: Separate the token IDs and their corresponding
+    weights into two distinct lists.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Prompt and negative prompt padding**: Ensure that both the prompt and negative
+    prompt tokens have the same maximum length. If the prompt is longer than the negative
+    prompt, pad the negative prompt to match the prompt’s length. Otherwise, pad the
+    prompt to align with the negative prompt’s length.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Regarding attention and emphasis (weighting), we will implement the following
+    weighting format [4]:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE78]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s go through each of those steps in more detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build the `parse_prompt_attention` function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'To make sure the prompt format is fully compatible with Automatic1111’s SD
+    WebUI, we will extract and reuse the function from the open sourced `parse_prompt_attention`
+    function [3]:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE79]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE80]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE81]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE82]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE83]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE84]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE85]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE86]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE87]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE88]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE89]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE90]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE91]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE92]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE93]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE94]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE95]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE96]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE97]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE98]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE99]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE100]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE101]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE102]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE103]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE104]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE105]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE106]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE107]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE108]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE109]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE110]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE111]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE112]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE113]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE114]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE115]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE116]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE117]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE118]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE119]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE120]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE121]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE122]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE123]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE124]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE125]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE126]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE127]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE128]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE129]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE130]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE131]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE132]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE133]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE134]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Call the previously created function using the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE135]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will return the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE136]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Get prompts with weights.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'With the help of the preceding function, we can get a list of prompt and weight
+    pairs. The text encoder will only encode the tokens of the prompt (no, you don’t
+    need to provide weights as input to the text encoder). We will need to further
+    process the prompt-weight pair to two independent lists with the same size, one
+    for token IDs and one for weights, like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE137]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE138]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This work can be done by the following function:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE139]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE140]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE141]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE142]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE143]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE144]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE145]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE146]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE147]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE148]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE149]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE150]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE151]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE152]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE153]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE154]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE155]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE156]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE157]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE158]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE159]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE160]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE161]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE162]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE163]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE164]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE165]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The preceding function takes two parameters: the SD pipeline and the prompt
+    string. The input string can be the positive prompt or the negative prompt.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Inside the function body, we first call the `parse_prompt_attention` function
+    to have the prompts with weight associated in the smallest grain (The weight is
+    applied in the individual token level). Then, we loop through the list, tokenize
+    the text, and remove the tokenizer-added beginning and end token IDs with the
+    indexing operation, `[1:-1]`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Merge the new token IDs back to the list that holds all token IDs. In the meantime,
+    expand the weights number and merge back to the list that holds all weights numbers.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let’s reuse the prompt of `a (white) cat` and call the function:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE166]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE167]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE168]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The preceding code will return the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE169]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Notice that the second token ID from `white` now has a weight of `1.1` instead
+    of `1.0`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Pad the tokens.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In this step, we will further transform the token ID list and its weights into
+    a chunked list.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let’s say we have a list of token IDs containing more than 77 elements:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`[``1,2,3,...,100]`'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We need to transform it into a list that includes chunks, with 77 (maximum)
+    tokens inside each chunk:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`[[``49406,1,2...75,49407],[49406,76,77,...,100,49407]]`'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: This is so that, in the next step, we can loop through the outer layer of the
+    list and encode the 77-token list one at a time.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now, you may wonder why we need to provide a maximum of 77 tokens to the text
+    encoder at a time. What if we simply loop through each element and encode one
+    token at a time? Good question, but we can’t do it like this because encoding
+    `white` and then encoding `cat` will produce different embeddings compared with
+    encoding `white cat` together at one time.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We can use a quick test to find out the difference. First, let’s encode `white`
+    only:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE170]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE171]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE172]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE173]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE174]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE175]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE176]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE177]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE178]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, encode `white` `cat` together:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE179]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE180]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE181]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE182]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE183]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE184]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE185]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE186]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE187]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Give the preceding code a try; you will find that the same `white` will lead
+    to a different embedding. What is the root cause? The token and embedding is not
+    a one-to-one mapping; the embedding is generated based on the self-attention mechanism
+    [5]. A single `white` can represent the color or a family name, while `white`
+    in `white cat` is clearly saying that it is a color that describes the cat.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let’s get back to the padding work. The following code will check the length
+    of the token list. If the token ID list length is larger than 75, then take the
+    first 75 tokens and loop this operation the remaining tokens are fewer than 75,
+    which will be handled by a separate logic:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE188]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE189]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE190]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE191]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE192]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE193]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE194]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE195]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE196]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE197]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE198]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE199]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE200]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE201]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE202]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE203]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE204]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE205]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE206]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE207]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE208]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE209]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE210]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE211]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE212]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE213]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE214]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE215]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE216]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE217]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE218]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, use the following function:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE219]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE220]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE221]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The preceding function takes the following previously generated `tokens` and
+    `weights` list:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE222]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'It transforms it into this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE223]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE224]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Get the weighted embeddings.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This is the final step, and we will get the Automatic1111-compatible embeddings
+    without a token size limitation:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE225]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE226]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE227]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE228]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE229]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE230]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE231]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE232]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE233]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE234]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE235]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE236]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE237]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE238]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE239]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE240]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE241]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE242]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE243]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE244]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE245]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE246]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE247]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE248]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE249]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE250]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE251]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE252]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE253]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE254]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE255]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE256]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE257]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE258]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE259]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE260]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE261]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE262]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE263]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE264]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE265]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE266]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE267]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE268]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE269]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE270]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE271]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE272]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE273]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE274]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE275]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE276]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE277]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE278]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE279]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE280]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE281]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE282]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE283]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE284]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE285]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE286]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE287]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE288]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE289]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE290]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE291]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE292]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE293]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE294]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE295]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE296]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE297]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE298]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE299]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE300]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE301]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE302]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE303]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE304]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE305]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE306]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE307]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE308]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE309]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE310]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE311]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE312]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE313]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The function looks a bit long but the logic is simple. Let me explain it section
+    by section:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: In the *padding-the-shorter-one* section, the logic will fill the shorter prompt
+    with the ending token (`eos`) so that both the prompt and negative prompt token
+    lists share the same size (so that the generated latent can do a subtraction operation).
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We call the `pad_tokens_and_weights` function to break all tokens and weights
+    into chunks, each chunk with 77 elements.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We loop through the chunk list and encode the 77 tokens to embed in one step.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use `token_embedding = pipe.text_encoder(token_tensor)[0].squeeze(0)` to
+    remove empty dimensions, so that we can multiply each element with its weight.
+    Note that, now, each token is represented by a 768-element vector.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, we exit the loop and stack the tensor list to a higher dimension tensor
+    using `prompt_embeds = torch.cat(embeds, dim =` `1)`.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Verifying the work
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After the not-so-many lines of code, we finally have all the logic ready, so
+    let’s give the code a test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the simple version of a *long prompt encoder*, we still get a cat with some
+    patterns in the body instead of `pure white`, as we gave in the prompt. Now, let’s
+    add weight to the `white` keyword to see whether anything happens:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE314]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our new embedding function magically enabled us to generate a pure white cat,
+    as we gave a `1.5` weight to the `white` keyword.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.3: Cute pure white cat running on the grass, with a 1.5 weight
+    on the word white](img/B21263_10_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.3: Cute pure white cat running on the grass, with a 1.5 weight on
+    the word white'
+  prefs: []
+  type: TYPE_NORMAL
+- en: That is all! Now, we can reuse or extend this function to build any custom prompt
+    parser as we want. But what if you don’t want to build your own function to implement;
+    are there ways to start using unlimited weighted prompts? Yes, next we are going
+    to introduce two pipelines contributed from the open source community and integrated
+    into Diffusers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overcoming the 77-token limitation using community pipelines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Implementing a pipeline supporting long prompt weighting from scratch can be
+    challenging. Often, we simply wish to utilize Diffusers to generate images using
+    detailed and nuanced prompts. Fortunately, the open source community has provided
+    implementations for SD v1.5 and SDXL. The SDXL implementation was originally initialized
+    by Andrew Zhu, the author of this book, and massively improved by the community.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I’ll now provide two examples of how to use the community pipeline for SD v1.5
+    and SDXL:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example uses the `lpw_stable_diffusion` pipeline for SD v1.5.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Use the following code to start a long prompt weighted pipeline:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE315]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE316]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE317]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE318]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE319]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE320]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE321]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE322]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In the preceding code, `custom_pipeline = "lpw_stable_diffusion"` will actually
+    download the `lpw_stable_diffusion` file from the Hugging Face server and will
+    be invoked inside of the `DiffusionPipeline` pipeline.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let’s generate an image using the pipeline:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE323]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE324]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE325]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE326]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE327]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE328]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE329]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE330]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE331]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: You will see an image the same as in *Figure 10**.3*.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now let’s see an example using the `lpw_stable_diffusion` pipeline for SDXL.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The usage is almost the same as the one we used in SD v1.5\. The only differences
+    are that we are loading an SDXL model and that we use another custom pipeline
+    name: `lpw_stable_diffusion_xl`. See the following code:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE332]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE333]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE334]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE335]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE336]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE337]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE338]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE339]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The image generation code is exactly the same as the one we used for SD v1.5:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE340]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE341]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE342]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE343]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE344]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE345]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE346]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE347]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE348]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will see an image generated as shown in *Figure 10**.4*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 10.4: Cute pure white cat running on the grass, with a 1.5 weight
+    on the word white, using lpw_stable_diffusion_xl](img/B21263_10_04.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.4: Cute pure white cat running on the grass, with a 1.5 weight on
+    the word white, using lpw_stable_diffusion_xl'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From the image, we can clearly see what `pure (white:1.5) cat` is bringing
+    into the image: proof that the pipeline can be used to generate images using long
+    weighted prompts.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter tried to solve one of the most discussed topics: overcoming the
+    77-token limitation and adding prompt weights for the Stable Diffusion pipeline
+    using the `Diffusers` package. Automatic1111’s Stable Diffusion WebUI provides
+    a versatile UI and is now (as I am writing this) the most prevailing prompt weighting
+    and attention format. However, if we take a look at the code from Automatic1111,
+    we will probably get lost soon; its code is long without clear documentation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter started with understanding the root cause of the 77-token limitation
+    and advanced to how the Stable Diffusion pipeline uses prompt embeddings. We implemented
+    two functions to overcome the 77-token limitation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One simple function without weighting was implemented to show how to walk around
+    the 77-token limitation. We also built another function with the full function
+    of a long prompt usage without length limitations and also have prompt weighting
+    implemented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By understanding and implementing these two functions, we can leverage the
+    idea to not only use Diffuser to produce high-quality images the same as we can
+    by using Automatic1111’s WebUI but we can also further extend it to add more powerful
+    features. In terms of which feature to add, it is in your hands now. In the next
+    chapter, we’ll start another exciting topic: using Stable Diffusion to fix and
+    upscale images.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Hugging Face, weighted prompts: [https://huggingface.co/docs/diffusers/main/en/using-diffusers/weighted_prompts](https://huggingface.co/docs/diffusers/main/en/using-diffusers/weighted_prompts)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'OpenAI CLIP, Connecting text and images: [https://openai.com/research/clip](https://openai.com/research/clip)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Automatic1111, Stable Diffusion WebUI prompt parser: [https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/master/modules/prompt_parser.py#L345C19-L345C19](https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/master/modules/prompt_parser.py#L345C19-L345C19'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: )
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Automatic1111, Attention/emphasis: [https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#attentionemphasis](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#attentionemphasis'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: )
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ashish et al., *Attention Is All You* *Need*: [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Source of the 77-token size limitation: [https://github.com/openai/CLIP/blob/4d120f3ec35b30bd0f992f5d8af2d793aad98d2a/clip/clip.py#L206](https://github.com/openai/CLIP/blob/4d120f3ec35b30bd0f992f5d8af2d793aad98d2a/clip/clip.py#L206)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

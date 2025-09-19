@@ -1,0 +1,444 @@
+- en: '19'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Generation Data Persistence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Imagine a Python program generates images but when you go back to the image
+    hoping to make improvements or simply generate new images based on the original
+    prompt, you can’t find the exact prompt, inference steps, guidance scale, and
+    the other things that actually generate the image!
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the solutions to solve this problem is saving all the metadata in the
+    generated image file. The **Portable Network Graphics** (**PNG**) [1] image format
+    provides a mechanism for us to store a piece of metadata along with the image
+    pixel data. We will explore this solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we are going to look at the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring and understanding the PNG file structure
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Storing the Stable Diffusion generation metadata in the PNG file
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Extracting the Stable Diffusion generation metadata from the PNG file
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By employing the solution provided by this chapter, you will be able to maintain
+    the generation prompt and parameters in the image file, and also extract the meta
+    information for further usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring and understanding the PNG file structure
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before saving the image metadata and Stable Diffusion generation parameters
+    in the image, we’d better have an overall understanding of why we’re choosing
+    PNG as the output image format to save the output of Stable Diffusion, and why
+    PNG can support unlimited custom metadata, which is useful for writing a large
+    amount of data into the image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By understanding the PNG format, we can confidently write and read data into
+    a PNG file as we are going to persist data in the image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PNG is a raster graphics file format, an ideal image format for images generated
+    by Stable Diffusion. The PNG file format was created as an improved, non-patented
+    lossless image compression format, and is now widely used on the internet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides PNG, several other image formats also support saving custom image metadata,
+    such as JPEG, TIFF, RAW, DNG, and BMP. However, these formats have their problems
+    and limitations. JPEG files can include custom Exif metadata, but JPEG is a loss
+    compression image format, reaching its high rate of compression by sacrificing
+    image quality. DNG is a proprietary format owned by Adobe. BMP’s custom metadata
+    size is limited compared with PNG.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the PNG format, besides the capability of storing additional metadata,
+    there are a lot of advantages that make it an ideal format [1]:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Lossless compression**: PNG uses lossless compression, which means the image
+    quality is not degraded when compressed'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Transparency support**: PNG supports transparency (alpha channel), allowing
+    images to have transparent backgrounds or semi-transparent elements'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Wide color range**: PNG supports 24-bit RGB color, 32-bit RGBA color, and
+    grayscale images, providing a wide range of color options'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Gamma correction**: PNG supports gamma correction, which helps maintain consistent
+    colors across different devices and platforms'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Progressive display**: PNG supports interlacing, allowing the image to be
+    displayed progressively as it is being downloaded'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We also need to be aware that, in some cases, PNG may not be the best choice.
+    Here, let me list some:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Larger file size**: Compared to other formats such as JPEG, PNG files can
+    be larger due to its lossless compression'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**No native support for animation**: Unlike GIF, PNG does not support animation
+    natively'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Not suitable for high-resolution photographs**: Due to its lossless compression,
+    PNG is not the best choice for high-resolution photographs, as the file size can
+    be significantly larger than formats such as JPEG that use lossy compression'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Despite these limitations, PNG remains a viable option for image formatting,
+    particularly for raw images from Stable Diffusion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The internal data structure of a PNG file is based on a chunk-based structure.
+    Each chunk is a self-contained unit that stores specific information about the
+    image or metadata. This structure allows PNG files to store additional information,
+    such as text, copyright, or any other metadata, without affecting the image data
+    itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A PNG file consists of a signature followed by a series of chunks. Here’s a
+    brief overview of the main components of a PNG file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Signature**: The first 8 bytes of a PNG file are a fixed signature (89 50
+    4E 47 0D 0A 1A 0A in hexadecimal) that identifies the file as a PNG.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`length` field.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**CRC** (4 bytes): A **cyclic redundancy check** (**CRC**) value for error
+    detection, calculated based on the chunk’s type and data fields.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This structure offers both flexibility and extensibility, as it allows for the
+    addition of new chunk types without disrupting the compatibility with existing
+    PNG decoders. Moreover, this PNG data structure enables the insertion of nearly
+    limitless additional metadata into the image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will utilize Python to insert some text data into a PNG image file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Saving extra text data in a PNG image file
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: First and foremost, let’s use Stable Diffusion to generate an image for testing.
+    Not like the code we used in previous chapters, this time, we are going to use
+    a JSON object to store the generation parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Load the model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, let’s use `gen_meta` in the Python `dict` type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: We should have an image generated with the `input_image` handle – the reference
+    to the image object in the Python context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let’s store the `gen_meta` data in the PNG file step by step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the `pillow` library [2] if you haven’t already:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use the following code to add one chunk that stores text information:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now the stringified `gen_meta` is in the `output_image_with_metadata.png` file.
+    Please note that we need to first convert `gen_data` from an object to a string
+    using `json.dumps(gen_meta)`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The preceding code added one chunk of data to the PNG file. As we learned at
+    the beginning of this chapter, the PNG file is stacked in chunks, which means
+    we should be able to add any number of text chunks to the PNG file. In the following
+    example, we added two chunks instead of just one:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Simply by calling another `add_text()function`, we can add a second text chunk
+    to the PNG file. Next, let’s extract the added data from the PNG image.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Extracting text data from a PNG image is straightforward. We will use the `pillow`
+    package again for the extraction task:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE37]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE38]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE39]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We should see an output like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE41]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: With the code provided in this section, we should be able to save and retrieve
+    custom data to and from a PNG image file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PNG extra data storage limitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You may wonder whether there are any limitations on text data size. There is
+    no specific limit on the amount of metadata that can be written to a PNG file.
+    However, there are practical constraints based on the PNG file structure and the
+    limitations of the software or libraries used to read and write the metadata.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A PNG file, as we discussed in the first section, is stored in chunks. Each
+    chunk has a maximum size of 2 31 − 1 bytes (approximately 2 GB). While it is theoretically
+    possible to include multiple metadata chunks within a single PNG file, storing
+    excessive or overly large data within these chunks can lead to errors or slow
+    loading times when attempting to open the image using other software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In practice, metadata in PNG files is usually small, containing information
+    such as copyright, author, description, or the software used to create the image.
+    In our case, it is the Stable Diffusion parameters that are used to generate the
+    image. It is not recommended to store large amounts of data in PNG metadata, as
+    it may cause performance issues and compatibility problems with some software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we introduced a solution to store the image generation prompt
+    and relative parameters in the PNG image file, so that the generation data will
+    go with the file wherever it goes and we can extract the parameters, using Stable
+    Diffusion to enhance it or extend the prompt for other usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter introduced the file structure of a PNG file and provided sample
+    code to store multiple chunks of text data in a PNG file and then use Python code
+    to extract the metadata from the PNG file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the solution’s sample code, you will be able to extract the metadata from
+    an image generated by A1111’s Stable Diffusion web UI too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will build an interactive web UI for a Stable Diffusion
+    application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Portable Network Graphics (PNG) specification: [https://www.w3.org/TR/png/](https://www.w3.org/TR/png/)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Pillow package: [https://pillow.readthedocs.io/en/stable/](https://pillow.readthedocs.io/en/stable/)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
