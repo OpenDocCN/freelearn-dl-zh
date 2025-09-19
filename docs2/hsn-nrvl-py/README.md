@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# Python 神经演化实用指南
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/c4cc7adb41ad9d14715dc730f23708c6`](https://zh.annas-archive.org/md5/c4cc7adb41ad9d14715dc730f23708c6)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

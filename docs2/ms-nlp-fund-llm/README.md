@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 精通自然语言处理：从基础到大语言模型
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/9aaa43d610032843316e1bd6be920e64`](https://zh.annas-archive.org/md5/9aaa43d610032843316e1bd6be920e64)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
