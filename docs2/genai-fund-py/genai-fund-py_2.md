@@ -1,4 +1,4 @@
-# 2
+
 
 # 概述GenAI类型和模式：GANs、扩散器和Transformer概述
 

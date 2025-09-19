@@ -602,9 +602,9 @@ FuzzyWuzzy 有两个主要的模块将非常有用：fuzz 和 process。让我�
 from fuzzywuzzy import fuzz
 # Trying the ratio and partial_ratio 
 fuzz.ratio("Electronic City Phase One", "Electronic City Phase One, Bangalore")
-# 82
+
 fuzz.partial_ratio("Electronic City Phase One", "Electronic City Phase One, Bangalore")
-# 100
+
 ```
 
 我们可以看到，比率函数被前面地址中使用的尾随 `Bangalore` 搅乱了，但实际上这两个字符串指的是同一个地址/实体。这被 `partial_ratio` 捕获。
@@ -613,9 +613,9 @@ fuzz.partial_ratio("Electronic City Phase One", "Electronic City Phase One, Bang
 
 ```py
 fuzz.ratio('Narendra Modi', 'Narendra D. Modi')
-# 90
+
 fuzz.partial_ratio('Narendra Modi', 'Narendra D. Modi')
-# 77
+
 ```
 
 如您所见，仅仅因为我们有一个额外的 `D.` 标记，我们的逻辑就不再适用了。我们想要的是对顺序不那么敏感的东西。FuzzyWuzzy 的作者已经为我们解决了这个问题。
@@ -624,9 +624,9 @@ FuzzyWuzzy 支持将我们的输入在空格上进行标记化，并删除标点
 
 ```py
 fuzz.token_sort_ratio('Narendra Modi', 'Narendra D. Modi')
-# 93
+
 fuzz.token_set_ratio('Narendra Modi', 'Narendra D. Modi')
-# 100
+
 ```
 
 这对我们来说将完美无缺。如果我们有一个选项列表，并且我们想找到最接近的匹配项，我们可以使用 process 模块：
@@ -828,7 +828,7 @@ Metaphone + Levenshtein
 
 ```py
 jellyfish.levenshtein_distance(jellyfish.metaphone('write'), jellyfish.metaphone('right'))# 
-# 0
+
 ```
 
 这正如预期的那样工作。让我们将一些例子添加到我们的旧例子列表中：

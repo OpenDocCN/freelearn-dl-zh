@@ -1,4 +1,4 @@
-# 16
+
 
 # 探索 Stable Diffusion XL
 
