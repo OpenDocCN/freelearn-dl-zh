@@ -1,0 +1,581 @@
+<html><head></head><body>
+		<div id="_idContainer064">
+			<h1 id="_idParaDest-122" class="chapter-number"><a id="_idTextAnchor197"/>10</h1>
+			<h1 id="_idParaDest-123"><a id="_idTextAnchor198"/>Overcoming 77-Token Limitations and Enabling Prompt Weighting</h1>
+			<p>From <a href="B21263_05.xhtml#_idTextAnchor097"><span class="No-Break"><em class="italic">Chapter 5</em></span></a>, we know that Stable Diffusion utilizes OpenAI’s CLIP model as its text encoder. The CLIP model’s tokenization implementation, as per the source code [6], has a context length of <span class="No-Break">77 tokens.</span></p>
+			<p>This 77-token limit in the CLIP model extends to Hugging Face Diffusers, restricting the maximum input prompt to 77 tokens. Unfortunately, it’s not possible to assign keyword weights within these input prompts due to this constraint without <span class="No-Break">some modifications.</span></p>
+			<p>For instance, let’s say you give a prompt string that produces more than 77 tokens, <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+from diffusers import StableDiffusionPipeline
+import torch
+pipe = StableDiffusionPipeline.from_pretrained(
+    "stablediffusionapi/deliberate-v2",
+    torch_dtype=torch.float16).to("cuda")
+prompt = "a photo of a cat and a dog driving an aircraft "*20
+image = pipe(prompt = prompt).images[0]
+image</pre>
+			<p>Diffusers will show up a warning message, <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+The following part of your input was truncated because CLIP can only handle sequences up to 77 tokens…</pre>
+			<p>You can’t highlight the cat by providing the weight, such as in <span class="No-Break">the following:</span></p>
+			<pre class="source-code">
+a photo (cat:1.5) and a dog driving an aircraft</pre>
+			<p>By default, the <strong class="source-inline">Diffusers</strong> package does not include functionality for overcoming the 77-token limitation or assigning weights to individual tokens, as stated in its documentation. This is because Diffusers aims to serve as a versatile toolbox, providing essential features that can be utilized in <span class="No-Break">various projects.</span></p>
+			<p>Nonetheless, using the core functionalities offered by Diffusers, we can develop a custom prompt parser. This parser will help us circumvent the 77-token restriction and assign weights to each token. In this chapter, we will delve into the structure of text embeddings and outline a method to surpass the 77-token limit while also assigning weight values to <span class="No-Break">each token.</span></p>
+			<p>In this chapter, we will cover <span class="No-Break">the following:</span></p>
+			<ul>
+				<li>Understanding the <span class="No-Break">77-token limitation</span></li>
+				<li>Overcoming the <span class="No-Break">77-token limitation</span></li>
+				<li>Enabling long prompts <span class="No-Break">with weighting</span></li>
+				<li>Overcoming the 77-token limitation using <span class="No-Break">community pipelines</span></li>
+			</ul>
+			<p>If you want to start using a full feature pipeline supporting long prompt weighting, please turn to the <em class="italic">Overcoming the 77-token limitation using the community </em><span class="No-Break"><em class="italic">pipelines</em></span><span class="No-Break"> section.</span></p>
+			<p>By the end of the chapter, you will be able to use weighted prompts without size limitations and know how to implement them <span class="No-Break">using Python.</span></p>
+			<h1 id="_idParaDest-124"><a id="_idTextAnchor199"/>Understanding the 77-token limitation</h1>
+			<p>The Stable Diffusion (v1.5) text encoder uses the CLIP encoder from OpenAI [<em class="italic">2</em>]. The CLIP text encoder has a 77-token limit, and<a id="_idIndexMarker308"/> this limitation propagates to the downstream Stable Diffusion. We can reproduce the 77-token limitation with the <span class="No-Break">following steps:</span></p>
+			<ol>
+				<li>We can take out the encoder from Stable Diffusion and verify it. Let’s say we have the prompt <strong class="source-inline">a photo of a cat and dog driving an aircraft</strong> and we multiply it by 20 to make the prompt’s token size larger <span class="No-Break">than 77:</span><pre class="source-code">
+prompt = "a photo of a cat and a dog driving an aircraft "*20</pre></li>
+				<li>Reuse the pipeline we initialized at the beginning of the chapter and take out <strong class="source-inline">tokenizer</strong> <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">text_encoder</strong></span><span class="No-Break">:</span><pre class="source-code">
+tokenizer = pipe.tokenizer</pre><pre class="source-code">
+text_encoder = pipe.text_encoder</pre></li>
+				<li>Use <strong class="source-inline">tokenizer</strong> to get the token IDs from <span class="No-Break">the prompt:</span><pre class="source-code">
+tokens = tokenizer(</pre><pre class="source-code">
+    prompt,</pre><pre class="source-code">
+    truncation = False,</pre><pre class="source-code">
+    return_tensors = 'pt'</pre><pre class="source-code">
+)["input_ids"]</pre><pre class="source-code">
+print(len(tokens[0]))</pre></li>
+				<li>Since we set <strong class="source-inline">truncation = False</strong>, <strong class="source-inline">tokenizer</strong> will convert any length string to token IDs. The preceding code will output a token list with a length of 181. <strong class="source-inline">return_tensors = 'pt'</strong> will tell the function to return the result in a <strong class="source-inline">[1,181]</strong> <span class="No-Break">tensor object.</span><p class="list-inset">Try encoding the <a id="_idIndexMarker309"/>token IDs <span class="No-Break">to </span><span class="No-Break"><strong class="source-inline">embeddings</strong></span><span class="No-Break">:</span></p><pre class="source-code">
+embeddings = pipe.text_encoder(tokens.to("cuda"))[0]</pre><p class="list-inset">We will see a <strong class="source-inline">RuntimeError</strong> message that says <span class="No-Break">the following:</span></p><pre class="source-code">
+RuntimeError: The size of tensor a (181) must match the size of tensor b (77) at non-singleton dimension 1</pre><p class="list-inset">From the preceding steps, we can see that CLIP’s text encoder only accepts 77 tokens at <span class="No-Break">a time.</span></p></li>
+				<li>Now, let’s take a look at the first and last tokens. If we take away <strong class="source-inline">*20</strong> and only tokenize the prompt <strong class="source-inline">a photo cat and dog driving an aircraft</strong>, when we print out the token IDs, we will see 10 token IDs instead <span class="No-Break">of 8:</span><pre class="source-code">
+tensor([49406,   320,  1125,  2368,   537,  1929,  4161,   550,  7706, 49407])</pre></li>
+				<li>In the preceding token IDs, the first (<strong class="source-inline">49406</strong>) and last (<strong class="source-inline">49407</strong>) are automatically added. We can use <strong class="source-inline">tokenizer._convert_id_to_token</strong> to convert the token IDs to <span class="No-Break">a string:</span><pre class="source-code">
+print(tokenizer._convert_id_to_token(49406))</pre><pre class="source-code">
+print(tokenizer._convert_id_to_token(49407))</pre><p class="list-inset">We can see<a id="_idIndexMarker310"/> that the two additional tokens are added to <span class="No-Break">the prompt:</span></p><pre class="source-code">
+&lt;|startoftext|&gt;</pre><pre class="source-code">
+&lt;|endoftext|&gt;</pre></li>
+			</ol>
+			<p>Why do we need to check this? Because we need to remove the automatically added beginning and end tokens when concatenating tokens. Next, let’s proceed to the steps to overcome the <span class="No-Break">77-token limitatio<a id="_idTextAnchor200"/>n.</span></p>
+			<h1 id="_idParaDest-125"><a id="_idTextAnchor201"/>Overcoming the 77-tokens limitation</h1>
+			<p>Fortunately, the <a id="_idIndexMarker311"/>Stable Diffusion UNet doesn’t enforce this 77-token limitation. If we can get the embeddings in batches, concatenate those chunked embeddings into one tensor, and provide it to the UNet, we should be able to overcome the 77-token limitation. Here’s an overview of <span class="No-Break">the process:</span></p>
+			<ol>
+				<li>Extract the text tokenizer and text encoder from the Stable <span class="No-Break">Diffusion pipeline.</span></li>
+				<li>Tokenize the input prompt, regardless of <span class="No-Break">its size.</span></li>
+				<li>Eliminate the added beginning and <span class="No-Break">end tokens.</span></li>
+				<li>Pop out the first 77 tokens and encode them <span class="No-Break">into embeddings.</span></li>
+				<li>Stack the embeddings into a tensor of size <strong class="source-inline">[1, </strong><span class="No-Break"><strong class="source-inline">x, 768]</strong></span><span class="No-Break">.</span></li>
+			</ol>
+			<p>Now, let’s implement this idea using <span class="No-Break">Python code:</span></p>
+			<ol>
+				<li>Take out the text tokenizer and <span class="No-Break">text encoder:</span><pre class="source-code">
+# step 1. take out the tokenizer and text encoder</pre><pre class="source-code">
+tokenizer = pipe.tokenizer</pre><pre class="source-code">
+text_encoder = pipe.text_encoder</pre><p class="list-inset">We can reuse the tokenizer and text encoder from the Stable <span class="No-Break">Diffusion pipeline.</span></p></li>
+				<li>Tokenize any<a id="_idIndexMarker312"/> size of <span class="No-Break">input prompt:</span><pre class="source-code">
+# step 2. encode whatever size prompt to tokens by setting </pre><pre class="source-code">
+# truncation = False.</pre><pre class="source-code">
+tokens = tokenizer(</pre><pre class="source-code">
+    prompt,</pre><pre class="source-code">
+    truncation = False</pre><pre class="source-code">
+)["input_ids"]</pre><pre class="source-code">
+print("token length:", len(tokens))</pre><pre class="source-code">
+# step 2.2. encode whatever size neg_prompt, </pre><pre class="source-code">
+# padding it to the size of prompt.</pre><pre class="source-code">
+negative_ids = pipe.tokenizer(</pre><pre class="source-code">
+    neg_prompt,</pre><pre class="source-code">
+    truncation    = False,</pre><pre class="source-code">
+    padding       = "max_length",</pre><pre class="source-code">
+    max_length    = len(tokens)</pre><pre class="source-code">
+).input_ids</pre><pre class="source-code">
+print("neg_token length:", len(negative_ids))</pre><p class="list-inset">In the <a id="_idIndexMarker313"/>preceding code, we did <span class="No-Break">the following:</span></p><ul><li>We set <strong class="source-inline">truncation = False</strong> to allow tokenization beyond the default 77-token limit. This ensures that the entire prompt is tokenized, regardless of <span class="No-Break">its size.</span></li><li>The tokens are returned as a Python list instead of a torch tensor. Tokens in the Python list will make it easier for us to add additional elements. Note that the token list will be converted to a torch tensor before providing it to the <span class="No-Break">text encoder.</span></li><li>There are two additional parameters, <strong class="source-inline">padding = "max_length"</strong> and <strong class="source-inline">max_length  = len(tokens)</strong>. We use these to make sure prompt tokens and negative prompt tokens are the <span class="No-Break">same size.</span></li></ul></li>
+				<li>Remove the beginning and <span class="No-Break">end tokens.</span><p class="list-inset">The tokenizer will automatically add two additional tokens: the beginning token (<strong class="source-inline">49406</strong>) and the end <span class="No-Break">token (</span><span class="No-Break"><strong class="source-inline">49407</strong></span><span class="No-Break">).</span></p><p class="list-inset">In the subsequent step, we will segment the token sequence and feed the chunked tokens to the text encoder. Each chunk will have its own beginning and end tokens. But before that, we will need to exclude them initially from the long original <span class="No-Break">token list:</span></p><pre class="source-code">
+tokens = tokens[1:-1]</pre><pre class="source-code">
+negative_ids = negative_ids[1:-1]</pre><p class="list-inset">And then add these beginning and end tokens back to the chunked tokens, each chunk with a size of size <strong class="source-inline">75</strong>. We will add the beginning and the end tokens back in <span class="No-Break"><em class="italic">step 4</em></span><span class="No-Break">.</span></p></li>
+				<li>Encode the 77-sized chunked tokens <span class="No-Break">into embeddings:</span><pre class="source-code">
+# step 4. Pop out the head 77 tokens, </pre><pre class="source-code">
+# and encode the 77 tokens to embeddings.</pre><pre class="source-code">
+embeds,neg_embeds = [],[]</pre><pre class="source-code">
+chunk_size = 75</pre><pre class="source-code">
+bos = pipe.tokenizer.bos_token_id</pre><pre class="source-code">
+eos = pipe.tokenizer.eos_token_id</pre><pre class="source-code">
+for i in range(0, len(tokens), chunk_size):</pre><pre class="source-code">
+# Add the beginning and end token to the 75 chunked tokens to </pre><pre class="source-code">
+# make a 77-token list</pre><pre class="source-code">
+    sub_tokens = [bos] + tokens[i:i + chunk_size] + [eos]</pre><pre class="source-code">
+# text_encoder support torch.Size([1,x]) input tensor</pre><pre class="source-code">
+# that is why use [sub_tokens], </pre><pre class="source-code">
+# instead of simply give sub_tokens.</pre><pre class="source-code">
+    tensor_tokens = torch.tensor(</pre><pre class="source-code">
+        [sub_tokens],</pre><pre class="source-code">
+        dtype = torch.long,</pre><pre class="source-code">
+        device = pipe.device</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+    chunk_embeds = text_encoder(tensor_tokens)[0]</pre><pre class="source-code">
+    embeds.append(chunk_embeds)</pre><pre class="source-code">
+# Add the begin and end token to the 75 chunked neg tokens to </pre><pre class="source-code">
+# make a 77 token list</pre><pre class="source-code">
+    sub_neg_tokens = [bos] + negative_ids[i:i + chunk_size] + \</pre><pre class="source-code">
+        [eos]</pre><pre class="source-code">
+    tensor_neg_tokens = torch.tensor(</pre><pre class="source-code">
+        [sub_neg_tokens],</pre><pre class="source-code">
+        dtype = torch.long,</pre><pre class="source-code">
+        device = pipe.device</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+    neg_chunk_embeds= text_encoder(tensor_neg_tokens)[0]</pre><pre class="source-code">
+    neg_embeds.append(neg_chunk_embeds)</pre><p class="list-inset">The <a id="_idIndexMarker314"/>preceding code loops through the token list, taking out 75 tokens at a time. Then, it adds the beginning and end tokens to the 75-token list to create a 77-token list. Why 77 tokens? Because the text encoder can encode 77 tokens to embeddings at <span class="No-Break">one time.</span></p><p class="list-inset">Inside the <strong class="source-inline">for</strong> loop, the first part handles the prompt embeddings, and the second part handles the negative embeddings. Even though we give an empty negative prompt, to enable classification-free guidance diffusion, we still need a negative embedding list with the same size of positive prompt embeddings (inside of the denoising loop, the conditioned latent will subtract the unconditional latent, which is generated from the <span class="No-Break">negative prompt).</span></p></li>
+				<li>Stack the embeddings to a <strong class="source-inline">[1,x,768]</strong> size <span class="No-Break">torch tensor.</span><p class="list-inset">Before this step, the <strong class="source-inline">embeds</strong> list holds data <span class="No-Break">like this:</span></p><pre class="source-code">
+[tensor1, tensor2...]</pre><p class="list-inset">The Stable Diffusion pipeline’s embedding parameters accept tensors in the size <span class="No-Break">of </span><span class="No-Break"><strong class="source-inline">torch.Size([1,x,768])</strong></span><span class="No-Break">.</span></p><p class="list-inset">We still need to convert the list to a three-dimension tensor using these two lines <span class="No-Break">of code:</span></p><pre class="source-code">
+# step 5. Stack the embeddings to a [1,x,768] size torch tensor.</pre><pre class="source-code">
+prompt_embeds = torch.cat(embeds, dim = 1)</pre><pre class="source-code">
+prompt_neg_embeds = torch.cat(neg_embeds, dim = 1)</pre><p class="list-inset">In the preceding code, we have <span class="No-Break">the following:</span></p><ul><li><strong class="source-inline">embeds</strong> and <strong class="source-inline">neg_embeds</strong> are lists of PyTorch tensors. The <strong class="source-inline">torch.cat()</strong> function is used to concatenate these tensors along the dimension specified by <strong class="source-inline">dim</strong>. In this case, we have <strong class="source-inline">dim=1</strong>, which means the tensors are concatenated along their second dimension (since Python uses <span class="No-Break">0-based indexing).</span></li><li><strong class="source-inline">prompt_embeds</strong> is a tensor that contains all the embeddings from <strong class="source-inline">embeds</strong> concatenated together. Similarly, <strong class="source-inline">prompt_neg_embeds</strong> contains<a id="_idIndexMarker315"/> all the embeddings from <strong class="source-inline">neg_embeds</strong> <span class="No-Break">concatenated together.</span></li></ul></li>
+			</ol>
+			<p>By now, we have a functioning text encoder that can convert whatever length of prompt to embeddings, which can be used by a Stable Diffusion pipeline. Next, let’s put all the <span class="No-Break">code to<a id="_idTextAnchor202"/>gether.</span></p>
+			<h2 id="_idParaDest-126"><a id="_idTextAnchor203"/>Putting all the code together into a function</h2>
+			<p>Let’s go a step further to put all the previous code in a <span class="No-Break">packed function:</span></p>
+			<pre class="source-code">
+def long_prompt_encoding(
+    pipe:StableDiffusionPipeline,
+    prompt,
+    neg_prompt = ""
+):
+    bos = pipe.tokenizer.bos_token_id
+    eos = pipe.tokenizer.eos_token_id
+    chunk_size = 75
+    # step 1. take out the tokenizer and text encoder
+    tokenizer = pipe.tokenizer
+    text_encoder = pipe.text_encoder
+    # step 2.1. encode whatever size prompt to tokens by setting 
+    # truncation = False.
+    tokens = tokenizer(
+        prompt.
+        truncation = False,
+        # return_tensors = 'pt'
+    )["input_ids"]
+    # step 2.2. encode whatever size neg_prompt, 
+    # padding it to the size of prompt.
+    negative_ids = pipe.tokenizer(
+        neg_prompt,
+        truncation = False,
+        # return_tensors = "pt",
+        Padding = "max_length",
+        max_length = len(tokens)
+    ).input_ids
+    # Step 3. remove begin and end tokens
+    tokens = tokens[1:-1]
+    negative_ids = negative_ids[1:-1]
+    # step 4. Pop out the head 77 tokens, 
+    # and encode the 77 tokens to embeddings.
+    embeds,neg_embeds = [],[]
+    for i in range(0, len(tokens), chunk_size):
+# Add the beginning and end tokens to the 75 chunked tokens to make a 
+# 77-token list
+        sub_tokens = [bos] + tokens[i:i + chunk_size] + [eos]
+# text_encoder support torch.Size([1,x]) input tensor
+# that is why use [sub_tokens], instead of simply give sub_tokens.
+        tensor_tokens = torch.tensor(
+            [sub_tokens],
+            dtype = torch.long,
+            device = pipe.device
+        )
+        chunk_embeds = text_encoder(tensor_tokens)[0]
+        embeds.append(chunk_embeds)
+# Add beginning and end token to the 75 chunked neg tokens to make a 
+# 77-token list
+        sub_neg_tokens = [bos] + negative_ids[i:i + chunk_size] + \
+            [eos]
+        tensor_neg_tokens = torch.tensor(
+            [sub_neg_tokens],
+            dtype = torch.long,
+            device = pipe.device
+        )
+        neg_chunk_embeds = text_encoder(tensor_neg_tokens)[0]
+        neg_embeds.append(neg_chunk_embeds)
+# step 5. Stack the embeddings to a [1,x,768] size torch tensor.
+    prompt_embeds = torch.cat(embeds, dim = 1)
+    prompt_neg_embeds = torch.cat(neg_embeds, dim = 1)
+    return prompt_embeds, prompt_neg_embeds</pre>
+			<p>Let’s create a long prompt to test whether the preceding function works <span class="No-Break">or not:</span></p>
+			<pre class="source-code">
+prompt = "photo, cute cat running on the grass" * 10 #&lt;- long prompt
+prompt_embeds, prompt_neg_embeds = long_prompt_encoding(
+    pipe, prompt, neg_prompt="low resolution, bad anatomy"
+)
+print(prompt_embeds.shape)
+image = pipe(
+    prompt_embeds = prompt_embeds,
+    negative_prompt_embeds = prompt_neg_embeds,
+    generator = torch.Generator("cuda").manual_seed(1)
+).images[0]
+image</pre>
+			<p>The result is shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.1</em></span><span class="No-Break">:</span></p>
+			<div>
+				<div id="_idContainer060" class="IMG---Figure">
+					<img src="image/B21263_10_01.jpg" alt="Figure 10.1: Cute cat running on the grass, using a long prompt"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.1: Cute cat running on the grass, using a long prompt</p>
+			<p>If our new function works for long prompts, the generated image should reflect additional appended prompts. Let’s extend the prompt to <span class="No-Break">the following:</span></p>
+			<pre class="source-code">
+prompt = "photo, cute cat running on the grass" * 10
+prompt = prompt + ",pure white cat" * 10</pre>
+			<p>The new prompt will generate an image as shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.2</em></span><span class="No-Break">:</span></p>
+			<div>
+				<div id="_idContainer061" class="IMG---Figure">
+					<img src="image/B21263_10_02.jpg" alt="Figure 10.2: Cute cat running on the grass, with the additional prompt of pure white cat"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.2: Cute cat running on the grass, with the additional prompt of pure white cat</p>
+			<p>As you can see, the new appended prompt works and there are more white elements added to the cat; however, it is still not pure white as requested in the prompt. We will solve this with prompt weighting, which we’ll cover in the <span class="No-Break">upcoming sec<a id="_idTextAnchor204"/>tion.</span></p>
+			<h1 id="_idParaDest-127"><a id="_idTextAnchor205"/>Enabling long prompts with weighting</h1>
+			<p>We just<a id="_idIndexMarker316"/> built a whatever size of text encoder for a Stable <a id="_idIndexMarker317"/>Diffusion pipeline (v1.5-based). All of those steps are paving the way to build long prompts with a weighting <span class="No-Break">text encoder.</span></p>
+			<p>A weighted Stable Diffusion prompt refers to the practice of assigning different levels of importance to specific words or phrases within a text prompt used for generating images through the Stable Diffusion algorithm. By adjusting these weights, we can control the degree to which certain concepts influence the generated output, allowing for greater customization and refinement of the <span class="No-Break">resulting images.</span></p>
+			<p>The process typically involves scaling up or down the text embedding vectors associated with each concept in the prompt. For instance, if you want the Stable Diffusion model to emphasize a particular subject while deemphasizing another, you would increase the weight of the former and decrease the weight of the latter. Weighted prompts enable us to better direct the image generation toward <span class="No-Break">desired outcomes.</span></p>
+			<p>The core of adding weight to the prompt is simply <span class="No-Break">vector multiplication:</span></p>
+			<p><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">i</span><span class="_-----MathTools-_Math_Variable">g</span><span class="_-----MathTools-_Math_Variable">h</span><span class="_-----MathTools-_Math_Variable">t</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">_</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">m</span><span class="_-----MathTools-_Math_Variable">b</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">i</span><span class="_-----MathTools-_Math_Variable">n</span><span class="_-----MathTools-_Math_Variable">g</span><span class="_-----MathTools-_Math_Variable">s</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">=</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Base">[</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">m</span><span class="_-----MathTools-_Math_Variable">b</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">i</span><span class="_-----MathTools-_Math_Variable">n</span><span class="_-----MathTools-_Math_Variable">g</span><span class="_-----MathTools-_Math_Number">1</span><span class="_-----MathTools-_Math_Operator">,</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">m</span><span class="_-----MathTools-_Math_Variable">b</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">i</span><span class="_-----MathTools-_Math_Variable">n</span><span class="_-----MathTools-_Math_Variable">g</span><span class="_-----MathTools-_Math_Number">2</span><span class="_-----MathTools-_Math_Operator">,</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">.</span><span class="_-----MathTools-_Math_Operator">.</span><span class="_-----MathTools-_Math_Operator">.</span><span class="_-----MathTools-_Math_Operator">,</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">m</span><span class="_-----MathTools-_Math_Variable">b</span><span class="_-----MathTools-_Math_Variable">e</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">d</span><span class="_-----MathTools-_Math_Variable">i</span><span class="_-----MathTools-_Math_Variable">n</span><span class="_-----MathTools-_Math_Variable">g</span><span class="_-----MathTools-_Math_Number">768</span><span class="_-----MathTools-_Math_Number">]</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">×</span><span class="_-----MathTools-_Math_Base"> </span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">w</span></span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">e</span></span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">i</span></span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">g</span></span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">h</span></span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">t</span></span></p>
+			<p>Before that, we still need to do some preparations to make a weighted prompt embedding, <span class="No-Break">as follows:</span></p>
+			<ol>
+				<li><strong class="bold">Prompt parsing</strong>: Parse the prompt string to extract weight numbers. For instance, convert the prompt <strong class="source-inline">a (white) cat</strong> into a list like this: <strong class="source-inline">[['a ', 1.0], ['white', 1.1], ['cat', 1.0]]</strong>. We’ll adopt the prevalent prompt format used in the Automatic1111 <strong class="bold">Stable Diffusion</strong> (<strong class="bold">SD</strong>) WebUI, as defined<a id="_idIndexMarker318"/> in the open source SD <span class="No-Break">WebUI [4</span><span class="No-Break">].</span></li>
+				<li><strong class="bold">Token and weight extraction</strong>: Separate the token IDs and their corresponding weights into two <span class="No-Break">distinct lists.</span></li>
+				<li><strong class="bold">Prompt and negative prompt padding</strong>: Ensure that both the prompt and negative prompt tokens have the same maximum length. If the prompt is longer than the negative prompt, pad the negative prompt to match the prompt’s length. Otherwise, pad the prompt to align with the negative <span class="No-Break">prompt’s length.</span></li>
+			</ol>
+			<p>Regarding<a id="_idIndexMarker319"/> attention and emphasis (weighting), we will<a id="_idIndexMarker320"/> implement the following weighting <span class="No-Break">format [4]:</span></p>
+			<pre class="source-code">
+a (word) - increase attention to word by a factor of 1.1
+a ((word)) - increase attention to word by a factor of 1.21 (= 1.1 * 1.1)
+a [word] - decrease attention to word by a factor of 1.1
+a (word:1.5) - increase attention to word by a factor of 1.5
+a (word:0.25) - decrease attention to word by a factor of 4 (= 1 / 0.25)
+a \(word\) - use literal () characters in prompt</pre>
+			<p>Let’s go through each of those steps in <span class="No-Break">more detail:</span></p>
+			<ol>
+				<li>Build the <span class="No-Break"><strong class="source-inline">parse_prompt_attention</strong></span><span class="No-Break"> function.</span><p class="list-inset">To make sure the prompt format is fully compatible with Automatic1111’s SD WebUI, we will extract and reuse the function from the open sourced <strong class="source-inline">parse_prompt_attention</strong> <span class="No-Break">function [3]:</span></p><pre class="source-code">
+def parse_prompt_attention(text):</pre><pre class="source-code">
+    import re</pre><pre class="source-code">
+    re_attention = re.compile(</pre><pre class="source-code">
+        r"""</pre><pre class="source-code">
+            \\\(|\\\)|\\\[|\\]|\\\\|\\|\(|\[|:([+-]?[.\d]+)\)|</pre><pre class="source-code">
+            \)|]|[^\\()\[\]:]+|:</pre><pre class="source-code">
+        """</pre><pre class="source-code">
+        , re.X</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+    re_break = re.compile(r"\s*\bBREAK\b\s*", re.S)</pre><pre class="source-code">
+    res = []</pre><pre class="source-code">
+    round_brackets = []</pre><pre class="source-code">
+    square_brackets = []</pre><pre class="source-code">
+    round_bracket_multiplier = 1.1</pre><pre class="source-code">
+    square_bracket_multiplier = 1 / 1.1</pre><pre class="source-code">
+    def multiply_range(start_position, multiplier):</pre><pre class="source-code">
+        for p in range(start_position, len(res)):</pre><pre class="source-code">
+            res[p][1] *= multiplier</pre><pre class="source-code">
+    for m in re_attention.finditer(text):</pre><pre class="source-code">
+        text = m.group(0)</pre><pre class="source-code">
+        weight = m.group(1)</pre><pre class="source-code">
+        if text.startswith('\\'):</pre><pre class="source-code">
+            res.append([text[1:], 1.0])</pre><pre class="source-code">
+        elif text == '(':</pre><pre class="source-code">
+            round_brackets.append(len(res))</pre><pre class="source-code">
+        elif text == '[':</pre><pre class="source-code">
+            square_brackets.append(len(res))</pre><pre class="source-code">
+        elif weight is not None and len(round_brackets) &gt; 0:</pre><pre class="source-code">
+            multiply_range(round_brackets.pop(), float(weight))</pre><pre class="source-code">
+        elif text == ')' and len(round_brackets) &gt; 0:</pre><pre class="source-code">
+            multiply_range(round_brackets.pop(), \</pre><pre class="source-code">
+                round_bracket_multiplier)</pre><pre class="source-code">
+        elif text == ']' and len(square_brackets) &gt; 0:</pre><pre class="source-code">
+            multiply_range(square_brackets.pop(), \</pre><pre class="source-code">
+                square_bracket_multiplier)</pre><pre class="source-code">
+        else:</pre><pre class="source-code">
+            parts = re.split(re_break, text)</pre><pre class="source-code">
+            for i, part in enumerate(parts):</pre><pre class="source-code">
+                if i &gt; 0:</pre><pre class="source-code">
+                    res.append(["BREAK", -1])</pre><pre class="source-code">
+                res.append([part, 1.0])</pre><pre class="source-code">
+    for pos in round_brackets:</pre><pre class="source-code">
+        multiply_range(pos, round_bracket_multiplier)</pre><pre class="source-code">
+    for pos in square_brackets:</pre><pre class="source-code">
+        multiply_range(pos, square_bracket_multiplier)</pre><pre class="source-code">
+    if len(res) == 0:</pre><pre class="source-code">
+        res = [["", 1.0]]</pre><pre class="source-code">
+    # merge runs of identical weights</pre><pre class="source-code">
+    i = 0</pre><pre class="source-code">
+    while i + 1 &lt; len(res):</pre><pre class="source-code">
+        if res[i][1] == res[i + 1][1]:</pre><pre class="source-code">
+            res[i][0] += res[i + 1][0]</pre><pre class="source-code">
+            res.pop(i + 1)</pre><pre class="source-code">
+        else:</pre><pre class="source-code">
+            i += 1</pre><pre class="source-code">
+    return res</pre><p class="list-inset">Call the <a id="_idIndexMarker321"/>previously created function <a id="_idIndexMarker322"/>using <span class="No-Break">the following:</span></p><pre class="source-code">
+parse_prompt_attention("a (white) cat")</pre><p class="list-inset">This will return <span class="No-Break">the following:</span></p><pre class="source-code">
+[['a ', 1.0], ['white', 1.1], [' cat', 1.0]]</pre></li>
+				<li>Get prompts <span class="No-Break">with weights.</span><p class="list-inset">With the help of the preceding function, we can get a list of prompt and weight pairs. The text encoder will only encode the tokens of the prompt (no, you don’t need to provide weights as input to the text encoder). We will need to further process the prompt-weight pair to two independent lists with the same size, one for token IDs and one for weights, <span class="No-Break">like this:</span></p><pre class="source-code">
+tokens: [1,2,3...]</pre><pre class="source-code">
+weights: [1.0, 1.0, 1.0...]</pre><p class="list-inset">This work can be done by the <span class="No-Break">following function:</span></p><pre class="source-code">
+# step 2. get prompts with weights</pre><pre class="source-code">
+# this function works for both prompt and negative prompt</pre><pre class="source-code">
+def get_prompts_tokens_with_weights(</pre><pre class="source-code">
+    pipe: StableDiffusionPipeline,</pre><pre class="source-code">
+    prompt: str</pre><pre class="source-code">
+):</pre><pre class="source-code">
+    texts_and_weights = parse_prompt_attention(prompt)</pre><pre class="source-code">
+    text_tokens,text_weights = [],[]</pre><pre class="source-code">
+    for word, weight in texts_and_weights:</pre><pre class="source-code">
+        # tokenize and discard the starting and the ending token</pre><pre class="source-code">
+        token = pipe.tokenizer(</pre><pre class="source-code">
+            word,</pre><pre class="source-code">
+            # so that tokenize whatever length prompt</pre><pre class="source-code">
+            truncation = False</pre><pre class="source-code">
+        ).input_ids[1:-1]</pre><pre class="source-code">
+        # the returned token is a 1d list: [320, 1125, 539, 320]</pre><pre class="source-code">
+        # use merge the new tokens to the all tokens holder: </pre><pre class="source-code">
+        # text_tokens</pre><pre class="source-code">
+        text_tokens = [*text_tokens,*token]</pre><pre class="source-code">
+        # each token chunk will come with one weight, like ['red </pre><pre class="source-code">
+        # cat', 2.0]</pre><pre class="source-code">
+        # need to expand the weight for each token.</pre><pre class="source-code">
+        chunk_weights = [weight] * len(token)</pre><pre class="source-code">
+        # append the weight back to the weight holder: text_</pre><pre class="source-code">
+        # weights</pre><pre class="source-code">
+        text_weights = [*text_weights, *chunk_weights]</pre><pre class="source-code">
+    return text_tokens,text_weights</pre><p class="list-inset">The <a id="_idIndexMarker323"/>preceding function takes two <a id="_idIndexMarker324"/>parameters: the SD pipeline and the prompt string. The input string can be the positive prompt or the <span class="No-Break">negative prompt.</span></p><p class="list-inset">Inside the function body, we first call the <strong class="source-inline">parse_prompt_attention</strong> function to have the prompts with weight associated in the smallest grain (The weight is applied in the individual token level). Then, we loop through the list, tokenize the text, and remove the tokenizer-added beginning and end token IDs with the indexing <span class="No-Break">operation, </span><span class="No-Break"><strong class="source-inline">[1:-1]</strong></span><span class="No-Break">.</span></p><p class="list-inset">Merge the new token IDs back to the list that holds all token IDs. In the meantime, expand the weights number and merge back to the list that holds all <span class="No-Break">weights numbers.</span></p><p class="list-inset">Let’s reuse the prompt of <strong class="source-inline">a (white) cat</strong> and call <span class="No-Break">the function:</span></p><pre class="source-code">
+prompt = "a (white) cat"</pre><pre class="source-code">
+tokens, weights = get_prompts_tokens_with_weights(pipe, prompt)</pre><pre class="source-code">
+print(tokens,weights)</pre><p class="list-inset">The preceding code will return <span class="No-Break">the following:</span></p><pre class="source-code">
+[320, 1579, 2368] [1.0, 1.1, 1.0]</pre><p class="list-inset">Notice that the second token ID from <strong class="source-inline">white</strong> now has a weight of <strong class="source-inline">1.1</strong> instead <span class="No-Break">of </span><span class="No-Break"><strong class="source-inline">1.0</strong></span><span class="No-Break">.</span></p></li>
+				<li>Pad <span class="No-Break">the tokens.</span><p class="list-inset">In this step, we will further transform the token ID list and its weights into a <span class="No-Break">chunked list.</span></p><p class="list-inset">Let’s say we have a list of token IDs containing more than <span class="No-Break">77 elements:</span></p><p class="list-inset"><strong class="source-inline">[</strong><span class="No-Break"><strong class="source-inline">1,2,3,...,100]</strong></span></p><p class="list-inset">We need to transform it into a list that includes chunks, with 77 (maximum) tokens inside <span class="No-Break">each chunk:</span></p><p class="list-inset"><strong class="source-inline">[[</strong><span class="No-Break"><strong class="source-inline">49406,1,2...75,49407],[49406,76,77,...,100,49407]]</strong></span></p><p class="list-inset">This is so that, in the next step, we can loop through the outer layer of the list and encode the 77-token list one at <span class="No-Break">a time.</span></p><p class="list-inset">Now, you<a id="_idIndexMarker325"/> may wonder why we need to<a id="_idIndexMarker326"/> provide a maximum of 77 tokens to the text encoder at a time. What if we simply loop through each element and encode one token at a time? Good question, but we can’t do it like this because encoding <strong class="source-inline">white</strong> and then encoding <strong class="source-inline">cat</strong> will produce different embeddings compared with encoding <strong class="source-inline">white cat</strong> together at <span class="No-Break">one time.</span></p><p class="list-inset">We can use a quick test to find out the difference. First, let’s encode <span class="No-Break"><strong class="source-inline">white</strong></span><span class="No-Break"> only:</span></p><pre class="source-code">
+# encode "white" only</pre><pre class="source-code">
+white_token = 1579</pre><pre class="source-code">
+white_token_tensor = torch.tensor(</pre><pre class="source-code">
+    [[white_token]],</pre><pre class="source-code">
+    dtype = torch.long,</pre><pre class="source-code">
+    device = pipe.device</pre><pre class="source-code">
+)</pre><pre class="source-code">
+white_embed = pipe.text_encoder(white_token_tensor)[0]</pre><pre class="source-code">
+print(white_embed[0][0])</pre><p class="list-inset">Then, encode <strong class="source-inline">white </strong><span class="No-Break"><strong class="source-inline">cat</strong></span><span class="No-Break"> together:</span></p><pre class="source-code">
+# encode "white cat"</pre><pre class="source-code">
+white_token, cat_token = 1579, 2369</pre><pre class="source-code">
+white_cat_token_tensor = torch.tensor(</pre><pre class="source-code">
+    [[white_token, cat_token]],</pre><pre class="source-code">
+    dtype = torch.long,</pre><pre class="source-code">
+    device = pipe.device</pre><pre class="source-code">
+)</pre><pre class="source-code">
+white_cat_embeds = pipe.text_encoder(white_cat_token_tensor)[0]</pre><pre class="source-code">
+print(white_cat_embeds[0][0])</pre><p class="list-inset">Give the<a id="_idIndexMarker327"/> preceding code a try; you will find<a id="_idIndexMarker328"/> that the same <strong class="source-inline">white</strong> will lead to a different embedding. What is the root cause? The token and embedding is not a one-to-one mapping; the embedding is generated based on the self-attention mechanism [5]. A single <strong class="source-inline">white</strong> can represent the color or a family name, while <strong class="source-inline">white</strong> in <strong class="source-inline">white cat</strong> is clearly saying that it is a color that describes <span class="No-Break">the cat.</span></p><p class="list-inset">Let’s get back to the padding work. The following code will check the length of the token list. If the token ID list length is larger than 75, then take the first 75 tokens and loop this operation the remaining tokens are fewer than 75, which will be handled by a <span class="No-Break">separate logic:</span></p><pre class="source-code">
+# step 3. padding tokens</pre><pre class="source-code">
+def pad_tokens_and_weights(</pre><pre class="source-code">
+    token_ids: list,</pre><pre class="source-code">
+    weights: list</pre><pre class="source-code">
+):</pre><pre class="source-code">
+    bos,eos = 49406,49407</pre><pre class="source-code">
+    # this will be a 2d list</pre><pre class="source-code">
+    new_token_ids = []</pre><pre class="source-code">
+    new_weights   = []</pre><pre class="source-code">
+    while len(token_ids) &gt;= 75:</pre><pre class="source-code">
+        # get the first 75 tokens</pre><pre class="source-code">
+        head_75_tokens = [token_ids.pop(0) for _ in range(75)]</pre><pre class="source-code">
+        head_75_weights = [weights.pop(0) for _ in range(75)]</pre><pre class="source-code">
+        # extract token ids and weights</pre><pre class="source-code">
+        temp_77_token_ids = [bos] + head_75_tokens + [eos]</pre><pre class="source-code">
+        temp_77_weights   = [1.0] + head_75_weights + [1.0]</pre><pre class="source-code">
+        # add 77 tokens and weights chunks to the holder list</pre><pre class="source-code">
+        new_token_ids.append(temp_77_token_ids)</pre><pre class="source-code">
+        new_weights.append(temp_77_weights)</pre><pre class="source-code">
+    # padding the left</pre><pre class="source-code">
+    if len(token_ids) &gt; 0:</pre><pre class="source-code">
+        padding_len = 75 - len(token_ids)</pre><pre class="source-code">
+        padding_len = 0</pre><pre class="source-code">
+        temp_77_token_ids = [bos] + token_ids + [eos] * \</pre><pre class="source-code">
+            padding_len + [eos]</pre><pre class="source-code">
+        new_token_ids.append(temp_77_token_ids)</pre><pre class="source-code">
+        temp_77_weights = [1.0] + weights   + [1.0] * \</pre><pre class="source-code">
+            padding_len + [1.0]</pre><pre class="source-code">
+        new_weights.append(temp_77_weights)</pre><pre class="source-code">
+    # return</pre><pre class="source-code">
+    return new_token_ids, new_weights</pre><p class="list-inset">Next, use <a id="_idIndexMarker329"/>the<a id="_idIndexMarker330"/> <span class="No-Break">following function:</span></p><pre class="source-code">
+t,w = pad_tokens_and_weights(tokens.copy(), weights.copy())</pre><pre class="source-code">
+print(t)</pre><pre class="source-code">
+print(w)</pre><p class="list-inset">The preceding function takes the following previously generated <strong class="source-inline">tokens</strong> and <span class="No-Break"><strong class="source-inline">weights</strong></span><span class="No-Break"> list:</span></p><pre class="source-code">
+[320, 1579, 2368] [1.0, 1.1, 1.0]</pre><p class="list-inset">It transforms it <span class="No-Break">into this:</span></p><pre class="source-code">
+[[49406, 320, 1579, 2368, 49407]]</pre><pre class="source-code">
+[[1.0, 1.0, 1.1, 1.0, 1.0]]</pre></li>
+				<li>Get the <span class="No-Break">weighted embeddings.</span><p class="list-inset">This is the final step, and we will get the Automatic1111-compatible embeddings without a token <span class="No-Break">size limitation:</span></p><pre class="source-code">
+def get_weighted_text_embeddings(</pre><pre class="source-code">
+    pipe: StableDiffusionPipeline,</pre><pre class="source-code">
+    prompt : str      = "",</pre><pre class="source-code">
+    neg_prompt: str   = ""</pre><pre class="source-code">
+):</pre><pre class="source-code">
+    eos = pipe.tokenizer.eos_token_id</pre><pre class="source-code">
+    prompt_tokens, prompt_weights = \ </pre><pre class="source-code">
+        get_prompts_tokens_with_weights(</pre><pre class="source-code">
+        pipe, prompt</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+    neg_prompt_tokens, neg_prompt_weights = \</pre><pre class="source-code">
+        get_prompts_tokens_with_weights(pipe, neg_prompt)</pre><pre class="source-code">
+    # padding the shorter one</pre><pre class="source-code">
+    prompt_token_len        = len(prompt_tokens)</pre><pre class="source-code">
+    neg_prompt_token_len    = len(neg_prompt_tokens)</pre><pre class="source-code">
+    if prompt_token_len &gt; neg_prompt_token_len:</pre><pre class="source-code">
+        # padding the neg_prompt with eos token</pre><pre class="source-code">
+        neg_prompt_tokens   = (</pre><pre class="source-code">
+            neg_prompt_tokens  + \</pre><pre class="source-code">
+            [eos] * abs(prompt_token_len - neg_prompt_token_len)</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+        neg_prompt_weights  = (</pre><pre class="source-code">
+            neg_prompt_weights +</pre><pre class="source-code">
+            [1.0] * abs(prompt_token_len - neg_prompt_token_len)</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+    else:</pre><pre class="source-code">
+        # padding the prompt</pre><pre class="source-code">
+        prompt_tokens       = (</pre><pre class="source-code">
+            prompt_tokens \</pre><pre class="source-code">
+            + [eos] * abs(prompt_token_len - \</pre><pre class="source-code">
+            neg_prompt_token_len)</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+        prompt_weights      = (</pre><pre class="source-code">
+            prompt_weights \</pre><pre class="source-code">
+            + [1.0] * abs(prompt_token_len - \</pre><pre class="source-code">
+            neg_prompt_token_len)</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+    embeds = []</pre><pre class="source-code">
+    neg_embeds = []</pre><pre class="source-code">
+    prompt_token_groups ,prompt_weight_groups = \</pre><pre class="source-code">
+        pad_tokens_and_weights(</pre><pre class="source-code">
+            prompt_tokens.copy(),</pre><pre class="source-code">
+            prompt_weights.copy()</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+    neg_prompt_token_groups, neg_prompt_weight_groups = \</pre><pre class="source-code">
+        pad_tokens_and_weights(</pre><pre class="source-code">
+            neg_prompt_tokens.copy(),</pre><pre class="source-code">
+            neg_prompt_weights.copy()</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+    # get prompt embeddings one by one is not working.</pre><pre class="source-code">
+    for i in range(len(prompt_token_groups)):</pre><pre class="source-code">
+        # get positive prompt embeddings with weights</pre><pre class="source-code">
+        token_tensor = torch.tensor(</pre><pre class="source-code">
+            [prompt_token_groups[i]],</pre><pre class="source-code">
+            dtype = torch.long, device = pipe.device</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+        weight_tensor = torch.tensor(</pre><pre class="source-code">
+            prompt_weight_groups[i],</pre><pre class="source-code">
+            dtype     = torch.float16,</pre><pre class="source-code">
+            device    = pipe.device</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+        token_embedding = \</pre><pre class="source-code">
+            pipe.text_encoder(token_tensor)[0].squeeze(0)</pre><pre class="source-code">
+        for j in range(len(weight_tensor)):</pre><pre class="source-code">
+            token_embedding[j] = token_embedding[j] * </pre><pre class="source-code">
+                weight_tensor[j]</pre><pre class="source-code">
+        token_embedding = token_embedding.unsqueeze(0)</pre><pre class="source-code">
+        embeds.append(token_embedding)</pre><pre class="source-code">
+        # get negative prompt embeddings with weights</pre><pre class="source-code">
+        neg_token_tensor = torch.tensor(</pre><pre class="source-code">
+            [neg_prompt_token_groups[i]],</pre><pre class="source-code">
+            dtype = torch.long, device = pipe.device</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+        neg_weight_tensor = torch.tensor(</pre><pre class="source-code">
+            neg_prompt_weight_groups[i],</pre><pre class="source-code">
+            dtype     = torch.float16,</pre><pre class="source-code">
+            device    = pipe.device</pre><pre class="source-code">
+        )</pre><pre class="source-code">
+        neg_token_embedding = \</pre><pre class="source-code">
+            pipe.text_encoder(neg_token_tensor)[0].squeeze(0)</pre><pre class="source-code">
+        for z in range(len(neg_weight_tensor)):</pre><pre class="source-code">
+            neg_token_embedding[z] = (</pre><pre class="source-code">
+                neg_token_embedding[z] * neg_weight_tensor[z]</pre><pre class="source-code">
+            )</pre><pre class="source-code">
+        neg_token_embedding = neg_token_embedding.unsqueeze(0)</pre><pre class="source-code">
+        neg_embeds.append(neg_token_embedding)</pre><pre class="source-code">
+    prompt_embeds       = torch.cat(embeds, dim = 1)</pre><pre class="source-code">
+    neg_prompt_embeds   = torch.cat(neg_embeds, dim = 1)</pre><pre class="source-code">
+    return prompt_embeds, neg_prompt_embeds</pre><p class="list-inset">The<a id="_idIndexMarker331"/> function looks a bit long but the logic is<a id="_idIndexMarker332"/> simple. Let me explain it section <span class="No-Break">by section:</span></p><ul><li>In the <em class="italic">padding-the-shorter-one</em> section, the logic will fill the shorter prompt with the ending token (<strong class="source-inline">eos</strong>) so that both the prompt and negative prompt token lists share the same size (so that the generated latent can do a <span class="No-Break">subtraction operation).</span></li><li>We call the <strong class="source-inline">pad_tokens_and_weights</strong> function to break all tokens and weights into chunks, each chunk with <span class="No-Break">77 elements.</span></li><li>We loop through the chunk list and encode the 77 tokens to embed in <span class="No-Break">one step.</span></li><li>We use <strong class="source-inline">token_embedding = pipe.text_encoder(token_tensor)[0].squeeze(0)</strong> to remove empty dimensions, so that we can multiply each element with its weight. Note that, now, each token is represented by a <span class="No-Break">768-element vector.</span></li><li>Finally, we<a id="_idIndexMarker333"/> exit the loop and stack the <a id="_idIndexMarker334"/>tensor list to a higher dimension tensor using <strong class="source-inline">prompt_embeds = tor<a id="_idTextAnchor206"/>ch.cat(embeds, dim = </strong><span class="No-Break"><strong class="source-inline">1)</strong></span><span class="No-Break">.</span></li></ul></li>
+			</ol>
+			<h1 id="_idParaDest-128"><a id="_idTextAnchor207"/>Verifying the work</h1>
+			<p>After the not-so-many lines of code, we finally have all the logic ready, so let’s give the code <span class="No-Break">a test.</span></p>
+			<p>In the simple version of a <em class="italic">long prompt encoder</em>, we still get a cat with some patterns in the body instead of <strong class="source-inline">pure white</strong>, as we gave in the prompt. Now, let’s add weight to the <strong class="source-inline">white</strong> keyword to see whether <span class="No-Break">anything happens:</span></p>
+			<pre class="source-code">
+prompt = "photo, cute cat running on the grass" * 10
+prompt = prompt + ",pure (white:1.5) cat" * 10
+neg_prompt = "low resolution, bad anatomy"
+prompt_embeds, prompt_neg_embeds = get_weighted_text_embeddings(
+    pipe, prompt = prompt, neg_prompt = neg_prompt
+)
+image = pipe(
+    prompt_embeds = prompt_embeds,
+    negative_prompt_embeds = prompt_neg_embeds,
+    generator = torch.Generator("cuda").manual_seed(1)
+).images[0]
+image</pre>
+			<p>Our new embedding function magically enabled us to generate a pure white cat, as we gave a <strong class="source-inline">1.5</strong> weight to the <span class="No-Break"><strong class="source-inline">white</strong></span><span class="No-Break"> keyword.</span></p>
+			<div>
+				<div id="_idContainer062" class="IMG---Figure">
+					<img src="image/B21263_10_03.jpg" alt="Figure 10.3: Cute pure white cat running on the grass, with a 1.5 weight on the word white"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.3: Cute pure white cat running on the grass, with a 1.5 weight on the word white</p>
+			<p>That is all! Now, we can reuse or extend this function to build any custom prompt parser as we want. But what if you don’t want to build your own function to implement; are there ways to start using unlimited weighted prompts? Yes, next we are going to introduce two pipelines contributed from the open source community and int<a id="_idTextAnchor208"/>egrated <span class="No-Break">into Diffusers.</span></p>
+			<h1 id="_idParaDest-129"><a id="_idTextAnchor209"/>Overcoming the 77-token limitation using community pipelines</h1>
+			<p>Implementing a <a id="_idIndexMarker335"/>pipeline supporting <a id="_idIndexMarker336"/>long prompt weighting from scratch can be challenging. Often, we simply wish to utilize Diffusers to generate images using detailed and nuanced prompts. Fortunately, the open source community has provided implementations for SD v1.5 and SDXL. The SDXL implementation was originally initialized by Andrew Zhu, the author of this book, and massively improved by <span class="No-Break">the community.</span></p>
+			<p>I’ll now provide two examples of how to use the community pipeline for SD v1.5 <span class="No-Break">and SDXL:</span></p>
+			<ol>
+				<li>This example uses the <strong class="source-inline">lpw_stable_diffusion</strong> pipeline for <span class="No-Break">SD v1.5.</span><p class="list-inset">Use the following code to start a long prompt <span class="No-Break">weighted pipeline:</span></p><pre class="source-code">
+from diffusers import DiffusionPipeline</pre><pre class="source-code">
+import torch</pre><pre class="source-code">
+model_id_or_path = "stablediffusionapi/deliberate-v2"</pre><pre class="source-code">
+pipe = DiffusionPipeline.from_pretrained(</pre><pre class="source-code">
+    model_id_or_path,</pre><pre class="source-code">
+    torch_dtype = torch.float16,</pre><pre class="source-code">
+    custom_pipeline = "lpw_stable_diffusion"</pre><pre class="source-code">
+).to("cuda:0")</pre><p class="list-inset">In the preceding code, <strong class="source-inline">custom_pipeline = "lpw_stable_diffusion"</strong> will actually download the <strong class="source-inline">lpw_stable_diffusion</strong> file from the Hugging Face server and will be invoked inside of the <span class="No-Break"><strong class="source-inline">DiffusionPipeline</strong></span><span class="No-Break"> pipeline.</span></p></li>
+				<li>Let’s generate an image using <span class="No-Break">the pipeline:</span><pre class="source-code">
+prompt = "photo, cute cat running on the grass" * 10</pre><pre class="source-code">
+prompt = prompt + ",pure (white:1.5) cat" * 10</pre><pre class="source-code">
+neg_prompt = "low resolution, bad anatomy"</pre><pre class="source-code">
+image = pipe(</pre><pre class="source-code">
+    prompt = prompt,</pre><pre class="source-code">
+    negative_prompt = neg_prompt,</pre><pre class="source-code">
+    generator = torch.Generator("cuda").manual_seed(1)</pre><pre class="source-code">
+).images[0]</pre><pre class="source-code">
+image</pre><p class="list-inset">You will see an image the same as in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.3</em></span><span class="No-Break">.</span></p></li>
+				<li>Now let’s<a id="_idIndexMarker337"/> see an example<a id="_idIndexMarker338"/> using the <strong class="source-inline">lpw_stable_diffusion</strong> pipeline <span class="No-Break">for SDXL.</span><p class="list-inset">The usage is almost the same as the one we used in SD v1.5. The only differences are that we are loading an SDXL model and that we use another custom pipeline name: <strong class="source-inline">lpw_stable_diffusion_xl</strong>. See the <span class="No-Break">following code:</span></p><pre class="source-code">
+from diffusers import DiffusionPipeline</pre><pre class="source-code">
+import torch</pre><pre class="source-code">
+model_id_or_path = "stabilityai/stable-diffusion-xl-base-1.0"</pre><pre class="source-code">
+pipe = DiffusionPipeline.from_pretrained(</pre><pre class="source-code">
+    model_id_or_path,</pre><pre class="source-code">
+    torch_dtype = torch.float16,</pre><pre class="source-code">
+    custom_pipeline = "lpw_stable_diffusion_xl",</pre><pre class="source-code">
+).to("cuda:0")</pre><p class="list-inset">The image <a id="_idIndexMarker339"/>generation <a id="_idIndexMarker340"/>code is exactly the same as the one we used for <span class="No-Break">SD v1.5:</span></p><pre class="source-code">
+prompt = "photo, cute cat running on the grass" * 10</pre><pre class="source-code">
+prompt = prompt + ",pure (white:1.5) cat" * 10</pre><pre class="source-code">
+neg_prompt = "low resolution, bad anatomy"</pre><pre class="source-code">
+image = pipe(</pre><pre class="source-code">
+    prompt = prompt,</pre><pre class="source-code">
+    negative_prompt = neg_prompt,</pre><pre class="source-code">
+    generator = torch.Generator("cuda").manual_seed(7)</pre><pre class="source-code">
+).images[0]</pre><pre class="source-code">
+image</pre><p class="list-inset">We will see an image generated as shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.4</em></span><span class="No-Break">:</span></p></li>
+			</ol>
+			<div>
+				<div id="_idContainer063" class="IMG---Figure">
+					<img src="image/B21263_10_04.jpg" alt="Figure 10.4: Cute pure white cat running on the grass, with a 1.5 weight on the word white, using lpw_stable_diffusion_xl"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.4: Cute pure white cat running on the grass, with a 1.5 weight on the word white, using lpw_stable_diffusion_xl</p>
+			<p>From the<a id="_idIndexMarker341"/> image, we can clearly <a id="_idIndexMarker342"/>see what <strong class="source-inline">pure (white:1.5) cat</strong> is bringing into the image: proof that the pipeline can be used to generate image<a id="_idTextAnchor210"/>s using long <span class="No-Break">weighted prompts.</span></p>
+			<h1 id="_idParaDest-130"><a id="_idTextAnchor211"/>Summary</h1>
+			<p>This chapter tried to solve one of the most discussed topics: overcoming the 77-token limitation and adding prompt weights for the Stable Diffusion pipeline using the <strong class="source-inline">Diffusers</strong> package. Automatic1111’s Stable Diffusion WebUI provides a versatile UI and is now (as I am writing this) the most prevailing prompt weighting and attention format. However, if we take a look at the code from Automatic1111, we will probably get lost soon; its code is long without <span class="No-Break">clear documentation.</span></p>
+			<p>This chapter started with understanding the root cause of the 77-token limitation and advanced to how the Stable Diffusion pipeline uses prompt embeddings. We implemented two functions to overcome the <span class="No-Break">77-token limitation.</span></p>
+			<p>One simple function without weighting was implemented to show how to walk around the 77-token limitation. We also built another function with the full function of a long prompt usage without length limitations and also have prompt <span class="No-Break">weighting implemented.</span></p>
+			<p>By understanding and implementing these two functions, we can leverage the idea to not only use Diffuser to produce high-quality images the same as we can by using Automatic1111’s WebUI but we can also further extend it to add more powerful features. In terms of which feature to add, it is in your hands now. In the next chapter, we’ll start another exciting topic: using Stable Diffus<a id="_idTextAnchor212"/>ion to fix and <span class="No-Break">upscale images.</span></p>
+			<h1 id="_idParaDest-131"><a id="_idTextAnchor213"/>References</h1>
+			<ol>
+				<li>Hugging Face, weighted <span class="No-Break">prompts: </span><a href="https://huggingface.co/docs/diffusers/main/en/using-diffusers/weighted_prompts"><span class="No-Break">https://huggingface.co/docs/diffusers/main/en/using-diffusers/weighted_prompts</span></a></li>
+				<li>OpenAI CLIP, Connecting text and <span class="No-Break">images: </span><a href="https://openai.com/research/clip"><span class="No-Break">https://openai.com/research/clip</span></a></li>
+				<li>Automatic1111, Stable Diffusion WebUI prompt <span class="No-Break">parser: </span><a href="https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/master/modules/prompt_parser.py#L345C19-L345C19&#13;"><span class="No-Break">https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/master/modules/prompt_parser.py#L345C19-L345C19</span></a></li>
+				<li>Automatic1111, <span class="No-Break">Attention/emphasis: </span><a href="https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#attentionemphasis&#13;"><span class="No-Break">https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#attentionemphasis</span></a></li>
+				<li>Ashish et al., <em class="italic">Attention Is All You </em><span class="No-Break"><em class="italic">Need</em></span><span class="No-Break">: </span><a href="https://arxiv.org/abs/1706.03762"><span class="No-Break">https://arxiv.org/abs/1706.03762</span></a></li>
+				<li>Source of the 77-token size <span class="No-Break">limitation: </span><a href="https://github.com/openai/CLIP/blob/4d120f3ec35b30bd0f992f5d8af2d793aad98d2a/clip/clip.py#L206"><span class="No-Break">https://github.com/openai/CLIP/blob/4d120f3ec35b30bd0f992f5d8af2d793aad98d2a/clip/clip.py#L206</span></a></li>
+			</ol>
+		</div>
+	</body></html>

@@ -1,0 +1,223 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Web Deployments</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">So far, we have been focused on getting something to work for the very first time and then making incremental updates. These updates are almost always geared toward better techniques and better usability. But, how do we expose them to the user? One way to do this is via REST endpoints.</p>
+<p class="mce-root">In this chapter, we are going to cover the following topics:</p>
+<ul>
+<li>Training a model, and writing some neater utils for data I/O</li>
+<li>Building a predict function, separated from training</li>
+<li>Exposing what we have covered using a Flask REST endpoint</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Web deployments</h1>
+                </header>
+            
+            <article>
+                
+<p>This is the hackathon version, and more experienced engineers will notice that we neglect a lot of best practices in favor of saving developer time. In my defense, I did add pretty usable logging. </p>
+<p>We will start from where we left off when we talked about text classification using machine learning methods. There are a few challenges that we left untouched:</p>
+<ul>
+<li><strong>Model persistence</strong>: How can I write the model, data, and code to disk?</li>
+<li><strong>Model loading and prediction</strong>: How can I load the model data <em>and code</em> from disk?</li>
+<li><strong>Flask for REST endpoints</strong>: How can I expose the loaded model over the web?</li>
+</ul>
+<p> If there is anything that you take away from this chapter, it should be the preceding three questions. If you have a clear and complete idea regarding how to tackle these three questions, your battle is won.</p>
+<p>We will use a scikit-learn model and the same TF-IDF based pipelines we are familiar with for this demo.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Model persistence</h1>
+                </header>
+            
+            <article>
+                
+<p>The first challenge is to write the model data and code it to disk. Let's start by training the pipeline first.</p>
+<p>Let's get the imports out of the way:</p>
+<pre>import gzip<br/>import logging<br/>import os<br/>from pathlib import Path<br/>from urllib.request import urlretrieve<br/>import numpy as np<br/>import pandas as pd<br/>from sklearn.externals import joblib<br/>from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer<br/>from sklearn.linear_model import LogisticRegression as LR<br/>from sklearn.pipeline import Pipeline<br/>from tqdm import tqdm</pre>
+<p>Let's write some utils for reading the data from text files and downloading them if absent:</p>
+<p>Let's start by setting up a download progress bar for our use. We will do this by building a small abstraction over the <kbd>tqdm</kbd> package:</p>
+<pre>class TqdmUpTo(tqdm):<br/>    def update_to(self, b=1, bsize=1, tsize=None):<br/>        if tsize is not None:<br/>        self.total = tsize<br/>        self.update(b * bsize - self.n)</pre>
+<p class="mce-root">Let's use the preceding <kbd>tqdm</kbd> progress information for defining a download utility:</p>
+<pre class="mce-root">def get_data(url, filename):<br/>    """<br/>    Download data if the filename does not exist already<br/>    Uses Tqdm to show download progress<br/>    """<br/>    if not os.path.exists(filename):<br/>        dirname = os.path.dirname(filename)<br/>        if not os.path.exists(dirname):<br/>            os.makedirs(dirname)<br/>        with TqdmUpTo(unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]) as t:<br/>            urlretrieve(url, filename, reporthook=t.update_to)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>Notice that the utility uses <kbd>os</kbd> instead of <kbd>pathlib</kbd>, which is preferred throughout the text otherwise. This is both for variety and the fact that <kbd>os</kbd> works equally well in Python 2, while <kbd>pathlib</kbd> is best used with Python 3.4 or later. As a reminder, this entire book assumes that you are using Python 3.6 code. </p>
+<p>Now that we have a <kbd>get_data</kbd> utility in place, let's write a <kbd>read_data</kbd> utility, which is customized to our specific dataset:</p>
+<pre>def read_data(dir_path):<br/>    """read data into pandas dataframe"""<br/>    def load_dir_reviews(reviews_path):<br/>         files_list = list(reviews_path.iterdir())<br/>         reviews = []<br/>         for filename in files_list:<br/>         f = open(filename, "r", encoding="utf-8")<br/>         reviews.append(f.read())<br/>         return pd.DataFrame({"text": reviews})<br/>    pos_path = dir_path / "pos"<br/>    neg_path = dir_path / "neg"<br/>    pos_reviews, neg_reviews = load_dir_reviews(pos_path), load_dir_reviews(neg_path)<br/>    pos_reviews["label"] = 1<br/>    neg_reviews["label"] = 0<br/>    merged = pd.concat([pos_reviews, neg_reviews])<br/>    df = merged.sample(frac=1.0) # shuffle the rows<br/>    df.reset_index(inplace=True) # don't carry index from previous<br/>    df.drop(columns=["index"], inplace=True) # drop the column 'index'<br/>    return df</pre>
+<p>pandas DataFrames make our code much easier to read, manage, and debug. Additionally, this function actually uses a Python nested function to make it easier to increase code reuse. Notice that for both positive and negative reviews, we use the same internal function that does the I/O for us.</p>
+<p class="mce-root">Let's import these utils now:</p>
+<pre><span class="pl-k">from</span> utils <span class="pl-k">import</span> get_data, read_data</pre>
+<p>I have defined a logger from the Python 3 <kbd>logging</kbd> module, with both the file handler and the console handler. Since that is a well-known and established best practice, I am going to skip that here and use the logger directly instead:</p>
+<pre class="mce-root">data_path = Path(os.getcwd()) / "data" / "aclImdb"<br/>logger.info(data_path)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>The <kbd>data_path</kbd> variable now contains the extracted folders and files from <kbd>aclImdb</kbd>. Notice that this extraction is not done by code, but is instead done by the user outside of this code.</p>
+<p>This is because this extraction from <kbd>*.tar.gz</kbd> or <kbd>*.tgz</kbd> is OS-dependent. Another thing that you should have noticed by now is that we have moved away from notebooks with interspersed print statements and previews to Python scripts for this section.</p>
+<p>We must download the compressed file <span>– </span>which is a little more than 110 MB <span>–</span> if it does not exist in the target location:</p>
+<pre class="mce-root">if not data_path.exists():<br/>    data_url = "http://files.fast.ai/data/aclImdb.tgz"<br/>    get_data(data_url, "data/imdb.tgz")</pre>
+<p>Extract the files while you're offline before trying to read them:</p>
+<pre class="mce-root">train_path = data_path / "train"<br/># load data file as dict object<br/>train = read_data(train_path)</pre>
+<p>The <kbd>train</kbd> variable is now a DataFrame with two columns: the raw <em>text</em> and the <em>label</em>. The label is either <kbd>pos</kbd> or <kbd>neg</kbd>, which is short for positive or negative. The label indicates the overall sentiment of the review. We separate these into two variables: <kbd>X_train</kbd> and <kbd>y_train</kbd>:</p>
+<pre class="mce-root"><br/># extract the images (X) and labels (y) from the dict<br/>X_train, y_train = train["text"], train["label"]</pre>
+<p>Next, let's define the <kbd>Pipeline</kbd> of operations that we want to perform. The logistic regression model, which uses TF-IDF representations, is the simplest and fastest way to train the model, and has reasonably good performance. We will use that here, but you can (<em>and usually, should</em>) actually replace this with whatever has the best performance on your test data:</p>
+<pre class="mce-root">lr_clf = Pipeline(<br/> [("vect", CountVectorizer()), ("tfidf", TfidfTransformer()), ("clf", LR())]<br/>)<br/>lr_clf.fit(X=X_train, y=y_train)</pre>
+<p>Once we call the <kbd>.fit </kbd>function, we have trained our pipeline for text classification.</p>
+<p>Those who are familiar with Python might remember pickle or cPickle. Pickle is a Python-native utility for saving objects and other Python data structures to disk in binary for later reuse. <kbd>joblib</kbd> is a pickle improvement!</p>
+<p class="mce-root"/>
+<p><kbd>joblib</kbd> is an improvement because it also caches the <em>code with data</em>, which is fantastic for our use case. We don't have to worry about defining the pipeline in our web API layer. It is no longer tied to our specific model, which means that we can keep making better releases by simply changing the underlying <kbd>joblib.dump</kbd> file.</p>
+<p>As a tribute to the classic Python pickle, we are going to give a <kbd>.pkl</kbd> extension to this cached code and <kbd>model.pkl</kbd> data file:</p>
+<pre class="mce-root"># save model<br/>joblib.dump(lr_clf, "model.pkl")</pre>
+<p>That's it! We have now written our code and data logic into one single binary file.</p>
+<p>How will we actually use this? Let's look at how next.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Model loading and prediction</h1>
+                </header>
+            
+            <article>
+                
+<p>The next challenge is actually to load the model from our pickled file and use it to make predictions.</p>
+<p>Let's start by loading the model from disk:</p>
+<pre><span class="pl-k">from</span> sklearn.externals <span class="pl-k">import</span> joblib<br/>model <span class="pl-k">=</span> joblib.load(<span class="pl-s"><span class="pl-pds">"</span>model.pkl<span class="pl-pds">"</span></span>)</pre>
+<p>The <kbd>model</kbd> variable should now expose all the functions that the original <kbd>lr_clf</kbd> object did. Of all those methods, we are interested in the <kbd>predict</kbd> function.</p>
+<p>But before we use that, let's load some files from disk for making predictions:</p>
+<pre class="mce-root"># loading one example negative review<br/>with open(r".\\data\\aclImdb\\train\neg\\1_1.txt", "r") as infile:<br/>    test_neg_contents = infile.read()<br/><br/># loading one example positive review<br/>with open(r".\\data\\aclImdb\\train\pos\\0_9.txt", "r") as infile:<br/>    test_pos_contents = infile.read()</pre>
+<p>We can now pass these variables in a list to the <kbd>predict</kbd> method:</p>
+<pre>predictions <span class="pl-k">=</span> model.predict([test_neg_contents, test_pos_contents])</pre>
+<p>What does the <kbd>predictions</kbd> variable contain at this point?</p>
+<p>Is it a list? Is it a numpy array? Or just an integer?</p>
+<p class="mce-root"/>
+<p>You can check for this by using the following code:</p>
+<pre>print(predictions)<br/>&gt; [0 1]<br/><br/>for p in predictions:<br/>    print("pos" if p else "neg")<br/><br/>&gt; neg<br/>&gt; pos</pre>
+<p>As we can see, the predictions is a list of integers, identical to the way we had read our <kbd>y_train</kbd> variable in the training file. Let's go ahead and incorporate what we have learned here into a web interface and REST Endpoints.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Flask for web deployments</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's begin by getting the imports out of the way:</p>
+<pre>import logging<br/>import flask<br/>import os<br/>import numpy as np<br/>from flask import Flask, jsonify, render_template, request<br/>from sklearn.externals import joblib</pre>
+<p>I am assuming that as a programmer, you can pick up Flask basics outside this book. Even then, for the sake of completeness, I am adding the main ideas that are relevant to us:</p>
+<ul>
+<li>The main web app is defined in the <kbd>Flask</kbd> module, which is imported from Flask</li>
+<li><kbd>jsonify</kbd> converts any JSON-friendly dictionary into a JSON that can then be returned to the user</li>
+<li><kbd>render_template</kbd> is how we expose HTML pages and web interfaces to our users</li>
+</ul>
+<p>Let's begin by declaring our app first:</p>
+<pre>app = Flask(__name__)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p>Next, we will use the <kbd>route</kbd> function to decorate our Python functions and expose them as REST endpoints. Let's start by exposing a simple status endpoint that is always ON and return 200 for whenever the service is running:</p>
+<pre>@app.route("/status", methods=["GET"])<br/>def get_status():<br/>    return jsonify({"version": "0.0.1", "status": True})</pre>
+<p>The <kbd>methods</kbd> variable is usually a list of strings with the values <kbd>GET</kbd> <kbd>POST</kbd>, or both. GET is used for HTTP(S) GET calls that require no information from the user, except that which is already contained in the GET call. The HTTP POST calls supply additional data from the client (such as the browser) to the server.</p>
+<p>This can be accessed by hitting the <kbd>/status</kbd> endpoint in your browser.</p>
+<p>Go ahead and try it.</p>
+<p>Ouch! We forgot to run the app itself first.</p>
+<p>Let's go ahead and run the app in debug mode. Debug mode allows us to add and edit code, and automatically load the code on every save:</p>
+<pre>if __name__ == "__main__":<br/>    # load ml model from disk<br/>    model = joblib.load("model.pkl")<br/>    # start api<br/>    app.run(host="0.0.0.0", port=8000, debug=True)</pre>
+<p>Notice that we load the <kbd>model</kbd> variable from <kbd>joblib</kbd>, like we did earlier. This code segment is written at the end of an <kbd>api.py</kbd> file. This is remarkably sloppy, with no concurrency support, and isn't integrated with nginx <span>–</span> but all of that is fine for this demonstration.</p>
+<p>What happens if we hit the <kbd>localhost:8000/status</kbd> endpoint from our browser now?</p>
+<p>We get a status 200, and the data field contains our JSON with the version and <em>status</em> information. Great.</p>
+<p class="mce-root"/>
+<p>Let's go ahead and add our <kbd>/predict</kbd> endpoint. Here is the outline of the steps this function will undertake: </p>
+<ol>
+<li>It will check if this is indeed a POST method. If yes, it will extract the file information from the <em>file</em> key in <kbd>flask.request.files</kbd>.</li>
+<li>Then, it will write this file to disk and read again, and then pass string text to <kbd>model.predict</kbd> as a single element of a list.</li>
+<li>Finally, it will return the result to a web interface in HTML, after optionally deleting the file written to disk:</li>
+</ol>
+<pre>@app.route("/predict", methods=["POST"])<br/>def make_prediction():<br/>    if request.method == "POST":<br/>        # get uploaded file if it exists<br/>        logger.debug(request.files)<br/>        f = request.files["file"]<br/>        f.save(f.filename) # save file to disk<br/>        logger.info(f"{f.filename} saved to disk")<br/>        # read file from disk<br/>        with open(f.filename, "r") as infile:<br/>            text_content = infile.read()<br/>            logger.info(f"Text Content from file read")<br/>        prediction = model.predict([text_content])<br/>        logger.info(f"prediction: {prediction}")<br/>        prediction = "pos" if prediction[0] == 1 else "neg"<br/>        os.remove(f.filename)<br/>    return flask.render_template("index.html", label=prediction)</pre>
+<p><br/>
+Quite obviously, the step for writing the file to disk is redundant if we are simply going to delete it later. In practice, I keep the files on disk since it helps with debugging and, in some cases, understanding how the API is being used in actual practice by its users.</p>
+<p>In the preceding snippet, you might have noticed that we return an <kbd>index.html</kbd> file with a <kbd>label</kbd> value. The label is set as part of <kbd>Jinja2</kbd> templates. The variable is used in the <kbd>index.html</kbd> itself and the value is updated when rendering the page.</p>
+<p>This is the <kbd>index.html</kbd> we will use:</p>
+<pre>&lt;html&gt;<br/>&lt;head&gt;<br/>&lt;title&gt;Text Classification model as a Flask API&lt;/title&gt;<br/>&lt;meta charset="utf-8"&gt;<br/>&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;<br/>&lt;/head&gt;<br/><br/>&lt;body&gt;<br/>&lt;h1&gt;Movie Sentiment Analysis&lt;/h1&gt;<br/>&lt;form action="/predict" method="post" enctype="multipart/form-data"&gt;<br/> &lt;input type="file" name="file" value="Upload"&gt;<br/> &lt;input type="submit" value="Predict"&gt; <br/> &lt;p&gt;Prediction: {% if label %} {{ label }} {% endif %}&lt;/p&gt;<br/>&lt;/form&gt;<br/>&lt;/body&gt;<br/>&lt;/html&gt;</pre>
+<p>This is what the HTML looks like:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-307 image-border" src="assets/d94796a9-e320-469e-af4b-6030a0bbe624.png" style=""/></div>
+<p>The <span class="packt_screen">Prediction:</span> <span class="packt_screen">pos</span> is actually a result from the file I uploaded to this page earlier. This was marked by the <kbd>{%%}</kbd> syntax in the actual HTML:</p>
+<pre>Prediction: {% if label %} {{ label }} {% endif %}</pre>
+<p>So, we have seen a few things in the Flask-based web deployment section:</p>
+<ul>
+<li>How do you receive uploaded files on the Flask webserver?</li>
+<li>How do you upload the file using a web interface?</li>
+<li>And, as a bonus: Jinja templates to display the returned answer</li>
+</ul>
+<div class="packt_tip packt_infobox">It is worth mentioning that we could make this even more general by separating returns. This would be for use by humans, where we return HTML, and for use by machine, where we return JSON. I leave this function refactoring as an exercise for you.</div>
+<p>Quite obviously, we could have done this with Django or any other web framework. The only reason I picked Flask is for demonstration purposes and because it is very lightweight, with no concern for model-view-controller separation.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>The key takeaway from this chapter should be that any machine learning model can be deployed like any other piece of code. The only difference is that we have to make room for being able to load the model again from disk. To do this, first, we need to train a model and write the model code and weights to disk using <kbd>joblib</kbd>. Then, we need to build a predict function, which is separated from training. Finally, we expose what we have done by using Flash with Jinja2 HTML templates.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

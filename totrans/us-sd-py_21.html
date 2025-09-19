@@ -1,0 +1,794 @@
+<html><head></head><body>
+		<div id="_idContainer146">
+			<h1 id="_idParaDest-243" class="chapter-number"><a id="_idTextAnchor405"/>21</h1>
+			<h1 id="_idParaDest-244"><a id="_idTextAnchor406"/>Diffusion Model Transfer Learning</h1>
+			<p>This book is mainly focused on using Stable Diffusion with Python, and when doing so, we will need to fine-tune a model for our specific needs. As we discussed in previous chapters, there are many ways to customize the model, such as <span class="No-Break">the following:</span></p>
+			<ul>
+				<li>Unlocking UNet to fine-tune <span class="No-Break">all parameters</span></li>
+				<li>Training a textual inversion to add new <span class="No-Break">keyword embeddings</span></li>
+				<li>Locking UNet and training a LoRA model for <span class="No-Break">customized styles</span></li>
+				<li>Training a ControlNet model to guide image generation with <span class="No-Break">control guidance</span></li>
+				<li>Training an adaptor to use the image as one of the <span class="No-Break">guidance embeddings</span></li>
+			</ul>
+			<p>It is impossible to cover all the model training topics in simply one chapter. Another book would be needed to discuss the details of <span class="No-Break">model training.</span></p>
+			<p>Nevertheless, we still want to use this chapter to drill down to the core concepts of model training. Instead of listing sample code on how to fine-tune a diffusion model, or using the scripts from the <strong class="source-inline">Diffusers</strong> package, we want to introduce you to the core concepts of training so that you fully understand the common training process. In this chapter, we will cover the <span class="No-Break">following topics:</span></p>
+			<ul>
+				<li>Introducing the foundations of training a model by training a linear model from scratch <span class="No-Break">using PyTorch</span></li>
+				<li>Introducing the Hugging Face Accelerate package to train a model in <span class="No-Break">multiple GPUs</span></li>
+				<li>Building code to train a Stable Diffusion V1.5 LoRA model using PyTorch and Accelerator step <span class="No-Break">by step</span></li>
+			</ul>
+			<p>By the end of this chapter, you’ll be familiar with the overall training process and key concepts, and you’ll be able to read sample code from other repositories and build your own training code to customize a model from a <span class="No-Break">pre-trained model.</span></p>
+			<p>Writing code to train one model is the best way to learn how to train a model. Let’s start work <span class="No-Break">on it.</span></p>
+			<h1 id="_idParaDest-245"><a id="_idTextAnchor407"/>Technical requirements</h1>
+			<p>Training a model requires more GPU power and VRAM than model inference. Prepare a GPU with at least 8 GB of VRAM – the more, the better. You can also train a model using <span class="No-Break">multiple GPUs.</span></p>
+			<p>It is recommended to install the latest version of the <span class="No-Break">following packages:</span></p>
+			<pre class="source-code">
+pip install torch torchvision torchaudio
+pip install bitsandbytes
+pip install transformers
+pip install accelerate
+pip install diffusers
+pip install peft
+pip install datasets</pre>
+			<p>Here are the specified packages with the versions I used to write the <span class="No-Break">code samples:</span></p>
+			<pre class="source-code">
+pip install torch==2.1.2 torchvision==0.16.1 torchaudio==2.1.1
+pip install bitsandbytes==0.41.0
+pip install transformers==4.36.1
+pip install accelerate==0.24.1
+pip install diffusers==0.26.0
+pip install peft==0.6.2
+pip install datasets==2.16.0</pre>
+			<p>The training code was tested in the Ubuntu 22.04 <span class="No-Break">x64 version.</span></p>
+			<h1 id="_idParaDest-246"><a id="_idTextAnchor408"/>Training a neural network model with PyTorch</h1>
+			<p>The <a id="_idIndexMarker608"/>target of this section is to build and train one simple neural network model using PyTorch. The model will be a simple one-layer model, with no additional fancy layers. It is simple but with all the elements required to train a Stable Diffusion LoRA, as we will see later in <span class="No-Break">this chapter.</span></p>
+			<p>Feel free to skip this section if you are familiar with PyTorch model training. If it is your first time to start training a model, this simple model training will help you thoroughly understand the process of <span class="No-Break">model training.</span></p>
+			<p>Before starting, make sure you have installed all the required packages mentioned in the <em class="italic">Technical </em><span class="No-Break"><em class="italic">requirements</em></span><span class="No-Break"> section.</span><a id="_idTextAnchor409"/></p>
+			<h2 id="_idParaDest-247"><a id="_idTextAnchor410"/>Preparing the training data</h2>
+			<p>Let’s<a id="_idIndexMarker609"/> assume we want to train a model with four weights and output one digital result show, as shown in <span class="No-Break">the following:</span></p>
+			<p><span class="_-----MathTools-_Math_Variable">y</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">=</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">1</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">×</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">x</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">1</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">+</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">2</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">×</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">x</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">2</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">+</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">3</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">×</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">x</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">3</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">+</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">4</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Operator">×</span><span class="_-----MathTools-_Math_Base"> </span><span class="No-Break"><span class="_-----MathTools-_Math_Variable">x</span></span><span class="No-Break"><span class="_-----MathTools-_Math_Base"> </span></span><span class="No-Break"><span class="_-----MathTools-_Math_Number">4</span></span></p>
+			<p>The four weights, <span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">1</span><span class="_-----MathTools-_Math_Operator">,</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">2</span><span class="_-----MathTools-_Math_Operator">,</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">3</span><span class="_-----MathTools-_Math_Operator">,</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Variable">w</span><span class="_-----MathTools-_Math_Base"> </span><span class="_-----MathTools-_Math_Number">4</span>, are the model weights we want to have from the training data (Think of these weights as the Stable Diffusion model weight). Because we need to have some real data to train the model, I will use the weights <strong class="source-inline">[2,3,4,7]</strong> to generate some <span class="No-Break">sample data:</span></p>
+			<pre class="source-code">
+import numpy as np
+w_list = np.array([2,3,4,7])</pre>
+			<p>Let’s create 10 groups of input sample data, <strong class="source-inline">x_sample</strong>; each <strong class="source-inline">x_sample</strong> is an array with four elements, the same length as <span class="No-Break">the weight:</span></p>
+			<pre class="source-code">
+import random
+x_list = []
+for _ in range(10):
+    x_sample = np.array([random.randint(1,100) for _ in range(
+        len(w_list))])
+    x_list.append(x_sample)</pre>
+			<p>In the following section, we will use a neural network model to predict a list of weights; for the sake of training, let’s assume that the true weights are unknown after generating the <span class="No-Break">training data.</span></p>
+			<p>In the preceding code snippet, we utilize <strong class="source-inline">numpy</strong> to leverage its dot product operator, <strong class="source-inline">@</strong>, to compute the output, <strong class="source-inline">y</strong>. Now, let’s generate <strong class="source-inline">y_list</strong> containing <span class="No-Break"><strong class="source-inline">10</strong></span><span class="No-Break"> elements:</span></p>
+			<pre class="source-code">
+y_list = []
+for x_sample in x_list:
+    y_temp = x_sample@w_list
+    y_list.append(y_temp)</pre>
+			<p>You can print <strong class="source-inline">x_list</strong> and <strong class="source-inline">y_list</strong> to take a look at the <span class="No-Break">training data.</span></p>
+			<p>Our <a id="_idIndexMarker610"/>training data is ready; there’s no need to download anything else. Next, let’s define the model itself and prepare <span class="No-Break">for trainin<a id="_idTextAnchor411"/>g.</span></p>
+			<h2 id="_idParaDest-248"><a id="_idTextAnchor412"/>Preparing for training</h2>
+			<p>Our model could<a id="_idIndexMarker611"/> be the world’s simplest model ever, a simple linear dot product, as defined in the <span class="No-Break">following code:</span></p>
+			<pre class="source-code">
+import torch
+import torch.nn as nn
+class MyLinear(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.w = nn.Parameter(torch.randn(4))
+    def forward(self, x:torch.Tensor):
+        return self.w @ x</pre>
+			<p>The <strong class="source-inline">torch.randn(4)</strong> code is to generate a tensor with a four-weight number. No other code is needed; our NN model is ready now, <span class="No-Break">named </span><span class="No-Break"><strong class="source-inline">MyLinear</strong></span><span class="No-Break">.</span></p>
+			<p>To train a model, we will need to initialize it, similar to initializing random weights in an LLM or <span class="No-Break">diffusion model:</span></p>
+			<pre class="source-code">
+model = MyLinear()</pre>
+			<p>Almost all neural network model training follows <span class="No-Break">these steps:</span></p>
+			<ol>
+				<li>Forward a pass to predict <span class="No-Break">the result.</span></li>
+				<li>Compute the difference between the predicted result and the ground truth, known as the <span class="No-Break">loss value.</span></li>
+				<li>Perform backpropagation to calculate the gradient <span class="No-Break">loss value.</span></li>
+				<li>Update the <span class="No-Break">model parameters.</span></li>
+			</ol>
+			<p>Before<a id="_idIndexMarker612"/> kicking off the training, define a loss function and an optimizer. The loss function, <strong class="source-inline">loss_fn</strong>, will help calculate a loss value based on the predicted result and ground truth result. <strong class="source-inline">optimizer</strong> will be used to update <span class="No-Break">the weights.</span></p>
+			<pre class="source-code">
+loss_fn = nn.MSELoss()
+optimizer = torch.optim.SGD(model.parameters(), lr = 0.00001)</pre>
+			<p><strong class="source-inline">lr</strong> represents the learning rate, a crucial hyperparameter to set. Determining the best <strong class="bold">learning rate</strong> (<strong class="bold">lr</strong>) often<a id="_idIndexMarker613"/> involves trial and error, depending on the characteristics of your model, dataset, and problem. To find a reasonable learning rate, you need to do <span class="No-Break">the following:</span></p>
+			<ul>
+				<li><strong class="bold">Start with a small learning rate</strong>: A common practice is to start with a small learning rate, such as 0.001, and gradually increase or decrease it based on the observed <span class="No-Break">convergence behavior.</span></li>
+				<li><strong class="bold">Use learning rate schedules</strong>: You can use learning rate schedules to adjust the learning rate dynamically during <a id="_idIndexMarker614"/>training. One common approach is step decay, where the learning rate decreases after a fixed number of epochs. Another <a id="_idIndexMarker615"/>popular method is exponential decay, in which the learning rate decreases exponentially over time. (We won’t use it in the world’s <span class="No-Break">simplest model.)</span></li>
+			</ul>
+			<p>Also, don’t forget to convert the input and output to the torch <span class="No-Break">Tensor object:</span></p>
+			<pre class="source-code">
+x_input = torch.tensor(x_list, dtype=torch.float32)
+y_output = torch.tensor(y_list, dtype=torch.float32)</pre>
+			<p>All the preparations are done, so let’s start training <span class="No-Break">a<a id="_idTextAnchor413"/> model.</span></p>
+			<h2 id="_idParaDest-249"><a id="_idTextAnchor414"/>Training a model</h2>
+			<p>We will set the<a id="_idIndexMarker616"/> epoch number to 100, which means looping through our training data <span class="No-Break">100 times:</span></p>
+			<pre class="source-code">
+# start train model
+num_epochs = 100
+for epoch in range(num_epochs):
+    for i, x in enumerate(x_input):
+        # forward
+        y_pred = model(x)
+        # calculate loss
+        loss = loss_fn(y_pred,y_output[i])
+        # zero out the cached parameter.
+        optimizer.zero_grad()
+        # backward
+        loss.backward()
+        # update paramters
+        optimizer.step()
+    if (epoch+1) % 10 == 0:
+        print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1, 
+            num_epochs, loss.item()))
+print("train done")</pre>
+			<p>Let’s break down the<a id="_idIndexMarker617"/> <span class="No-Break">preceding code:</span></p>
+			<ul>
+				<li><strong class="source-inline">y_pred = model(x)</strong>: This line applies the model to the current input data sample, <strong class="source-inline">x</strong>, generating a <span class="No-Break">prediction, </span><span class="No-Break"><strong class="source-inline">y_pred</strong></span><span class="No-Break">.</span></li>
+				<li><strong class="source-inline">loss = loss_fn(y_pred,y_output[i])</strong>: This line calculates the loss (also known as the error or cost) by comparing the predicted output, <strong class="source-inline">y_pred</strong>, with the actual output, <strong class="source-inline">y_output[i]</strong> , using a specified loss <span class="No-Break">function, </span><span class="No-Break"><strong class="source-inline">loss_fn</strong></span><span class="No-Break">.</span></li>
+				<li><strong class="source-inline">optimizer.zero_grad()</strong>: This line resets the gradients calculated during the backward pass to zero. This is important because it prevents gradient values from carrying over between <span class="No-Break">different samples.</span></li>
+				<li><strong class="source-inline">loss.backward()</strong>: This line performs the backpropagation algorithm, computing gradients for all parameters with respect to <span class="No-Break">the loss.</span></li>
+				<li><strong class="source-inline">optimizer.step()</strong>: This line updates the model’s parameters based on the computed gradients and the chosen <span class="No-Break">optimization method.</span></li>
+			</ul>
+			<p>Putting all the code together and running it, we will see the <span class="No-Break">following output:</span></p>
+			<pre class="source-code">
+Epoch [10/100], Loss: 201.5572
+Epoch [20/100], Loss: 10.8380
+Epoch [30/100], Loss: 3.5255
+Epoch [40/100], Loss: 1.7397
+Epoch [50/100], Loss: 0.9160
+Epoch [60/100], Loss: 0.4882
+Epoch [70/100], Loss: 0.2607
+Epoch [80/100], Loss: 0.1393
+Epoch [90/100], Loss: 0.0745
+Epoch [100/100], Loss: 0.0398
+train done</pre>
+			<p>The loss value converges quickly and approaches <strong class="source-inline">0</strong> after <strong class="source-inline">100</strong> epochs. Execute the following code to see the <span class="No-Break">current weight:</span></p>
+			<pre class="source-code">
+model.w</pre>
+			<p>You can see that<a id="_idIndexMarker618"/> the weights update <span class="No-Break">as follows:</span></p>
+			<pre class="source-code">
+Parameter containing:
+tensor([1.9761, 3.0063, 4.0219, 6.9869], requires_grad=True)</pre>
+			<p>This is quite close to <strong class="source-inline">[2,3,4,7]</strong>! The model was successfully trained to find the right <span class="No-Break">weight numbers.</span></p>
+			<p>In the case of Stable Diffusion and multiple GPU training, we can get help from the Hugging Face Accelerate package [4]. Let’s start using <span class="No-Break"><strong class="source-inline">Accele<a id="_idTextAnchor415"/>rate</strong></span><span class="No-Break"> next.</span></p>
+			<h1 id="_idParaDest-250"><a id="_idTextAnchor416"/>Training a model with Hugging Face’s Accelerate</h1>
+			<p>Hugging Face’s <strong class="source-inline">Accelerate</strong> is a library that provides a high-level API over different PyTorch distributed <a id="_idIndexMarker619"/>frameworks, aiming to simplify the process of distributed and mixed-precision training. It is designed to keep changes to your training loop to a minimum and allow the same functions to work for any distributed setup. Let’s see what <strong class="source-inline">Accelerate</strong> can bring to<a id="_idTextAnchor417"/> <span class="No-Break">the table.</span></p>
+			<h2 id="_idParaDest-251"><a id="_idTextAnchor418"/>Applying Hugging Face’s Accelerate</h2>
+			<p>Let’s apply <strong class="source-inline">Accelerate</strong> to our simple but working model. Accelerate is designed to be used together with PyTorch, so we don’t need to change too much code. Here are the steps to use <strong class="source-inline">Accelerate</strong> to<a id="_idIndexMarker620"/> train <span class="No-Break">a model:</span></p>
+			<ol>
+				<li>Generate the default <span class="No-Break">configuration file:</span><pre class="source-code">
+from accelerate import utils</pre><pre class="source-code">
+utils.write_basic_config()</pre></li>
+				<li>Initialize an <strong class="source-inline">Accelerate</strong> instance, and send the model instance and data to the device managed <span class="No-Break">by Accelerate:</span><pre class="source-code">
+from accelerate import Accelerator</pre><pre class="source-code">
+accelerator = Accelerator()</pre><pre class="source-code">
+device = accelerator.device</pre><pre class="source-code">
+x_input.to(device)</pre><pre class="source-code">
+y_output.to(device)</pre><pre class="source-code">
+model.to(device)</pre></li>
+				<li>Replace <strong class="source-inline">loss.backward</strong> with <span class="No-Break"><strong class="source-inline">accelerator.backward(loss)</strong></span><span class="No-Break"> :</span><pre class="source-code">
+# loss.backward</pre><pre class="source-code">
+accelerator.backward(loss)</pre></li>
+			</ol>
+			<p>Next, we will update the training code <span class="No-Break">using<a id="_idTextAnchor419"/> Accelerate.</span></p>
+			<h2 id="_idParaDest-252"><a id="_idTextAnchor420"/>Putting code together</h2>
+			<p>We will keep<a id="_idIndexMarker621"/> all the other code the same; here is the complete training code except for the data preparations and <span class="No-Break">model initializing:</span></p>
+			<pre class="source-code">
+# start train model using Accelerate
+from accelerate import utils
+utils.write_basic_config()
+from accelerate import Accelerator
+accelerator = Accelerator()
+device = accelerator.device
+x_input.to(device)
+y_output.to(device)
+model.to(device)
+model, optimizer = accelerator.prepare(
+    model, optimizer
+)
+num_epochs = 100
+for epoch in range(num_epochs):
+    for i, x in enumerate(x_input):
+        # forward
+        y_pred = model(x)
+        # calculate loss
+        loss = loss_fn(y_pred,y_output[i])
+        # zero out the cached parameter.
+        optimizer.zero_grad()
+        # backward
+        #loss.backward()
+        accelerator.backward(loss)
+        # update paramters
+        optimizer.step()
+    if (epoch+1) % 10 == 0:
+        print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1,
+            num_epochs, loss.item()))
+print("train done")</pre>
+			<p>Running the<a id="_idIndexMarker622"/> preceding code, we should get the same output as when we run the training model without the Hugging Face <strong class="source-inline">Accelerate</strong> library. And the loss value c<a id="_idTextAnchor421"/>onverges <span class="No-Break">as well.</span></p>
+			<h2 id="_idParaDest-253"><a id="_idTextAnchor422"/>Training a model with multiple GPUs using Accelerate</h2>
+			<p>There are <a id="_idIndexMarker623"/>many types of multiple GPU training; in our case, we will use the data parallel style [1]. Simply put, we will load the whole model data into each GPU and split the training data across <span class="No-Break">multiple GPUs.</span></p>
+			<p>In PyTorch, we can achieve this with the <span class="No-Break">following code:</span></p>
+			<pre class="source-code">
+import torch.nn as nn
+from torch.nn.parallel import DistributedDataParallel
+model = MyLinear()
+ddp_model = DistributedDataParallel(model)
+# Hugging Face Accelerate wraps this operation automatically using the prepare() function like this:
+from accelerate import Accelerator
+accelerator = Accelerator()
+model = MyLinear()
+model = accelerator.prepare(model)</pre>
+			<p>For the world’s simplest model, we will load the whole model to each GPU and split the 10 groups’ training data into 5 groups each. Each GPU will take five groups of data at the same time. After each step, all loss gradient numbers will be merged using the <strong class="source-inline">allreduce</strong> operation. The <strong class="source-inline">allreduce</strong> operation simply added all the loss data from all GPUs, added it up, and then sent it back to each GPU to update the weights, as shown in the following <span class="No-Break">Python code:</span></p>
+			<pre class="source-code">
+def allreduce(data):
+    for i in range(1, len(data)):
+        data[0][:] += data[i].to(data[0].device)
+    for i in range(1, len(data)):
+        data[i][:] = data[0].to(data[i].device)</pre>
+			<p>Accelerate will launch two independent processes to train. To avoid creating two training <a id="_idIndexMarker624"/>datasets, let’s generate one dataset and save it to local storage using the <span class="No-Break"><strong class="source-inline">pickle</strong></span><span class="No-Break"> package:</span></p>
+			<pre class="source-code">
+import numpy as np
+w_list = np.array([2,3,4,7])
+import random
+x_list = []
+for _ in range(10):
+    x_sample = np.array([random.randint(1,100)
+        for _ in range(len(w_list))]
+    )
+    x_list.append(x_sample)
+y_list = []
+for x_sample in x_list:
+    y_temp = x_sample@w_list
+    y_list.append(y_temp)
+train_obj = {
+    'w_list':w_list.tolist(),
+    'input':x_list,
+    'output':y_list
+}
+import pickle
+with open('train_data.pkl','wb') as f:
+    pickle.dump(train_obj,f)</pre>
+			<p>Then, wrap<a id="_idIndexMarker625"/> the whole model and training code in a <strong class="source-inline">main</strong> function and save it in a new Python file <span class="No-Break">named </span><span class="No-Break"><strong class="source-inline">train_model_in_2gpus.py</strong></span><span class="No-Break">:</span></p>
+			<pre class="source-code">
+import torch
+import torch.nn as nn
+from accelerate import utils
+from accelerate import Accelerator
+# start a accelerate instance
+utils.write_basic_config()
+accelerator = Accelerator()
+device = accelerator.device
+def main():
+    # define the model
+    class MyLinear(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = nn.Parameter(torch.randn(len(w_list)))
+        def forward(self, x:torch.Tensor):
+            return self.w @ x
+    # load training data
+    import pickle
+    with open("train_data.pkl",'rb') as f:
+        loaded_object = pickle.load(f)
+    w_list = loaded_object['w_list']
+    x_list = loaded_object['input']
+    y_list = loaded_object['output']
+    # convert data to torch tensor
+    x_input = torch.tensor(x_list, dtype=torch.float32).to(device)
+    y_output = torch.tensor(y_list, dtype=torch.float32).to(device)
+    # initialize model, loss function, and optimizer
+    Model = MyLinear().to(device)
+    loss_fn = nn.MSELoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr = 0.00001)
+    # wrap model and optimizer using accelerate
+    model, optimizer = accelerator.prepare(
+        model, optimizer
+    )
+    num_epochs = 100
+    for epoch in range(num_epochs):
+        for i, x in enumerate(x_input):
+            # forward
+            y_pred = model(x)
+            # calculate loss
+            loss = loss_fn(y_pred,y_output[i])
+            # zero out the cached parameter.
+            optimizer.zero_grad()
+            # backward
+            #loss.backward()
+            accelerator.backward(loss)
+            # update paramters
+            optimizer.step()
+        if (epoch+1) % 10 == 0:
+            print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1, 
+                num_epochs, loss.item()))
+    # take a look at the model weights after trainning
+    model = accelerator.unwrap_model(model)
+    print(model.w)
+if __name__ == "__main__":
+    main()</pre>
+			<p>Then, start the training using <span class="No-Break">this command:</span></p>
+			<pre class="source-code">
+accelerate launch --num_processes=2 train_model_in_2gpus.py</pre>
+			<p>You should see something <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+Parameter containing:
+tensor([1.9875, 3.0020, 4.0159, 6.9961], device='cuda:0', requires_grad=True)</pre>
+			<p>If so, congratulations! You<a id="_idIndexMarker626"/> just successfully trained an AI model in two GPUs. With the knowledge you’ve learned, let’s now start to train a Stable Di<a id="_idTextAnchor423"/>ffusion <span class="No-Break">V1.5 LoRA.</span></p>
+			<h1 id="_idParaDest-254"><a id="_idTextAnchor424"/>Training a Stable Diffusion V1.5 LoRA</h1>
+			<p>The Hugging Face <a id="_idIndexMarker627"/>document provides complete guidance on training a LoRA by calling a pre-defined script [2] provided by Diffusers. However, we don’t want to stop at “using” the script. The training code from Diffusers includes a lot of edge-case handling and additional code that is hard to read and learn. In this section, we will write up each line of the training code to fully understand what happens in <span class="No-Break">each step.</span></p>
+			<p>In the following sample, we will use eight images with associated captions to train a LoRA. The image and image captions are provided in the <strong class="source-inline">train_data</strong> folder of the code for <span class="No-Break">this chapter.</span></p>
+			<p>Our training code structure will be <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+# import packages
+import torch
+from accelerate import utils
+from accelerate import Accelerator
+from diffusers import DDPMScheduler,StableDiffusionPipeline
+from peft import LoraConfig
+from peft.utils import get_peft_model_state_dict
+from datasets import load_dataset
+from torchvision import transforms
+import math
+from diffusers.optimization import get_scheduler
+from tqdm.auto import tqdm
+import torch.nn.functional as F
+from diffusers.utils import convert_state_dict_to_diffusers
+# train code
+def main():
+    accelerator = Accelerator(
+        gradient_accumulation_steps = gradient_accumulation_steps,
+        mixed_precision = "fp16"
+    )
+    Device = accelerator.device
+    ...
+    # almost all training code will be land inside of this main function.
+if __name__ == "__main__":
+    main()</pre>
+			<p>Right below the <strong class="source-inline">main()</strong> function, we initialize the <strong class="source-inline">accelerate</strong> instance. The <strong class="source-inline">Accelerator</strong> instance is initialized with <span class="No-Break">two hyperparameters:</span></p>
+			<ul>
+				<li><strong class="source-inline">gradient_accumulation_steps</strong>: This is the number of training steps to accumulate <a id="_idIndexMarker628"/>gradients before we update the model parameters. Gradient accumulation allows you to effectively train with a larger batch size than would be possible with a single GPU, while still fitting the model parameters <span class="No-Break">in memory.</span></li>
+				<li><strong class="source-inline">mixed_precision</strong>: This specifies the precision to use during training. The <strong class="source-inline">"fp16"</strong> value means that half-precision floating point values will be used for the intermediate computations, which can lead to faster training times and lower <span class="No-Break">memory usage.</span></li>
+			</ul>
+			<p>The <strong class="source-inline">Accelerator</strong> instance also has an attribute device, which is the device (GPU or CPU) on which the model will be trained. The device attribute can be used to move the model and tensors to the appropriate device <span class="No-Break">before training.</span></p>
+			<p>Now, let’s start <span class="No-Break">defin<a id="_idTextAnchor425"/>ing hyperparameters.</span></p>
+			<h2 id="_idParaDest-255"><a id="_idTextAnchor426"/>Defining training hyperparameters</h2>
+			<p>Hyperparameters are <a id="_idIndexMarker629"/>parameters that are not learned from the data but, instead, are set before the commencement of the learning process. They are user-defined settings that govern the training process of a machine learning algorithm. In our LoRA training case, we will have the <span class="No-Break">following settings:</span></p>
+			<pre class="source-code">
+# hyperparameters
+output_dir = "."
+pretrained_model_name_or_path   = "runwayml/stable-diffusion-v1-5"
+lora_rank = 4
+lora_alpha = 4
+learning_rate = 1e-4
+adam_beta1, adam_beta2 = 0.9, 0.999
+adam_weight_decay = 1e-2
+adam_epsilon = 1e-08
+dataset_name = None
+train_data_dir = "./train_data"
+top_rows = 4
+output_dir = "output_dir"
+resolution = 768
+center_crop = True
+random_flip = True
+train_batch_size = 4
+gradient_accumulation_steps = 1
+num_train_epochs = 200
+# The scheduler type to use. Choose between ["linear", "cosine", # "cosine_with_restarts", "polynomial","constant", "constant_with_ 
+# warmup"]
+lr_scheduler_name = "constant" #"cosine"#
+max_grad_norm = 1.0
+diffusion_scheduler = DDPMScheduler</pre>
+			<p>Let’s break down the <span class="No-Break">preceding settings:</span></p>
+			<ul>
+				<li><strong class="source-inline">output_dir</strong>: This is the directory where the model outputs will <span class="No-Break">be saved.</span></li>
+				<li><strong class="source-inline">pretrained_model_name_or_path</strong>: This is the name or path of the pretrained model to be used as the starting point <span class="No-Break">for training.</span></li>
+				<li><strong class="source-inline">lora_rank</strong>: This is the<a id="_idIndexMarker630"/> number of layers in the <strong class="bold">low-rank adaptation module</strong> (<strong class="bold">LoRa</strong>) used to<a id="_idIndexMarker631"/> fine-tune the pretrained model. A higher rank allows for more complex adjustments, but it also requires more training data and can be computationally expensive. Generally, ranks below <strong class="source-inline">32</strong> might not be effective enough, while ranks above <strong class="source-inline">256</strong> might be overkill for most tasks. In our case, since we use only eight images to train the LoRA, setting the rank to <strong class="source-inline">4</strong> <span class="No-Break">is enough.</span></li>
+				<li><strong class="source-inline">lora_alpha</strong>: This, conversely, controls the strength of the updates made to the pretrained model’s weights during fine-tuning. Specifically, the weight changes generated during fine-tuning are multiplied by a scaling factor equal to Alpha divided by Rank, before being added back to the original model weights. Therefore, increasing Alpha relative to Rank. Setting Alpha equal to Rank is a common <span class="No-Break">starting practice.</span></li>
+				<li><strong class="source-inline">learning_rate</strong>: This parameter controls how quickly the model learns from its mistakes during training. Specifically, it sets the step size for each iteration, determining how aggressively the model adjusts its parameters to minimize the <span class="No-Break"><strong class="source-inline">loss</strong></span><span class="No-Break"> function.</span></li>
+				<li><strong class="source-inline">adam_beta1</strong> and <strong class="source-inline">adam_beta2</strong>: These are the parameters used in the Adam optimizer to control the decay rates of the moving averages of the gradient and squared <span class="No-Break">gradient, respectively.</span></li>
+				<li><strong class="source-inline">adam_weight_decay</strong>: This is the weight decay used in the Adam optimizer to <span class="No-Break">prevent overfitting.</span></li>
+				<li><strong class="source-inline">adam_epsilon</strong>: This is a<a id="_idIndexMarker632"/> small value added to the denominator for numerical stability in the <span class="No-Break">Adam optimizer.</span></li>
+				<li><strong class="source-inline">dataset_name</strong>: This is the name of the dataset to be used for training. Particularly, this is the Hugging Face dataset ID, such <span class="No-Break">as </span><span class="No-Break"><strong class="source-inline">lambdalabs/pokemon-blip-captions</strong></span><span class="No-Break">.</span></li>
+				<li><strong class="source-inline">train_data_dir</strong>: This is the directory where the training data <span class="No-Break">is stored.</span></li>
+				<li><strong class="source-inline">top_rows</strong>: This is the number of rows used for training. It is used to select the top rows for training; if you have a dataset with 1,000 rows, set it to 8 to train the training code with the top <span class="No-Break">8 rows.</span></li>
+				<li><strong class="source-inline">output_dir</strong>: This is the directory where the outputs will be saved <span class="No-Break">during training.</span></li>
+				<li><strong class="source-inline">resolution</strong>: This is the resolution of the <span class="No-Break">input images.</span></li>
+				<li><strong class="source-inline">center_crop</strong>: This is a Boolean flag indicating whether to perform center cropping on the <span class="No-Break">input images.</span></li>
+				<li><strong class="source-inline">random_flip</strong>: This is a Boolean flag indicating whether to perform random horizontal flipping on the <span class="No-Break">input images.</span></li>
+				<li><strong class="source-inline">train_batch_size</strong>: This is the batch size used <span class="No-Break">during training.</span></li>
+				<li><strong class="source-inline">gradient_accumulation_steps</strong>: This is the number of training steps to accumulate gradients before updating the <span class="No-Break">model parameters.</span></li>
+				<li><strong class="source-inline">num_train_epochs</strong>: This is the number of training epochs <span class="No-Break">to perform.</span></li>
+				<li><strong class="source-inline">lr_scheduler_name</strong>: This is the name of the learning rate scheduler <span class="No-Break">to use.</span></li>
+				<li><strong class="source-inline">max_grad_norm</strong>: This is the maximum norm of the gradients to clip to prevent <span class="No-Break">exploding gradients.</span></li>
+				<li><strong class="source-inline">diffusion_scheduler</strong>: This is<a id="_idIndexMarker633"/> the name of the di<a id="_idTextAnchor427"/>ffusion scheduler to use. </li>
+			</ul>
+			<h2 id="_idParaDest-256"><a id="_idTextAnchor428"/>Preparing the Stable Diffusion components</h2>
+			<p>When training a LoRA, the <a id="_idIndexMarker634"/>process involves inference, adding the loss value, and backpropagation - a procedure reminiscent of the inference process. To facilitate this, let’s use the <strong class="source-inline">StableDiffusionPipeline</strong> from <strong class="source-inline">Diffusers</strong> package to get <strong class="source-inline">tokenizer</strong>, <strong class="source-inline">text_encoder</strong>, <strong class="source-inline">vae</strong>, <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">unet</strong></span><span class="No-Break">:</span></p>
+			<pre class="source-code">
+noise_scheduler = DDPMScheduler.from_pretrained(
+    pretrained_model_name_or_path, subfolder="scheduler")
+weight_dtype = torch.float16
+pipe = StableDiffusionPipeline.from_pretrained(
+    pretrained_model_name_or_path,
+    torch_dtype = weight_dtype
+).to(device)
+tokenizer, text_encoder = pipe.tokenizer, pipe.text_encoder
+vae, unet = pipe.vae, pipe.unet</pre>
+			<p>During LoRA training, those components will facilitate the forward pass, but their weights won’t be updated during backpropagation, so we need to set <strong class="source-inline">requires_grad_</strong> to <strong class="source-inline">False</strong>, as <span class="No-Break">shown here:</span></p>
+			<pre class="source-code">
+# freeze parameters of models, we just want to train a LoRA only
+unet.requires_grad_(False)
+vae.requires_grad_(False)
+text_encoder.requires_grad_(False)</pre>
+			<p>The LoRA weights are the part we want to train; let’s use PEFT’s [3] <strong class="source-inline">LoraConfig</strong> to initialize the <span class="No-Break">LoRA configurations.</span></p>
+			<p><strong class="source-inline">PEFT</strong> is a<a id="_idIndexMarker635"/> library <a id="_idIndexMarker636"/>developed by Hugging Face that provides parameter-efficient ways to adapt large pre-trained models to specific downstream applications. The key idea behind PEFT is to fine-tune only a small fraction of a model’s parameters instead of fine-tuning all of them, resulting in significant savings in terms of computation and memory usage. This makes it possible to fine-tune very large models even on consumer hardware with <span class="No-Break">limited resources.</span></p>
+			<p>LoRA is one of the PEFT methods supported by the PEFT library. With LoRA, instead of updating all the weights of a given layer during fine-tuning, only a low-rank approximation of the weight updates is learned, reducing the number of additional parameters required per layer. This approach allows you to fine-tune just 0.16% of the total parameters of a model while achieving similar performance to <span class="No-Break">full fine-tuning.</span></p>
+			<p>To use LoRA with a pre-trained transformer model, you need to instantiate a <strong class="source-inline">LoraConfig</strong> object and pass it to the appropriate component of your model. The <strong class="source-inline">LoraConfig</strong> class has several attributes that control its behavior, including the dimension/rank of the decomposition, dropout rates, and other hyperparameters. Once configured, you can then train your model using standard techniques, such as gradient descent. Here is the code to create a LoRA <span class="No-Break">configuration object:</span></p>
+			<pre class="source-code">
+# configure LoRA parameters use PEFT
+unet_lora_config = LoraConfig(
+    r = lora_rank,
+    lora_alpha = lora_alpha,
+    init_lora_weights = "gaussian",
+    target_modules = ["to_k", "to_q", "to_v", "to_out.0"]
+)</pre>
+			<p>Next, let’s add the LoRA adapter to the UNet model using the <span class="No-Break"><strong class="source-inline">unet_lora_config</strong></span><span class="No-Break"> configuration:</span></p>
+			<pre class="source-code">
+# Add adapter and make sure the trainable params are in float32.
+unet.add_adapter(unet_lora_config)
+for param in unet.parameters():
+    # only upcast trainable parameters (LoRA) into fp32
+    if param.requires_grad:
+        param.data = param.to(torch.float32)</pre>
+			<p>Inside the <strong class="source-inline">for</strong> loop, if <a id="_idIndexMarker637"/>the parameters require gradients (i.e., they are trainable), their data type is explicitly cast to <strong class="source-inline">torch.float32</strong>. This ensures that only the trainable parameters are in the <strong class="source-inline">float32</strong> f<a id="_idTextAnchor429"/>ormat for <span class="No-Break">efficient training.</span></p>
+			<h2 id="_idParaDest-257"><a id="_idTextAnchor430"/>Loading the training data</h2>
+			<p>Let’s load up some<a id="_idIndexMarker638"/> data using the <span class="No-Break">following code:</span></p>
+			<pre class="source-code">
+if dataset_name:
+    # Downloading and loading a dataset from the hub. data will be 
+    # saved to ~/.cache/huggingface/datasets by default
+    dataset = load_dataset(dataset_name)
+else:
+    dataset = load_dataset(
+        "imagefolder",
+        data_dir = train_data_dir
+    )
+train_data = dataset["train"]
+dataset["train"] = train_data.select(range(top_rows))
+# Preprocessing the datasets. We need to tokenize inputs and targets.
+dataset_columns = list(dataset["train"].features.keys())
+image_column, caption_column = dataset_columns[0],dataset_columns[1]</pre>
+			<p>Let’s break <a id="_idIndexMarker639"/>down the <span class="No-Break">preceding code:</span></p>
+			<ul>
+				<li><strong class="source-inline">if dataset_name:</strong>: If <strong class="source-inline">dataset_name</strong> is provided, the code tries to load a dataset from Hugging Face’s dataset hub using the <strong class="source-inline">load_dataset</strong> function. If no <strong class="source-inline">dataset_name</strong> is provided, it assumes that the dataset is stored locally and loads it using the <strong class="source-inline">imagefolder</strong> <span class="No-Break">dataset type.</span></li>
+				<li><strong class="source-inline">train_data = dataset["train"]</strong>: The train split of the dataset is assigned to the <span class="No-Break"><strong class="source-inline">train_data</strong></span><span class="No-Break"> variable.</span></li>
+				<li><strong class="source-inline">dataset["train"] = train_data.select(range(top_rows))</strong>: The first top rows of the train dataset are selected and assigned back to the train split of the dataset. This is useful when working with a small subset of the dataset for <span class="No-Break">faster experimentation.</span></li>
+				<li><strong class="source-inline">dataset_columns = list(dataset["train"].features.keys())</strong>: The keys of the <strong class="source-inline">dataset["train"]</strong> feature dictionary are extracted and assigned to the <strong class="source-inline">dataset_columns</strong> variable. These keys represent the image and caption columns in <span class="No-Break">the dataset.</span></li>
+				<li><strong class="source-inline">image_column, caption_column = dataset_columns[0], dataset_columns[1]</strong>: The first and second columns are assigned to the <strong class="source-inline">image_column</strong> and <strong class="source-inline">caption_column</strong> variables, respectively. This assumes that the dataset has exactly two columns – the first for images and the second <span class="No-Break">for captions.</span></li>
+			</ul>
+			<p>We will need a<a id="_idIndexMarker640"/> function to convert the input text to token IDs; we define the function <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+def tokenize_captions(examples, is_train=True):
+    '''Preprocessing the datasets.We need to tokenize input captions and transform the images.'''
+    captions = []
+    for caption in examples[caption_column]:
+        if isinstance(caption, str):
+            captions.append(caption)
+    inputs = tokenizer(
+        captions,
+        max_length = tokenizer.model_max_length,
+        padding = "max_length",
+        truncation = True,
+        return_tensors = "pt"
+    )
+    return inputs.input_ids</pre>
+			<p>And then, we<a id="_idIndexMarker641"/> train the data <span class="No-Break">transform pipeline:</span></p>
+			<pre class="source-code">
+# Preprocessing the datasets.
+train_transforms = transforms.Compose(
+    [
+        transforms.Resize(
+            resolution,
+            interpolation=transforms.InterpolationMode.BILINEAR
+        ),
+        transforms.CenterCrop(resolution) if center_crop else 
+            transforms.RandomCrop(resolution),
+        transforms.RandomHorizontalFlip() if random_flip else 
+            transforms.Lambda(lambda x: x),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5]) # [0,1] -&gt; [-1,1]
+    ]
+)</pre>
+			<p>The preceding code defines a set of image transformations that will be applied to the training dataset during the training of a machine learning or deep learning model. These transformations are defined using the <strong class="source-inline">transforms</strong> module from the <span class="No-Break"><strong class="source-inline">PyTorch</strong></span><span class="No-Break"> library.</span></p>
+			<p>Here’s a breakdown of what each <span class="No-Break">line does:</span></p>
+			<ul>
+				<li><strong class="source-inline">transforms.Compose()</strong>: This is a function that “chains” multiple transformations together. It takes a list of transformation functions as input and applies them <span class="No-Break">in order.</span></li>
+				<li><strong class="source-inline">transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR)</strong>: This line resizes the image to the given resolution pixels while keeping the aspect ratio. The interpolation method used is <span class="No-Break">bilinear interpolation.</span></li>
+				<li><strong class="source-inline">transforms.CenterCrop(resolution) if center_crop else transforms.RandomCrop(resolution)</strong>: This line crops the image to a square of resolution x resolution. If <strong class="source-inline">center_crop</strong> is <strong class="source-inline">True</strong>, the crop is taken from the center of the image. If <strong class="source-inline">center_crop</strong> is <strong class="source-inline">False</strong>, the crop is <span class="No-Break">taken randomly.</span></li>
+				<li><strong class="source-inline">transforms.RandomHorizontalFlip() if random_flip else transforms.Lambda(lambda x: x)</strong>: This line horizontally flips the image randomly <a id="_idIndexMarker642"/>with a probability of 0.5. If <strong class="source-inline">random_flip</strong> is <strong class="source-inline">False</strong>, it leaves the <span class="No-Break">image unchanged.</span></li>
+				<li><strong class="source-inline">transforms.ToTensor()</strong>: This line converts the image from a PIL image or NumPy array to a <span class="No-Break">PyTorch tensor.</span></li>
+				<li><strong class="source-inline">transforms.Normalize([0.5], [0.5])</strong>: This line scales the pixel values of the image between -1 and 1. It is commonly used to normalize image data before passing it to a <span class="No-Break">neural network.</span></li>
+			</ul>
+			<p>By chaining these transformations together using <strong class="source-inline">transforms.Compose</strong>, you can easily preprocess your image data and apply multiple transformations to <span class="No-Break">your dataset.</span></p>
+			<p>We need the following code to use the chained <span class="No-Break">transformation object:</span></p>
+			<pre class="source-code">
+def preprocess_train(examples):
+    '''prepare the train data'''
+    images = [image.convert("RGB") for image in examples[
+        image_column]]
+    examples["pixel_values"] = [train_transforms(image) 
+        for image in images]
+    examples["input_ids"] = tokenize_captions(examples)
+    return examples
+# only do this in the main process
+with accelerator.main_process_first():
+    # Set the training transforms
+    train_dataset = dataset["train"].with_transform(preprocess_train)
+def collate_fn(examples):
+    pixel_values = torch.stack([example["pixel_values"] 
+        for example in examples])
+    pixel_values = pixel_values.to(memory_format = \
+        torch.contiguous_format).float()
+    input_ids = torch.stack([example["input_ids"] 
+        for example in examples])
+    return {"pixel_values": pixel_values, "input_ids": input_ids}
+# DataLoaders creation:
+train_dataloader = torch.utils.data.DataLoader(
+    train_dataset,
+    shuffle = True
+    collate_fn = collate_fn
+    batch_size = train_batch_size
+)</pre>
+			<p>The <a id="_idIndexMarker643"/>preceding code first defines a function called <strong class="source-inline">preprocess_train</strong>, which preprocesses the train data. It first converts the images to the RGB format, and then it applies a series of image transformations (resize, center/random crop, random horizontal flip, and normalization) to them using the <strong class="source-inline">train_transforms</strong> object. It then tokenizes the input captions using the <strong class="source-inline">tokenize_captions</strong> function. The resulting preprocessed data is added to the <strong class="source-inline">examples</strong> dictionary as the <strong class="source-inline">pixel_values</strong> and <span class="No-Break"><strong class="source-inline">input_ids</strong></span><span class="No-Break"> keys.</span></p>
+			<p>The with <strong class="source-inline">accelerator.main_process_first()</strong> line is used to ensure that the code inside the block is executed only in the main process. In this case, it sets the training transforms <span class="No-Break">for </span><span class="No-Break"><strong class="source-inline">train_dataset</strong></span><span class="No-Break">.</span></p>
+			<p>The <strong class="source-inline">collate_fn</strong> function is used to collate the dataset examples into a batch to be fed to the model. It takes a list of examples and stacks <strong class="source-inline">pixel_values</strong> and <strong class="source-inline">input_ids</strong> together. The resulting tensors are then converted to the <strong class="source-inline">float32</strong> format and returned as <span class="No-Break">a dictionary.</span></p>
+			<p>Finally, <strong class="source-inline">train_dataloader</strong> is created using the <strong class="source-inline">torch.utils.data.DataLoader</strong> class, which loads <strong class="source-inline">train_dataset</strong> with the specified batch size, shuffle, and <span class="No-Break">collate functions.</span></p>
+			<p>In PyTorch, DataLoader is a utility class that abstracts the process of loading data in batches for training or evaluation. It is used to load data in batches, which are sequences of data points used to train a machine <span class="No-Break">learning model.</span></p>
+			<p>In the provided code, <strong class="source-inline">train_dataloader</strong> is an instance of PyTorch’s <strong class="source-inline">DataLoader</strong> class. It is used to load the training data in batches. More specifically, it loads the data from <strong class="source-inline">train_dataset</strong> in batches of a predefined batch size, shuffles the data for each epoch, and applies a user-defined <strong class="source-inline">collate_fn</strong> function to preprocess the data before feeding it to <span class="No-Break">the model.</span></p>
+			<p><strong class="source-inline">train_dataloader</strong> is necessary for the efficient training of the model. By loading data in batches, it allows the model to process multiple data points in parallel, which can significantly reduce training time. Additionally, shuffling the data for each epoch helps prevent overfitting by ensuring that the model sees different data points in <span class="No-Break">each epoch.</span></p>
+			<p>In the provided code, the <strong class="source-inline">collate_fn</strong> function is used to preprocess the data before it is fed to the model. It takes a list of examples and returns a dictionary containing the pixel values and input IDs for each example. The <strong class="source-inline">collate_fn</strong> function is applied to each batch of data by <strong class="source-inline">DataLoader</strong> before it is fed to the model. This allows for more efficient <a id="_idIndexMarker644"/>processing of the data by applying the same prepro<a id="_idTextAnchor431"/>cessing steps to each batch <span class="No-Break">of data.</span></p>
+			<h2 id="_idParaDest-258"><a id="_idTextAnchor432"/>Defining the training components</h2>
+			<p>To prepare and define the training components, let’s <a id="_idIndexMarker645"/>first initialize an <strong class="source-inline">AdamW</strong> optimizer. <strong class="source-inline">AdamW</strong> is an optimization algorithm to train machine learning models. It is a variant of the popular <strong class="source-inline">Adam</strong> optimizer, which uses adaptive learning rates for each model parameter. The <strong class="source-inline">AdamW</strong> optimizer is similar to the <strong class="source-inline">Adam</strong> optimizer, but it includes an additional weight decay term in the gradient update step. This weight decay term is added to the gradient of the loss function during optimization, which helps to prevent overfitting by adding a regularization term to the <span class="No-Break">loss function.</span></p>
+			<p>We can initialize an <strong class="source-inline">AdamW</strong> optimizer using the <span class="No-Break">following code:</span></p>
+			<pre class="source-code">
+# initialize optimizer
+lora_layers = filter(lambda p: p.requires_grad, unet.parameters())
+optimizer = torch.optim.AdamW(
+    lora_layers,
+    lr = learning_rate,
+    betas = (adam_beta1, adam_beta2),
+    weight_decay = adam_weight_decay,
+    eps = adam_epsilon
+)</pre>
+			<p>The <strong class="source-inline">filter</strong> function is used to iterate through all the parameters of the <strong class="source-inline">unet</strong> model and selects only those parameters that require gradient computation. The <strong class="source-inline">filter</strong> function returns a generator object that contains the parameters that require gradient computation. This generator object is assigned to the <strong class="source-inline">lora_layers</strong> variable, which will be used to optimize the model parameters <span class="No-Break">during training.</span></p>
+			<p>The <strong class="source-inline">AdamW</strong> optimizer is initialized with the <span class="No-Break">following hyperparameters:</span></p>
+			<ul>
+				<li><strong class="source-inline">lr</strong>: The learning rate, which controls the step size at each iteration while moving toward a minimum of a <span class="No-Break">loss function</span></li>
+				<li><strong class="source-inline">betas</strong>: A tuple containing the exponential decay rates for the moving average of the gradient (β1) and the squared <span class="No-Break">gradient (β2)</span></li>
+				<li><strong class="source-inline">weight_decay</strong>: The weight decay term added to the gradient of the loss function <span class="No-Break">during optimization</span></li>
+				<li><strong class="source-inline">eps</strong>: A small value added to the denominator to improve <span class="No-Break">numerical stability</span></li>
+			</ul>
+			<p>Second, we<a id="_idIndexMarker646"/> define a learning rate scheduler – <strong class="source-inline">lr_scheduler</strong>. Instead of defining one manually, we can use the <strong class="source-inline">get_scheduler</strong> function provided by the <strong class="source-inline">Diffusers</strong> package (<strong class="source-inline">from diffusers.optimization </strong><span class="No-Break"><strong class="source-inline">import get_scheduler</strong></span><span class="No-Break">):</span></p>
+			<pre class="source-code">
+# learn rate scheduler from diffusers's get_scheduler
+lr_scheduler = get_scheduler(
+    lr_scheduler_name,
+    optimizer = optimizer
+)</pre>
+			<p>This code creates a learning rate scheduler object using the <strong class="source-inline">get_scheduler</strong> function from the <strong class="source-inline">Diffusers</strong> library. The learning rate scheduler determines how the learning rate (i.e., the step size in gradient descent) changes <span class="No-Break">during training.</span></p>
+			<p>The <strong class="source-inline">get_scheduler</strong> function takes <span class="No-Break">two arguments:</span></p>
+			<ul>
+				<li><strong class="source-inline">lr_scheduler_name</strong>: The name of the learning rate scheduler algorithm to use. In our sample, the name is <strong class="source-inline">constant</strong>, defined at the beginning of <span class="No-Break">the code.</span></li>
+				<li><strong class="source-inline">optimizer</strong>: The PyTorch optimizer object that the learning rate scheduler will be applied to. This is the <strong class="source-inline">AdamW</strong> optimizer we <span class="No-Break">just initialized.</span></li>
+			</ul>
+			<p>We have just prepared all the elements to kick off training and we have written lots of code to prepare the dataset, although the actual training code isn’t that lon<a id="_idTextAnchor433"/>g. Let’s write the training <span class="No-Break">code next.</span></p>
+			<h2 id="_idParaDest-259"><a id="_idTextAnchor434"/>Training a Stable Diffusion V1.5 LoRA</h2>
+			<p>Training a LoRA will usually <a id="_idIndexMarker647"/>take a while, and we’d better create a progress bar to track the <span class="No-Break">training progress:</span></p>
+			<pre class="source-code">
+# set step count and progress bar
+max_train_steps = num_train_epochs*len(train_dataloader)
+progress_bar = tqdm(
+    range(0, max_train_steps),
+    initial = 0,
+    desc = "Steps",
+    # Only show the progress bar once on each machine.
+    Disable = not accelerator.is_local_main_process,
+)</pre>
+			<p>Here is the core <span class="No-Break">training code:</span></p>
+			<pre class="source-code">
+# start train
+for epoch in range(num_train_epochs):
+    unet.train()
+    train_loss = 0.0
+    for step, batch in enumerate(train_dataloader):
+        # step 1. Convert images to latent space
+        # latents = vae.encode(batch["pixel_values"].to(
+            dtype=weight_dtype)).latent_dist.sample()
+        latents = latents * vae.config.scaling_factor
+        # step 2. Sample noise that we'll add to the latents, 
+        latents provide the shape info.
+        noise = torch.randn_like(latents)
+        # step 3. Sample a random timestep for each image
+        batch_size = latents.shape[0]
+        timesteps = torch.randint(
+            low = 0,
+            high = noise_scheduler.config.num_train_timesteps,
+            size = (batch_size,),
+            device = latents.device
+        )
+        timesteps = timesteps.long()
+        # step 4. Get the text embedding for conditioning
+        encoder_hidden_states = text_encoder(batch["input_ids"])[0]
+        # step 5. Add noise to the latents according to the noise 
+        # magnitude at each timestep
+        # (this is the forward diffusion process), 
+        # provide to unet to get the prediction result
+        noisy_latents = noise_scheduler.add_noise(
+            latents, noise, timesteps)
+        # step 6. Get the target for loss depend on the prediction 
+        # type
+        if noise_scheduler.config.prediction_type == "epsilon":
+            target = noise
+        elif noise_scheduler.config.prediction_type == "v_prediction":
+            target = noise_scheduler.get_velocity(
+                latents, noise, timesteps)
+        else:
+            raise ValueError(f"Unknown prediction type {
+                noise_scheduler.config.prediction_type}")
+        # step 7. Predict the noise residual and compute loss
+        model_pred = unet(noisy_latents, timesteps, 
+            encoder_hidden_states).sample
+        # step 8. Calculate loss
+        loss = F.mse_loss(model_pred.float(), target.float(), 
+            reduction="mean")
+        # step 9. Gather the losses across all processes for logging 
+        # (if we use distributed training).
+        avg_loss = accelerator.gather(loss.repeat(
+            train_batch_size)).mean()
+        train_loss += avg_loss.item() / gradient_accumulation_steps
+        # step 10. Backpropagate
+        accelerator.backward(loss)
+        if accelerator.sync_gradients:
+            params_to_clip = lora_layers
+            accelerator.clip_grad_norm_(params_to_clip, max_grad_norm)
+        optimizer.step()
+        lr_scheduler.step()
+        optimizer.zero_grad()
+        # step 11. check optimization step and update progress bar
+        if accelerator.sync_gradients:
+            progress_bar.update(1)
+            train_loss = 0.0
+        logs = {"epoch": epoch,"step_loss": loss.detach().item(), 
+            "lr": lr_scheduler.get_last_lr()[0]}
+        progress_bar.set_postfix(**logs)</pre>
+			<p>The preceding code is a typical training loop for Stable Diffusion model training. Here’s a breakdown of what each part of the <span class="No-Break">code does:</span></p>
+			<ul>
+				<li>The outer loop (<strong class="source-inline">for epoch in range(num_train_epochs)</strong>) iterates over the number of training epochs. An epoch is one complete pass through the entire <span class="No-Break">training dataset.</span></li>
+				<li><strong class="source-inline">unet.train()</strong> sets the model to training mode. This is important because some layers, such as dropout and batch normalization, behave differently during training and testing. In the<a id="_idIndexMarker648"/> training phase, these layers behave differently than in the evaluation phase. For example, dropout layers will drop out nodes with a certain probability during training to prevent overfitting, but they will not drop out any nodes during evaluation. Similarly, <strong class="source-inline">BatchNorm</strong> layers will use batch statistics during training, but will use accumulated statistics during evaluation. So, if you don’t call <strong class="source-inline">unet.train()</strong>, these layers will not behave correctly for the training phase, which could lead to <span class="No-Break">incorrect results.</span></li>
+				<li>The inner loop (<strong class="source-inline">for step, batch in enumerate(train_dataloader)</strong>) iterates over the training data. <strong class="source-inline">train_dataloader</strong> is a <strong class="source-inline">DataLoader</strong> object that provides batches of <span class="No-Break">training data.</span></li>
+				<li>In <em class="italic">step 1</em>, the model encodes the input images into a latent space using a <strong class="bold">Variational Autoencoder</strong> (<strong class="bold">VAE</strong>). The <a id="_idIndexMarker649"/>latent distribution is then sampled to get the latent vectors (<strong class="source-inline">latents</strong>), which are scaled by <span class="No-Break">a factor.</span></li>
+				<li>In <em class="italic">step 2</em>, random noise is added<a id="_idIndexMarker650"/> to the latent vectors. This noise is sampled from a standard normal distribution and has the same shape as the <span class="No-Break">latent vectors.</span></li>
+				<li>In <em class="italic">step 3</em>, random timesteps are sampled for each image in the batch. This is part of a time-dependent noise <span class="No-Break">addition process.</span></li>
+				<li>In <em class="italic">step 4</em>, the text encoder is used to get the text embedding <span class="No-Break">for conditioning.</span></li>
+				<li>In <em class="italic">step 5</em>, noise is added to the latent vectors according to the noise magnitude at <span class="No-Break">each timestep.</span></li>
+				<li>In <em class="italic">step 6</em>, the target for the loss calculation is determined based on the prediction type. It can be either the noise or the velocity of <span class="No-Break">the noise.</span></li>
+				<li>In <em class="italic">steps 7</em> and <em class="italic">8</em>, The model makes a prediction using the noisy latent vectors, the timesteps, and the text embeddings. The loss is then calculated as the mean squared error between the model’s prediction and <span class="No-Break">the target.</span></li>
+				<li>In <em class="italic">step 9</em>, the loss is gathered across all processes for logging. This is necessary in the case of distributed training, where the model is trained on multiple GPUs. So that we can see the loss value changes in the middle of a <span class="No-Break">training process.</span></li>
+				<li>In <em class="italic">step 10</em>, the gradients of the loss with respect to the model parameters are computed (<strong class="source-inline">accelerator.backward(loss)</strong>), and the gradients are clipped if necessary. This is to prevent the gradients from becoming too large, which can cause numerical instability. The optimizer updates the model parameters based on the gradients (<strong class="source-inline">optimizer.step()</strong>), and the learning rate scheduler updates the learning rate (<strong class="source-inline">lr_scheduler.step()</strong>). The gradients are then reset to <span class="No-Break">zero (</span><span class="No-Break"><strong class="source-inline">optimizer.zero_grad()</strong></span><span class="No-Break">).</span></li>
+				<li>In <em class="italic">step 11</em>, if the gradients are synchronized, the training loss is reset to zero and the progress bar <span class="No-Break">is updated.</span></li>
+				<li>Finally, the training loss, learning rate, and current epoch are logged to monitor the training process. The progress bar is updated with <span class="No-Break">these logs.</span></li>
+			</ul>
+			<p>Once you understand<a id="_idIndexMarker651"/> the preceding steps, you can not only train a Stable Diffusion LoRA but also train any <span class="No-Break">other models.</span></p>
+			<p>Lastly, we will need to save the LoRA we <span class="No-Break">just trained:</span></p>
+			<pre class="source-code">
+# Save the lora layers
+accelerator.wait_for_everyone()
+if accelerator.is_main_process:
+    unet = unet.to(torch.float32)
+    unwrapped_unet = accelerator.unwrap_model(unet)
+    unet_lora_state_dict = convert_state_dict_to_diffusers(
+        get_peft_model_state_dict(unwrapped_unet))
+    weight_name = f"""lora_{pretrained_model_name_or_path.split('/')[-1]}_rank{lora_rank}_s{max_train_steps}_r{resolution}_{diffusion_scheduler.__name__}_{formatted_date}.safetensors"""
+    StableDiffusionPipeline.save_lora_weights(
+        save_directory = output_dir,
+        unet_lora_layers = unet_lora_state_dict,
+        safe_serialization = True,
+        weight_name = weight_name
+    )
+accelerator.end_training()</pre>
+			<p>Let’s break down the <span class="No-Break">preceding code:</span></p>
+			<ul>
+				<li><strong class="source-inline">accelerator.wait_for_everyone()</strong>: This line is used in distributed training to make sure all processes have reached this point in the code. It’s a <span class="No-Break">synchronization point.</span></li>
+				<li><strong class="source-inline">if accelerator.is_main_process:</strong>: This checks whether the current process is the main one. In distributed training, you typically only want to save the model once, not once for <span class="No-Break">each process.</span></li>
+				<li><strong class="source-inline">unet = unet.to(torch.float32)</strong>: This line converts the data type of the model’s weights to <strong class="source-inline">float32</strong>. This is typically done to save memory, as <strong class="source-inline">float32</strong> uses less memory than <strong class="source-inline">float64</strong> but still provides sufficient precision for most deep <span class="No-Break">learning tasks.</span></li>
+				<li><strong class="source-inline">unwrapped_unet = accelerator.unwrap_model(unet)</strong>: This unwraps the model<a id="_idIndexMarker652"/> from the accelerator, which is a wrapper used for <span class="No-Break">distributed training.</span></li>
+				<li><strong class="source-inline">unet_lora_state_dict = convert_state_dict_to_diffusers(get_peft_model_state_dict(unwrapped_unet))</strong>: This line gets the state dictionary of the model, which contains the weights of the model, and then converts it to a format suitable <span class="No-Break">for Diffusers.</span></li>
+				<li><strong class="source-inline">weight_name = f"lora_{pretrained_model_name_or_path.split('/')[-1]}_rank{lora_rank}_s{max_train_steps}_r{resolution}_{diffusion_scheduler.__name__}_{formatted_date}.safetensors"</strong>: This line creates a name for the file where the weights will be saved. The name includes various details about the <span class="No-Break">training process.</span></li>
+				<li><strong class="source-inline">StableDiffusionPipeline.save_lora_weights(...)</strong>: This line saves the weights of the model to a file. The <strong class="source-inline">save_directory</strong> argument specifies the directory where the file will be saved, <strong class="source-inline">unet_lora_layers</strong> is the state dictionary of the model, <strong class="source-inline">safe_serialization</strong> indicates that the weights should be saved in a way that is safe to load later, and <strong class="source-inline">weight_name</strong> is the name of <span class="No-Break">the file.</span></li>
+				<li><strong class="source-inline">accelerator.end_training()</strong>: This line signals the end of the training process. This is typically used to clean up resources used <span class="No-Break">during training.</span></li>
+			</ul>
+			<p>We have the complete <a id="_idIndexMarker653"/>training code in the associated code folder for this chapter, named <strong class="source-inline">train_sd16_lora.py</strong>. We are not done yet; we still need to kick off the training using the <strong class="source-inline">accelerator</strong> command in<a id="_idTextAnchor435"/>stead of entering <strong class="source-inline">python </strong><span class="No-Break"><strong class="source-inline">py_file.py</strong></span><span class="No-Break"> directly.</span></p>
+			<h2 id="_idParaDest-260"><a id="_idTextAnchor436"/>Kicking off the training</h2>
+			<p>If you have one <a id="_idIndexMarker654"/>GPU, simply run the <span class="No-Break">following command:</span></p>
+			<pre class="source-code">
+accelerate launch --num_processes=1 ./train_sd16_lora.py</pre>
+			<p>For two GPUs, increase <strong class="source-inline">--num_processes</strong> to <strong class="source-inline">2</strong>, <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+accelerate launch --num_processes=2 ./train_sd16_lora.py</pre>
+			<p>If you have more than two GPUs and want to train on assigned GPUs (e.g., you have three GPUs and want the training code run on the second and third GPUs), use <span class="No-Break">this command:</span></p>
+			<pre class="source-code">
+CUDA_VISIBLE_DEVICES=1,2 accelerate launch --num_processes=2 ./train_sd16_lora.py</pre>
+			<p>To use the first and third GPUs, simply update the <strong class="source-inline">CUDA_VISIBLE_DEVICES</strong> settings to <strong class="source-inline">0,2</strong>, <span class="No-Break">like this:</span></p>
+			<pre class="source-code">
+CUDA_VISIBLE_DEVICES=0,2 accelerate<a id="_idTextAnchor437"/> launch --num_processes=2 ./train_sd16_lora.py</pre>
+			<h2 id="_idParaDest-261"><a id="_idTextAnchor438"/>Verifying the result</h2>
+			<p>This is the most exciting moment<a id="_idIndexMarker655"/> to witness the power of model training. First, let’s load up the LoRA but set its weight to <strong class="source-inline">0.0</strong> with <strong class="source-inline">adapter_weights = [</strong><span class="No-Break"><strong class="source-inline">0.0]</strong></span><span class="No-Break">:</span></p>
+			<pre class="source-code">
+from diffusers import StableDiffusionPipeline
+import torch
+from diffusers.utils import make_image_grid
+from diffusers import EulerDiscreteScheduler
+lora_name = "lora_file_name.safetensors"
+lora_model_path = f"./output_dir/{lora_name}"
+device = "cuda:0"
+pipe = StableDiffusionPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5",
+    torch_dtype = torch.bfloat16
+).to(device)
+pipe.load_lora_weights(
+    pretrained_model_name_or_path_or_dict=lora_model_path,
+    adapter_name = "az_lora"
+)
+prompt = "a toy bike. macro photo. 3d game asset"
+nagtive_prompt = "low quality, blur, watermark, words, name"
+pipe.set_adapters(
+    ["az_lora"],
+    adapter_weights = [0.0]
+)
+pipe.scheduler = EulerDiscreteScheduler.from_config(
+    pipe.scheduler.config)
+images = pipe(
+    prompt = prompt,
+    nagtive_prompt = nagtive_prompt,
+    num_images_per_prompt = 4,
+    generator = torch.Generator(device).manual_seed(12),
+    width = 768,
+    height = 768,
+    guidance_scale = 8.5
+).images
+pipe.to("cpu")
+torch.cuda.empty_cache()
+make_image_grid(images, cols = 2, rows = 2)</pre>
+			<p>Running the <a id="_idIndexMarker656"/>preceding code, we will get the images shown in <span class="No-Break"><em class="italic">Figure 21</em></span><span class="No-Break"><em class="italic">.1</em></span><span class="No-Break">:</span></p>
+			<div>
+				<div id="_idContainer144" class="IMG---Figure">
+					<img src="image/B21263_21_01.jpg" alt="Figure 21.1: A toy bike, a macro photo, a 3D game asset, and an image generated without using LoRA"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 21.1: A toy bike, a macro photo, a 3D game asset, and an image generated without using LoRA</p>
+			<p>The result is not <a id="_idIndexMarker657"/>that good. Now, let’s enable the trained LoRA with <strong class="source-inline">adapter_weights = [1.0]</strong>. Run the code again, and you should see the images shown in <span class="No-Break"><em class="italic">Figure 21</em></span><span class="No-Break"><em class="italic">.2</em></span><span class="No-Break">:</span></p>
+			<div>
+				<div id="_idContainer145" class="IMG---Figure">
+					<img src="image/B21263_21_02.jpg" alt="Figure 21.2: A toy bike, a macro photo, a 3D game asset, and an image generated with LoRA training using eight images﻿"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 21.2: A toy bike, a macro photo, a 3D game asset, and an image generated with LoRA training using eight images</p>
+			<p>The result is <a id="_idIndexMarker658"/>way better than the images without using the Lo<a id="_idTextAnchor439"/>RA! If you see similar <span class="No-Break">results, congratulations!</span></p>
+			<h1 id="_idParaDest-262"><a id="_idTextAnchor440"/>Summary</h1>
+			<p>This has been a long chapter, but learning about the power of model training is worth the length. Once we have mastered the training skill, we can train any models based on our needs. The whole training process isn’t easy, as there are so many details and trivial things to deal with. However, writing the training code is the only way to fully understand how model training works; considering the fruitful outcome, it is worth spending time to figure it out from the <span class="No-Break">bottom up.</span></p>
+			<p>Due to the length limitation of one chapter, I can only cover the entire LoRA training process, but once you succeed with LoRA training, you can find more training samples from Diffusers, change the code based on your specific needs, or simply write your training code, especially if you are working on a new <span class="No-Break">model’s architecture.</span></p>
+			<p>In this chapter, we began by training one simple model; the model itself isn’t that interesting, but it helped you to understand the core steps of model training using PyTorch. Then, we moved on to leverage the Accelerator package to train a model in multiple GPUs. Finally, we touched on the real Stable Diffusion model and trained a full-functioning LoRA, using simply <span class="No-Break">eight images.</span></p>
+			<p>In the next and final chapter, we’ll discuss something less technical, AI, and its relationship with us, privacy, and how t<a id="_idTextAnchor441"/>o keep pace with its <span class="No-Break">fast-changing advancements.</span></p>
+			<h1 id="_idParaDest-263"><a id="_idTextAnchor442"/>References</h1>
+			<ol>
+				<li>What is <strong class="bold">Distributed Data Parallel</strong> (<span class="No-Break"><strong class="bold">DDP</strong></span><span class="No-Break">): </span><a href="https://pytorch.org/tutorials/beginner/ddp_series_theory.html"><span class="No-Break">https://pytorch.org/tutorials/beginner/ddp_series_theory.html</span></a></li>
+				<li>Launch the LoRA training <span class="No-Break">script: </span><a href="https://huggingface.co/docs/diffusers/en/training/lora#launch-the-script&#13;"><span class="No-Break">https://huggingface.co/docs/diffusers/en/training/lora#launch-the-script</span></a></li>
+				<li>Hugging Face <span class="No-Break">PEFT: </span><a href="https://huggingface.co/docs/peft/en/index"><span class="No-Break">https://huggingface.co/docs/peft/en/index</span></a></li>
+				<li>Hugging Face <span class="No-Break">Accelerate: </span><a href="https://huggingface.co/docs/accelerate/en/index&#13;"><span class="No-Break">https://huggingface.co/docs/accelerate/en/index</span></a></li>
+			</ol>
+		</div>
+	</body></html>
