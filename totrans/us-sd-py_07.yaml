@@ -1,297 +1,425 @@
 - en: '7'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '7'
 - en: Optimizing Performance and VRAM Usage
+  id: totrans-1
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化性能和VRAM使用
 - en: In the previous chapters, we covered the theory behind the Stable Diffusion
     models, introduced the Stable Diffusion model data format, and discussed conversion
     and model loading. Even though the Stable Diffusion model conducts denoising in
     the latent space, by default, the model’s data and execution still require a lot
     of resources and may throw a `CUDA Out of memory` error from time to time.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的章节中，我们介绍了Stable Diffusion模型背后的理论，介绍了Stable Diffusion模型的数据格式，并讨论了转换和模型加载。尽管Stable
+    Diffusion模型在潜在空间中进行去噪，但默认情况下，模型的数据和执行仍然需要大量资源，并且可能会不时抛出`CUDA Out of memory`错误。
 - en: 'To enable fast and smooth image generation using Stable Diffusion, there are
     some techniques to optimize the overall process, boost the inference speed, and
     also reduce VRAM usage. In this chapter, we are going to cover the following optimization
     solutions and discuss how well these solutions work in practice:'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了使用Stable Diffusion快速平滑地生成图像，有一些技术可以优化整个过程，提高推理速度，并减少VRAM使用。在本章中，我们将介绍以下优化解决方案，并讨论这些解决方案在实际应用中的效果：
 - en: Using float16 or bfloat16 data type
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用float16或bfloat16数据类型
 - en: Enabling VAE tiling
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 启用VAE分块
 - en: Enabling Xformers or using PyTorch 2.0
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 启用Xformers或使用PyTorch 2.0
 - en: Enabling sequential CPU offload
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 启用顺序CPU卸载
 - en: Enabling model CPU offload
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 启用模型CPU卸载
 - en: '**Token** **merging** (**ToMe**)'
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Token** **合并** (**ToMe**)'
 - en: By using some of these solutions, you can enable your GPU with even 4 GB RAM
     to run a Stable Diffusion model smoothly. Please refer to [*Chapter 2*](B21263_02.xhtml#_idTextAnchor037)
     for detailed software and hardware requirements for running Stable Diffusion models.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过使用这些解决方案中的一些，你可以让你的GPU即使只有4 GB RAM也能顺畅地运行Stable Diffusion模型。请参阅[*第2章*](B21263_02.xhtml#_idTextAnchor037)以获取运行Stable
+    Diffusion模型所需的详细软件和硬件要求。
 - en: Setting the baseline
+  id: totrans-11
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 设置基线
 - en: Before heading to the optimization solutions, let’s take a look at the speed
     and VRAM usage with the default settings so that we know how much VRAM usage has
     been reduced or how much the speed has been improved after applying an optimization
     solution.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 在探讨优化解决方案之前，让我们看看默认设置下的速度和VRAM使用情况，这样我们就可以知道在应用优化解决方案后VRAM使用量减少了多少，或者速度提高了多少。
 - en: 'Let’s use a non-cherry-picked number `1` as the generator seed to exclude the
     impacts from the randomly generated seed. The tests are conducted on an RTX 3090
     with 24 GB VRAM running Windows 11, with another GPU for rendering all other windows
     and the UI so that the RTX 3090 can be dedicated to the Stable Diffusion pipelines:'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们使用一个非精选的数字`1`作为生成器的种子，以排除随机生成的种子的影响。测试是在运行Windows 11的RTX 3090（24 GB VRAM）上进行的，还有一个GPU用于渲染所有其他窗口和UI，这样RTX
+    3090就可以专门用于Stable Diffusion管道：
 - en: '[PRE0]'
+  id: totrans-14
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: By default, PyTorch enables **TensorFloat32** (**TF32**) mode for convolutions
     [4] and **float32** (**FP32**) mode for matrix multiplications. The preceding
     code generates a 512x512 image using 8.4 GB VRAM with a generation speed of 7.51iteration/second.
     In the following sections, we will measure the VRAM usage and the generation speed
     improvements after adopting an optimization solution.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，PyTorch为卷积启用**TensorFloat32** (**TF32**)模式[4]，为矩阵乘法启用**float32** (**FP32**)模式。前面的代码使用8.4
+    GB VRAM生成一个512x512的图像，生成速度为7.51次/秒。在接下来的章节中，我们将测量采用优化解决方案后的VRAM使用量和生成速度的提升。
 - en: Optimization solution 1 – using the float16 or bfloat16 data type
+  id: totrans-16
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化方案1 – 使用float16或bfloat16数据类型
 - en: In PyTorch, floating point tensors are created in FP32 precision by default.
     The TF32 data format was developed for Nvidia Ampere and later CUDA devices. TF32
     can achieve faster matrix multiplications and convolutions with slightly less
     accurate computation [5]. Both FP32 and TF32 are historic artifact settings and
     are required for training, but it is rare that networks need this much numerical
     accuracy for inference.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 在PyTorch中，默认以FP32精度创建浮点张量。TF32数据格式是为Nvidia Ampere和后续CUDA设备开发的。TF32可以通过略微降低计算精度来实现更快的矩阵乘法和卷积[5]。FP32和TF32都是历史遗留设置，对于训练是必需的，但网络很少需要如此高的数值精度来进行推理。
 - en: Instead of using the TF32 and FP32 data types, we can load and run the Stable
     Diffusion model weights in float16 or bfloat16 precision to save VRAM usage and
     improve speed. But what are the differences between float16 and bfloat16, and
     which one should we use?
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以不使用TF32和FP32数据类型，而是以float16或bfloat16精度加载和运行Stable Diffusion模型的权重，以节省VRAM使用并提高速度。但float16和bfloat16之间有什么区别，我们应该使用哪一个？
 - en: 'bfloat16 and float16 are both half-precision floating-point data formats, but
     they have some differences:'
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: bfloat16和float16都是半精度浮点数据格式，但它们有一些区别：
 - en: '**Range of values**: bfloat16 has a larger positive range than float16\. The
     maximum positive value for bfloat16 is approximately 3.39e38, while for float16
     it’s approximately 6.55e4\. This makes bfloat16 more suitable for models that
     require a large dynamic range.'
+  id: totrans-20
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**值范围**：bfloat16的正值范围比float16大。bfloat16的最大正值约为3.39e38，而float16约为6.55e4。这使得bfloat16更适合需要大动态范围模型的场景。'
 - en: '**Precision**: Both bfloat16 and float16 have a 3-bit exponent and a 10-bit
     mantissa (fraction). However, bfloat16 uses the leading bit as a sign bit, while
     float16 uses it as part of the mantissa. This means that bfloat16 has a smaller
     relative precision than float16, especially for small numbers.'
+  id: totrans-21
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**精度**：bfloat16和float16都具有3位指数和10位尾数（分数）。然而，bfloat16使用最高位作为符号位，而float16将其用作尾数的一部分。这意味着bfloat16的相对精度比float16小，特别是对于小数。'
 - en: bfloat16 is typically useful for deep neural networks. It provides a good balance
     between range, precision, and memory usage. It’s supported by many modern GPUs
     and can significantly reduce memory usage and increase training speed compared
     to using single precision (FP32).
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: bfloat16通常对深度神经网络很有用。它在范围、精度和内存使用之间提供了良好的平衡。它被许多现代GPU支持，与使用单精度（FP32）相比，可以显著减少内存使用并提高训练速度。
 - en: 'In Stable Diffusion, we can use bfloat16 or float16 to boost the inference
     speed and reduce the VRAM usage at the same time. Here is some code that loads
     a Stable Diffusion model with bfloat16:'
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Stable Diffusion中，我们可以使用bfloat16或float16来提高推理速度并同时减少VRAM使用。以下是一些使用bfloat16加载Stable
+    Diffusion模型的代码：
 - en: '[PRE1]'
+  id: totrans-24
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: We use the `text2img_pipe` pipeline object to generate an image that uses only
     4.7 GB VRAM, with 19.1 denoising iterations per second.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们使用`text2img_pipe`管道对象生成一个仅使用4.7 GB VRAM的图像，每秒进行19.1次去噪迭代。
 - en: Note that if you are using a CPU, you should not use `torch.float16` because
     the CPU does not have hardware support for float16.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，如果您使用的是CPU，则不应使用`torch.float16`，因为CPU没有对float16的硬件支持。
 - en: Optimization solution 2 – enabling VAE tiling
+  id: totrans-27
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化方案2 – 启用VAE分块
 - en: Stable Diffusion VAE tiling is a technique that can be used to generate large
     images. It works by splitting an image into small tiles and then generating each
     tile separately. This technique allows the generation of large images without
     using too much VRAM.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: Stable Diffusion VAE分块是一种可以用来生成大图像的技术。它通过将图像分割成小块，然后分别生成每个块来实现。这项技术允许在不使用太多VRAM的情况下生成大图像。
 - en: Note that the result of tiled encoding and decoding will differ unnoticeably
     from the non-tiled version. Diffusers’ implementation of VAE tiling uses overlap
     tiles to blend edges to form a much smoother output.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，分块编码和解码的结果与非分块版本几乎无差别。Diffusers对VAE分块的实现使用重叠的块来混合边缘，从而形成更平滑的输出。
 - en: 'You can turn on VAE tiling by adding the one-line code, `text2img_pipe.enable_vae_tiling()`,
     before inferencing:'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以在推理之前添加一行代码`text2img_pipe.enable_vae_tiling()`来启用VAE分块：
 - en: '[PRE2]'
+  id: totrans-31
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: Turning VAE tiling on or off does not seem to have much impact on the generated
     image. The only difference is that the VRAM usage, without VAE tiling, generates
     a 1024x1024 image that takes 7.6 GB VRAM. On the other hand, turning on the VAE
     tiling reduces the VRAM usage to 5.1 GB.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 打开或关闭VAE分块似乎对生成的图像影响不大。唯一的区别是，没有VAE分块时，VRAM使用量生成一个1024x1024的图像需要7.6 GB VRAM。另一方面，打开VAE分块将VRAM使用量降低到5.1
+    GB。
 - en: The VAE tiling happens between the image pixel space and latent space, and the
     overall process has a minimal impact on the denoising loop. Testing shows in the
     case of generating fewer than 4 images, there is an unnoticeable impact on the
     performance, which can reduce VRAM usage by 20% to 30%. It would be a good idea
     to always turn it on.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: VAE分块发生在图像像素空间和潜在空间之间，整个过程对去噪循环的影响最小。测试表明，在生成少于4张图像的情况下，对性能的影响不明显，可以减少20%到30%的VRAM使用量。始终开启它是个好主意。
 - en: Optimization solution 3 – enabling Xformers or using PyTorch 2.0
+  id: totrans-34
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化方案3 – 启用Xformers或使用PyTorch 2.0
 - en: When we provide a text or prompt to generate an image, the encoded text embedding
     will be fed to the Transformer multi-header attention component of the diffusion
     UNet.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们提供文本或提示来生成图像时，编码的文本嵌入将被馈送到扩散UNet的Transformer多头注意力组件。
 - en: Inside the Transformer block, the self-attention and cross-attention headers
     will try to compute the attention score (via the `QKV` operation). This is computation-heavy
     and will also use a lot of memory.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Transformer块内部，自注意力和交叉注意力头将尝试计算注意力分数（通过`QKV`操作）。这是计算密集型的，并且也会使用大量的内存。
 - en: 'The open source `Xformers` [2] package from Meta Research is built to optimize
     the process. In short, the main differences between Xformers and standard Transformers
     are as follows:'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: Meta Research的开源`Xformers` [2]软件包旨在优化此过程。简而言之，Xformers与标准Transformers之间的主要区别如下：
 - en: '**Hierarchical attention mechanism**: Xformers use a hierarchical attention
     mechanism, which consists of two layers of attention: a coarse layer and a fine
     layer. The coarse layer attends to the input sequence at a high level, while the
     fine layer attends to the input sequence at a low level. This allows Xformers
     to learn long-range dependencies in the input sequence while also being able to
     focus on local details.'
+  id: totrans-38
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**分层注意力机制**：Xformers使用分层注意力机制，它由两层注意力组成：粗层和细层。粗层在高层次上关注输入序列，而细层在低层次上关注输入序列。这使得Xformers能够在学习输入序列中的长距离依赖关系的同时，也能关注局部细节。'
 - en: '**Reduced number of heads**: Xformers use a smaller number of heads than standard
     Transformers. A head is a unit of computation in the attention mechanism. Xformers
     use 4 heads, while standard Transformers use 12 heads. This reduction in the number
     of heads allows Xformers to reduce the memory requirements while still maintaining
     performance.'
+  id: totrans-39
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**减少头数**：Xformers使用的头数比标准Transformers少。头是注意力机制中的计算单元。Xformers使用4个头，而标准Transformers使用12个头。这种头数的减少使得Xformers能够在保持性能的同时减少内存需求。'
 - en: 'Enabling Xformers for Stable Diffusion using the `Diffusers` package is quite
     simple. Add one line of code, as shown in the following snippet:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用`Diffusers`软件包为Stable Diffusion启用Xformers非常简单。只需添加一行代码，如下面的代码片段所示：
 - en: '[PRE3]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: If you are using PyTorch 2.0+, you may not notice the performance boost or VRAM
     usage drop. That is because PyTorch 2.0 includes a natively built attention optimization
     feature similar to the Xformers implementation. If a historical PyTorch before
     version 2.0 is being used, enabling Xformers will noticeably boost the inference
     speed and reduce VRAM usage.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你使用的是PyTorch 2.0+，你可能不会注意到性能提升或VRAM使用量下降。这是因为PyTorch 2.0包含一个类似于Xformers实现的本地构建的注意力优化功能。如果正在使用版本2.0之前的PyTorch历史版本，启用Xformers将明显提高推理速度并减少VRAM使用。
 - en: Optimization solution 4 – enabling sequential CPU offload
+  id: totrans-43
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化方案4 – 启用顺序CPU卸载
 - en: 'As we discussed in [*Chapter 5*](B21263_05.xhtml#_idTextAnchor097), one pipeline
     includes several sub-models:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在[*第五章*](B21263_05.xhtml#_idTextAnchor097)中讨论的那样，一个管道包括多个子模型：
 - en: Text embedding model used to encode text to embeddings
+  id: totrans-45
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 用于将文本编码为嵌入的文本嵌入模型
 - en: Image latent encoder/decoder used to encode the input guidance image and decode
     latent space to pixel images
+  id: totrans-46
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 用于编码输入引导图像和解码潜在空间到像素图像的图像潜在编码器/解码器
 - en: The UNet will loop the inference denoising steps
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: UNet 将循环推理去噪步骤
 - en: The safety checker model checks the safety of the generated content
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 安全检查模型检查生成内容的安全性
 - en: The idea of sequential CPU offload is offloading idle submodels to CPU RAM when
     it finishes its task and is idle.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 顺序CPU卸载的想法是在完成其任务并空闲时将空闲子模型卸载到CPU RAM。
 - en: 'Here is an example of how it works step by step:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是一个逐步工作的示例：
 - en: Load the CLIP text model to the GPU VRAM and encode the input prompt to embeddings.
+  id: totrans-51
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将CLIP文本模型加载到GPU VRAM，并将输入提示编码为嵌入。
 - en: Offload the CLIP text model to CPU RAM.
+  id: totrans-52
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将CLIP文本模型卸载到CPU RAM。
 - en: Load the VAE model (the image to latent space encoder and decoder) to the GPU
     VRAM and encode the start image if the current task is an image-to-image pipeline.
+  id: totrans-53
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将VAE模型（图像到潜在空间的编码器和解码器）加载到GPU VRAM，并在当前任务是图像到图像管道时编码起始图像。
 - en: Offload the VAE to the CPU RAM.
+  id: totrans-54
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将VAE卸载到CPU RAM。
 - en: Load UNet to loop through the denoising steps (load and offload unused sub-modules
     weights data too).
+  id: totrans-55
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将UNet加载到循环遍历去噪步骤（同时加载和卸载未使用的子模块权重数据）。
 - en: Offload UNet to the CPU RAM.
+  id: totrans-56
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将UNet卸载到CPU RAM。
 - en: Load the VAE model from CPU RAM to GPU VRAM to perform latent space to image
     decoding.
+  id: totrans-57
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将VAE模型从CPU RAM加载到GPU VRAM以执行潜在空间到图像的解码。
 - en: In the preceding steps, we can see that through all the processes, only one
     sub-model will stay in the VRAM, which can effectively reduce the usage of VRAM.
     However, the loading and offloading will significantly reduce the inference speed.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的步骤中，我们可以看到在整个过程中，只有一个子模型会留在 VRAM 中，这可以有效地减少 VRAM 的使用。然而，加载和卸载会显著降低推理速度。
 - en: 'Enabling sequential CPU offload is as simple as one line of code, as shown
     in the following snippet:'
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 启用顺序 CPU 卸载就像以下代码片段中的一行一样简单：
 - en: '[PRE4]'
+  id: totrans-60
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Imagine the possibility of creating a tailored pipeline that efficiently utilizes
     the VRAM for denoising with UNet. By strategically shifting the text encoder/decoder,
     VAE models, and safety checker models to the CPU during idle periods, while keeping
@@ -300,130 +428,191 @@
     in the code that comes with the book, which remarkably reduces VRAM usage to as
     low as 3.2 GB (even for generating a 512x512 image) while maintaining a comparable
     processing speed, with no noticeable degradation in performance!
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 想象一下创建一个定制管道，该管道能够有效地利用 VRAM 来进行 UNet 的去噪。通过在空闲期间将文本编码器/解码器、VAE 模型和安全检查器模型策略性地转移到
+    CPU 上，同时保持 UNet 模型在 VRAM 中，可以实现显著的速度提升。这种方法在书中提供的自定义实现中得到了证实，它将 VRAM 使用量显著降低到低至
+    3.2 GB（即使是生成 512x512 的图像），同时保持可比的处理速度，性能没有明显下降！
 - en: The custom pipeline code provided in this chapter did almost the same thing
     as `enable_sequential_cpu_offload()`. The only difference is keeping the UNet
     in VRAM until the end of denoising. That is why the inference speed remains fast.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章提供的自定义管道代码几乎与 `enable_sequential_cpu_offload()` 做的是同一件事。唯一的区别是保持 UNet 在 VRAM
+    中直到去噪结束。这就是为什么推理速度保持快速的原因。
 - en: With proper model load and offload management, we can reduce the VRAM usage
     from 4.7 GB to 3.2 GB while maintaining inference speeds that are indistinguishable
     from those achieved without model offloading.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过适当的模型加载和卸载管理，我们可以将 VRAM 使用量从 4.7 GB 降低到 3.2 GB，同时保持与未进行模型卸载时相同的推理速度。
 - en: Optimization solution 5 – enabling model CPU offload
+  id: totrans-64
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化方案 5 – 启用模型 CPU 卸载
 - en: Full model offloading moves the whole model data to and off GPU instead of moving
     weights only. If this is not enabled, all model data will stay in GPU before and
     after forward inference; clearing the CUDA cache won’t free up VRAM either. This
     could lead to a `CUDA Out of memory` error if you are loading up other models,
     say, an upscale model to further process the image. The model-to-CPU offload method
     can mitigate the `CUDA Out of` `memory` problem.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 完整模型卸载将整个模型数据移动到和从 GPU 上，而不是只移动权重。如果不启用此功能，所有模型数据在正向推理前后都将留在 GPU 上；清除 CUDA 缓存也不会释放
+    VRAM。如果你正在加载其他模型，例如，一个上采样模型以进一步处理图像，这可能会导致 `CUDA Out of memory` 错误。模型到 CPU 卸载方法可以缓解
+    `CUDA Out of` `memory` 问题。
 - en: Based on the idea behind this method, an additional one to two seconds will
     be spent on moving the model between CPU RAM and GPU VRAM.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据这种方法背后的理念，在 CPU RAM 和 GPU VRAM 之间移动模型时，将额外花费一到两秒钟。
 - en: 'To enable this method, remove `pipe.to("cuda")` and add `pipe.enable_model_cpu_offload()`:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启用此方法，请删除 `pipe.to("cuda")` 并添加 `pipe.enable_model_cpu_offload()`：
 - en: '[PRE5]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: When offloading the model, the GPU hosts a single primary pipeline component,
     usually the text encoder, UNet, or VAE, while the remaining components are idle
     on the CPU memory. Components such as UNet, which undergo multiple iterations,
     remain on the GPU until their utilization is no longer required.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 在卸载模型时，GPU 承载单个主要管道组件，通常是文本编码器、UNet 或 VAE，而其余组件在 CPU 内存中处于空闲状态。像 UNet 这样的组件，在经过多次迭代后，会留在
+    GPU 上，直到它们的利用率不再需要。
 - en: The model CPU offload method can reduce the VRAM usage to 3.6 GB and keep a
     relatively good inference speed. If you give the preceding code a test run, you
     will find the inference speed is relatively slow at the beginning and gradually
     speeds up to its normal iteration speed.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 模型 CPU 卸载方法可以将 VRAM 使用量降低到 3.6 GB，并保持相对较好的推理速度。如果你对前面的代码进行测试运行，你会发现推理速度最初相对较慢，然后逐渐加快到其正常迭代速度。
 - en: 'At the end of image generation, we can use the following code to manually move
     the model weights data out of VRAM to CPU RAM:'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 在图像生成结束时，我们可以使用以下代码手动将模型权重数据从 VRAM 移动到 CPU RAM：
 - en: '[PRE6]'
+  id: totrans-72
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: After executing the preceding code, you will find your GPU VRAM usage level
     has significantly reduced.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行前面的代码后，你会发现你的 GPU VRAM 使用量水平显著降低。
 - en: Next, let’s take a look at Token Merging.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，让我们来看看标记合并。
 - en: Optimization solution 6 – Token Merging (ToMe)
+  id: totrans-75
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 优化方案6 – 标记合并（ToMe）
 - en: '**Token Merging** (**ToMe**) was first posited by Daniel et al [3]. It is a
     technique that can be used to speed up the inference time of Stable Diffusion
     models. ToMe works by merging redundant tokens in the model, which means that
     the model has less work to do compared with non-merging models. This can lead
     to noticeable speed improvements without sacrificing image quality.'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: '**标记合并**（**ToMe**）最初由Daniel等人提出[3]。这是一种可以用来加快稳定扩散模型推理时间的技术。ToMe通过合并模型中的冗余标记来工作，这意味着与未合并的模型相比，模型需要做的工作更少。这可以在不牺牲图像质量的情况下带来明显的速度提升。'
 - en: ToMe works by first identifying redundant tokens in the model. This is done
     by looking at the similarity between tokens. If two tokens are very similar, then
     they are probably redundant. Once redundant tokens have been identified, they
     are merged. This is done by averaging the values of the two tokens.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: ToMe通过首先识别模型中的冗余标记来工作。这是通过查看标记之间的相似性来完成的。如果两个标记非常相似，那么它们可能是冗余的。一旦识别出冗余标记，它们就会被合并。这是通过平均两个标记的值来完成的。
 - en: For example, if a model has 100 tokens and 50 of those tokens are redundant,
     then merging the redundant tokens can reduce the number of tokens that the model
     has to process by 50%.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，如果一个模型有100个标记，其中50个标记是冗余的，那么合并冗余标记可以将模型需要处理的标记数量减少50%。
 - en: 'ToMe can be used with any Stable Diffusion model. It does not require any additional
     training. To use ToMe, we need to first install the following package from its
     original inventor:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: ToMe可以与任何稳定扩散模型一起使用。它不需要任何额外的训练。要使用ToMe，我们首先需要从其原始发明者那里安装以下包：
 - en: '[PRE7]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Then, import the `ToMe` package to enable it:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，导入`ToMe`包以启用它：
 - en: '[PRE8]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: The performance improvement is dependent on how many redundant tokens are found.
     In the preceding code, the `ToMe` package improves the iteration speed from around
     19 iterations per second to 20 iterations per second.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 性能提升取决于找到多少冗余标记。在前面的代码中，`ToMe`包将迭代速度从大约每秒19次提高到20次。
 - en: It's worth noting that the `ToMe` package may produce a slightly altered image
     output, although this difference has no discernible impact on image quality. This
     is because ToMe merges tokens, which can influence the conditional embeddings.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 值得注意的是，`ToMe`包可能会产生略微改变后的图像输出，尽管这种差异对图像质量没有可察觉的影响。这是因为ToMe合并了标记，这可能会影响条件嵌入。
 - en: Summary
+  id: totrans-85
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 摘要
 - en: In this chapter, we have introduced six techniques to enhance the performance
     of Stable Diffusion and minimize VRAM usage. The amount of VRAM is often the most
     significant hurdle in running a Stable Diffusion model, with `CUDA Out of memory`
     being a common issue. The techniques we have discussed can drastically reduce
     VRAM usage while maintaining the same inference speed.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了六种技术来增强稳定扩散的性能并最小化VRAM的使用。VRAM的量往往是运行稳定扩散模型时最显著的障碍，其中“CUDA内存不足”是一个常见问题。我们讨论的技术可以大幅减少VRAM的使用，同时保持相同的推理速度。
 - en: Enabling the float16 data type can halve VRAM usage and nearly double the inference
     speed. VAE tiling allows the generation of large images without excessive VRAM
     usage. Xformers can further decrease VRAM usage and increase inference speed by
     implementing an intelligent two-layer attention mechanism. PyTorch 2.0 provides
     native features such as Xformers and automatically enables them.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 启用float16数据类型可以将VRAM使用量减半，并将推理速度提高近一倍。VAE分块允许在不使用过多VRAM的情况下生成大图像。Xformers通过实现智能的两层注意力机制，可以进一步减少VRAM使用量并提高推理速度。PyTorch
+    2.0提供了原生功能，如Xformers，并自动启用它们。
 - en: Sequential CPU offload can significantly reduce VRAM usage by offloading a sub-model
     and its sub-modules to CPU RAM, albeit at the cost of slower inference speed.
     However, we can use the same concept to implement our sequential offload mechanism
@@ -431,43 +620,63 @@
     offload can offload the entire model to the CPU, freeing up VRAM for other tasks,
     and only reloading the models back to VRAM when necessary. **Token Merging**,
     or **ToMe**, reduces redundant tokens and boosts inference speed.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过将子模型及其子模块卸载到CPU RAM，顺序CPU卸载可以显著减少VRAM的使用，尽管这会以较慢的推理速度为代价。然而，我们可以使用相同的概念来实现我们的顺序卸载机制，以节省VRAM使用量，同时保持推理速度几乎不变。模型CPU卸载可以将整个模型卸载到CPU，为其他任务释放VRAM，并在必要时才将模型重新加载回VRAM。**标记合并**（或**ToMe**）减少了冗余标记并提高了推理速度。
 - en: By applying these solutions, you could potentially run a pipeline that outperforms
     any other models in the world. The AI landscape is constantly evolving, and by
     the time you read this, new solutions may have emerged. However, understanding
     the internal workings allows us to tune and optimize the image generation process
     according to your needs.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过应用这些解决方案，你可能会运行一个性能优于世界上任何其他模型的流水线。人工智能领域正在不断演变，在你阅读这段文字的时候，可能会有新的解决方案出现。然而，理解其内部工作原理使我们能够根据你的需求调整和优化图像生成过程。
 - en: In the next chapter, we are going to explore of the most exciting topics, community-shared
     LoRAs.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨最激动人心的主题之一，即社区共享的LoRAs。
 - en: References
+  id: totrans-91
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 参考文献
 - en: 'Hugging Face, memory, and speed: [https://huggingface.co/docs/diffusers/optimization/fp16](https://huggingface.co/docs/diffusers/optimization/fp16)'
+  id: totrans-92
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Hugging Face、内存和速度：[https://huggingface.co/docs/diffusers/optimization/fp16](https://huggingface.co/docs/diffusers/optimization/fp16)
 - en: 'facebookresearch, xformers: [https://github.com/facebookresearch/xformers](https://github.com/facebookresearch/xformers)'
+  id: totrans-93
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: facebookresearch, xformers：[https://github.com/facebookresearch/xformers](https://github.com/facebookresearch/xformers)
 - en: 'Daniel Bolya, Judy Hoffman; Token Merging for Fast Stable Diffusion: [https://arxiv.org/abs/2303.17604](https://arxiv.org/abs/2303.17604)'
+  id: totrans-94
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Daniel Bolya, Judy Hoffman；快速稳定扩散的Token合并：[https://arxiv.org/abs/2303.17604](https://arxiv.org/abs/2303.17604)
 - en: 'What Every User Should Know About Mixed Precision Training in PyTorch: [https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/#picking-the-right-approach](https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/#picking-the-right-approach'
+  id: totrans-95
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 每个用户都应该了解的PyTorch混合精度训练：[https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/#picking-the-right-approach](https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/#picking-the-right-approach)
 - en: )
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: )
 - en: 'Accelerating AI Training with NVIDIA TF32 Tensor Cores: [https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/)'
+  id: totrans-97
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用NVIDIA TF32 Tensor Cores加速AI训练：[https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/)
