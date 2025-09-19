@@ -1,6 +1,6 @@
 
 
-# 为Stable Diffusion构建优化提示
+# 第十七章：为Stable Diffusion构建优化提示
 
 在Stable Diffusion V1.5（SD V1.5）中，制作提示以生成理想的图像可能具有挑战性。看到由复杂和不寻常的词组合产生的令人印象深刻的图像并不罕见。这主要归因于Stable Diffusion V1.5中使用的语言文本编码器——OpenAI的CLIP模型。CLIP使用来自互联网的带标题图像进行训练，其中许多是标签而不是结构化句子。
 

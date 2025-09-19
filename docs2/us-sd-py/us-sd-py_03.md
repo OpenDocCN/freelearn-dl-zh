@@ -1,6 +1,6 @@
 
 
-# 使用Stable Diffusion生成图像
+# 第三章：使用Stable Diffusion生成图像
 
 在本章中，我们将通过利用Hugging Face Diffusers包（[https://github.com/huggingface/diffusers](https://github.com/huggingface/diffusers)）和开源包来开始使用常见的Stable Diffusion功能。正如我们在 [*第1章*](B21263_01.xhtml#_idTextAnchor015) 中提到的，*Stable Diffusion简介*，Hugging Face Diffusers是目前最广泛使用的Stable Diffusion的Python实现。在我们探索图像生成时，我们将介绍常用的术语。
 

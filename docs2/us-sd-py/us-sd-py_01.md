@@ -1,6 +1,6 @@
 
 
-# 介绍 Stable Diffusion
+# 第一章：介绍 Stable Diffusion
 
 Stable Diffusion 是一个深度学习模型，它利用扩散过程从引导指令和图像中生成高质量的美术作品。
 

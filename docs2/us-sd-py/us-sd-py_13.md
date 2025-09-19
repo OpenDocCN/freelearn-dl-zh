@@ -1,6 +1,6 @@
 
 
-# 使用 ControlNet 生成图像
+# 第十三章：使用 ControlNet 生成图像
 
 Stable Diffusion 的 ControlNet 是一个神经网络插件，允许你通过添加额外条件来控制扩散模型。它首次在 2023 年由 Zhang Lvmin 和 Maneesh Agrawala 发表的论文《Adding Conditional Control to Text-to-Image Diffusion Models [1]》中介绍。
 

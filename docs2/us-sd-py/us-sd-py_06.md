@@ -1,6 +1,6 @@
 
 
-# 使用 Stable Diffusion 模型
+# 第六章：使用 Stable Diffusion 模型
 
 当我们开始使用 Stable Diffusion 模型时，我们会立即遇到不同种类的模型文件，并需要知道如何将模型文件转换为所需的格式。
 

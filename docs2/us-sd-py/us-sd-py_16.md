@@ -1,6 +1,6 @@
 
 
-# 探索 Stable Diffusion XL
+# 第十六章：探索 Stable Diffusion XL
 
 在不太成功的 Stable Diffusion 2.0 和 Stable Diffusion 2.1 之后，2023 年 7 月 Stability AI 发布了其最新版本，**Stable Diffusion XL**（**SDXL**）[1]。注册一开放，我就迫不及待地应用了模型权重数据。我的测试和社区进行的测试都表明，SDXL 取得了显著的进步。它现在允许我们以更高的分辨率生成更高质量的图像，远远超过了 Stable Diffusion V1.5 基础模型。另一个显著的改进是能够使用更直观的“自然语言”提示来生成图像，消除了需要拼凑大量“单词”来形成一个有意义的提示的需求。此外，我们现在可以用更简洁的提示生成所需的图像。
 

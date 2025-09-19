@@ -1,6 +1,6 @@
 
 
-# 优化性能和VRAM使用
+# 第七章：优化性能和VRAM使用
 
 在前面的章节中，我们介绍了Stable Diffusion模型背后的理论，介绍了Stable Diffusion模型的数据格式，并讨论了转换和模型加载。尽管Stable Diffusion模型在潜在空间中进行去噪，但默认情况下，模型的数据和执行仍然需要大量资源，并且可能会不时抛出`CUDA Out of memory`错误。
 

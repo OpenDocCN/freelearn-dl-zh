@@ -1,6 +1,6 @@
 
 
-# Streamlining Text Preprocessing Techniques for Optimal NLP Performance
+# 第四章：Streamlining Text Preprocessing Techniques for Optimal NLP Performance
 
 文本预处理在自然语言处理（NLP）领域是一个至关重要的初始步骤。它包括将原始、未加工的文本数据转换为机器学习算法可以轻松理解的格式。为了从文本数据中提取有意义的见解，必须清理、规范化和将数据转换成更结构化的形式。本章概述了最常用的文本预处理技术，包括分词、词干提取、词形还原、停用词移除和**词性标注**（**POS**），以及它们的优缺点。
 
