@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 大语言模型解码
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/eb6ab63c213448f052afb5210ee505d4`](https://zh.annas-archive.org/md5/eb6ab63c213448f052afb5210ee505d4)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

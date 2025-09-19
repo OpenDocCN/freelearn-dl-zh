@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 人工智能密集型 Python 应用构建指南
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/7267c174a783a618ea95a0881f58bfe1`](https://zh.annas-archive.org/md5/7267c174a783a618ea95a0881f58bfe1)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
