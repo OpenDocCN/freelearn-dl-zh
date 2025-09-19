@@ -424,27 +424,48 @@ LDA 后面有很多数学原理——例如 **期望最大化**、吉布斯抽�
 
 1.  首先，我们将使用以下命令导入 `boto3`：
 
-    [PRE0]
+    ```py
+    import boto3
+    ```
 
 1.  接下来，我们将使用以下命令导入 `pandas`：
 
-    [PRE1]
+    ```py
+    import pandas as pd
+    ```
 
 1.  现在，我们将使用以下命令创建 S3 客户端对象：
 
-    [PRE2]
+    ```py
+    # Setup a region
+    region = 'us-west-2'
+    # Create an S3 client
+    s3 = boto3.client('s3',region_name = region)
+    ```
 
 1.  接下来，我们将创建一个具有唯一存储桶名称的变量。在这里，选定的存储桶名称是 `known-tm-analysis`，但你需要创建一个唯一的名称：
 
-    [PRE3]
+    ```py
+    # Creates a variable with the bucket name
+    #'<insert a unique bucket name>'
+    bucket_name = 'known-tm-analysis-20200302'
+    ```
 
 1.  接下来，创建一个新的存储桶：
 
-    [PRE4]
+    ```py
+    # Create a location Constraint
+    location = {'LocationConstraint': region}
+    # Creates a new bucket 
+    s3.create_bucket(Bucket=bucket_name,\
+                     CreateBucketConfiguration=location)
+    ```
 
 1.  创建要导入的 CSV 文件名列表：
 
-    [PRE5]
+    ```py
+    filenames_list = ['doc-topics.csv', 'topic-terms.csv']
+    ```
 
     注意
 
@@ -452,7 +473,10 @@ LDA 后面有很多数学原理——例如 **期望最大化**、吉布斯抽�
 
 1.  现在，使用以下代码行迭代每个文件以上传到S3：
 
-    [PRE6]
+    ```py
+    for filename in filenames_list:
+        s3.upload_file(filename, bucket_name, filename)
+    ```
 
     注意
 
@@ -460,15 +484,35 @@ LDA 后面有很多数学原理——例如 **期望最大化**、吉布斯抽�
 
 1.  接下来，检查文件名是否为`doc-topics.csv`：并获取`doc-topics.csv`文件对象，将其分配给`obj`变量。
 
-    [PRE7]
+    ```py
+        if filename == 'doc-topics.csv':
+            obj = s3.get_object(Bucket=bucket_name, Key=filename)
+    ```
 
 1.  接下来，读取`csv`对象并将其分配给`doc_topics`变量。您可以看到包括以下*步骤7*和*步骤8*在内的整个代码块：
 
-    [PRE8]
+    ```py
+    for filename in filenames_list:
+        # Uploads each CSV to the created bucket
+        s3.upload_file(filename, bucket_name, filename)
+        # checks if the filename is 'doc-topics.csv'
+        if filename == 'doc-topics.csv':
+            # gets the 'doc-topics.csv' file as an object
+            obj = s3.get_object(Bucket=bucket_name, Key=filename)
+            # reads the csv and assigns to doc_topics 
+            doc_topics = pd.read_csv(obj['Body'])
+        else:
+            obj = s3.get_object(Bucket=bucket_name, Key=filename)
+            topic_terms = pd.read_csv(obj['Body'])
+    ```
 
 1.  现在，使用以下命令将主题列上的文件合并，以获取每份文档中最常见的术语：
 
-    [PRE9]
+    ```py
+    merged_df = pd.merge(doc_topics, topic_terms, on='topic')
+    # print the merged_df to the console
+    print(merged_df)
+    ```
 
 1.  接下来，使用*Shift* + *Enter*键执行笔记本单元格：
 

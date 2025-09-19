@@ -22,7 +22,10 @@
 
 1.  设置并激活Python虚拟环境：
 
-    [PRE0]
+    ```py
+    $ python3 -m venv venv
+    $ source venv/bin/activate
+    ```
 
 1.  您将使用以下包来开发本章中描述的演示：
 
@@ -48,7 +51,9 @@
 
     要在您的Python虚拟环境中安装所提到的包，请运行以下命令：
 
-    [PRE1]
+    ```py
+    pip3 install langchain==0.2.14 langchain-community==0.2.12 langchain-core==0.2.33 langchain-mongodb==0.1.8 langchain-openai==0.1.22 langchain-text-splitters==0.2.2 numpy==1.26.4 openai==1.41.1 s3fs==2024.6.1 pymongo==4.8.0 pandas==2.2.2 boto3==1.35.2 python-dotenv==1.0.1
+    ```
 
     您还需要了解如何设置和运行JupyterLab或Jupyter Notebook。
 
@@ -74,11 +79,30 @@
 
 1.  初始化OpenAI API密钥和MongoDB连接字符串：
 
-    [PRE2]
+    ```py
+    import os
+    import getpass
+    # set openai api key
+    try:
+        openai_api_key = os.environ["OPENAI_API_KEY"]
+    except KeyError:
+        openai_api_key = getpass.getpass("Please enter your OPENAI API KEY (hit enter): ")
+    # Set MongoDB Atlas connection string
+    try:
+        MONGO_CONN_STR = os.environ["MONGODB_CONNECTION_STR"]
+    except KeyError:
+        MONGO_CONN = getpass.getpass("Please enter your MongoDB Atlas Connection String (hit enter): ")
+    ```
 
 1.  现在，从S3存储桶中加载数据集。在Jupyter Notebook中运行以下代码行以直接从AWS S3存储桶读取数据到`pandas` DataFrame：
 
-    [PRE3]
+    ```py
+    import pandas as pd
+    import s3fs
+    df = pd.read_json("https://ashwin-partner-bucket.s3.eu-west-1.amazonaws.com/movies_sample_dataset.jsonl", orient="records", lines=True)
+    df.to_json("./movies_sample_dataset.jsonl", orient="records", lines=True)
+    df[:3]
+    ```
 
     执行前面的代码片段后，你应该在你的Jupyter Notebook单元格中看到以下结果。
 
@@ -90,7 +114,27 @@
 
 1.  接下来，运行此`final`字段与OpenAI的嵌入API，如图所示：
 
-    [PRE4]
+    ```py
+    import numpy as np
+    from tqdm import tqdm
+    import openai
+    df['final'] = df['text'] + "    Overview: " + df['overview']
+    df['final'][:5]
+    step = int(np.ceil(df['final'].shape[0]/100))
+    embeddings_t = []
+    lines = []
+    # Note that we must split the dataset into smaller batches to not exceed the rate limits imposed by OpenAI API's.
+    for x, y in list(map(lambda x: (x, x+step), list(range(0, df.shape[0], step)))):
+        lines += [df.final.values[x:y].tolist()]
+    for i in tqdm(lines):
+        embeddings_t += openai.embeddings.create(
+            model='text-embedding-ada-002', input=i).data
+    out = []
+    for ele in embeddings_t:
+        out += [ele.embedding]
+    df['embedding'] = out
+    df[:5]
+    ```
 
     你应该看到`sample_movies`数据集在`embedding`字段中丰富了OpenAI嵌入，如图*图8**.2*所示。
 
@@ -102,13 +146,36 @@
 
 1.  现在你已经为`sample_movies`数据集创建了向量嵌入，你可以初始化MongoDB客户端并将文档插入你选择的集合中，通过运行以下代码行：
 
-    [PRE5]
+    ```py
+    from pymongo import MongoClient
+    import osmongo_client = MongoClient(os.environ["MONGODB_CONNECTION_STR"])
+    # Upload documents along with vector embeddings to MongoDB Atlas Collection
+    output_collection = mongo_client["sample_movies"]["embed_movies"]
+    if output_collection.count_documents({})>0:
+        output_collection.delete_many({})
+    _ = output_collection.insert_many(df.to_dict("records"))
+    ```
 
     你已经将测试数据导入以构建向量搜索功能。现在，让我们按照以下步骤构建向量搜索索引。
 
 1.  让我们首先创建向量索引定义。你可以在MongoDB Atlas向量搜索UI中通过遵循*第5章*，*向量数据库*中解释的步骤创建一个向量搜索索引。本演示教程所需的向量索引在此提供：
 
-    [PRE6]
+    ```py
+    {
+        "fields": [
+          {
+            "type": "vector",
+            "numDimensions": 1536,
+            "path": "embedding",
+            "similarity": "cosine"
+          },
+          {
+            "type": "filter",
+            "path": "year"
+          },
+        ]
+    }
+    ```
 
     一旦在MongoDB Atlas UI中的向量搜索索引JSON编辑器下添加了向量索引定义，创建向量搜索索引的过程就会被触发，并在向量索引定义中指定的`path`字段处创建向量搜索索引。现在，你准备好在MongoDB Atlas中执行向量搜索查询，在存储所有数据的`sample_movies.embed_movies`集合上创建向量索引。
 
@@ -130,7 +197,29 @@
 
     运行以下代码以初始化一个可以帮助您实现向量搜索、预过滤和后过滤的函数：
 
-    [PRE7]
+    ```py
+    def query_vector_search(q, prefilter = {}, postfilter = {},path="embedding",topK=2):
+        ele = openai.embeddings.create(model='text-embedding-ada-002', input=q).data
+        query_embedding = ele[0].embedding
+        vs_query = {
+                    "index": "default",
+                    "path": path,
+                    "queryVector": query_embedding,
+                    "numCandidates": 10,
+                    "limit": topK,
+                }
+        if len(prefilter)>0:
+            vs_query["filter"] = prefilter
+        new_search_query = {"$vectorSearch": vs_query}
+        project = {"$project": {"score": {"$meta": "vectorSearchScore"},"_id": 0,"title": 1, "release_date": 1, "overview": 1,"year": 1}}
+        if len(postfilter.keys())>0:
+            postFilter = {"$match":postfilter}
+            res = list(output_collection.aggregate([new_search_query, project, postFilter]))
+        else:
+            res = list(output_collection.aggregate([new_search_query, project]))
+        return res
+    query_vector_search("I like Christmas movies, any recommendations for movies release after 1990?", prefilter={"year": {"$gt": 1990}}, topK=5)
+    ```
 
     您应该得到以下结果：
 
@@ -140,7 +229,9 @@
 
 这是一个示例查询，使用 `year` 作为预过滤和一个基于 `score` 的后过滤来仅保留相关结果：
 
-[PRE8]
+```py
+query_vector_search("I like Christmas movies, any recommendations for movies release after 1990?", prefilter={"year":{"$gt": 1990}}, postfilter= {"score": {"$gt":0.905}},topK=5)
+```
 
 您应该得到以下结果：
 
@@ -154,7 +245,26 @@
 
 利用 **LangChain** 和 MongoDB Atlas 向量搜索构建语义相似度检索器提供了几个优点。以下示例演示了如何使用 LangChain 包装类执行向量相似度搜索：
 
-[PRE9]
+```py
+from langchain_mongodb.vectorstores import MongoDBAtlasVectorSearch
+from langchain_openai import OpenAIEmbeddings
+import json
+embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+vector_search = MongoDBAtlasVectorSearch(output_collection, embedding_model, text_key='final')
+fquery = {"year": {"$gt": 1990}}
+search_kwargs = {
+    "k": 5,
+    'filter': fquery,
+}
+retriever = vector_search.as_retriever(search_kwargs=search_kwargs)
+docs = retriever.invoke("I like Christmas movies, any recommendations for movies release after 1990?")
+for doc in docs:
+    foo = {}
+    foo['title'] = doc.metadata['title']
+    foo['year'] = doc.metadata['year']
+    foo['final'] = doc.metadata['text']
+    print(json.dumps(foo,indent=1))
+```
 
 这是结果：
 
@@ -262,11 +372,37 @@
 
 以下是通过LangChain调用OpenAI LLM的示例代码：
 
-[PRE10]
+```py
+from openai import OpenAI
+client = OpenAI()
+def invoke_llm(prompt, model_name='gpt-3.5-turbo-0125'):
+    """
+    Queries with input prompt to OpenAI API using the chat completion api gets the model's response.
+    """
+    response = client.chat.completions.create(
+      model=model_name,
+      messages=[
+        {
+          «role»: «user»,
+          «content»: prompt
+        }
+      ],
+      temperature=0.2,
+      max_tokens=256,
+      top_p=1,
+      frequency_penalty=0,
+      presence_penalty=0
+    )
+    chatbot_response = response.choices[0].message.content.strip()
+    return chatbot_response
+invoke_llm("This is a test")
+```
 
 这里是结果：
 
-[PRE11]
+```py
+'Great! What do you need help with?'
+```
 
 现在你有了调用MongoDB Atlas向量搜索进行检索的API以及调用LLM的API，你可以结合这两个工具来创建一个RAG系统。
 
@@ -276,31 +412,63 @@
 
 以下是一个在私有知识库上执行QA的提示示例：
 
-[PRE12]
+```py
+def get_prompt(question, context):
+    prompt = f"""Question: {question}
+            System: Let's think step by step.
+            Context: {context}
+            """
+    return prompt
+def get_recommendation_prompt(query, context):
+    prompt = f"""
+        From the given movie listing data, choose a few great movie recommendations.
+        User query: {query}
+        Context: {context}
+        Movie Recommendations:
+        1\. Movie_name: Movie_overview
+        """
+    return prompt
+```
 
 为了展示RAG相对于基础LLM的优势，让我们首先在没有向量搜索上下文的情况下询问LLM一个问题，然后包含它。这将展示你如何通过利用未在私有知识库上训练的基础LLM，如`gpt-3.5-turbo`，来提高结果的准确性并减少幻觉。
 
 这里是未使用向量搜索的查询响应：
 
-[PRE13]
+```py
+print(invoke_llm("In which movie does a footballer go completely blind?"))
+```
 
 这是结果：
 
-[PRE14]
+```py
+The Game of Their Lives" (2005), where the character Davey Herold, a footballer, goes completely blind after being hit in the head during a game
+```
 
 虽然LLM的响应显示它在事实准确性方面存在困难，但与人类监督一起在企业应用中使用它仍然有希望。这些系统可以协同有效地为商业应用提供动力。为了帮助克服这个问题，你需要通过向量搜索结果向提示中添加上下文。
 
 让我们看看如何使用`invoke_llm`函数和`query_vector_search`方法，将相关上下文与用户查询一起提供，以生成具有事实正确答案的响应：
 
-[PRE15]
+```py
+idea = "In which movie does a footballer go completely blind?"
+search_response = query_vector_search(idea, prefilter={"year":{"$gt": 1990}}, postfilter={"score": {"$gt":0.8}},topK=10)
+premise = "\n".join(list(map(lambda x:x['final'], search_response)))
+print(invoke_llm(get_prompt(idea, premise)))
+```
 
 这里是结果：
 
-[PRE16]
+```py
+The movie in which a footballer goes completely blind is "23 Blast."
+```
 
 同样，你可以使用`get_recommendation_prompt`方法，通过简单的RAG框架生成一些电影推荐：
 
-[PRE17]
+```py
+question = "I like Christmas movies, any recommendations for movies release after 1990?"
+search_response = query_vector_search(question,topK=10)
+context = "\n".join(list(map(lambda x:x['final'], search_response)))
+print(invoke_llm(get_recommendation_prompt("I like Christmas movies, any recommendations for movies release after 1990?", context)))
+```
 
 这里是结果：
 
@@ -334,7 +502,20 @@
 
 对于此示例，您将利用来自一家知名电子商务公司的时尚数据。以下代码展示了如何将数据集从S3存储桶加载到`pandas` DataFrame中，然后将这些文档插入到MongoDB Atlas集合`search.catalog_final_myn`中：
 
-[PRE18]
+```py
+import pandas as pd
+import s3fs
+import os
+import boto3
+s3_uri= "https://ashwin-partner-bucket.s3.eu-west-1.amazonaws.com/fashion_dataset.jsonl"
+df = pd.read_json(s3_uri, orient="records", lines=True)
+print(df[:3])
+from pymongo import MongoClient
+mongo_client = MongoClient(os.environ["MONGODB_CONNECTION_STR"])
+# Upload documents along with vector embeddings to MongoDB Atlas Collection
+col = mongo_client["search"]["catalog_final_myn"]
+col.insert_many(df.to_dict(orient="records"))
+```
 
 这里是结果：
 
@@ -346,13 +527,160 @@
 
 如您在*图8**.10*中看到的那样，向量嵌入已经作为数据集的一部分提供。因此，下一步是创建向量搜索索引。您可以通过遵循*第5章*，*向量数据库*中详细说明的步骤，使用以下索引映射来创建向量搜索索引：
 
-[PRE19]
+```py
+{
+    "fields": [
+      {
+        "type": "vector",
+        "numDimensions": 1536,
+        "path": "openAIVec",
+        "similarity": "cosine"
+      }
+    ]
+}
+```
 
 ### 使用高级RAG的时尚推荐
 
 您已成功将新的时尚数据集加载到MongoDB Atlas集合中，并创建了包含所有构建块的向量搜索索引。现在，您可以使用以下代码设置高级RAG系统并构建具有之前提到的功能的推荐系统：
 
-[PRE20]
+```py
+from langchain_core.output_parsers import JsonOutputParser # type: ignore
+from langchain_core.prompts import PromptTemplate # type: ignore
+from langchain_core.pydantic_v1 import BaseModel, Field # type: ignore
+from langchain_openai import ChatOpenAI # type: ignore
+from langchain_community.embeddings import OpenAIEmbeddings # type: ignore
+from langchain_mongodb.vectorstores import MongoDBAtlasVectorSearch # type: ignore
+from pymongo import MongoClient # type: ignore
+from typing import List
+from itertools import chain
+import certifi # type: ignore
+import os
+from dotenv import load_dotenv # type: ignore
+load_dotenv()
+from functools import lru_cache
+@lru_cache
+def get_openai_emb_transformers():
+    """
+    Returns an instance of OpenAIEmbeddings for OpenAI transformer models.
+    This function creates and returns an instance of the OpenAIEmbeddings class,
+    which provides access to OpenAI transformer models for natural language processing.
+    The instance is cached using the lru_cache decorator for efficient reuse.
+    Returns:
+        embeddings (OpenAIEmbeddings): An instance of the OpenAIEmbeddings class.
+    """
+    embeddings = OpenAIEmbeddings()
+    return embeddings
+@lru_cache
+def get_vector_store():
+    """
+    Retrieves the vector store for MongoDB Atlas.
+    Returns:
+        MongoDBAtlasVectorSearch: The vector store object.
+    """
+    vs = MongoDBAtlasVectorSearch(collection=col, embedding=get_openai_emb_transformers(), index_name="vector_index_openAi_cosine", embedding_key="openAIVec", text_key="title")
+    return vs
+@lru_cache(10)
+def get_conversation_chain_conv():
+    """
+    Retrieves a conversation chain model for chat conversations.
+    Returns:
+        ChatOpenAI: The conversation chain model for chat conversations.
+    """
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2, max_tokens=2048)
+    # chain = ConversationChain(llm=llm, memory=ConversationBufferWindowMemory(k=5))
+    return llm
+# Define your desired data structure.
+class ProductRecoStatus(BaseModel):
+    """
+    Represents the status of product recommendations.
+    Attributes:
+        relevancy_status (bool): Product recommendation status conditioned on the context of the input query.
+                                 True if the query is related to purchasing fashion clothing and/or accessories.
+                                 False otherwise.
+        recommendations (List[str]): List of recommended product titles based on the input query context and
+                                     if the relevancy_status is True.
+    """
+    relevancy_status: bool = Field(description="Product recommendation status is conditioned on the fact if the context of input query is to purchase a fashion clothing and or fashion accessories.")
+    recommendations: List[str] = Field(description="list of recommended product titles based on the input query context and if recommendation_status is true.")
+class Product(BaseModel):
+    """
+    Represents a product.
+    Attributes:
+        title (str): Title of the product.
+        baseColour (List[str]): List of base colours of the product.
+        gender (List[str]): List of genders the product is targeted for.
+        articleType (str): Type of the article.
+        mfg_brand_name (str): Manufacturer or brand name of the product.
+    """
+    title: str = Field(description="Title of the product.")
+    baseColour: List[str] = Field(description="List of base colours of the product.")
+    gender: List[str] = Field(description="List of genders the product is targeted for.")
+    articleType: str = Field(description="Type of the article.")    mfg_brand_name: str = Field(description="Manufacturer or brand name of the product.")
+class Recommendations(BaseModel):
+    """
+    Represents a set of recommendations for products and a message to the user.
+    Attributes:
+        products (List[Product]): List of recommended products.
+        message (str): Message to the user and context of the chat history summary.
+    """
+    products: List[Product] = Field(description="List of recommended products.")
+    message: str = Field(description="Message to the user and context of the chat history summary.")
+reco_status_parser = JsonOutputParser(pydantic_object=ProductRecoStatus)
+reco_status_prompt = PromptTemplate(    template="You are AI assistant tasked at identifying if there is a product purchase intent in the query and providing suitable fashion recommendations.\n{format_instructions}\n{query}\n\
+        #Chat History Summary: {chat_history}\n\nBased on the context of the query, please provide the relevancy status and list of recommended products.",
+    input_variables=["query", "chat_history"],
+    partial_variables={"format_instructions": reco_status_parser.get_format_instructions()},
+)
+reco_parser = JsonOutputParser(pydantic_object=Recommendations)
+reco_prompt = PromptTemplate(
+    input_variables=["question", "recommendations", "chat_history"],
+    partial_variables={"format_instructions": reco_parser.get_format_instructions()},
+    template="\n User query:{question} \n Chat Summary: {chat_history} \n Rank and suggest me suitable products for creating grouped product recommendations given all product recommendations below feature atleast one product for each articleType \n {recommendations} \n show output in {format_instructions} for top 10 products"
+)
+def get_product_reco_status(query: str, chat_history: List[str] = []):
+    """
+    Retrieves the recommendation status for a product based on the given query and chat history.
+    Args:
+        query (str): The query to be used for retrieving the recommendation status.
+        chat_history (List[str]): The chat history containing previous conversations.
+    Returns:
+        The response containing the recommendation status.
+    """
+    llm = get_conversation_chain_conv()
+    chain = reco_status_prompt | llm | reco_status_parser
+    resp = chain.invoke({"query": query, "chat_history": chat_history})
+    return resp
+def get_sorted_results(product_recommendations):
+    all_titles = [rec['title'] for rec in product_recommendations['products']]
+    results = list(col.find({"title": {"$in":all_titles}}, {"_id": 0 , "id":1, "title": 1, "price": 1, "baseColour": 1, "articleType": 1, "gender": 1, "link" : 1, "mfg_brand_name": 1}))
+    sorted_results = []
+    for title in all_titles:
+        for result in results:
+            if result['title'] == title:
+                sorted_results.append(result)
+                break
+    return sorted_results
+def get_product_recommendations(query: str, reco_queries: List[str], chat_history: List[str]=[]):
+    """
+    Retrieves product recommendations based on the given query and chat history.
+    Args:
+        query (str): The query string for the recommendation.
+        chat_history (List[str]): The list of previous chat messages.
+        filter_query (dict): The filter query to apply during the recommendation retrieval.
+        reco_queries (List[str]): The list of recommendation queries.
+    Returns:
+        dict: The response containing the recommendations.
+    """
+    vectorstore = get_vector_store()
+    retr = vectorstore.as_retriever(search_kwargs={"k": 10})
+    all_recommendations = list(chain(*retr.batch(reco_queries)))
+    llm = get_conversation_chain_conv()
+    llm_chain = reco_prompt | llm | reco_parser
+    resp = llm_chain.invoke({"question": query, "chat_history": chat_history, "recommendations": [v.page_content for v in all_recommendations]})
+    resp = get_sorted_results(resp)
+    return resp
+```
 
 上述代码执行以下任务：
 
@@ -368,11 +696,23 @@
 
 让我们现在使用这些方法来创建一个产品推荐示例。输入以下代码，然后检查其输出：
 
-[PRE21]
+```py
+query = "Can you suggest me some casual dresses for date occasion with my boyfriend"
+status = get_product_reco_status(query)
+print(status)
+print(get_product_recommendations(query, reco_queries=status["recommendations"], chat_history=[])
+```
 
 这是状态输出：
 
-[PRE22]
+```py
+{'relevancy_status': True,
+ 'recommendations': ['Floral Print Wrap Dress',
+  'Off-Shoulder Ruffle Dress',
+  'Lace Fit and Flare Dress',
+  'Midi Slip Dress',
+  'Denim Shirt Dress']}
+```
 
 你可以从前面的示例输出中看到，LLM能够通过在MongoDB Atlas集合上执行向量相似性搜索来将产品意图购买分类为正面，并推荐合适的查询。
 
@@ -384,11 +724,18 @@
 
 相反，你可以测试相同的方法来找到一个适合约会的地点，而不是寻找礼物或着装的建议。在这种情况下，模型将查询分类为具有负面产品购买意图，并且不会提供任何搜索词建议：
 
-[PRE23]
+```py
+query = "Where should I take my boy friend for date"
+status = get_product_reco_status(query)
+print(status)
+print(get_conversation_chain_conv().invoke(query).content)
+```
 
 这是状态输出：
 
-[PRE24]
+```py
+{'relevancy_status': False, 'recommendations': []}
+```
 
 这是LLM的输出：
 

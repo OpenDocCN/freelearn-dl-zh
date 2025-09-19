@@ -256,15 +256,66 @@ LLM系统的评估指标大致可以分为以下类别：
 
 首先，安装`prettytable` Python包，你将使用它以可读的格式输出结果。在终端中安装包：
 
-[PRE0]
+```py
+pip3 install prettytable==3.10.2
+```
 
 然后，执行以下Python代码：
 
-[PRE1]
+```py
+from prettytable import PrettyTable
+input_relevance_guardrail_data = [
+    {
+        "input": "What should I do in New York City in July?",
+        "output": True,
+        "expected": True
+    },
+{
+        "input": "Can you help me with my math homework?",
+        "output": False,
+        "expected": False
+    },
+    {
+        "input": "What's the capital of France?",
+        "output": False,
+        "expected": True
+    },
+]
+# assertion-based evaluation
+def evaluate_correctness(output, expected):
+    return 1 if output == expected else 0
+def calculate_average(scores):
+    return sum(scores) / len(scores)
+def create_table(data):
+    table = PrettyTable()
+    table.field_names = ["Input", "Output", "Expected", "Score"]
+    scores = [evaluate_correctness(case["output"], case["expected"]) for case in data]
+    for case, score in zip(data, scores):
+        table.add_row([case["input"], case["output"], case["expected"], score])
+# Add a blank row for visual separation
+table.add_row(["", "", "", ""])
+    # Add average score to bottom of the table
+    average_score = calculate_average(scores)
+    table.add_row(["Average", "", "", f"{average_score:.4f}"])
+    return table
+# Create and print the table
+result_table = create_table(input_relevance_guardrail_data)
+print(result_table)
+```
 
 此代码将以下评估结果输出到终端：
 
-[PRE2]
+```py
++--------------------------------------------+--------+----------+--------+
+|                   Input                    | Output | Expected | Score  |
++--------------------------------------------+--------+----------+--------+
+| What should I do in New York City in July? |  True  |   True   |   1    |
+|   Can you help me with my math homework?   | False  |  False   |   1    |
+|       What's the capital of France?        | False  |   True   |   0    |
+|                                            |        |          |        |
+|                  Average                   |        |          | 0.6667 |
++--------------------------------------------+--------+----------+--------+
+```
 
 上述代码示例展示了如何使用基于断言的评估指标来评估智能应用中的LLM组件。
 
@@ -286,15 +337,95 @@ LLM系统的评估指标大致可以分为以下类别：
 
 首先，你必须安装几个Python包。`prettytable`包以可读的格式输出结果，`sacrebleu`包计算BLEU分数，`rouge-score`包计算ROUGE分数。在终端中安装这些包：
 
-[PRE3]
+```py
+pip3 install prettytable==3.10.2 sacrebleu==2.4.2 rouge-score==0.1.2
+```
 
 然后，执行以下Python代码：
 
-[PRE4]
+```py
+from prettytable import PrettyTable
+import sacrebleu
+from rouge_score import rouge_scorer
+evaluation_data = [
+    {
+        "input": "What should I do in New York City in July?",
+        "output": "Check out Times Square, go to an outdoor concert, and visit the Statue of Liberty.",
+        "golden_answer": "Explore Central Park, attend outdoor concerts, and visit rooftop bars.",
+        "contexts": [
+            "Times Square is known for its Broadway theaters, bright lights, and bustling atmosphere.",
+            "Outdoor concerts in Central Park are popular summer events attracting many visitors.",
+            "The Statue of Liberty is a symbol of freedom and a must-see landmark in NYC."
+        ]
+    },
+    {
+        "input": "Can you help me with my math homework?",
+        "output": "I'm designed to assist with travel queries. For math help, try using online resources like Khan Academy or Mathway.",
+        "golden_answer": "I am a travel assistant chatbot, so I cannot help you with your math homework.",
+        "contexts": []
+    },
+    {
+        "input": "What's the capital of France?",
+        "output": "The capital of France is Paris.",
+        "golden_answer": "Paris is the capital of France.",
+        "contexts": [
+            "Paris, known as the City of Light, is the most populous city of France.",
+            "European capitals: Paris, France; Berlin, Germany; Madrid, Spain",
+        ]
+    }
+]
+# Statistical evaluators
+def evaluate_bleu(output, golden_answer):
+    bleu = sacrebleu.corpus_bleu([output], [[golden_answer]])
+    return bleu.score / 100  # Normalize BLEU score to be between 0 and 1
+def evaluate_rouge(output, contexts):
+    context_text = ("\n").join(contexts)
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+    scores = scorer.score(context_text, output)
+    return scores['rougeL'].fmeasure
+def calculate_average(scores):
+    return sum(scores) / len(scores)
+# truncate strings for easier printing in table
+def truncate_string(s, max_length=10):
+    return (s[:max_length] + '...') if len(s) > max_length else s
+def create_table(data):
+    table = PrettyTable()
+    table.field_names = ["Input", "Output", "Golden Answer", "# Contexts", "BLEU", "ROUGE"]
+    bleu_scores = [evaluate_bleu(case["output"], case["golden_answer"]) for case in data]
+    rouge_scores = [evaluate_rouge(case["output"], case["contexts"]) for case in data]
+    for case, bleu, rouge in zip(data, bleu_scores, rouge_scores):
+        table.add_row([
+            truncate_string(case["input"]),
+            truncate_string(case["output"]),
+            truncate_string(case["golden_answer"]),
+            len(case["contexts"]),
+            f"{bleu:.4f}",
+            f"{rouge:.4f}"])
+    # Add a blank row for visual separation
+    table.add_row(["", "", "", "", "", ""])
+    # Add the average score to bottom of the table
+    average_bleu = calculate_average(bleu_scores)
+    average_rouge = calculate_average(rouge_scores)
+    table.add_row(["Average", "", "", "", f"{average_bleu:.4f}", f"{average_rouge:.4f}"])
+    return table
+# Create and print the table
+result_table = create_table(evaluation_data)
+print(result_table)
+```
 
 此代码将以下内容输出到终端：
 
-[PRE5]
+```py
++---------------+---------------+---------------+------------+--------+--------+
+|     Input     |     Output    | Golden Answer | # Contexts |  BLEU  | ROUGE  |
++---------------+---------------+---------------+------------+--------+--------+
+| What shoul... | Check out ... | Explore Ce... |     3      | 0.0951 | 0.2857 |
+| Can you he... | I'm design... | I am a tra... |     0      | 0.0270 | 0.0000 |
+| What's the... | The capita... | Paris is t... |     2      | 0.2907 | 0.2857 |
+|               |               |               |            |        |        |
+|    Average    |               |               |            | 0.1376 | 0.1905 |
++---------------+---------------+---------------+------------+--------+--------+
+```
 
 上述示例演示了如何使用BLEU和ROUGE分数作为评估指标来衡量旅行助手聊天机器人的输出。例如，在前面的例子中，BLEU和ROUGE分数在第一个`纽约市`测试案例中如此不同，表明模型答案与黄金答案有显著偏差，但相对较高地遵循上下文信息。这种差异意味着你可以优化检索器以获取更多相关上下文信息，从而更好地满足黄金答案。
 
@@ -340,15 +471,129 @@ LLM系统的评估指标大致可以分为以下类别：
 
 首先，你必须安装几个 Python 包。`prettytable` 包以可读的格式输出结果，而 `openai` 包调用 OpenAI API 以使用 GPT-4o LLM。在终端中安装这些包：
 
-[PRE6]
+```py
+pip3 install prettytable==3.10.2 openai==1.39.0
+```
 
 然后，执行以下代码：
 
-[PRE7]
+```py
+import json
+from prettytable import PrettyTable
+import openai
+import os
+# Add your OpenAI API key to call the model
+openai.api_key = os.getenv("OPENAI_API_KEY")
+# Data to evaluate
+evaluation_data = [
+    {
+        "input": "What should I do in New York City in July?",
+        "output": "Check out Times Square, go to an outdoor concert, and visit the Statue of Liberty.",
+    },
+    {
+        "input": "Can you help me with my math homework?",
+        "output": "I'm designed to assist with travel queries. For math help, try using online resources like Khan Academy or Mathway.",
+    },
+    {
+        "input": "What's the capital of France?",
+        "output": "The capital of France is Paris.",
+    }
+]
+# LLM-as-a-Judge Evaluation metric
+# that assesses if the output includes a recommendation.
+def evaluate_includes_recommendation(input, output):
+    # Few-shot examples to help the model produce better answers.
+    few_shot_examples = [
+        {
+            "input": "What are some good restaurants in Paris?",
+            "output": "Try Le Jules Verne for an upscale dining experience, or visit Le Relais de l'Entrecôte for a classic steak frites.",
+            "recommendation": True
+        },
+        {
+            "input": "Where should I stay in London?",
+            "output": "Consider staying at The Ritz for luxury or the Hoxton for a more budget-friendly option.",
+            "recommendation": True
+        },
+        {
+            "input": "What's the weather like in Tokyo in winter?",
+            "output": "In winter, Tokyo is generally cool with temperatures ranging from 2°C to 12°C. While you're there, consider visiting the hot springs (onsen) for a warm and relaxing experience.",
+            "recommendation": True
+        },
+        {
+            "input": "What's the population of Berlin?",
+            "output": "The population of Berlin is approximately 3.6 million.",
+            "recommendation": False
+        },
+        {
+            "input": "What's the currency used in Japan?",
+            "output": "The currency used in Japan is the Japanese Yen (JPY).",
+            "recommendation": False
+        }
+    ]
+    # Constructing the prompt
+    prompt = """Determine whether the following output includes a recommendation based on the input.
+Format response as a JSON object with the shape { "recommendation": boolean }.
+Examples:
+"""
+    # Append few-shot examples to the prompt.
+    for example in few_shot_examples:
+        prompt += f"""Input: {example['input']}
+Output: {example['output']}
+Recommendation: {{ "recommendation": {str(example['recommendation']).lower()} }}
+"""
+    prompt += f"""Input: {input}
+Output: {output}
+Recommendation:"""
+    # Call the OpenAI API
+    response = openai.chat.completions.create(
+        # Use strong evaluator LLM
+        model="gpt-4o",
+        ## Format response as JSON, so it is easier to parse
+        response_format={ "type": "json_object" },
+        messages=[{ "role": "user", "content": prompt }],
+        # Make sure temperature=0 for consistent outputs
+        temperature=0
+    )
+    recommendation = json.loads(response.choices[0].message.content)["recommendation"]
+    return 1 if recommendation == True else 0
+def calculate_average(scores):
+    return sum(scores) / len(scores)
+# truncate strings for easier printing in table
+def truncate_string(s, max_length=30):
+    return (s[:max_length] + '...') if len(s) > max_length else s
+def create_table(data):
+    table = PrettyTable()
+    table.field_names = ["Input", "Output", "Score"]
+    scores = [evaluate_includes_recommendation(case["input"], case["output"]) for case in data]
+    for case, score in zip(data, scores):
+        table.add_row([
+            truncate_string(case["input"]),
+            truncate_string(case["output"]),
+            score])
+    # Add a blank row for visual separation
+    table.add_row(["", "", ""])
+    # Add the average score to bottom of the table
+    average = calculate_average(scores)
+    table.add_row(["Average", "", f"{average:.4f}"])
+    return table
+# Create and print the table
+result_table = create_table(evaluation_data)
+print(result_table)
+```
 
 此代码将以下内容输出到终端：
 
-[PRE8]
+```py
++-----------------------------------+-----------------------------------+--------+
+|               Input               |               Output              | Score  |
++-----------------------------------+-----------------------------------+--------+
+| What should I do in New York C... | Check out Times Square, go to ... |   1    |
+| Can you help me with my math h... | I'm designed to assist with tr... |   1    |
+|   What's the capital of France?   | The capital of France is Paris... |   0    |
+|                                   |                                   |        |
+|              Average              |                                   | 0.6667 |
++-----------------------------------+-----------------------------------+--------+
+```
 
 上述示例演示了如何创建一个简单的 LLM-as-a-judge 指标来评估一个响应是否包含推荐。你可以扩展这些技术来创建额外的 LLM-as-a-judge 指标，以查看你的 LLM 系统的各个方面。在下一节中，你将了解一些更复杂的 LLM-as-a-judge 指标，用于评估 RAG 系统。
 
@@ -392,15 +637,88 @@ Ragas 包含一个用于测量忠诚度的模块。它使用以下公式计算�
 
 首先，你必须安装几个Python包。`ragas`包包括响应忠实度指标和报告模块。`langchain-openai`包允许你将OpenAI模型传递给Ragas。本例使用GPT-4o mini模型。Ragas还依赖于`datasets`包来格式化输入。在终端中安装这些包：
 
-[PRE9]
+```py
+pip3 install ragas==0.1.13 langchain-openai==0.1.20 datasets==2.20.0
+```
 
 然后，运行以下代码以执行评估：
 
-[PRE10]
+```py
+from ragas.metrics import faithfulness
+from ragas import evaluate
+from datasets import Dataset
+from langchain_openai.chat_models import ChatOpenAI
+import os
+openai_api_key = os.getenv("OPENAI_API_KEY")
+evaluation_data = [
+    {
+        "input": "What should I do in New York City in July?",
+        "output": "Check out Times Square, go to an outdoor concert, and visit the Statue of Liberty.",
+        "contexts": [
+            "Times Square is known for its Broadway theaters, bright lights, and bustling atmosphere.",
+            "Outdoor concerts in Central Park are popular summer events attracting many visitors.",
+            "The Statue of Liberty is a symbol of freedom and a must-see landmark in NYC."
+        ]
+    },
+    {
+        "input": "Can you help me with my math homework?",
+        "output": "I'm designed to assist with travel queries. For math help, try using online resources like Khan Academy or Mathway.",
+        "contexts": []
+    },
+    {
+        "input": "What's the capital of France?",
+        "output": "The capital of France is Paris.",
+        "contexts": [
+            "Paris, known as the City of Light, is the most populous city of France.",
+            "European capitals: Paris, France; Berlin, Germany; Madrid, Spain",
+        ]
+    }
+]
+# Format our dataset for Ragas data structure
+def prepare_data_for_ragas(data_list):
+    data_table = {
+        'question': [],
+        'answer': [],
+        'contexts': []
+    }
+    for data_item in data_list:
+        data_table["question"].append(data_item["input"])
+        data_table["answer"].append(data_item["output"])
+        data_table["contexts"].append(data_item["contexts"])
+    return data_table
+def create_report(data):
+    ragas_dict = prepare_data_for_ragas(data)
+    dataset = Dataset.from_dict(prepare_data_for_ragas(data))
+    langchain_llm = ChatOpenAI(
+        model_name="gpt-4o-mini",
+        api_key=openai_api_key)
+    score = evaluate(dataset, metrics=[faithfulness], llm=langchain_llm)
+    return score
+# Create and print the table
+results = create_report(evaluation_data)
+print(results.to_pandas())
+print(results)
+```
 
 执行此代码将在终端输出类似以下的结果：
 
-[PRE11]
+```py
+Evaluating: 100%
+ 3/3 [00:05<00:00,  1.72s/it]
+                                    question  \
+0  What should I do in New York City in July?
+1      Can you help me with my math homework?
+2               What's the capital of France?
+                                              answer  \
+0  Check out Times Square, go to an outdoor conce...
+1  I'm designed to assist with travel queries. Fo...
+2                    The capital of France is Paris.
+                                            contexts  faithfulness
+0  [Times Square is known for its Broadway theate...           1.0
+1                                                 []           0.0
+2  [Paris, known as the City of Light, is the mos...           1.0
+{'faithfulness': 0.6667}
+```
 
 从结果中可以看出，Ragas评估者认为第一和第三种示例是忠实的，而第二种则不是。
 
@@ -426,15 +744,97 @@ Ragas假设，如果生成的答案与原始问题高度相关，那么从这个
 
 首先，你必须安装几个Python包。注意，这些与上一节中Ragas忠实度评估示例中的依赖项相同。`ragas`包包括响应答案相关性指标和报告模块。`langchain-openai`包允许你将OpenAI模型传递给Ragas。本例使用GPT-4o mini模型。Ragas还依赖于`datasets`包来格式化输入。在终端中安装这些包：
 
-[PRE12]
+```py
+pip3 install ragas==0.1.13 langchain-openai==0.1.20 datasets==2.20.0
+```
 
 然后，运行以下代码以执行评估：
 
-[PRE13]
+```py
+from ragas.metrics import answer_relevancy
+from ragas import evaluate
+from datasets import Dataset
+from langchain_openai.chat_models import ChatOpenAI
+from langchain_openai.embeddings import OpenAIEmbeddings
+import os
+openai_api_key = os.getenv("OPENAI_API_KEY")
+evaluation_data = [
+    {
+        "input": "What should I do in New York City in July?",
+        "output": "Check out Times Square, go to an outdoor concert, and visit the Statue of Liberty.",
+        "contexts": [
+            "Times Square is known for its Broadway theaters, bright lights, and bustling atmosphere.",
+            "Outdoor concerts in Central Park are popular summer events attracting many visitors.",
+            "The Statue of Liberty is a symbol of freedom and a must-see landmark in NYC."
+        ]
+    },
+    {
+        "input": "Can you help me with my math homework?",
+        "output": "I'm designed to assist with travel queries. For math help, try using online resources like Khan Academy or Mathway.",
+        "contexts": []
+    },
+    {
+        "input": "What's the capital of France?",
+        "output": "The capital of France is Paris.",
+        "contexts": [
+            "Paris, known as the City of Light, is the most populous city of France.",
+            "European capitals: Paris, France; Berlin, Germany; Madrid, Spain",
+        ]
+    }
+]
+# Format our dataset for Ragas data structure
+def prepare_data_for_ragas(data_list):
+    data_table = {
+        'question': [],
+        'answer': [],
+        'contexts': []
+    }
+    for data_item in data_list:
+        data_table["question"].append(data_item["input"])
+        data_table["answer"].append(data_item["output"])
+        data_table["contexts"].append(data_item["contexts"])
+    return data_table
+def create_report(data):
+    ragas_dict = prepare_data_for_ragas(data)
+    dataset = Dataset.from_dict(prepare_data_for_ragas(data))
+    langchain_llm = ChatOpenAI(
+        model_name="gpt-4o-mini",
+  api_key=openai_api_key)
+    langchain_embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-large",
+        api_key=openai_api_key
+    )
+    score = evaluate(dataset,
+                     metrics=[answer_relevancy],
+                     llm=langchain_llm,
+                     embeddings=langchain_embeddings
+                    )
+    return score
+# Create and print the table
+results = create_report(evaluation_data)
+print(results.to_pandas())
+print(results)
+```
 
 执行此代码将在终端输出以下结果：
 
-[PRE14]
+```py
+Evaluating: 100%
+ 3/3 [00:04<00:00,  4.85s/it]
+                                    question  \
+0  What should I do in New York City in July?
+1      Can you help me with my math homework?
+2               What's the capital of France?
+                                              answer  \
+0  Check out Times Square, go to an outdoor conce...
+1  I'm designed to assist with travel queries. Fo...
+2                    The capital of France is Paris.
+                                            contexts  answer_relevancy
+0  [Times Square is known for its Broadway theate...          0.630561
+1                                                 []          0.000000
+2  [Paris, known as the City of Light, is the mos...          0.873249
+{'answer_relevancy': 0.5013}
+```
 
 从结果中可以看出，第一和第三种情况是相关的，而第二种情况则不是。这很合理，因为第一和第三种情况有相当相关的上下文，而第二种情况则完全没有上下文信息。
 

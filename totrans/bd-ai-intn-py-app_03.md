@@ -32,7 +32,10 @@
 
 为了对概率语言建模有一个直观的理解，考虑以下句子的开头，你想要预测下一个单词：
 
-[PRE0]
+```py
+
+The
+```
 
 这显然是一个具有许多可能答案的模糊任务。英语中的 *the* 是一个非常常见和通用的单词，可能性是无限的。任何名词，如 *house*、*dog*、*spoon* 等，都可以是句子的有效可能延续。甚至形容词如 *big*、*green* 和 *lazy* 也可能是可能的候选人。相反，有些词很少出现在冠词之后，包括动词，如 *eat*、*see* 和 *learn*。
 
@@ -64,7 +67,10 @@
 
 假设你已经多次进行了选择下一个单词的过程，发现自己已经进一步地沿着句子前进：
 
-[PRE1]
+```py
+
+The quick brown fox jumps over the
+```
 
 这个句子接下来会如何继续？现在的概率分布是什么样的？
 
@@ -226,11 +232,22 @@ n-gram 语言模型可以被描述为一个巨大的查找表，其中模型考�
 
 以下代码示例演示了`tiktoken` Python库的使用。在用`pip install tiktoken`安装包之后，你可以创建一个`encoder`对象并编码任何文本，这将返回一个标记ID的列表。以下代码片段将句子 *tiktoken is a popular tokenizer!* 分词，并将每个标记ID解码回其字节字符串：
 
-[PRE2]
+```py
+
+import tiktoken
+# use the gpt-4 tokenizer 'cl100k_base'encoder = tiktoken.get_encoding("cl100k_base")
+token_ids = encoder.encode("tiktoken is a popular tokenizer!")
+print("Token IDs", token_ids)
+tokens = [encoder.decode_single_token_bytes(t) for t in token_ids]print("Tokens", tokens)
+```
 
 运行此代码会产生以下输出：
 
-[PRE3]
+```py
+
+Token IDs [83, 1609, 5963, 374, 264, 5526, 47058, 0]
+Tokens [b't', b'ik', b'token', b' is', b' a', b' popular', b' tokenizer', b'!']
+```
 
 你可以看到单词 *tiktoken* 被分割成三个标记，*t*、*ik* 和 *token*，这很可能是由于该单词本身并不常见，不足以在词汇表中拥有自己的标记。值得注意的是，空白通常被编码为标记的一部分，例如在“ *is*”的开头。
 

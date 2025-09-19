@@ -26,11 +26,15 @@
 
 我们还将使用Python的**Keras**库([https://keras.io](https://keras.io))，这是一个强大的机器学习应用库，允许我们构建自定义神经网络。你可以使用以下命令安装它：
 
-[PRE0]
+```py
+pip install keras
+```
 
 你还需要**PyTorch**，可以使用以下命令安装：
 
-[PRE1]
+```py
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
 
 # 任务分析
 
@@ -298,7 +302,20 @@ SLAM过程实际上非常有趣，不是因为单个扫描中发生了什么，�
 
 1.  这里列出了我们这个程序需要的导入项——相当多：
 
-    [PRE2]
+    ```py
+    # import the necessary packages
+    from keras.preprocessing.image import ImageDataGenerator from keras.optimizers import Adam
+    from sklearn.model_selection import train_test_split from keras.preprocessing.image import img_to_array from keras.utils import to_categorical
+    import matplotlib.pyplot as plt import numpy as np
+    import cv2 import os
+    from keras.models import Sequential
+    from keras.layers.convolutional import Conv2D
+    from keras.layers.convolutional import MaxPooling2D
+    from keras.layers.core import Activation
+    from keras.layers.core import Flatten
+    from keras.layers.core import Dense
+    from keras import backend as K
+    ```
 
 1.  这是CNN的设置：
 
@@ -310,49 +327,137 @@ SLAM过程实际上非常有趣，不是因为单个扫描中发生了什么，�
 
     这是一个通用的卷积网络类，可以用于其他事物，因为它是一个通用的多类图像分类CNN：
 
-    [PRE3]
+    ```py
+    class ConvNet():
+        @staticmethod
+        def create(width, height, depth, classes):
+            # initialize the network
+            network = Sequential()
+            inputShape = (height, width, depth)
+            # first set of CONV => RELU => POOL layers
+            network.add(Conv2D(50, (10, 10), padding="same", input_shape=inputShape))
+            network.add(Activation("relu"))
+            network.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+            # second set of CONV => RELU => POOL layers
+            network.add(Conv2D(50, (5, 5), padding="same"))
+            network.add(Activation("relu"))
+            network.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+            # third set of CONV => RELU => POOL layers
+            network.add(Conv2D(50, (5, 5), padding="same"))
+            network.add(Activation("relu"))
+            network.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+            # Fully connected ReLU layers
+            network.add(Flatten())
+            network.add(Dense(500))
+            network.add(Activation("relu"))
+            network.add(Dense(500))
+            network.add(Activation("relu"))
+            # softmax classifier
+            network.add(Dense(classes))
+            network.add(Activation("softmax"))
+            # return the constructed network architecture
+            return network
+    ```
 
 1.  现在，我们设置我们的学习计划。我们将运行25次训练，学习率为0.001。我们设置每个批次的图像数量为32张，如果我们内存不足，我们可以减少这个数量：
 
-    [PRE4]
+    ```py
+    EPOCHS = 25 LEARN_RATE = 1e-3
+    BATCH = 32 # batch size - modify if you run out of memory
+    ```
 
 1.  下一个部分加载所有我们的图像。我们在这里设置了图像所在的路径。我们将三种类型的训练图像放在名为`left`、`right`和`center`的文件夹中：
 
-    [PRE5]
+    ```py
+    print ("Loading Images")
+    images=[]
+    labels=[]
+    #location of your images
+    imgPath = "c:\users\fxgovers\documents\book\chapter7\train\" imageDirs=["left","right","center"]
+    for imgDir in imageDirs:
+     fullPath = imgPath + imgDir
+     # find all the images in this directory 
+     allFileNames = 
+     os.listdir(fullPath) ifiles=[]
+     label = imgDirs.index(imgDir) # use the integer version of the 
+     label # 0= left, 1 = right, 2 = center
+     for fname in allFileNames:
+       if ".jpg" in fname:
+          ifiles.append(fname)
+    ```
 
 1.  现在，你可以参考我关于我们将要经历的图像预处理过程的图（*图7**.7*）。我们将把图像切成两半，只处理图像的上半部分。然后，我们将图像缩小到244 x 244以适应神经网络，神经网络需要正方形图像。由于我们不需要考虑颜色，只需形状，我们将图像转换为灰度（黑白）。这将进一步减少我们的数据。我们将对图像进行均衡化，这会将灰度颜色的范围重新缩放到0到255，从而平衡光照并设置对比度：
 
-    [PRE6]
+    ```py
+    # process all of the images 
+    for ifname in ifiles:
+      # load the image, pre-process it, and store it in the data list image = cv2.imread(ifname)
+      # let's get the image to a known size regardless of what was collected 
+      image = cv2.resize(image, (800, 600))
+      halfImage = 800*300 # half the pixels
+      # cut the image in half -we take the top half 
+      image = image[0:halfimage]
+      #size the image to what we want to put into the neural network image=cv2.resize(image,(224,224))
+      # convert to grayscale
+      image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) #equalize the image to use the full range from 0 to 255 # this gets rid of a lot of illumination variation 
+      image = cv2.equalizeHist(image)
+    ```
 
 1.  接下来，我们有高斯模糊。这是一个可选项——如果你的房间没有很多细节，你可能想移除它。我的游戏室有很多家具，所以我认为减少噪声会提高性能：
 
-    [PRE7]
+    ```py
+    # gaussian blur the image to remove high frequency noise # we use a 5x kernel
+    image = cv2.GaussianBlur(img,(5,5),0)
+    ```
 
 1.  我们将图像转换为浮点数的NumPy数组，范围从0到1，而不是从0到255的整数集。这个神经网络工具包只允许NumPy数组作为输入。我们还把与标签相关的数字（左=`0`，右=`1`，中心=`2`）放入匹配的`labels` NumPy数组中：
 
-    [PRE8]
+    ```py
+    # convert to a numpy array image = img_to_array(image)
+    # normalize the data to be from 0 to 1
+    image2 = np.array(image, dtype="float") / 255.0 images=images.append(image) labels.append(label)
+    labels = np.array(labels) # convert to array
+    ```
 
 1.  我们将数据分成两部分——一个用于训练神经网络的训练集和一个用于验证训练集的测试集。我们将使用80%的图像样本进行训练，20%进行测试：
 
-    [PRE9]
+    ```py
+    # split data into testing data and training data 80/20
+    (trainData, testData, trainLabel, testLabel) = train_test_split(data, labels, test_size=0.20, random_state=42)
+    ```
 
 1.  我们必须将标签转换为张量，这仅仅是一种特定的数据格式：
 
-    [PRE10]
+    ```py
+    # convert the labels from integers to vectors 
+    trainLabel = to_categorical(trainLabel, num_classes=3) testLabel = to_categorical(testLabel, num_classes=3)
+    ```
 
 1.  现在，我们通过实例化`ConvNet`对象来构建我们的实际神经网络，这个对象实际上在Keras中构建我们的CNN。我们设置了优化器，它是**自适应动量估计**（**ADAM**），一种自适应梯度下降法。ADAM像带有摩擦的重球一样作用于误差梯度——它有一定的动量，但不会快速加速：
 
-    [PRE11]
+    ```py
+    # initialize the artificial neural network print("compiling CNN...")
+    cnn = ConvNet.build(width=224, height=224, depth=1, classes=3) opt = Adam(lr=LEARN_RATE, decay=LEARN_RATE / EPOCHS) model.compile(loss="categorical_crossentropy", optimizer=opt, metrics=["accuracy"])
+    ```
 
 1.  我们在这一步训练网络。这需要相当长的时间才能完成——从15分钟到一两个小时——具体取决于你有多少图像。我们希望训练结果至少达到80%。如果没有，可以增加一些周期来观察学习曲线何时趋于平稳。如果这仍然不起作用，你需要更多的训练图像。我目标是每个集合有1,000张图像，这大约需要50分钟的机器人驾驶时间：
 
-    [PRE12]
+    ```py
+    # train the network
+    print("Training network. This will take a while")
+    trainedNetwork = model.fit_generator(aug.flow(trainImage, trainLabel, batch_size=BATCH),
+    validation_data=(testImage, testLable), steps_per_epoch=len(trainImage) // BATCH,
+    epochs=EPOCHS, verbose=1) # save the model to disk
+    print("Writing network to disk") cnn.save("nav_model")
+    ```
 
 1.  现在我们已经完成了，所以我们将创建的模型保存到磁盘上，以便我们可以将其传输到机器人的电脑，即Nvidia Jetson Nano。
 
 1.  现在，制作你的第二个驾驶训练集，从随机位置到玩具箱。选择随机位置，并使用摇杆将机器人驾驶到玩具箱。继续这样做，直到你有大约1,000张图像。将这些图像通过训练程序运行，并通过更改程序的最后一行将此模型标记为`toybox_model`：
 
-    [PRE13]
+    ```py
+    cnn.save("toybox_model")
+    ```
 
 这太棒了——我们已经构建并训练了我们的神经网络。现在，我们需要将其用于驾驶机器人，我们将在下一节中这样做。
 
@@ -362,35 +467,125 @@ SLAM过程实际上非常有趣，不是因为单个扫描中发生了什么，�
 
 1.  我们从ROS、OpenCV2和Keras开始导入，因为我们将会结合这三个库中的函数：
 
-    [PRE14]
+    ```py
+    import roslib import sys import rospy import cv2
+    from std_msgs.msg import String
+    from sensor_msgs.msg import Image
+    from geometry_msgs.msg import Twist
+    from cv_bridge import CvBridge, CvBridgeError
+    from keras.preprocessing.image import img_to_array
+    from keras.models import load_model
+    import numpy as np
+    ```
 
 1.  这一部分是ROS接口。我喜欢以这种方式封装ROS接口，将所有的发布和订阅放在一个地方。我们需要设置几个主题——我们需要能够在`syscommand`主题上发送和接收命令。我们将向机器人的电机在`cmd_vel`主题上发布命令。我们从`image_topic`主题接收来自摄像头的图像。我们使用回调来处理在机器人上其他地方发布的主题事件。这些可以在任何时间调用。当我们向主题发布时，我们拥有更多的控制权，这通过`pubTwist`和`pubCmd`方法来处理。我添加了标志来接收命令和图像，这样我们就不小心重复处理相同的图像或命令两次：
 
-    [PRE15]
+    ```py
+    class ROSIF():
+     def  init (self):
+      self.bridge = CvBridge()
+      self.image_sub = rospy.Subscriber("image_topic",Image,self.callback)
+      self.cmd_sub = rospy.Subscriber( "syscommand",String,self.cmdCallback) self.cmd_pub = rospy.Publisher( "syscommand",String,queue_size=10)
+      self.twist_pub = rospy.Publisher("cmd_vel",Twist,queue_size=10)
+      self.newImage = False
+      self.cmdReceived=""
+    def callback(self):
+     try:
+      self.image = self.bridge.imgmsg_to_cv2(data, "bgr8") 
+      self.newImage = True
+     except CvBridgeError as e:
+      print(e)
+    def cmdCallback(self,data):
+     # receieve a message on syscommand
+     self.cmdReceived = data.data
+    def getCmd(self):
+     cmd = self.cmdReceived
+     self.cmdReceived = "" # clear the command so we dont do it twice
+     return cmd
+    ```
 
 1.  下一个函数是程序其余部分获取摄像头系统最新图像的手段，该图像在ROS上发布在`image_topic`。我们获取最新图像并将`newImage`变量设置为`False`，这样我们就知道下次是否正在尝试连续两次处理相同的图像。每次我们获取到新图像时，我们将`newImage`设置为`True`，每次我们使用图像时，我们将`newImage`设置为`False`：
 
-    [PRE16]
+    ```py
+    def getImage(self):
+      if self.newImage=True:
+        self.newImage = False
+        # reset the flag so we don't process twice return self.image
+        self.newImage = False
+        # we send back a list with zero elements
+        img = []
+        return img
+    ```
 
 1.  这一部分向机器人发送速度命令，以匹配CNN预测的我们应执行的操作。CNN的输出是三个值之一：左转、右转或直行。这些作为神经网络中的三个枚举值之一——`0`、`1`或`2`输出。我们将它们转换回左转、右转和中心值，然后使用这些信息向机器人发送运动命令。机器人使用`Twist`消息发送电机命令。`Twist`数据消息旨在适应非常复杂的机器人、四旋翼飞行器和全向轮驱动系统，这些系统可以朝任何方向移动，因此它有很多额外的值。我们发送一个`Twist.linear.x`命令来设置机器人的前后速度，以及一个`Twist.angular.z`值来设置底座的旋转或转向。在我们的情况下，正的`angular.z`旋转值向右转，负值向左转。我们的最后一条语句将数据值作为`Twist`消息发布到`cmd_vel`主题：
 
-    [PRE17]
+    ```py
+    # publishing commands back to the robot
+    def pubCmd(self,cmdstr):
+      self.cmd_pub.publish(String(cmdstr)):
+    def pubTwist(self,cmd):
+      if cmd == 0: # turn left 
+        turn = -2
+        speed = 1
+      if cmd==1:
+        turn = 2
+        speed = 1
+      if cmd ==3:
+        turn=0 
+        speed = 1 # all stop
+      if cmd==4:
+        turn = 0
+          speed = 0
+        cmdTwist = Twist()
+        cmdTwist.linear.x = speed
+        cmdTwist.angular.z = turn self.twist_pub.publish(cmdTwist)
+    ```
 
 1.  我们创建一个函数，通过一个命令来完成所有的图像处理。这正是我们为训练程序预处理图像的方式——正如你可能想象的那样。你可能觉得我先将图像放大，然后再缩小，这有点奇怪。这样做的原因是为了在图像的垂直部分有细节。如果我将它缩小到 240 x 240，然后将其切成两半，我会在之后拉伸像素以再次使其成为正方形。我喜欢在缩小时有额外的像素。这种技术的最大优点是，它不关心输入图像的分辨率——我们最终会得到正确尺寸和裁剪的图像。
 
     其他步骤包括将图像转换为灰度，对对比度范围进行均衡，这会扩展我们的颜色值以填充可用空间，并执行高斯模糊以减少噪声。我们通过将我们的整数 0-255 灰度值转换为 0 到 1 的浮点值来对图像进行归一化，以便神经网络使用：
 
-    [PRE18]
+    ```py
+    def processImage(img):
+    # need to process the image
+    image = cv2.resize(image, (640, 480))
+    halfImage = 640*240 # half the pixels
+    # cut the image in half -we take the top half image = image[0:halfimage]
+    #size the image to what we want to put into the neural network
+    image=cv2.resize(image,(224,224))
+    # convert to grayscale
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+     #equalize the image to use the ful
+         image = cv2.equalizeHist(image)
+    # gaussian blur the image to remove high freqency noise # we use a 5x kernel
+    image = cv2.GaussianBlur(img,(5,5),0) # convert to a numpy array
+    image = img_to_array(image)
+    # normalize the data to be from 0 to 1
+    image2 = np.array(image, dtype="float") / 255.0 return image2
+    ```
 
 1.  现在我们已经设置好了，我们进入主程序。我们必须初始化我们的 ROS 节点，这样我们才能与 ROS 发布/订阅系统通信。我们创建一个变量，mode，我们用它来控制要进入哪个处理分支。我们创建一个接口，允许操作员打开和关闭导航功能，并在正常导航和我们的玩具箱寻找模式之间进行选择。
 
     在本节中，我们将加载我们之前训练的两个神经网络模型：
 
-    [PRE19]
+    ```py
+    # MAIN PROGRAM
+    ic = image_converter()
+    rosif = ROSIF()
+    rospy.init_node('ROS_cnn_nav')
+    mode = "OFF"
+    # load the model for regular navigation
+    navModel = load_model("nav_model")
+    toyboxModel = load_model("toybox_model")
+    ```
 
 1.  本节开始处理循环，该循环在程序运行时执行。运行 `rospy.spin()` 告诉 ROS 系统处理任何可能等待我们的消息。我们的最后一步是暂停程序 0.02 秒，以便让 Raspberry Pi 处理其他数据并运行其他程序：
 
-    [PRE20]
+    ```py
+    while not rospy.is_shutdown():
+      rospy.spin()
+      time.sleep(0.02)
+    ```
 
 因此，我们的导航章节到此结束。我们介绍了使用神经网络教机器人通过天花板上的地标来驾驶，以及如何避开障碍物和进行房间导航——而且无需地图。
 

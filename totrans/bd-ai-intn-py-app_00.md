@@ -63,11 +63,16 @@
 
 代码块应如下设置：
 
-[PRE0]
+```py
+# Connect to your Atlas cluster
+client = MongoClient(ATLAS_CONNECTION_STRING)
+```
 
 任何命令行输入或输出都应如下所示：
 
-[PRE1]
+```py
+pip3 install prettytable==3.10.2 sacrebleu==2.4.2 rouge-score==0.1.2
+```
 
 **粗体**：表示新术语、重要单词或您在屏幕上看到的单词。例如，菜单或对话框中的单词以**粗体**显示。以下是一个示例：“切换**搜索节点以实现工作负载隔离**的单选按钮以启用。”
 

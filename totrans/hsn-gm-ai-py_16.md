@@ -50,7 +50,43 @@ ML-Agents 最初是在 Keras 中开发的，然后成熟到 TensorFlow 以提高
 
 1.  `create_visual_observation_encoder` 函数是编码状态的基函数，函数的完整定义（不包括注释）如下所示：
 
-[PRE0]
+```py
+def create_visual_observation_encoder(
+        self,
+        image_input: tf.Tensor,
+        h_size: int,
+        activation: ActivationFunction,
+        num_layers: int,
+        scope: str,
+        reuse: bool,
+    ) -> tf.Tensor:        
+        with tf.variable_scope(scope):
+            conv1 = tf.layers.conv2d(
+                image_input,
+                16,
+                kernel_size=[8, 8],
+                strides=[4, 4],
+                activation=tf.nn.elu,
+                reuse=reuse,
+                name="conv_1",
+            )
+            conv2 = tf.layers.conv2d(
+                conv1,
+                32,
+                kernel_size=[4, 4],
+                strides=[2, 2],
+                activation=tf.nn.elu,
+                reuse=reuse,
+                name="conv_2",
+            )
+            hidden = c_layers.flatten(conv2)
+
+        with tf.variable_scope(scope + "/" + "flat_encoding"):
+            hidden_flat = self.create_vector_observation_encoder(
+                hidden, h_size, activation, num_layers, scope, reuse
+            )
+        return hidden_flat
+```
 
 1.  虽然代码在 TensorFlow 中，但有一些明显的常见术语的指标，例如 layers 和 conv2d。有了这些信息，您可以看到这个编码器使用了两个 CNN 层：一个具有 8 x 8 的内核大小、4 x 4 的步长和 16 个滤波器；接着是一个使用 4 x 4 的内核大小、2 x 2 的步长和 32 个滤波器的第二层。
 
@@ -106,7 +142,9 @@ Unity 开发了一个 2D 和 3D 游戏引擎/平台，它已经成为构建游�
 
 1.  导航到Unity `ml-agents` 文件夹并执行以下命令以开始训练：
 
-[PRE1]
+```py
+mlagents-learn config/trainer_config.yaml --run-id=vishall_1 --train
+```
 
 1.  这将启动Python训练器，几秒钟后，会提示你在编辑器中点击播放。完成此操作后，所有环境中的智能体将开始训练，你可以在编辑器中可视化这个过程。以下截图显示了在命令行中看起来是怎样的：
 
@@ -134,11 +172,50 @@ Unity 有一种未记录的方法可以改变在环境中训练时可以使用�
 
 1.  此文件定义了各种学习大脑的配置。找到 `VisualHallwayLearning` 大脑的章节，如下所示：
 
-[PRE2]
+```py
+VisualHallwayLearning:
+    use_recurrent: true
+    sequence_length: 64
+    num_layers: 1
+    hidden_units: 128
+    memory_size: 256
+    beta: 1.0e-2
+    num_epoch: 3
+    buffer_size: 1024
+    batch_size: 64
+    max_steps: 5.0e5
+    summary_freq: 1000
+    time_horizon: 64
+```
 
 1.  这些超参数是除了在配置文件顶部默认大脑配置中设置的基值之外额外的。如下所示：
 
-[PRE3]
+```py
+idefault:
+    trainer: ppo
+    batch_size: 1024
+    beta: 5.0e-3
+    buffer_size: 10240
+    epsilon: 0.2
+    hidden_units: 128
+    lambd: 0.95
+    learning_rate: 3.0e-4
+    learning_rate_schedule: linear
+    max_steps: 5.0e4
+    memory_size: 256
+    normalize: false
+    num_epoch: 3
+    num_layers: 2
+    time_horizon: 64
+    sequence_length: 64
+    summary_freq: 1000
+    use_recurrent: false
+    vis_encode_type: simple
+    reward_signals:
+        extrinsic:
+            strength: 1.0
+            gamma: 0.99
+```
 
 1.  我们感兴趣的超参数是设置为简单并突出显示在前面代码示例中的 `vis_encode_type` 值。ML-Agents 通过更改此选项支持两种额外的视觉编码类型：
 
@@ -152,17 +229,134 @@ Unity 有一种未记录的方法可以改变在环境中训练时可以使用�
 
 1.  我们将通过在 `VisualHallwayLearning` 大脑配置的末尾添加新行来更改我们大脑中的默认值：
 
-[PRE4]
+```py
+VisualHallwayLearning:
+    use_recurrent: true
+    sequence_length: 64
+    num_layers: 1
+    hidden_units: 128
+    memory_size: 256
+    beta: 1.0e-2
+    num_epoch: 3
+    buffer_size: 1024
+    batch_size: 64
+    max_steps: 5.0e5
+    summary_freq: 1000
+    time_horizon: 64
+    vis_enc_type: nature_cnn --or-- resnet
+```
 
 1.  现在我们知道了如何设置这些，让我们通过打开 `ml-agents/trainers` 文件夹中我们之前打开的 `models.py` 代码来看看它们的样子。滚动到 `create_visual_observation_encoder` 函数下方，找到如下所示的 `create_nature_cnn_observation_encoder` 函数：
 
-[PRE5]
+```py
+def create_nature_cnn_visual_observation_encoder(
+        self,
+        image_input: tf.Tensor,
+        h_size: int,
+        activation: ActivationFunction,
+        num_layers: int,
+        scope: str,
+        reuse: bool,
+    ) -> tf.Tensor:        
+        with tf.variable_scope(scope):
+            conv1 = tf.layers.conv2d(
+                image_input,
+                32,
+                kernel_size=[8, 8],
+                strides=[4, 4],
+                activation=tf.nn.elu,
+                reuse=reuse,
+                name="conv_1",
+            )
+            conv2 = tf.layers.conv2d(
+                conv1,
+                64,
+                kernel_size=[4, 4],
+                strides=[2, 2],
+                activation=tf.nn.elu,
+                reuse=reuse,
+                name="conv_2",
+            )
+            conv3 = tf.layers.conv2d(
+                conv2,
+                64,
+                kernel_size=[3, 3],
+                strides=[1, 1],
+                activation=tf.nn.elu,
+                reuse=reuse,
+                name="conv_3",
+            )
+            hidden = c_layers.flatten(conv3)
+
+        with tf.variable_scope(scope + "/" + "flat_encoding"):
+            hidden_flat = self.create_vector_observation_encoder(
+                hidden, h_size, activation, num_layers, scope, reuse
+            )
+        return hidden_flat
+```
 
 1.  与这种实现的主要区别在于使用了名为 `conv3` 的第三层。我们可以看到这个第三层的核大小为 3 x 3，步长为 1 x 1，有 64 个滤波器。由于核和步长尺寸较小，我们可以看到这个新层被用来提取更精细的特征。这种特征有多有用取决于环境。
 
 1.  接下来，我们想查看列在最后一个函数之后的第三个视觉编码实现。下一个函数是 `create_resent_visual_observation_encoder`，如下所示：
 
-[PRE6]
+```py
+ def create_resnet_visual_observation_encoder(
+        self,
+        image_input: tf.Tensor,
+        h_size: int,
+        activation: ActivationFunction,
+        num_layers: int,
+        scope: str,
+        reuse: bool,
+    ) -> tf.Tensor:       
+        n_channels = [16, 32, 32] 
+        n_blocks = 2 
+        with tf.variable_scope(scope):
+            hidden = image_input
+            for i, ch in enumerate(n_channels):
+                hidden = tf.layers.conv2d(
+                    hidden,
+                    ch,
+                    kernel_size=[3, 3],
+                    strides=[1, 1],
+                    reuse=reuse,
+                    name="layer%dconv_1" % i,
+                )
+                hidden = tf.layers.max_pooling2d(
+                    hidden, pool_size=[3, 3], strides=[2, 2], padding="same"
+                )                
+                for j in range(n_blocks):
+                    block_input = hidden
+                    hidden = tf.nn.relu(hidden)
+                    hidden = tf.layers.conv2d(
+                        hidden,
+                        ch,
+                        kernel_size=[3, 3],
+                        strides=[1, 1],
+                        padding="same",
+                        reuse=reuse,
+                        name="layer%d_%d_conv1" % (i, j),
+                    )
+                    hidden = tf.nn.relu(hidden)
+                    hidden = tf.layers.conv2d(
+                        hidden,
+                        ch,
+                        kernel_size=[3, 3],
+                        strides=[1, 1],
+                        padding="same",
+                        reuse=reuse,
+                        name="layer%d_%d_conv2" % (i, j),
+                    )
+                    hidden = tf.add(block_input, hidden)
+            hidden = tf.nn.relu(hidden)
+            hidden = c_layers.flatten(hidden)
+
+        with tf.variable_scope(scope + "/" + "flat_encoding"):
+            hidden_flat = self.create_vector_observation_encoder(
+                hidden, h_size, activation, num_layers, scope, reuse
+            )
+        return hidden_flat
+```
 
 1.  你现在可以回到配置文件中更新`vis_enc_type`超参数，并重新训练视觉代理。如果你有时间运行两个版本，注意哪个编码器更成功。
 
@@ -188,17 +382,53 @@ ResNet或残差CNN网络被引入作为一种允许更深的编码结构而不�
 
 1.  再次向下滚动到 `create_resnet_visual_observation_encoder` 函数。查看定义构建残差网络的变量，如下所示的前两行：
 
-[PRE7]
+```py
+n_channels = [16, 32, 32] # channel for each stack
+n_blocks = 2 # number of residual blocks
+```
 
 1.  接下来，再向下滚动一点，到我们列举构建每个输入层所需通道数的地方。代码如下所示：
 
-[PRE8]
+```py
+for i, ch in enumerate(n_channels):
+    hidden = tf.layers.conv2d(
+        hidden, 
+        ch, 
+        kernel_size=[3, 3], 
+        strides=[1, 1], 
+        reuse=reuse,    
+        name="layer%dconv_1" % i,)
+        hidden = tf.layers.max_pooling2d(
+            hidden, pool_size=[3, 3], strides=[2, 2], padding="same")
+```
 
 1.  `n_channels` 变量表示每个输入卷积层使用的通道数或过滤器。因此，我们正在创建包含输入层和中间块的三个残差层组。这些块用于将训练隔离到每一层。
 
 1.  继续向下滚动，我们可以看到以下代码中块是如何在层之间构建的：
 
-[PRE9]
+```py
+for j in range(n_blocks):
+    block_input = hidden
+    hidden = tf.nn.relu(hidden)
+    hidden = tf.layers.conv2d(
+        hidden,
+        ch,
+        kernel_size=[3, 3],
+        strides=[1, 1],
+        padding="same",
+        reuse=reuse,
+        name="layer%d_%d_conv1" % (i, j),)
+    hidden = tf.nn.relu(hidden)
+    hidden = tf.layers.conv2d(
+        hidden,
+        ch,
+        kernel_size=[3, 3],
+        strides=[1, 1],
+        padding="same",
+        reuse=reuse,
+        name="layer%d_%d_conv2" % (i, j),)
+    hidden = tf.add(block_input, hidden)
+```
 
 1.  这段代码创建了一个类似于以下图中所示的网络结构：
 
@@ -232,15 +462,42 @@ ML-Agents中ResNet架构图
 
 1.  建议在安装任何新代码和环境之前创建一个新的虚拟环境。这可以通过Anaconda使用以下命令轻松完成：
 
-[PRE10]
+```py
+conda create -n obtower python=3.6
+conda activate obstower
+```
 
 1.  首先，您需要从以下存储库下载并安装Unity障碍塔挑战([https://github.com/Unity-Technologies/obstacle-tower-env](https://github.com/Unity-Technologies/obstacle-tower-env))，或者只需从新的虚拟环境使用以下命令：
 
-[PRE11]
+```py
+git clone git@github.com:Unity-Technologies/obstacle-tower-env.git
+cd obstacle-tower-env
+pip install -e .
+```
 
 1.  运行OTC环境相当简单，可以使用以下简单的代码块在环境中执行随机动作：
 
-[PRE12]
+```py
+from obstacle_tower_env import ObstacleTowerEnv, ObstacleTowerEvaluation
+def run_episode(env):
+    done = False
+    episode_return = 0.0
+
+    while not done:
+        action = env.action_space.sample()
+        obs, reward, done, info = env.step(action)
+        episode_return += reward
+    return episode_return
+
+if __name__ == '__main__':    
+    eval_seeds = [1001, 1002, 1003, 1004, 1005]    
+    env = ObstacleTowerEnv('./ObstacleTower/obstacletower')    
+    env = ObstacleTowerEvaluation(env, eval_seeds)    
+    while not env.evaluation_complete:
+        episode_rew = run_episode(env)    
+    print(env.results)
+    env.close()
+```
 
 1.  运行OTC环境的代码现在应该相当熟悉了，但有一个需要注意的项目。代理会循环通过回合或生命，但代理只有一定数量的生命。这个环境模拟了一个真实游戏，因此代理只有有限的尝试次数和时间来完成挑战。
 
@@ -248,11 +505,17 @@ ML-Agents中ResNet架构图
 
 1.  导航到文件夹并运行以下命令以安装所需的依赖项：
 
-[PRE13]
+```py
+pip install -e .
+```
 
 1.  之后，你需要配置一些环境变量到以下内容：
 
-[PRE14]
+```py
+ `OBS_TOWER_PATH` - the path to the obstacle tower binary.
+ `OBS_TOWER_RECORDINGS` - the path to a directory where demonstrations are stored.
+ `OBS_TOWER_IMAGE_LABELS` - the path to the directory of labeled images.
+```
 
 1.  你设置这些环境变量的方式将取决于你的操作系统以及你想要设置它们的位置级别。对于Windows用户，你可以使用**系统环境变量**设置面板来设置环境变量，如下所示：
 
@@ -290,17 +553,24 @@ ML-Agents中ResNet架构图
 
 1.  接下来，你需要运行该分类器，使用你刚刚生成或下载的训练输入图像和标签。通过执行以下命令来运行分类器：
 
-[PRE15]
+```py
+cd obs_tower2/scripts
+python run_classifier.py
+```
 
 1.  分类完成后，结果将定期输出到`save_classifier.pk1`文件。整个过程可能需要几个小时才能完全训练完成。
 
 1.  在构建了预分类器之后，我们可以使用人类样本进行行为克隆。这意味着你将使用保存并预先标注的会话作为后续智能体训练的输入。你可以通过运行以下命令来启动此过程：
 
-[PRE16]
+```py
+python run_clone.py
+```
 
 1.  运行此脚本会定期将输出生成到`save_clone.pkl`文件，整个脚本可能需要一天或更长时间才能运行。当脚本完成后，将输出复制到`save_prior.pkl`文件，如下所示：
 
-[PRE17]
+```py
+cp save_clone.pkl save_prior.pkl
+```
 
 这创建了一个先验记录集或记忆集，我们将在下一节中用它来训练智能体。
 
@@ -310,17 +580,177 @@ ML-Agents中ResNet架构图
 
 1.  用于赢得挑战的基础智能体是PPO；以下是该智能体的完整源代码列表以及PPO的复习：
 
-[PRE18]
+```py
+import itertools
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.optim as optim
+from .util import atomic_save
+
+class PPO:    
+    def __init__(self, model, epsilon=0.2, gamma=0.99, lam=0.95, lr=1e-4, ent_reg=0.001):
+        self.model = model
+        self.epsilon = epsilon
+        self.gamma = gamma
+        self.lam = lam
+        self.optimizer = optim.Adam(model.parameters(), lr=lr)
+        self.ent_reg = ent_reg
+
+    def outer_loop(self, roller, save_path='save.pkl', **kwargs):        
+        for i in itertools.count():
+            terms, last_terms = self.inner_loop(roller.rollout(), **kwargs)
+            self.print_outer_loop(i, terms, last_terms)
+            atomic_save(self.model.state_dict(), save_path)
+
+    def print_outer_loop(self, i, terms, last_terms):
+        print('step %d: clipped=%f entropy=%f explained=%f' %
+              (i, last_terms['clip_frac'], terms['entropy'], terms['explained']))
+
+    def inner_loop(self, rollout, num_steps=12, batch_size=None):
+        if batch_size is None:
+            batch_size = rollout.num_steps * rollout.batch_size
+        advs = rollout.advantages(self.gamma, self.lam)
+        targets = advs + rollout.value_predictions()[:-1]
+        advs = (advs - np.mean(advs)) / (1e-8 + np.std(advs))
+        actions = rollout.actions()
+        log_probs = rollout.log_probs()
+        firstterms = None
+        lastterms = None
+        for entries in rollout.batches(batch_size, num_steps):
+            def choose(values):
+                return self.model.tensor(np.array([values[t, b] for t, b in entries]))
+            terms = self.terms(choose(rollout.states),
+                               choose(rollout.obses),
+                               choose(advs),
+                               choose(targets),
+                               choose(actions),
+                               choose(log_probs))
+            self.optimizer.zero_grad()
+            terms['loss'].backward()
+            self.optimizer.step()
+            lastterms = {k: v.item() for k, v in terms.items() if k != 'model_outs'}
+            if firstterms is None:
+                firstterms = lastterms
+            del terms
+        return firstterms, lastterms
+
+    def terms(self, states, obses, advs, targets, actions, log_probs):
+        model_outs = self.model(states, obses)
+
+        vf_loss = torch.mean(torch.pow(model_outs['critic'] - targets, 2))
+        variance = torch.var(targets)
+        explained = 1 - vf_loss / variance
+
+        new_log_probs = -F.cross_entropy(model_outs['actor'], actions.long(), reduction='none')
+        ratio = torch.exp(new_log_probs - log_probs)
+        clip_ratio = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon)
+        pi_loss = -torch.mean(torch.min(ratio * advs, clip_ratio * advs))
+        clip_frac = torch.mean(torch.gt(ratio * advs, clip_ratio * advs).float())
+
+        all_probs = torch.log_softmax(model_outs['actor'], dim=-1)
+        neg_entropy = torch.mean(torch.sum(torch.exp(all_probs) * all_probs, dim=-1))
+        ent_loss = self.ent_reg * neg_entropy
+
+        return {
+            'explained': explained,
+            'clip_frac': clip_frac,
+            'entropy': -neg_entropy,
+            'vf_loss': vf_loss,
+            'pi_loss': pi_loss,
+            'ent_loss': ent_loss,
+            'loss': vf_loss + pi_loss + ent_loss,
+            'model_outs': model_outs,
+        }
+```
 
 1.  熟悉这个实现与我们在PPO中讨论的内容之间的区别。我们的示例为了解释目的而简化，但遵循相同的模式。
 
 1.  特别注意`inner_loop`中的代码，并理解其工作原理：
 
-[PRE19]
+```py
+def inner_loop(self, rollout, num_steps=12, batch_size=None):
+```
 
 1.  打开位于根目录`obs_tower2`文件夹中的`prierarchy.py`文件，如下所示：
 
-[PRE20]
+```py
+import numpy as np
+import torch
+import torch.nn.functional as F
+
+from .ppo import PPO
+
+class Prierarchy(PPO):  
+    def __init__(self, prior, *args, kl_coeff=0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.prior = prior
+        self.kl_coeff = kl_coeff
+
+    def print_outer_loop(self, i, terms, last_terms):
+        print('step %d: clipped=%f entropy=%f explained=%f kl=%f' %
+              (i, last_terms['clip_frac'], last_terms['entropy'], terms['explained'],
+               terms['kl']))
+
+    def inner_loop(self, rollout, num_steps=12, batch_size=None):
+        if batch_size is None:
+            batch_size = rollout.num_steps * rollout.batch_size
+        prior_rollout = self.prior.run_for_rollout(rollout)
+        prior_logits = prior_rollout.logits()
+        rollout = self.add_rewards(rollout, prior_rollout)
+        advs = rollout.advantages(self.gamma, self.lam)
+        targets = advs + rollout.value_predictions()[:-1]
+        actions = rollout.actions()
+        log_probs = rollout.log_probs()
+        firstterms = None
+        lastterms = None
+        for entries in rollout.batches(batch_size, num_steps):
+            def choose(values):
+                return self.model.tensor(np.array([values[t, b] for t, b in entries]))
+            terms = self.extended_terms(choose(prior_logits),
+                                        choose(rollout.states),
+                                        choose(rollout.obses),
+                                        choose(advs),
+                                        choose(targets),
+                                        choose(actions),
+                                        choose(log_probs))
+            self.optimizer.zero_grad()
+            terms['loss'].backward()
+            self.optimizer.step()
+            lastterms = {k: v.item() for k, v in terms.items() if k != 'model_outs'}
+            if firstterms is None:
+                firstterms = lastterms
+            del terms
+        return firstterms, lastterms
+
+    def extended_terms(self, prior_logits, states, obses, advs, targets, actions, log_probs):
+        super_out = self.terms(states, obses, advs, targets, actions, log_probs)
+        log_prior = F.log_softmax(prior_logits, dim=-1)
+        log_posterior = F.log_softmax(super_out['model_outs']['actor'], dim=-1)
+        kl = torch.mean(torch.sum(torch.exp(log_posterior) * (log_posterior - log_prior), dim=-1))
+        kl_loss = kl * self.ent_reg
+        super_out['kl'] = kl
+        super_out['kl_loss'] = kl_loss
+        super_out['loss'] = super_out['vf_loss'] + super_out['pi_loss'] + kl_loss
+        return super_out
+
+    def add_rewards(self, rollout, prior_rollout):
+        rollout = rollout.copy()
+        rollout.rews = rollout.rews.copy()
+
+        def log_probs(r):
+            return F.log_softmax(torch.from_numpy(np.array([m['actor'] for m in r.model_outs])),
+                                 dim=-1)
+
+        q = log_probs(prior_rollout)
+        p = log_probs(rollout)
+        kls = torch.sum(torch.exp(p) * (p - q), dim=-1).numpy()
+
+        rollout.rews -= kls[:-1] * self.kl_coeff
+
+        return rollout
+```
 
 1.  我们在这里看到的是`Hierarchy`类，它是`PPO`的扩展，通过扩展`inner_loop`函数来工作。简单来说，这段代码优化了KL-Divergence计算，使我们能够在山丘上稳固地占据位置而不会掉落。回想一下，这是我们关于裁剪目标函数的讨论。
 
@@ -336,11 +766,17 @@ ML-Agents中ResNet架构图
 
 1.  你可以通过在第一层的前10层运行以下命令来训练代理：
 
-[PRE21]
+```py
+cp save_prior.pkl save.pkl
+python run_tail.py --min 0 --max 1 --path save.pkl
+```
 
 1.  然后，为了在超过10层的楼层上训练代理，你可以使用以下方法：
 
-[PRE22]
+```py
+cp save_prior.pkl save_tail.pkl
+python run_tail.py --min 10 --max 15 --path save_tail.pkl
+```
 
 在OTC的每10层，游戏主题都会改变。这意味着墙壁颜色和纹理也会改变，以及需要完成的任务。正如我们之前提到的，这种视觉变化，加上3D，将使Unity OTC成为我们在首次变得足够聪明/大胆和/或勇敢地应对AGI时，最具挑战性和基准挑战之一。AGI和通过DRL走向更普遍智能的道路将是我们在第14章[从DRL到AGI](a171ddfa-e639-4b4e-9652-4279b5ac872a.xhtml)的关注点。
 
@@ -372,15 +808,24 @@ Habitat支持从以下三个供应商导入：[MatterPort3D](https://niessner.gi
 
 1.  打开Anaconda命令提示符并导航到一个干净的文件夹。使用以下命令下载和安装Habitat：
 
-[PRE23]
+```py
+git clone --branch stable git@github.com:facebookresearch/habitat-sim.git 
+cd habitat-sim
+```
 
 1.  然后，创建一个新的虚拟环境，并使用以下命令安装所需的依赖项：
 
-[PRE24]
+```py
+conda create -n habitat python=3.6 cmake=3.14.0 
+conda activate habitat 
+pip install -r requirements.txt
+```
 
 1.  接下来，我们需要使用以下命令构建Habitat Sim：
 
-[PRE25]
+```py
+python setup.py install
+```
 
 1.  从以下链接下载测试场景：[http://dl.fbaipublicfiles.com/habitat/habitat-test-scenes.zip](http://dl.fbaipublicfiles.com/habitat/habitat-test-scenes.zip)。
 
@@ -390,7 +835,9 @@ RGBD图像捕捉并不新鲜，传统上，它很昂贵，因为它需要移动�
 
 1.  安装完成后，我们可以通过运行以下命令来测试Habitat的安装：
 
-[PRE26]
+```py
+python examples/example.py --scene /path/to/data/scene_datasets/habitat-test-scenes/skokloster-castle.glb
+```
 
 1.  这将以非交互方式启动模拟并执行一些随机移动。如果您想查看或与环境交互，您将需要下载并安装存储库文档中找到的交互式插件。
 
@@ -402,11 +849,29 @@ RGBD图像捕捉并不新鲜，传统上，它很昂贵，因为它需要移动�
 
 1.  使用以下命令下载并安装Habitat API：
 
-[PRE27]
+```py
+git clone --branch stable git@github.com:facebookresearch/habitat-api.git 
+cd habitat-api pip install -r requirements.txt 
+python setup.py develop --all
+
+```
 
 1.  到目前为止，您可以使用多种方式使用API。我们首先将查看一个基本的代码示例，您可以用它来运行模拟：
 
-[PRE28]
+```py
+import habitat
+
+# Load embodied AI task (PointNav) and a pre-specified virtual robot
+env = habitat.Env(
+    config=habitat.get_config("configs/tasks/pointnav.yaml")
+)
+
+observations = env.reset()
+
+# Step through environment with random actions
+while not env.episode_over:
+    observations = env.step(env.action_space.sample())
+```
 
 1.  如您所见，模拟允许我们使用我们熟悉的Gym风格界面来编程智能体。
 
@@ -414,15 +879,23 @@ RGBD图像捕捉并不新鲜，传统上，它很昂贵，因为它需要移动�
 
 1.  使用以下命令安装Habitat Baselines包：
 
-[PRE29]
+```py
+# be sure to cd to the habitat_baselines folder
+pip install -r requirements.txt 
+python setup.py develop --all
+```
 
 1.  安装完成后，您可以通过运行以下命令来运行`run.py`脚本来训练一个智能体：
 
-[PRE30]
+```py
+python -u habitat_baselines/run.py --exp-config habitat_baselines/config/pointnav/ppo_pointnav.yaml --run-type train
+```
 
 1.  然后，您可以使用以下命令测试这个智能体：
 
-[PRE31]
+```py
+python -u habitat_baselines/run.py --exp-config habitat_baselines/config/pointnav/ppo_pointnav.yaml --run-type eval
+```
 
 Habitat是一个相对较新的发展，为在真实世界环境中训练智能体/机器人打开了大门。虽然Unity和ML-Agents是训练3D游戏环境中智能体的优秀平台，但它们仍然无法与真实世界的复杂性相比。在真实世界中，物体很少完美，通常是复杂的，这使得这些环境特别难以泛化，因此难以训练。在下一节中，我们通过典型的练习来结束这一章。
 

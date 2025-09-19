@@ -54,7 +54,11 @@
 
 代码块设置如下：
 
-[PRE0]
+```py
+# Get the start and end positions
+answer_start_scores = outputs.start_logits
+answer_end_scores = outputs.end_logits
+```
 
 **粗体**：表示新术语、重要单词或您在屏幕上看到的单词。例如，菜单或对话框中的单词以**粗体**显示。以下是一个示例：“点击GitHub主页右上角的**+**图标，并选择**New repository**。”
 

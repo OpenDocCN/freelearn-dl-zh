@@ -62,29 +62,83 @@
 
 1.  我们首先创建一个新的虚拟环境，然后下载一个名为`learn2learn`的包，这是一个元学习框架，它提供了PyTorch中MAML的出色实现。确保你创建一个新的环境并安装PyTorch和Gym环境，就像我们之前做的那样。你可以使用以下命令安装`learn2learn`：
 
-[PRE0]
+```py
+pip install learn2learn  # after installing new environment with torch
+
+pip install tqdm # used for displaying progress
+```
 
 1.  为了了解如何在基本任务中使用`learn2learn`，我们将回顾存储库中找到的基本MNIST训练样本，但不会查看源代码`Chapter_14_learn.py`中提供的每个代码示例的每个部分。打开样本并查看代码的顶部部分，如下所示：
 
-[PRE1]
+```py
+import learn2learn as l2l
+class Net(nn.Module):
+    def __init__(self, ways=3):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(1, 20, 5, 1)
+        self.conv2 = nn.Conv2d(20, 50, 5, 1)
+        self.fc1 = nn.Linear(4 * 4 * 50, 500)
+        self.fc2 = nn.Linear(500, ways)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = F.relu(self.conv2(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = x.view(-1, 4 * 4 * 50)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return F.log_softmax(x, dim=1)
+```
 
 1.  这段代码的顶部部分显示了`learn2learn`的`import`语句和`Net`类的定义。这是我们将要训练的网络模型。注意模型由两个卷积/池化层组成，随后是一个连接到输出层的全连接线性层。注意使用`ways`作为输入变量，它定义了最后一个输出层的输出数量。
 
 1.  接下来，我们将向下滚动到`main`函数。这里发生所有的主设置和初始化。这个样本比大多数样本更健壮，它提供了输入参数，你可以使用这些参数而不是在代码中修改超参数。以下代码展示了`main`函数的顶部：
 
-[PRE2]
+```py
+def main(lr=0.005, maml_lr=0.01, iterations=1000, ways=5, shots=1, tps=32, fas=5, device=torch.device("cpu"),
+         download_location="/tmp/mnist"):
+    transformations = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,)),
+        lambda x: x.view(1, 1, 28, 28),
+    ])
+
+    mnist_train = l2l.data.MetaDataset(MNIST(download_location, train=True, download=True, transform=transformations))
+    # mnist_test = MNIST(file_location, train=False, download=True, transform=transformations)
+
+    train_gen = l2l.data.TaskGenerator(mnist_train, ways=ways, tasks=10000)
+    # test_gen = l2l.data.TaskGenerator(mnist_test, ways=ways)
+
+    model = Net(ways)
+    model.to(device)
+    meta_model = l2l.algorithms.MAML(model, lr=maml_lr)
+    opt = optim.Adam(meta_model.parameters(), lr=lr)
+    loss_func = nn.NLLLoss(reduction="sum")
+```
 
 1.  虽然我们之前没有通过图像分类示例，但希望代码对你来说相对容易理解且熟悉。需要注意的是，在代码高亮行使用`l2l.algorithms.MAML`模型构建`meta_model`。注意`meta_model`是如何通过将其作为输入来包装`model`网络的。
 
 1.  从这里，我们将向下滚动到我们之前多次见过的熟悉的训练循环。然而，这次有一些有趣的不同之处。具体查看第一个迭代循环内部的代码，如下所示：
 
-[PRE3]
+```py
+iteration_error = 0.0
+iteration_acc = 0.0
+for _ in range(tps):
+    learner = meta_model.clone()
+    train_task = train_gen.sample()
+    valid_task = train_gen.sample(task=train_task.sampled_task)
+```
 
 注意我们是如何构建一个`meta_model`学习器的`learner`克隆。这个`learner`克隆变成了我们的目标学习网络。最后两行展示了为训练和验证任务构建采样器的过程。
 
 1.  接下来，让我们看看如何使用`learner`在另一个循环中以迭代方式再次计算损失，如下所示：
 
-[PRE4]
+```py
+for step in range(fas):
+    train_error, _ = compute_loss(train_task, device, learner, loss_func, batch=shots * ways)
+    learner.adapt(train_error)
+```
 
 1.  在这个阶段，运行样本并观察输出，以了解训练是如何进行的。
 
@@ -98,23 +152,52 @@
 
 1.  这里的内部循环被称为**快速自适应训练循环**，因为我们向网络展示了一些或小批量或数据样本进行训练。计算网络的损失是通过`compute_loss`函数完成的，如下面的代码所示：
 
-[PRE5]
+```py
+def compute_loss(task, device, learner, loss_func, batch=5):
+    loss = 0.0
+    acc = 0.0
+    dataloader = DataLoader(task, batch_size=batch, shuffle=False, num_workers=0)
+    for i, (x, y) in enumerate(dataloader):
+        x, y = x.squeeze(dim=1).to(device), y.view(-1).to(device)
+        output = learner(x)
+        curr_loss = loss_func(output, y)
+        acc += accuracy(output, y)
+        loss += curr_loss / x.size(0)
+    loss /= len(dataloader)
+    return loss, acc
+```
 
 1.  注意损失是如何通过迭代任务训练批次来计算的，通过迭代`dataloader`列表。然后我们通过将总损失`loss`除以数据加载器的数量来计算所有任务的平均损失。
 
 1.  这个平均`loss`和准确度`acc`由`compute_loss`函数返回。从这个学习实例中，学习者随后使用以下代码行进行适应或更新：
 
-[PRE6]
+```py
+train_error, _ = compute_loss(train_task, device, learner, loss_func, batch=shots * ways)
+learner.adapt(train_error)
+```
 
 1.  在快速自适应循环和通过每个循环更新学习者之后，我们可以使用以下代码验证学习者：
 
-[PRE7]
+```py
+valid_error, valid_acc = compute_loss(valid_task, device, learner, loss_func, batch=shots * ways)
+iteration_error += valid_error
+iteration_acc += valid_acc
+```
 
 1.  `valid_error`验证错误和`valid_acc`准确度随后累计在总的`iteration_error`错误和`iteration_acc`准确度值上。
 
 1.  我们通过以下代码计算平均迭代和准确度误差，`iteration_error`或`iteration_acc`值，然后将该误差反向传播到网络中：
 
-[PRE8]
+```py
+iteration_error /= tps
+iteration_acc /= tps
+tqdm_bar.set_description("Loss : {:.3f} Acc : {:.3f}".format(iteration_error.item(), iteration_acc))
+
+# Take the meta-learning step
+opt.zero_grad()
+iteration_error.backward()
+opt.step()
+```
 
 1.  这个示例的训练相当快，所以再次运行示例并观察算法在元学习任务上的训练速度有多快。
 
@@ -170,33 +253,119 @@ Unity Obstacle Tower Challenge很可能是为了鼓励开发者构建元-RL代�
 
 1.  您需要首先通过在您的虚拟环境窗口中输入以下命令来安装cherry RL包：
 
-[PRE9]
+```py
+pip install cherry-rl
+```
 
 1.  我们不会审查整个代码列表，只审查关键部分。首先，让我们看看`main`函数，它启动初始化并托管训练。此函数的开始部分如下所示：
 
-[PRE10]
+```py
+def main(
+        experiment='dev',
+        env_name='Particles2D-v1',
+        adapt_lr=0.1,
+        meta_lr=0.01,
+        adapt_steps=1,
+        num_iterations=200,
+        meta_bsz=20,
+        adapt_bsz=20,
+        tau=1.00,
+        gamma=0.99,
+        num_workers=2,
+        seed=42,
+):
+    random.seed(seed)
+    np.random.seed(seed)
+    th.manual_seed(seed)
+
+    def make_env():
+        return gym.make(env_name)
+```
 
 在`main`函数的定义中，我们可以看到所有相关的超参数以及它们选择的默认值。请注意，用于适应和元学习步骤的两个新超参数组分别以前缀`adapt`和`meta`开头。
 
 1.  接下来，我们将使用以下代码查看环境的初始化、策略、元学习者和优化器的初始化：
 
-[PRE11]
+```py
+env = l2l.gym.AsyncVectorEnv([make_env for _ in range(num_workers)])
+env.seed(seed)
+env = ch.envs.Torch(env)
+policy = DiagNormalPolicy(env.state_size, env.action_size)
+meta_learner = l2l.algorithms.MetaSGD(policy, lr=meta_lr)
+baseline = LinearValue(env.state_size, env.action_size)
+opt = optim.Adam(policy.parameters(), lr=meta_lr)
+all_rewards = []
+```
 
 1.  在这里，我们可以看到三个训练循环。首先，外层迭代循环控制元学习的重复次数。在这个循环内部，我们有任务设置和配置循环；记住，我们希望每个学习会话都需要一个不同但相关的任务。第三个、最内层的循环是自适应发生的地方，我们将损失反向传递通过模型。所有三个循环的代码如下所示：
 
-[PRE12]
+```py
+for iteration in range(num_iterations):
+    iteration_loss = 0.0
+    iteration_reward = 0.0
+    for task_config in tqdm(env.sample_tasks(meta_bsz)): 
+        learner = meta_learner.clone()
+        env.set_task(task_config)
+        env.reset()
+        task = ch.envs.Runner(env)
+
+        # Fast Adapt
+        for step in range(adapt_steps):
+            train_episodes = task.run(learner, episodes=adapt_bsz)
+            loss = maml_a2c_loss(train_episodes, learner, baseline, gamma, tau)
+            learner.adapt(loss)
+```
 
 1.  在快速自适应循环完成后，我们然后回到第二个循环并使用以下代码计算验证损失：
 
-[PRE13]
+```py
+valid_episodes = task.run(learner, episodes=adapt_bsz)
+loss = maml_a2c_loss(valid_episodes, learner, baseline, gamma, tau)
+iteration_loss += loss
+iteration_reward += valid_episodes.reward().sum().item() / adapt_bsz
+```
 
 1.  验证损失是在第二个循环中为每个不同的任务计算的。然后，这个损失被累积到迭代损失 `iteration_loss` 中。离开第二个循环后，我们打印出一些统计数据并计算自适应损失 `adaption_loss`，并使用以下代码将这个损失作为梯度反向传递通过网络进行训练：
 
-[PRE14]
+```py
+adaptation_loss = iteration_loss / meta_bsz
+print('adaptation_loss', adaptation_loss.item())
+
+opt.zero_grad()
+adaptation_loss.backward()
+opt.step()
+```
 
 1.  记住，在损失方程（迭代和自适应）中的除数都使用了一个相似的值 `20`，`meta_bsz` `= 20`，和 `adapt_bsz = 20`。基本损失函数由 `maml_a2c_loss` 和 `compute_advantages` 函数定义，如下面的代码所示：
 
-[PRE15]
+```py
+def compute_advantages(baseline, tau, gamma, rewards, dones, states, next_states):
+    # Update baseline
+    returns = ch.td.discount(gamma, rewards, dones)
+    baseline.fit(states, returns)
+    values = baseline(states)
+    next_values = baseline(next_states)
+    bootstraps = values * (1.0 - dones) + next_values * dones
+    next_value = th.zeros(1, device=values.device)
+    return ch.pg.generalized_advantage(tau=tau,
+                                       gamma=gamma,
+                                       rewards=rewards,
+                                       dones=dones,
+                                       values=bootstraps,
+                                       next_value=next_value)
+
+def maml_a2c_loss(train_episodes, learner, baseline, gamma, tau):    
+    states = train_episodes.state()
+    actions = train_episodes.action()
+    rewards = train_episodes.reward()
+    dones = train_episodes.done()
+    next_states = train_episodes.next_state()
+    log_probs = learner.log_prob(states, actions)
+    advantages = compute_advantages(baseline, tau, gamma, rewards,
+                                    dones, states, next_states)
+    advantages = ch.normalize(advantages).detach()
+    return a2c.policy_loss(log_probs, advantages)
+```
 
 注意樱桃RL库如何帮助我们避免了某些复杂代码的实现。幸运的是，我们应该已经知道樱桃函数 `ch.td.discount` 和 `ch.pg.generalized_advantage` 是什么，因为我们已经在之前的章节中遇到过它们，所以我们在这里不需要回顾它们。
 
@@ -220,11 +389,48 @@ OpenAI引入了回溯经验重放作为处理稀疏奖励的方法，但该算�
 
 1.  这两个示例几乎相同，除了HER的实现，所以比较将帮助我们理解代码的工作方式。接下来，环境已经被简化并定制构建，以执行简单的随机位移动操作。创建环境的代码如下：
 
-[PRE16]
+```py
+class Env(object):
+    def __init__(self, num_bits):
+        self.num_bits = num_bits
+
+    def reset(self):
+        self.done = False
+        self.num_steps = 0
+        self.state = np.random.randint(2, size=self.num_bits)
+        self.target = np.random.randint(2, size=self.num_bits)
+        return self.state, self.target
+
+    def step(self, action):
+        if self.done:
+            raise RESET        
+        self.state[action] = 1 - self.state[action]        
+        if self.num_steps > self.num_bits + 1:
+            self.done = True
+        self.num_steps += 1        
+        if np.sum(self.state == self.target) == self.num_bits:
+            self.done = True
+            return np.copy(self.state), 0, self.done, {}
+        else:
+            return np.copy(self.state), -1, self.done, {}
+```
 
 1.  我们从未真正讲解过如何构建自定义环境，但正如你所见，它可以相当简单。接下来，我们将查看我们将用于训练的简单DQN模型，如下面的代码所示：
 
-[PRE17]
+```py
+class Model(nn.Module):
+    def __init__(self, num_inputs, num_outputs, hidden_size=256):
+        super(Model, self).__init__()
+
+        self.linear1 = nn.Linear(num_inputs, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, num_outputs)
+
+    def forward(self, state, goal):
+        x = torch.cat([state, goal], 1)
+        x = F.relu(self.linear1(x))
+        x = self.linear2(x)
+        return x
+```
 
 1.  这就是你可以得到的简单DQN模型。接下来，让我们通过并排查看代码来比较这两个示例，如下面的截图所示：
 
@@ -234,19 +440,73 @@ VS中的代码示例比较
 
 1.  新的代码部分也在这里显示：
 
-[PRE18]
+```py
+new_episode = []
+  for state, reward, done, next_state, goal in episode:
+    for t in np.random.choice(num_bits, new_goals):
+      try:
+        episode[t]
+      except:
+        continue
+      new_goal = episode[t][-2]
+      if np.sum(next_state == new_goal) == num_bits:
+        reward = 0
+      else:
+        reward = -1
+      replay_buffer.push(state, action, reward, next_state, done, new_goal)
+      new_episode.append((state, reward, done, next_state, new_goal)) 
+```
 
 1.  我们在这里看到的是添加了另一个循环，这与元强化学习类似，但这次它作为一个兄弟存在。第二个循环在第一个内部循环完成一个回合后激活。然后，它遍历前一个回合中的每个事件，并根据新的目标调整目标或目标，基于返回的奖励。这本质上就是回溯部分。
 
 1.  这个例子剩余的部分与我们之前的许多例子相似，现在应该已经很熟悉了。但有趣的部分是`get_action`函数，如下面的代码所示：
 
-[PRE19]
+```py
+def get_action(model, state, goal, epsilon=0.1):
+    if random.random() < 0.1:
+        return random.randrange(env.num_bits)
+
+    state = torch.FloatTensor(state).unsqueeze(0).to(device)
+    goal = torch.FloatTensor(goal).unsqueeze(0).to(device)
+    q_value = model(state, goal)
+    return q_value.max(1)[1].item()
+```
 
 注意，这里我们使用了一个默认为`.1`的`epsilon`值，表示探索的倾向。实际上，你可能注意到这个例子没有使用变量探索。
 
 1.  继续探讨差异，下一个关键差异是`compute_td_loss`函数，如下面的代码所示：
 
-[PRE20]
+```py
+def compute_td_error(batch_size):
+    if batch_size > len(replay_buffer):
+        return None
+
+    state, action, reward, next_state, done, goal = replay_buffer.sample(batch_size)
+
+    state = torch.FloatTensor(state).to(device)
+    reward = torch.FloatTensor(reward).unsqueeze(1).to(device)
+    action = torch.LongTensor(action).unsqueeze(1).to(device)
+    next_state = torch.FloatTensor(next_state).to(device)
+    goal = torch.FloatTensor(goal).to(device)
+    mask = torch.FloatTensor(1 - np.float32(done)).unsqueeze(1).to(device)
+
+    q_values = model(state, goal)
+    q_value = q_values.gather(1, action)
+
+    next_q_values = target_model(next_state, goal)
+    target_action = next_q_values.max(1)[1].unsqueeze(1)
+    next_q_value = target_model(next_state, goal).gather(1, target_action)
+
+    expected_q_value = reward + 0.99 * next_q_value * mask
+
+    loss = (q_value - expected_q_value.detach()).pow(2).mean()
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    return loss
+```
 
 1.  首先运行不带HER的示例并观察结果，然后运行带有HER的示例。带有HER的示例的输出如下所示：
 
@@ -270,25 +530,119 @@ VS中的代码示例比较
 
 1.  我们将使用一个简单的A2C Vanilla PG方法作为生成我们想象训练引导的基础代理。让我们首先在文件中向下滚动，看看定义我们的代理的`ActorCritic`类：
 
-[PRE21]
+```py
+class ActorCritic(OnPolicy):
+    def __init__(self, in_shape, num_actions):
+        super(ActorCritic, self).__init__()
+
+        self.in_shape = in_shape
+
+        self.features = nn.Sequential(
+            nn.Conv2d(in_shape[0], 16, kernel_size=3, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 16, kernel_size=3, stride=2),
+            nn.ReLU(),
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(self.feature_size(), 256),
+            nn.ReLU(),
+        )
+
+        self.critic = nn.Linear(256, 1)
+        self.actor = nn.Linear(256, num_actions)
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        logit = self.actor(x)
+        value = self.critic(x)
+        return logit, value
+
+    def feature_size(self):
+        return self.features(autograd.Variable(torch.zeros(1, *self.in_shape))).view(1, -1).size(1)
+```
 
 1.  我们可以看到一个简单的PG代理，它将由A2C同步的actor-critic提供动力。接下来，我们来到另一个新类，称为`RolloutStorage`。Rollout storage在概念上与经验回放相似，但它还使我们能够进行持续的回报计算，如下面的代码所示：
 
-[PRE22]
+```py
+class RolloutStorage(object):
+    def __init__(self, num_steps, num_envs, state_shape):
+        self.num_steps = num_steps
+        self.num_envs = num_envs
+        self.states = torch.zeros(num_steps + 1, num_envs, *state_shape)
+        self.rewards = torch.zeros(num_steps, num_envs, 1)
+        self.masks = torch.ones(num_steps + 1, num_envs, 1)
+        self.actions = torch.zeros(num_steps, num_envs, 1).long()
+        #self.use_cuda = False
+
+    def cuda(self):
+        #self.use_cuda = True
+        self.states = self.states.cuda()
+        self.rewards = self.rewards.cuda()
+        self.masks = self.masks.cuda()
+        self.actions = self.actions.cuda()
+
+    def insert(self, step, state, action, reward, mask):
+        self.states[step + 1].copy_(state)
+        self.actions[step].copy_(action)
+        self.rewards[step].copy_(reward)
+        self.masks[step + 1].copy_(mask)
+
+    def after_update(self):
+        self.states[0].copy_(self.states[-1])
+        self.masks[0].copy_(self.masks[-1])
+
+    def compute_returns(self, next_value, gamma):
+        returns = torch.zeros(self.num_steps + 1, self.num_envs, 1)
+        #if self.use_cuda:
+        # returns = returns.cuda()
+        returns[-1] = next_value
+        for step in reversed(range(self.num_steps)):
+            returns[step] = returns[step + 1] * gamma * self.masks[step + 1] + self.rewards[step]
+        return returns[:-1]
+```
 
 1.  如果我们滚动到`main`函数，我们可以看到有16个同步环境正在以下代码的运行下进行：
 
-[PRE23]
+```py
+def main():
+    mode = "regular"
+    num_envs = 16
+
+    def make_env():
+        def _thunk():
+            env = MiniPacman(mode, 1000)
+            return env
+
+        return _thunk
+
+    envs = [make_env() for i in range(num_envs)]
+    envs = SubprocVecEnv(envs)
+
+    state_shape = envs.observation_space.shape
+```
 
 1.  我们将在稍后更多地讨论`RolloutStorage`类。现在，向下移动到代码的训练部分。这是典型的双层循环代码，外部循环控制剧集，内部循环控制步骤，如下面的代码所示：
 
-[PRE24]
+```py
+for i_update in range(num_frames):
+        for step in range(num_steps):
+            action = actor_critic.act(autograd.Variable(state))
+```
 
 其余的训练代码应该很熟悉，但你应该自己详细复习。
 
 1.  我们想要观察的下一个主要区别是在外部训练循环的末尾。这段最后的代码块是计算损失并将其推回网络的地方：
 
-[PRE25]
+```py
+optimizer.zero_grad()
+loss = value_loss * value_loss_coef + action_loss - entropy * entropy_coef
+loss.backward()
+nn.utils.clip_grad_norm(actor_critic.parameters(), max_grad_norm)
+optimizer.step()
+```
 
 1.  注意前面代码块中突出显示的行。这是独特的，因为我们正在将梯度裁剪到可能避免爆炸梯度的最大值。代码的最后部分渲染出游戏区域，并显示代理玩游戏。
 
@@ -306,21 +660,82 @@ VS中的代码示例比较
 
 1.  这段代码的目的是提取我们之前记录的保存状态观察字典。然后我们想要提取观察结果，并使用它来想象下一个状态将是什么样子。然后我们可以比较想象的状态和下一个状态之间的相似程度。这种相似程度将反过来用于训练想象损失。我们可以通过查看以下代码行来了解如何加载先前的模型：
 
-[PRE26]
+```py
+actor_critic.load_state_dict(torch.load("actor_critic_" + mode))
+```
 
 1.  上一行代码重新加载了我们之前训练的模型。现在我们想使用想象力（例如）合理地填补代理可能没有探索的区域。向下滚动，我们可以看到将学习代理的想象力部分的训练循环：
 
-[PRE27]
+```py
+for frame_idx, states, actions, rewards, next_states, dones in play_games(envs, num_updates):
+    states = torch.FloatTensor(states)
+    actions = torch.LongTensor(actions)
+    batch_size = states.size(0)
+
+    onehot_actions = torch.zeros(batch_size, num_actions, *state_shape[1:])
+    onehot_actions[range(batch_size), actions] = 1
+    inputs = autograd.Variable(torch.cat([states, onehot_actions], 1))
+```
 
 1.  此循环遍历之前玩过的游戏，并使用独热编码对动作进行编码。向下滚动，我们可以看到如何学习`imagined_state`状态和`imagined_reward`奖励：
 
-[PRE28]
+```py
+imagined_state, imagined_reward = env_model(inputs)
+
+target_state = pix_to_target(next_states)
+target_state = autograd.Variable(torch.LongTensor(target_state))
+target_reward = rewards_to_target(mode, rewards)
+target_reward = autograd.Variable(torch.LongTensor(target_reward))
+
+optimizer.zero_grad()
+image_loss = criterion(imagined_state, target_state)
+reward_loss = criterion(imagined_reward, target_reward)
+loss = image_loss + reward_coef * reward_loss
+loss.backward()
+optimizer.step()
+
+losses.append(loss.item())
+all_rewards.append(np.mean(rewards))
+```
 
 这是学习从之前观察到的观察中正确想象目标状态和奖励的代码部分。当然，观察越多，想象力越好，但到了某个点，过多的观察将完全消除所有想象力。平衡这种新的权衡将需要一些自己的尝试和错误。
 
 1.  向文件底部滚动，您可以看到以下代码输出的想象力和目标状态的示例：
 
-[PRE29]
+```py
+while not done:
+    steps += 1
+    actions = get_action(state)
+    onehot_actions = torch.zeros(batch_size, num_actions, *state_shape[1:])
+    onehot_actions[range(batch_size), actions] = 1
+    state = torch.FloatTensor(state).unsqueeze(0)
+
+    inputs = autograd.Variable(torch.cat([state, onehot_actions], 1))      
+    imagined_state, imagined_reward = env_model(inputs)
+    imagined_state = F.softmax(imagined_state)
+    iss.append(imagined_state)
+
+    next_state, reward, done, _ = env.step(actions[0])
+    ss.append(state)
+    state = next_state
+
+    imagined_image = target_to_pix(imagined_state.view(batch_size, -1, len(pixels))[0].max(1)[1].data.cpu().numpy())
+    imagined_image = imagined_image.reshape(15, 19, 3)
+    state_image = torch.FloatTensor(next_state).permute(1, 2, 0).cpu().numpy()
+
+    plt.figure(figsize=(10,3))
+    plt.subplot(131)
+    plt.title("Imagined")
+    plt.imshow(imagined_image)
+    plt.subplot(132)
+    plt.title("Actual")
+    plt.imshow(state_image)
+    plt.show()
+    time.sleep(0.3)
+
+    if steps > 30:
+       break
+```
 
 1.  以下示例截图展示了原始作者通过长时间训练代理所能达到的最佳效果：
 
@@ -332,7 +747,47 @@ VS中的代码示例比较
 
 1.  最后要注意的一点是如何提取想象图像。这是通过在`BasicBlock`类中使用反转CNN来完成的，它将编码转换回正确分辨率的图像。`BasicBlock`类的代码在此处显示：
 
-[PRE30]
+```py
+class BasicBlock(nn.Module):
+    def __init__(self, in_shape, n1, n2, n3):
+        super(BasicBlock, self).__init__()
+
+        self.in_shape = in_shape
+        self.n1 = n1
+        self.n2 = n2
+        self.n3 = n3
+
+        self.maxpool = nn.MaxPool2d(kernel_size=in_shape[1:])
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_shape[0] * 2, n1, kernel_size=1, stride=2, padding=6),
+            nn.ReLU(),
+            nn.Conv2d(n1, n1, kernel_size=10, stride=1, padding=(5, 6)),
+            nn.ReLU(),
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(in_shape[0] * 2, n2, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(n2, n2, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(n1 + n2, n3, kernel_size=1),
+            nn.ReLU()
+        )
+
+    def forward(self, inputs):
+        x = self.pool_and_inject(inputs)
+        x = torch.cat([self.conv1(x), self.conv2(x)], 1)
+        x = self.conv3(x)
+        x = torch.cat([x, inputs], 1)
+        return x
+
+    def pool_and_inject(self, x):
+        pooled = self.maxpool(x)
+        tiled = pooled.expand((x.size(0),) + self.in_shape)
+        out = torch.cat([tiled, x], 1)
+        return out
+```
 
 如我们所见，训练想象力过程本身并不困难。真正的困难是将这一切整合到一个运行代理中，我们将在下一节中了解如何做到这一点，当我们学习I2A时。
 
@@ -352,27 +807,193 @@ I2A架构展示了我们可以构建在DRL之上的系统的复杂性，以期�
 
 1.  我们已经涵盖了架构的第一部分，所以在这个阶段，我们可以从策略本身开始。看看I2A策略类：
 
-[PRE31]
+```py
+class I2A(OnPolicy):
+    def __init__(self, in_shape, num_actions, num_rewards, hidden_size, imagination, full_rollout=True):
+        super(I2A, self).__init__()
+
+        self.in_shape = in_shape
+        self.num_actions = num_actions
+        self.num_rewards = num_rewards
+
+        self.imagination = imagination
+
+        self.features = nn.Sequential(
+            nn.Conv2d(in_shape[0], 16, kernel_size=3, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 16, kernel_size=3, stride=2),
+            nn.ReLU(),
+        )
+
+        self.encoder = RolloutEncoder(in_shape, num_rewards, hidden_size)
+
+        if full_rollout:
+            self.fc = nn.Sequential(
+                nn.Linear(self.feature_size() + num_actions * hidden_size, 256),
+                nn.ReLU(),
+            )
+        else:
+            self.fc = nn.Sequential(
+                nn.Linear(self.feature_size() + hidden_size, 256),
+                nn.ReLU(),
+            )
+
+        self.critic = nn.Linear(256, 1)
+        self.actor = nn.Linear(256, num_actions)
+
+    def forward(self, state):
+        batch_size = state.size(0)
+
+        imagined_state, imagined_reward = self.imagination(state.data)
+        hidden = self.encoder(autograd.Variable(imagined_state), autograd.Variable(imagined_reward))
+        hidden = hidden.view(batch_size, -1)
+
+        state = self.features(state)
+        state = state.view(state.size(0), -1)
+
+        x = torch.cat([state, hidden], 1)
+        x = self.fc(x)
+
+        logit = self.actor(x)
+        value = self.critic(x)
+
+        return logit, value
+
+    def feature_size(self):
+        return self.features(autograd.Variable(torch.zeros(1, *self.in_shape))).view(1, -1).size(1)
+```
 
 1.  在大多数情况下，这是一个相当简单的PG策略，除了增加了想象元素。注意在`forward`函数中，前向传递指的是提取`imagined_state`和`imagined_reward`值所需的想象。
 
 1.  接下来，我们再向下滚动一点，来到`ImaginationCore`类。这个类封装了我们之前看到的功能，但全部封装在一个单独的类中，如下面的代码所示：
 
-[PRE32]
+```py
+class ImaginationCore(object):
+    def __init__(self, num_rolouts, in_shape, num_actions, num_rewards, env_model, distil_policy, full_rollout=True):
+        self.num_rolouts = num_rolouts
+        self.in_shape = in_shape
+        self.num_actions = num_actions
+        self.num_rewards = num_rewards
+        self.env_model = env_model
+        self.distil_policy = distil_policy
+        self.full_rollout = full_rollout
+
+    def __call__(self, state):
+        state = state.cpu()
+        batch_size = state.size(0)
+
+        rollout_states = []
+        rollout_rewards = []
+
+        if self.full_rollout:
+            state = state.unsqueeze(0).repeat(self.num_actions, 1, 1, 1, 1).view(-1, *self.in_shape)
+            action = torch.LongTensor([[i] for i in range(self.num_actions)]*batch_size)
+            action = action.view(-1)
+            rollout_batch_size = batch_size * self.num_actions
+        else:
+            action = self.distil_policy.act(autograd.Variable(state, volatile=True))
+            action = action.data.cpu()
+            rollout_batch_size = batch_size
+
+        for step in range(self.num_rolouts):
+            onehot_action = torch.zeros(rollout_batch_size, self.num_actions, *self.in_shape[1:])
+            onehot_action[range(rollout_batch_size), action] = 1
+            inputs = torch.cat([state, onehot_action], 1)
+
+            imagined_state, imagined_reward = self.env_model(autograd.Variable(inputs, volatile=True))
+
+            imagined_state = F.softmax(imagined_state).max(1)[1].data.cpu()
+            imagined_reward = F.softmax(imagined_reward).max(1)[1].data.cpu()
+
+            imagined_state = target_to_pix(imagined_state.numpy())
+            imagined_state = torch.FloatTensor(imagined_state).view(rollout_batch_size, *self.in_shape)
+
+            onehot_reward = torch.zeros(rollout_batch_size, self.num_rewards)
+            onehot_reward[range(rollout_batch_size), imagined_reward] = 1
+
+            rollout_states.append(imagined_state.unsqueeze(0))
+            rollout_rewards.append(onehot_reward.unsqueeze(0))
+
+            state = imagined_state
+            action = self.distil_policy.act(autograd.Variable(state, volatile=True))
+            action = action.data.cpu()
+
+        return torch.cat(rollout_states), torch.cat(rollout_rewards)
+```
 
 1.  现在我们已经看到了这些大型组件是如何工作的，是时候进入`main`函数了。我们将从查看代码的前十几行开始：
 
-[PRE33]
+```py
+envs = [make_env() for i in range(num_envs)]
+envs = SubprocVecEnv(envs)
+state_shape = envs.observation_space.shape
+num_actions = envs.action_space.n
+num_rewards = len(task_rewards[mode])
+
+full_rollout = True
+
+env_model = EnvModel(envs.observation_space.shape, num_pixels, num_rewards)
+env_model.load_state_dict(torch.load("env_model_" + mode))
+distil_policy = ActorCritic(envs.observation_space.shape, envs.action_space.n)
+distil_optimizer = optim.Adam(distil_policy.parameters())
+
+imagination = ImaginationCore(1, state_shape, num_actions, num_rewards, env_model, distil_policy, full_rollout=full_rollout)
+
+actor_critic = I2A(state_shape, num_actions, num_rewards, 256, imagination, full_rollout=full_rollout)
+```
 
 注意代码的流程。代码从实例化环境模型`env_model`和`distil_policy`，来自`ActorCritic`类开始。然后代码设置优化器，并实例化`ImaginationCore`类型的`imagination`对象，输入为`env_model`和`distil_policy`。最后一行使用`imagination`对象作为输入创建`actor_critic I2A`策略。
 
 1.  跳转到训练循环。注意它看起来相当标准：
 
-[PRE34]
+```py
+for i_update in tqdm(range(num_frames)):
+    for step in range(num_steps):
+        action = actor_critic.act(autograd.Variable(current_state))
+        next_state, reward, done, _ = envs.step(action.squeeze(1).cpu().data.numpy())
+        reward = torch.FloatTensor(reward).unsqueeze(1)
+        episode_rewards += reward
+        masks = torch.FloatTensor(1-np.array(done)).unsqueeze(1)
+        final_rewards *= masks
+        final_rewards += (1-masks) * episode_rewards
+        episode_rewards *= masks
+```
 
 1.  内部剧集循环完成后，我们接着跳转到损失计算和更新代码，如下所示：
 
-[PRE35]
+```py
+_, next_value = actor_critic(autograd.Variable(rollout.states[-1], volatile=True))
+next_value = next_value.data
+
+returns = rollout.compute_returns(next_value, gamma)
+logit, action_log_probs, values, entropy = actor_critic.evaluate_actions(
+autograd.Variable(rollout.states[:-1]).view(-1, *state_shape),
+            autograd.Variable(rollout.actions).view(-1, 1)
+        )
+
+distil_logit, _, _, _ = distil_policy.evaluate_actions(
+            autograd.Variable(rollout.states[:-1]).view(-1, *state_shape),
+            autograd.Variable(rollout.actions).view(-1, 1)
+        )
+
+distil_loss = 0.01 * (F.softmax(logit).detach() * F.log_softmax(distil_logit)).sum(1).mean()
+
+values = values.view(num_steps, num_envs, 1)
+action_log_probs = action_log_probs.view(num_steps, num_envs, 1)
+advantages = autograd.Variable(returns) - values
+
+value_loss = advantages.pow(2).mean()
+action_loss = -(autograd.Variable(advantages.data) * action_log_probs).mean()
+
+optimizer.zero_grad()
+loss = value_loss * value_loss_coef + action_loss - entropy * entropy_coef
+loss.backward()
+nn.utils.clip_grad_norm(actor_critic.parameters(), max_grad_norm)
+optimizer.step()
+distil_optimizer.zero_grad()
+distil_loss.backward()
+optimizer.step()
+```
 
 1.  这里需要注意的一点是，我们正在使用两个损失梯度将损失推回到`distil`模型，该模型调整`distil`模型的参数和`actor_critic`模型或策略及其参数。不深入细节，这里的主要概念是我们训练`distil`模型来学习想象力和用于一般策略训练的其他损失。
 

@@ -48,15 +48,58 @@ LingPipe 标记化器是使用 LingPipe `TokenizerFactory` 接口构建的，该
 
 1.  进入 `cookbook` 目录并调用以下类：
 
-    [PRE0]
+    ```py
+    java -cp "lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar" com.lingpipe.cookbook.chapter2.RunBaseTokenizerFactory
+
+    ```
 
     这将带我们到一个命令提示符，提示我们输入一些文本：
 
-    [PRE1]
+    ```py
+    type a sentence to see tokens and white spaces
+
+    ```
 
 1.  如果我们输入一个句子，例如：`It's no use growing older if you only learn new ways of misbehaving yourself`，我们将得到以下输出：
 
-    [PRE2]
+    ```py
+    It's no use growing older if you only learn new ways of misbehaving yourself. 
+    Token:'It'
+    WhiteSpace:''
+    Token:'''
+    WhiteSpace:''
+    Token:'s'
+    WhiteSpace:' '
+    Token:'no'
+    WhiteSpace:' '
+    Token:'use'
+    WhiteSpace:' '
+    Token:'growing'
+    WhiteSpace:' '
+    Token:'older'
+    WhiteSpace:' '
+    Token:'if'
+    WhiteSpace:' '
+    Token:'you'
+    WhiteSpace:' '
+    Token:'only'
+    WhiteSpace:' '
+    Token:'learn'
+    WhiteSpace:' '
+    Token:'new'
+    WhiteSpace:' '
+    Token:'ways'
+    WhiteSpace:' '
+    Token:'of'
+    WhiteSpace:' '
+    Token:'misbehaving'
+    WhiteSpace:' '
+    Token:'yourself'
+    WhiteSpace:''
+    Token:'.'
+    WhiteSpace:' '
+
+    ```
 
 1.  检查输出并注意标记和空白。文本来自萨基的短篇小说《巴斯特布尔女士的狂奔》。
 
@@ -64,7 +107,37 @@ LingPipe 标记化器是使用 LingPipe `TokenizerFactory` 接口构建的，该
 
 代码非常简单，可以完整地包含如下：
 
-[PRE3]
+```py
+package com.lingpipe.cookbook.chapter2;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
+import com.aliasi.tokenizer.IndoEuropeanTokenizerFactory;
+import com.aliasi.tokenizer.Tokenizer;
+import com.aliasi.tokenizer.TokenizerFactory;
+
+public class RunBaseTokenizerFactory {
+
+  public static void main(String[] args) throws IOException {
+    TokenizerFactory tokFactory = IndoEuropeanTokenizerFactory.INSTANCE;
+    BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+    while (true) {
+      System.out.println("type a sentence to " + "see the tokens and white spaces");
+      String input = reader.readLine();
+      Tokenizer tokenizer = tokFactory.tokenizer(input.toCharArray(), 0, input.length());
+      String token = null;
+      while ((token = tokenizer.nextToken()) != null) {
+        System.out.println("Token:'" + token + "'");
+        System.out.println("WhiteSpace:'" + tokenizer.nextWhitespace() + "'");
+
+      }
+    }
+  }
+}
+```
 
 此配方从 `main()` 方法的第一个语句中创建 `TokenizerFactory tokFactory` 开始。请注意，使用了单例 `IndoEuropeanTokenizerFactory.INSTANCE`。该工厂将为给定的字符串生成标记化器，这在 `Tokenizer tokenizer = tokFactory.tokenizer(input.toCharArray(), 0, input.length())` 这一行中很明显。输入的字符串通过 `input.toCharArray()` 转换为字符数组，作为 `tokenizer` 方法的第一个参数，并将起始和结束偏移量提供给创建的字符数组。
 
@@ -104,11 +177,46 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 1.  从命令行调用`RunLowerCaseTokenizerFactory`类：
 
-    [PRE4]
+    ```py
+    java -cp "lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar" com.lingpipe.cookbook.chapter2.RunLowerCaseTokenizerFactory.
+
+    ```
 
 1.  然后，在命令提示符下，让我们使用以下示例：
 
-    [PRE5]
+    ```py
+    type a sentence below to see the tokens and white spaces are:
+    This is an UPPERCASE word and these are numbers 1 2 3 4.5.
+    Token:'this'
+    WhiteSpace:' '
+    Token:'is'
+    WhiteSpace:' '
+    Token:'an'
+    WhiteSpace:' '
+    Token:'uppercase'
+    WhiteSpace:' '
+    Token:'word'
+    WhiteSpace:' '
+    Token:'and'
+    WhiteSpace:' '
+    Token:'these'
+    WhiteSpace:' '
+    Token:'are'
+    WhiteSpace:' '
+    Token:'numbers'
+    WhiteSpace:' '
+    Token:'1'
+    WhiteSpace:' '
+    Token:'2'
+    WhiteSpace:' '
+    Token:'3'
+    WhiteSpace:' '
+    Token:'4.5'
+    WhiteSpace:''
+    Token:'.'
+    WhiteSpace:''
+
+    ```
 
 ## 它是如何工作的...
 
@@ -116,7 +224,27 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 我们组合分词器的方式非常简单：
 
-[PRE6]
+```py
+public static void main(String[] args) throws IOException {
+
+  TokenizerFactory tokFactory = IndoEuropeanTokenizerFactory.INSTANCE;
+  tokFactory = new LowerCaseTokenizerFactory(tokFactory);
+  tokFactory = new WhitespaceNormTokenizerFactory(tokFactory);
+
+  BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+  while (true) {
+    System.out.println("type a sentence below to see the tokens and white spaces are:");
+    String input = reader.readLine();
+    Tokenizer tokenizer = tokFactory.tokenizer(input.toCharArray(), 0, input.length());
+    String token = null;
+    while ((token = tokenizer.nextToken()) != null) {
+      System.out.println("Token:'" + token + "'");
+      System.out.println("WhiteSpace:'" + tokenizer.nextWhitespace() + "'");
+    }
+  }
+}
+```
 
 在这里，我们创建了一个分词器，它返回使用印欧语分词器生成的归一化大小写和空白符标记符。从分词器工厂创建的分词器是一个过滤分词器，它以印欧语基础分词器开始，然后通过`LowerCaseTokenizer`修改以生成小写分词器。然后，它再次通过`WhiteSpaceNormTokenizerFactory`修改，以生成小写、空白符归一化的印欧语分词器。
 
@@ -142,11 +270,26 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 1.  从命令行调用`RunStopTokenizerFactory`类：
 
-    [PRE7]
+    ```py
+    java -cp "lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar" com.lingpipe.cookbook.chapter2.RunStopTokenizerFactory
+
+    ```
 
 1.  然后，在提示中，让我们使用以下示例：
 
-    [PRE8]
+    ```py
+    type a sentence below to see the tokens and white spaces:
+    the quick brown fox is jumping
+    Token:'quick'
+    WhiteSpace:' '
+    Token:'brown'
+    WhiteSpace:' '
+    Token:'fox'
+    WhiteSpace:' '
+    Token:'jumping'
+    WhiteSpace:''
+
+    ```
 
 1.  注意，我们丢失了相邻信息。在输入中，我们有`fox is jumping`，但分词结果却是`fox`后面跟着`jumping`，因为`is`被过滤掉了。这可能对需要准确相邻信息的基于分词的过程造成问题。在第4章（part0051_split_000.html#page "Chapter 4. Tagging Words and Tokens"）的*前景或背景驱动的有趣短语检测*配方中，我们将展示一个基于长度的过滤分词器，它可以保留相邻信息。
 
@@ -154,7 +297,17 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 在这个`StopTokenizerFactory`过滤器中使用的停用词只是一个非常短的单词列表，`is`、`of`、`the`和`to`。显然，如果需要，这个列表可以更长。正如你在前面的输出中看到的那样，单词`the`和`is`已经被从分词输出中移除。这是通过一个非常简单的步骤完成的：我们在`src/com/lingpipe/cookbook/chapter2/RunStopTokenizerFactory.java`中实例化`StopTokenizerFactory`。相关的代码是：
 
-[PRE9]
+```py
+TokenizerFactory tokFactory = IndoEuropeanTokenizerFactory.INSTANCE;
+tokFactory = new LowerCaseTokenizerFactory(tokFactory);
+Set<String> stopWords = new HashSet<String>();
+stopWords.add("the");
+stopWords.add("of");
+stopWords.add("to");
+stopWords.add("is");
+
+tokFactory = new StopTokenizerFactory(tokFactory, stopWords);
+```
 
 由于我们在分词器工厂中使用 `LowerCaseTokenizerFactory` 作为其中一个过滤器，我们可以忽略只包含小写单词的停用词。如果我们想保留输入标记的大小写并继续移除停用词，我们需要添加大写或混合大小写的版本。
 
@@ -178,39 +331,79 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 1.  从命令行调用 `RunLuceneTokenizer` 类：
 
-    [PRE10]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lucene-analyzers-common-4.6.0.jar:lib/lucene-core-4.6.0.jar com.lingpipe.cookbook.chapter2.RunLuceneTokenize
+
+    ```
 
 1.  然后，在提示中，让我们使用以下示例：
 
-    [PRE11]
+    ```py
+    the quick BROWN fox jumped
+    type a sentence below to see the tokens and white spaces:
+    The rain in Spain.
+    Token:'the' Start: 0 End:3
+    Token:'rain' Start: 4 End:8
+    Token:'in' Start: 9 End:11
+    Token:'spain' Start: 12 End:17
+
+    ```
 
 ## 它是如何工作的...
 
 让我们回顾以下代码，看看 Lucene 分词器在调用上与前面的示例有何不同——来自 `src/com/lingpipe/cookbook/chapter2/RunLuceneTokenizer.java` 的相关代码部分是：
 
-[PRE12]
+```py
+BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
-[PRE13]
+while (true) {
+```
 
-[PRE14]
+```py
+BufferedReader from the command line and starts a perpetual while() loop. Next, the prompt is provided, the input is read, and it is used to construct a Reader object:
+```
+
+```py
+System.out.println("type a sentence below to see the tokens and white spaces:");
+String input = reader.readLine();
+Reader stringReader = new StringReader(input);
+```
 
 所有输入都已封装，现在是构建实际分词器的时候了：
 
-[PRE15]
+```py
+TokenStream tokenStream = new StandardTokenizer(Version.LUCENE_46,stringReader);
+
+tokenStream = new LowerCaseFilter(Version.LUCENE_46,tokenStream);
+```
 
 输入文本用于使用 Lucene 的版本控制系统构建 `StandardTokenizer`，这产生了一个 `TokenStream` 实例。然后，我们使用 `LowerCaseFilter` 创建最终的过滤 `tokenStream`，其中将基本 `tokenStream` 作为参数。
 
 在 Lucene 中，我们需要从标记流中附加我们感兴趣的属性；这是通过 `addAttribute` 方法完成的：
 
-[PRE16]
+```py
+CharTermAttribute terms = tokenStream.addAttribute(CharTermAttribute.class);
+OffsetAttribute offset = tokenStream.addAttribute(OffsetAttribute.class);
+tokenStream.reset();
+```
 
 注意，在 Lucene 4 中，一旦分词器被实例化，在使用分词器之前必须调用 `reset()` 方法：
 
-[PRE17]
+```py
+while (tokenStream.incrementToken()) {
+  String token = terms.toString();
+  int start = offset.startOffset();
+  int end = offset.endOffset();
+  System.out.println("Token:'" + token + "'" + " Start: " + start + " End:" + end);
+}
+```
 
 `tokenStream` 被以下内容包装：
 
-[PRE18]
+```py
+tokenStream.end();
+tokenStream.close();
+```
 
 ## 参见
 
@@ -226,15 +419,40 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 1.  从命令行调用 `LuceneAnalyzerTokenizerFactory` 类：
 
-    [PRE19]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lucene-analyzers-common-4.6.0.jar:lib/lucene-core-4.6.0.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter2.LuceneAnalyzerTokenizerFactory
+
+    ```
 
 1.  类中的 `main()` 方法指定了输入：
 
-    [PRE20]
+    ```py
+    String text = "Hi how are you? " + "Are the numbers 1 2 3 4.5 all integers?";
+    Analyzer analyzer = new StandardAnalyzer(Version.LUCENE_46);
+    TokenizerFactory tokFactory = new LuceneAnalyzerTokenizerFactory(analyzer, "DEFAULT");
+    Tokenizer tokenizer = tokFactory.tokenizer(text.toCharArray(), 0, text.length());
+
+    String token = null;
+    while ((token = tokenizer.nextToken()) != null) {
+      String ws = tokenizer.nextWhitespace();
+      System.out.println("Token:'" + token + "'");
+      System.out.println("WhiteSpace:'" + ws + "'");
+    }
+    ```
 
 1.  前面的代码片段创建了一个 Lucene `StandardAnalyzer` 并使用它来构建一个 LingPipe `TokenizerFactory`。输出如下——`StandardAnalyzer` 过滤掉停用词，所以标记 `are` 被过滤掉：
 
-    [PRE21]
+    ```py
+    Token:'hi'
+    WhiteSpace:'default'
+    Token:'how'
+    WhiteSpace:'default'
+    Token:'you'
+    WhiteSpace:'default'
+    Token:'numbers'
+    WhiteSpace:'default'
+
+    ```
 
 1.  空白字符报告为 `default`，因为实现没有准确提供空白字符，而是使用默认值。我们将在 *How it works…* 部分讨论这个限制。
 
@@ -242,25 +460,78 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 让我们看看 `LuceneAnalyzerTokenizerFactory` 类。这个类通过包装 Lucene 分析器实现了 LingPipe `TokenizerFactory` 接口。我们将从 `src/com/lingpipe/cookbook/chapter2/LuceneAnalyzerTokenizerFactory.java` 中的类定义开始：
 
-[PRE22]
+```py
+public class LuceneAnalyzerTokenizerFactory implements TokenizerFactory, Serializable {
+
+  private static final long serialVersionUID = 8376017491713196935L;
+  private Analyzer analyzer;
+  private String field;
+  public LuceneAnalyzerTokenizerFactory(Analyzer analyzer, String field) {
+    super();
+    this.analyzer = analyzer;
+    this.field = field;
+  }
+```
 
 构造函数将分析器和字段的名称存储为私有变量。由于这个类实现了 `TokenizerFactory` 接口，我们需要实现 `tokenizer()` 方法：
 
-[PRE23]
+```py
+public Tokenizer tokenizer(char[] charSeq , int start, int length) {
+  Reader reader = new CharArrayReader(charSeq,start,length);
+  TokenStream tokenStream = analyzer.tokenStream(field,reader);
+  return new LuceneTokenStreamTokenizer(tokenStream);
+}
+```
 
 `tokenizer()` 方法创建一个新的字符数组读取器，并将其传递给 Lucene 分析器以将其转换为 `TokenStream`。基于标记流创建了一个 `LuceneTokenStreamTokenizer` 实例。`LuceneTokenStreamTokenizer` 是一个嵌套的静态类，它扩展了 LingPipe 的 `Tokenizer` 类：
 
-[PRE24]
+```py
+static class LuceneTokenStreamTokenizer extends Tokenizer {
+  private TokenStream tokenStream;
+  private CharTermAttribute termAttribute;
+  private OffsetAttribute offsetAttribute;
+
+  private int lastTokenStartPosition = -1;
+  private int lastTokenEndPosition = -1;
+
+  public LuceneTokenStreamTokenizer(TokenStream ts) {
+    tokenStream = ts;
+    termAttribute = tokenStream.addAttribute(
+      CharTermAttribute.class);
+    offsetAttribute = tokenStream.addAttribute(OffsetAttribute.class);
+  }
+```
 
 构造函数存储 `TokenStream` 并附加术语和偏移量属性。在先前的配方中，我们看到了术语和偏移量属性包含标记字符串，以及输入文本中的标记起始和结束偏移量。在找到任何标记之前，标记偏移量也被初始化为 `-1`：
 
-[PRE25]
+```py
+@Override
+public String nextToken() {
+  try {
+    if (tokenStream.incrementToken()){
+      lastTokenStartPosition = offsetAttribute.startOffset();
+      lastTokenEndPosition = offsetAttribute.endOffset();
+      return termAttribute.toString();
+    } else {
+      endAndClose();
+      return null;
+    }
+  } catch (IOException e) {
+    endAndClose();
+    return null;
+  }
+}
+```
 
 我们将实现 `nextToken()` 方法，并使用标记流的 `incrementToken()` 方法从标记流中检索任何标记。我们将使用 `OffsetAttribute` 设置标记的起始和结束偏移量。如果标记流已结束或 `incrementToken()` 方法抛出 I/O 异常，我们将结束并关闭 `TokenStream`。
 
 `nextWhitespace()` 方法有一些限制，因为 `offsetAttribute` 专注于当前标记，LingPipe 分词器将输入量化为下一个标记和下一个偏移量。在这里找到一个通用的解决方案将非常具有挑战性，因为标记之间可能没有明确定义的空白——想想字符 n-gram。因此，提供了 `default` 字符串以使其更清晰。该方法如下：
 
-[PRE26]
+```py
+@Override
+public String nextWhitespace() {   return "default";
+}
+```
 
 代码还涵盖了如何序列化分词器，但我们将不在菜谱中涵盖这一点。
 
@@ -274,7 +545,17 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 +   标记和空白被认为是语义中性的，这意味着标记不会根据上下文而改变。但我们的印欧语系分词器并非完全如此，因为它会根据上下文不同对待 `.`，例如，如果是十进制的一部分或在句子末尾，例如 `3.14 是 pi.`：
 
-    [PRE27]
+    ```py
+    Token:'3.14'
+    WhiteSpace:' '
+    Token:'is'
+    WhiteSpace:' '
+    Token:'pi'
+    WhiteSpace:''
+    Token:'.'
+    WhiteSpace:''.
+
+    ```
 
 对于基于统计的分词器，可能需要使用评估指标；这在本章的 *为没有空格的语言寻找单词* 菜谱中有讨论。参见 [第 5 章](part0061_split_000.html#page "第 5 章. 在文本中寻找跨度 – 分块") 的 *句子检测评估* 菜谱，*在文本中寻找跨度 – 分块*，以了解适当的基于跨度的评估技术。
 
@@ -284,11 +565,37 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 1.  以下代码设置了一个基于正则表达式的基分词工厂——如果你不清楚正在构建的内容，请查看该类的 Javadoc：
 
-    [PRE28]
+    ```py
+    public static void main(String[] args) {
+      String pattern = "[a-zA-Z]+|[0-9]+|\\S";
+      TokenizerFactory tokFactory = new RegExTokenizerFactory(pattern);
+      String[] tokens = {"Tokenizers","need","unit","tests","."};
+      String text = "Tokenizers need unit tests.";
+      checkTokens(tokFactory,text,tokens);
+      String[] whiteSpaces = {" "," "," ","",""};
+      checkTokensAndWhiteSpaces(tokFactory,text,tokens,whiteSpaces);
+      System.out.println("All tests passed!");
+    }
+    ```
 
 1.  `checkTokens` 方法接受 `TokenizerFactory`，一个表示所需分词的 `String` 数组，以及要分词的 `String`。它遵循以下步骤：
 
-    [PRE29]
+    ```py
+    static void checkTokens(TokenizerFactory tokFactory, String string, String[] correctTokens) {
+      Tokenizer tokenizer = tokFactory.tokenizer(input.toCharArray(),0,input.length());
+      String[] tokens = tokenizer.tokenize();
+      if (tokens.length != correctTokens.length) {
+        System.out.println("Token list lengths do not match");
+        System.exit(-1);
+      }
+      for (int i = 0; i < tokens.length; ++i) {
+        if (!correctTokens[i].equals(tokens[i])) {
+          System.out.println("Token mismatch: got |" + tokens[i] + "|");
+          System.out.println(" expected |" + correctTokens[i] + "|" );
+          System.exit(-1);
+        }
+      }
+    ```
 
 1.  该方法对错误非常敏感，因为如果令牌数组长度不同或任何令牌不相等，程序就会退出。JUnit这样的适当单元测试框架将是一个更好的框架，但这超出了本书的范围。您可以查看`lingpipe.4.1.0`/`src/com/aliasi/test`中的LingPipe单元测试，了解JUnit的使用方法。
 
@@ -302,7 +609,33 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 我们将从命令行调用`Rot13TokenizerFactory`类：
 
-[PRE30]
+```py
+java -cp "lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar" com.lingpipe.cookbook.chapter2.Rot13TokenizerFactory
+
+type a sentence below to see the tokens and white spaces:
+Move along, nothing to see here.
+Token:'zbir'
+Token:'nybat'
+Token:','
+Token:'abguvat'
+Token:'gb'
+Token:'frr'
+Token:'urer'
+Token:'.'
+Modified Output: zbir nybat, abguvat gb frr urer.
+type a sentence below to see the tokens and white spaces:
+zbir nybat, abguvat gb frr urer.
+Token:'move'
+Token:'along'
+Token:','
+Token:'nothing'
+Token:'to'
+Token:'see'
+Token:'here'
+Token:'.'
+Modified Output: move along, nothing to see here.
+
+```
 
 您可以看到，输入文本，原本是混合大小写且为正常英语，已经被转换为其Rot-13等价形式。您可以看到，第二次，我们将经过Rot-13修改后的文本作为输入，并得到了原始文本，除了它全部都是小写字母。
 
@@ -310,13 +643,43 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 `Rot13TokenizerFactory`扩展了`ModifyTokenTokenizerFactory`类。我们将重写`modifyToken()`方法，该方法一次操作一个令牌，在这种情况下，将令牌转换为它的Rot-13等价形式。还有一个类似的`modifyWhiteSpace`（String）方法，如果需要，会修改空白字符：
 
-[PRE31]
+```py
+public class Rot13TokenizerFactory extends ModifyTokenTokenizerFactory{
+
+  public Rot13TokenizerFactory(TokenizerFactory f) {
+    super(f);
+  }
+
+  @Override
+  public String modifyToken(String tok) {
+    return rot13(tok);
+  }
+
+  public static void main(String[] args) throws IOException {
+
+  TokenizerFactory tokFactory = IndoEuropeanTokenizerFactory.INSTANCE;
+  tokFactory = new LowerCaseTokenizerFactory(tokFactory);
+  tokFactory = new Rot13TokenizerFactory(tokFactory);
+```
 
 令牌本身的起始和结束偏移量与底层分词器的相同。在这里，我们将使用一个印欧语系分词器作为我们的基础分词器。首先通过`LowerCaseTokenizer`过滤一次，然后通过`Rot13Tokenizer`过滤。
 
 `rot13`方法如下：
 
-[PRE32]
+```py
+public static String rot13(String input) {
+  StringBuilder sb = new StringBuilder();
+  for (int i = 0; i < input.length(); i++) {
+    char c = input.charAt(i);
+    if       (c >= 'a' && c <= 'm') c += 13;
+    else if  (c >= 'A' && c <= 'M') c += 13;
+    else if  (c >= 'n' && c <= 'z') c -= 13;
+    else if  (c >= 'N' && c <= 'Z') c -= 13;
+    sb.append(c);
+  }
+  return sb.toString();
+}
+```
 
 # 为没有空格的语言寻找单词
 
@@ -336,19 +699,38 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 1.  输入以下命令：
 
-    [PRE33]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter2.TokenizeWithoutWhiteSpaces
+    Type an Englese sentence (English without spaces like Chinese):
+    TheraininSpainfallsmainlyontheplain
+
+    ```
 
 1.  下面的输出是：
 
-    [PRE34]
+    ```py
+    The rain in Spain falls mainly on the plain
+    ```
 
 1.  你可能不会得到完美的输出。马克·吐温从生成它的Java程序中恢复正确空白的能力如何？让我们来看看：
 
-    [PRE35]
+    ```py
+    type an Englese sentence (English without spaces like Chinese)
+    NGramProcessLMlm=newNGramProcessLM(nGram);
+    NGram Process L Mlm=new NGram Process L M(n Gram);
+
+    ```
 
 1.  前面的方法并不很好，但我们也不是非常公平；让我们使用LingPipe的连接源作为训练数据：
 
-    [PRE36]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter2.TokenizeWithoutWhiteSpaces data/cookbookSource.txt
+    Compiling Spell Checker
+    type an Englese sentence (English without spaces like Chinese)
+    NGramProcessLMlm=newNGramProcessLM(nGram);
+    NGramProcessLM lm = new NGramProcessLM(nGram);
+
+    ```
 
 1.  这就是完美的空格插入。
 
@@ -356,7 +738,14 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 尽管有很多乐趣和游戏，但涉及的代码非常少。酷的地方在于我们正在基于[第1章](part0014_split_000.html#page "Chapter 1. Simple Classifiers")中的字符语言模型，*简单分类器*。源代码位于`src/com/lingpipe/chapter2/TokenizeWithoutWhiteSpaces.java`：
 
-[PRE37]
+```py
+public static void main (String[] args) throws IOException, ClassNotFoundException {
+  int nGram = 5;
+  NGramProcessLM lm = new NGramProcessLM(nGram);
+  WeightedEditDistance spaceInsertingEditDistance
+    = CompiledSpellChecker.TOKENIZING;
+  TrainSpellChecker trainer = new TrainSpellChecker(lm, spaceInsertingEditDistance);
+```
 
 `main()`方法通过创建`NgramProcessLM`来启动。接下来，我们将访问一个用于编辑距离的类，该类旨在仅向字符流中添加空格。就是这样。`Editdistance`通常是一个相当粗略的字符串相似度度量，它评估需要对`string1`进行多少编辑才能使其与`string2`相同。关于这方面的许多信息可以在Javadoc `com.aliasi.spell`中找到。例如，`com.aliasi.spell.EditDistance`对基础知识进行了很好的讨论。
 
@@ -368,19 +757,42 @@ LingPipe提供了几个基本分词器，例如`IndoEuropeanTokenizerFactory`或
 
 到目前为止，我们已经配置和构建了一个 `TrainSpellChecker` 类。下一步是自然地对其进行训练：
 
-[PRE38]
+```py
+File trainingFile = new File(args[0]);
+String training = Files.readFromFile(trainingFile, Strings.UTF8);
+training = training.replaceAll("\\s+", " ");
+trainer.handle(training);
+```
 
 我们假设文本文件是 UTF-8 编码，将其全部读取；如果不是，则更正字符编码并重新编译。然后，我们将所有多个空白字符替换为单个空白字符。如果多个空白字符具有意义，这可能不是最好的选择。接下来是训练，就像我们在 [第 1 章](part0014_split_000.html#page "第 1 章。简单分类器") 中训练语言模型一样，*简单分类器*。
 
 接下来，我们将编译和配置拼写检查器：
 
-[PRE39]
+```py
+System.out.println("Compiling Spell Checker");
+CompiledSpellChecker spellChecker = (CompiledSpellChecker)AbstractExternalizable.compile(trainer);
+
+spellChecker.setAllowInsert(true);
+spellChecker.setAllowMatch(true);
+spellChecker.setAllowDelete(false);
+spellChecker.setAllowSubstitute(false);
+spellChecker.setAllowTranspose(false);
+spellChecker.setNumConsecutiveInsertionsAllowed(1);
+```
 
 下一个有趣的步骤是编译 `spellChecker`，它将底层语言模型中的所有计数转换为预计算的概率，这要快得多。编译步骤可以写入磁盘，因此可以在不进行训练的情况下稍后使用；然而，请参阅 `AbstractExternalizable` 的 Javadoc 了解如何进行此操作。接下来的几行配置 `CompiledSpellChecker` 以仅考虑插入字符的编辑，并检查精确字符串匹配，但禁止删除、替换和转置。最后，只允许一个插入。应该很清楚，我们正在使用 `CompiledSpellChecker` 的非常有限的功能，但这正是所需要的——插入空格或不插入。
 
 最后是我们的标准 I/O 例程：
 
-[PRE40]
+```py
+BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+while (true) {
+  System.out.println("type an Englese sentence (English " + "without spaces like Chinese)"));
+  String input = reader.readLine();
+  String result = spellChecker.didYouMean(input);
+  System.out.println(result);
+}
+```
 
 `CompiledSpellChecker` 和 `WeightedEditDistance` 类的机制在 Javadoc 或 [第 6 章](part0075_split_000.html#page "第 6 章。字符串比较和聚类") 的 *使用编辑距离和语言模型进行拼写校正* 菜单中描述得更好，*字符串比较和聚类*。然而，基本思想是将输入的字符串与刚刚训练的语言模型进行比较，得到一个分数，显示该字符串与模型匹配得有多好。这个字符串将是一个没有空白字符的巨大单词——但请注意，这里没有分词器在工作，因此拼写检查器开始插入空格并重新评估结果的分数。它保留这些序列，其中插入空格会增加序列的分数。
 

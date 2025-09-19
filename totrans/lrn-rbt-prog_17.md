@@ -240,25 +240,39 @@
 
 1.  我们通过键入`python3`开始Python：
 
-    [PRE0]
+    ```py
+    pi@myrobot:~ $ python3
+    Python 3.7.3 (default, Dec 20 2019, 18:57:59) 
+    [GCC 8.3.0] on linux
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>> 
+    ```
 
 1.  现在，我们需要导入我们的机器人对象并创建它，以便我们可以与之交互：
 
-    [PRE1]
+    ```py
+    >>> import robot
+    ```
 
 1.  让我们创建机器人对象：
 
-    [PRE2]
+    ```py
+    >>> r = robot.Robot()
+    ```
 
 1.  现在，使用此方法将水平伺服机构设置为中间位置：
 
-    [PRE3]
+    ```py
+    >>> r.set_pan(0)
+    ```
 
     水平伺服机构应该使相机居中。
 
 1.  接下来，我们将倾斜伺服机构设置为向下，以便观察线条：
 
-    [PRE4]
+    ```py
+    >>> r.set_tilt(90)
+    ```
 
     伺服机构应该在这里直视下方。它不应该过度拉伸或发出咔哒声。
 
@@ -268,7 +282,9 @@
 
 1.  在`ssh`终端中，键入以下内容以捕获测试图像：
 
-    [PRE5]
+    ```py
+    $ raspistill -o line1.jpg
+    ```
 
 您现在可以使用FileZilla（正如本书前面的章节所讨论的）将此图像下载到您的PC上。下一张图显示了一个测试图像，也用于前面的示例：
 
@@ -296,35 +312,53 @@
 
 1.  我们将需要导入NumPy以数值处理图像，OpenCV以操作图像，以及Matplotlib以绘制结果：
 
-    [PRE6]
+    ```py
+    import cv2
+    import numpy as np
+    from matplotlib import pyplot as plt
+    ```
 
 1.  现在，我们加载图像。OpenCV可以加载`jpg`图像，但如果在加载过程中出现问题，它会产生一个空图像。因此，我们需要检查它是否加载了某些内容：
 
-    [PRE7]
+    ```py
+    line1.jpg and is in the same directory that we will run this file from.
+    ```
 
 1.  捕获的图像将是相机的大默认分辨率。为了保持快速，我们将它调整到更小的图像：
 
-    [PRE8]
+    ```py
+    resized = cv2.resize(image, (320, 240))
+    ```
 
 1.  我们还只想使用灰度；对于这个练习，我们不感兴趣的其他颜色：
 
-    [PRE9]
+    ```py
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    ```
 
 1.  现在，我们将选择行；目前，我们将使用180，因为这在240像素高的图像上相当低。图像是存储的，使得行0是顶部。请注意，我们正在告诉NumPy将其转换为`int32`类型：
 
-    [PRE10]
+    ```py
+    int32 with a sign (plus or minus) so that our differences can be negative.
+    ```
 
 1.  我们可以为这一行的每个像素获取差异列表。NumPy使这变得容易：
 
-    [PRE11]
+    ```py
+    diff = np.diff(row)
+    ```
 
 1.  我们将要绘制这个`diff`列表。我们需要将*x*轴设置为像素编号；让我们创建一个从0到该范围的NumPy范围：
 
-    [PRE12]
+    ```py
+    x = np.arange(len(diff))
+    ```
 
 1.  让我们绘制`diff`变量与像素索引（`x`）的关系图，并将结果保存：
 
-    [PRE13]
+    ```py
+    not_blurred. This is because we've not added the optional blurring step. With the graph, we'll be able to see the difference. 
+    ```
 
 指向我的测试图片，我得到了以下图表：
 
@@ -336,13 +370,20 @@
 
 1.  让我们尝试添加模糊以查看这如何改变事情。对代码进行以下更改。粗体区域显示更改的部分：
 
-    [PRE14]
+    ```py
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.blur(gray, (5, 5))
+    row = blurred[180].astype(np.int32)
+    diff = np.diff(row)
+    ```
 
     在此代码中，我们添加了额外的模糊步骤，模糊5x5块稍微一点。
 
 1.  为了我们可以看到不同的图表，让我们更改输出文件的名称：
 
-    [PRE15]
+    ```py
+    plt.savefig("blurred.png")
+    ```
 
 稍微模糊应该可以减少噪声，同时不会太多地影响我们的尖锐峰值。确实，以下图显示了这是多么有效：
 
@@ -360,27 +401,41 @@
 
 1.  首先，我们必须获取坐标。让我们编写代码来请求最大值和最小值。我们将在分析代码和图表输出代码之间添加此代码：
 
-    [PRE16]
+    ```py
+    diff = np.diff(row)
+    min_d and max_d, abbreviating the difference as d. Note that they cannot be called min and max as those names already belong to Python.
+    ```
 
 1.  这些是值，但不是位置。我们现在需要找到位置索引。NumPy有一个`np.where`函数可以从数组中获取索引：
 
-    [PRE17]
+    ```py
+    where function returns an array of answers for each dimension – so, although diff is a one-dimensional array, we will still get a list of lists. The first [0] selects this first dimension's results list, and the second [0] selects the first item in the results. Multiple results mean it's found more than one peak, but we assume that there's only one for now.
+    ```
 
 1.  要找到中间位置，我们需要将它们相加然后除以2：
 
-    [PRE18]
+    ```py
+    middle = (highest + lowest) // 2
+    ```
 
 1.  现在我们已经找到了它，我们应该以某种方式显示它。我们可以在图上用三条线绘制这个图表。Matplotlib可以为图表指定颜色和样式。让我们从中间线开始：
 
-    [PRE19]
+    ```py
+    max_d and min_d for the Y coordinates, so the line draws from the highest peak to the lowest. The r- style specifier means to draw a solid red line.
+    ```
 
 1.  我们可以为`highest`和`lowest`位置做同样的事情，这次使用`g--`为绿色虚线：
 
-    [PRE20]
+    ```py
+    plt.plot([lowest, lowest], [max_d, min_d], "g--")
+    plt.plot([highest, highest], [max_d, min_d], "g--")
+    ```
 
 1.  就像我们对模糊处理所做的那样，让我们更改输出图的名称，以便我们可以进行比较：
 
-    [PRE21]
+    ```py
+    plt.savefig("located_lines.png")
+    ```
 
 运行此代码应输出以下图：
 
@@ -476,19 +531,30 @@ PID控制还取一个参考中间点，即相机的中间。它使用这些之�
 
 1.  在`handle_integral`方法中，将参数更改为接受`delta_time`：
 
-    [PRE22]
+    ```py
+        def handle_integral(self, error, delta_time):
+    ```
 
 1.  然后我们将使用这个方法来添加积分项：
 
-    [PRE23]
+    ```py
+                self.integral_sum += error * delta_time
+    ```
 
 1.  我们通常使用`get_value`方法来更新PID；然而，由于我们已经有使用这个方法的代码，我们应该让它对这些代码的行为保持不变。为此，我们将添加一个`delta_time`参数，但默认值为`1`：
 
-    [PRE24]
+    ```py
+        def get_value(self, error, delta_time=1):
+    ```
 
 1.  当这个`get_value`方法调用`handle_integral`时，它应该始终传递新的`delta_time`参数：
 
-    [PRE25]
+    ```py
+            p = self.handle_proportional(error)
+            i = self.handle_integral(error, delta_time)
+            logger.debug(f"P: {p}, I: {i:.2f}")
+            return p + i
+    ```
 
 虽然这不是一个很大的变化，但它意味着我们可以计算PID代码更新之间的时间变化。
 
@@ -502,157 +568,276 @@ PID控制还取一个参考中间点，即相机的中间。它使用这些之�
 
 1.  首先，我们需要导入`image_app_core`、NumPy、OpenCV、摄像头流、PID控制器和机器人。我们还有`time`模块，这样我们就可以稍后计算时间差：
 
-    [PRE26]
+    ```py
+    import time
+    from image_app_core import start_server_process, get_control_instruction, put_output_image
+    import cv2
+    import numpy as np
+    import camera_stream
+    from pid_controller import PIController
+    from robot import Robot
+    ```
 
 1.  让我们创建行为类。构造函数，就像之前一样，接受机器人作为参数：
 
-    [PRE27]
+    ```py
+    class LineFollowingBehavior:
+        def __init__(self, robot):
+            self.robot = robot
+    ```
 
 1.  现在，我们需要在构造函数中添加变量来跟踪我们的行为。首先，我们应该设置我们将要查找差异的行和阈值（低于该阈值我们不将其视为线条）：
 
-    [PRE28]
+    ```py
+            self.check_row = 180
+            self.diff_threshold = 10
+    ```
 
 1.  就像我们之前的摄像头行为一样，我们有一个中心点的设定值，一个变量来表示电机是否应该运行，以及一个前进的速度：
 
-    [PRE29]
+    ```py
+            self.center = 160
+            self.running = False
+            self.speed = 60
+    ```
 
 1.  我们将要创建一些有趣的显示。我们也会在这里存储我们计划使用的颜色——一个绿色的十字准线，红色用于中线，浅蓝色用于图表。这些是BGR格式，因为OpenCV期望这样：
 
-    [PRE30]
+    ```py
+            self.crosshair_color = [0, 255, 0]
+            self.line_middle_color = [128, 128, 255]
+            self.graph_color = [255, 128, 128]
+    ```
 
     这就是行为构造函数的完整内容。
 
 1.  现在，我们需要控制变量来表示系统是否正在运行或应该退出。这段代码应该很熟悉，因为它与其他摄像头控制行为相似：
 
-    [PRE31]
+    ```py
+        def process_control(self):
+            instruction = get_control_instruction()
+            if instruction:
+                command = instruction['command']
+                if command == "start":
+                    self.running = True
+                elif command == "stop":
+                    self.running = False
+                if command == "exit":
+                    print("Stopping")
+                    exit()
+    ```
 
 1.  接下来，我们将创建`run`方法，它将执行主要的PID循环并驱动机器人。我们将倾斜伺服器设置为`90`，将俯仰伺服器设置为`0`，这样它就会直视下方。我们也会设置摄像头：
 
-    [PRE32]
+    ```py
+        def run(self):
+            self.robot.set_pan(0)
+            self.robot.set_tilt(90)
+            camera = camera_stream.setup_camera()
+    ```
 
 1.  现在，我们为方向设置PID。这些值不是最终的，可能需要调整。我们有一个低比例值，因为方向误差与电机速度相比可能相当大：
 
-    [PRE33]
+    ```py
+            direction_pid = PIController( proportional_constant=0.4, integral_constant=0.01, windup_limit=400)
+    ```
 
 1.  我们暂停一秒钟，以便摄像头可以初始化，伺服器达到其位置：
 
-    [PRE34]
+    ```py
+            time.sleep(1)
+            self.robot.servos.stop_all()
+            print("Setup Complete")
+    ```
 
     我们停止伺服器，这样一旦它们达到位置，就不会再消耗更多电力。
 
 1.  由于我们将跟踪时间，我们在这里存储最后的时间值。时间是秒为单位的浮点数：
 
-    [PRE35]
+    ```py
+            last_time = time.time()
+    ```
 
 1.  我们启动摄像头循环并将帧传递给`process_frame`方法（我们很快就会编写）。我们还可以处理控制指令：
 
-    [PRE36]
+    ```py
+            for frame in camera_stream.start_stream(camera):
+                x, magnitude = self.process_frame(frame)
+                self.process_control()
+    ```
 
     从处理一个帧中，我们期望得到一个*X*值，幅度是差异中的最高值和最低值之间的差异。峰值之间的差距有助于检测它是否真的是线条而不是噪声。
 
 1.  现在，对于移动，我们需要检查机器人是否正在运行，以及我们找到的幅度是否大于阈值：
 
-    [PRE37]
+    ```py
+                if self.running and magnitude > self.diff_threshold:
+    ```
 
 1.  如果是这样，我们开始PID行为：
 
-    [PRE38]
+    ```py
+    dt. This error and time delta are fed to the PID, getting a new value. So, we are ready for the next calculation: last_time now gets the new_time value.
+    ```
 
 1.  我们现在记录这个信息并使用这个值来改变机器人的航向。我们将电机速度设置为基本速度，然后添加或减去电机的PID输出：
 
-    [PRE39]
+    ```py
+                    print(f"Error: {direction_error}, Value:{direction_value:2f}, t: {new_time}")
+                    self.robot.set_left(self.speed - direction_value)
+                    self.robot.set_right(self.speed + direction_value)
+    ```
 
 1.  现在我们已经处理了检测到线条时会发生什么。那么，当我们没有检测到线条时呢？`else`会停止电机运行并重置PID，这样它就不会累积异常值：
 
-    [PRE40]
+    ```py
+                else:
+                    self.robot.stop_motors()
+                    if not self.running:
+                        direction_pid.reset()
+                    last_time = time.time()
+    ```
 
     注意我们在这里仍然在更新最后的时间。否则，在停止和开始之间会有很大的差距，这会导致PID输入异常值。
 
 1.  接下来，我们需要填写处理框架时发生的事情。让我们添加我们的 `process_frame` 方法：
 
-    [PRE41]
+    ```py
+        def process_frame(self, frame):
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blur = cv2.blur(gray, (5, 5))
+            row = blur[self.check_row].astype(np.int32)
+            diff = np.diff(row)
+            max_d = np.amax(diff, 0)
+            min_d = np.amin(diff, 0)
+    ```
 
     这段代码看起来都应该很熟悉；这是我们之前为测试代码编写的代码。
 
 1.  我们应该测试看看我们的读数是否使我们位于零线的两侧，并且我们找到了两个不同的位置。最大值不应该低于零，最小值也不应该高于它。如果它们失败了，就停止在这里——主循环将考虑这不是一条线：
 
-    [PRE42]
+    ```py
+            if max_d < 0 or min_d > 0:
+                return 0, 0
+    ```
 
 1.  我们将像之前一样找到行上的位置，以及它们的中间点：
 
-    [PRE43]
+    ```py
+            highest = np.where(diff == max_d)[0][0]
+            lowest = np.where(diff == min_d)[0][0]
+            middle = (highest + lowest) // 2
+    ```
 
 1.  这样我们就可以用它来确定我们得到了一个正匹配，我们将计算最小值和最大值之间差异的幅度，确保我们没有捕捉到微弱的东西：
 
-    [PRE44]
+    ```py
+            mag = max_d - min_d
+    ```
 
 1.  我们希望在这里向用户展示一些有用的信息。因此，这个方法调用了一个 `make_display` 方法，就像其他相机行为一样。我们传递一些变量到这个显示上进行绘图：
 
-    [PRE45]
+    ```py
+            self.make_display(frame, middle, lowest, highest, diff)
+    ```
 
 1.  然后，我们返回中间点和幅度：
 
-    [PRE46]
+    ```py
+            return middle, mag
+    ```
 
 1.  这段代码将驱动我们的机器人，但如果我们不能看到正在发生的事情，我们将很难调整它。所以，让我们创建一个 `make_display` 方法来处理这个问题：
 
-    [PRE47]
+    ```py
+    frame, the middle position for the line, the lowest difference position in the line, the highest difference position, and diff as the whole difference row.
+    ```
 
 1.  我们在显示中首先想要的是中心参考。让我们在中心和选定的行上制作一个十字准线：
 
-    [PRE48]
+    ```py
+            cv2.line(frame, (self.center - 4, self.check_row), (self.center + 4, self.check_row), self.crosshair_color)
+            cv2.line(frame, (self.center, self.check_row - 4), (self.center, self.check_row + 4), self.crosshair_color)
+    ```
 
 1.  接下来，我们用另一种颜色显示我们找到的中间位置：
 
-    [PRE49]
+    ```py
+            cv2.line(frame, (middle, self.check_row - 8), (middle, self.check_row + 8), self.line_middle_color)
+    ```
 
 1.  为了找到它，我们还围绕它绘制了 `lowest` 和 `highest` 的条形图，颜色不同：
 
-    [PRE50]
+    ```py
+            cv2.line(frame, (lowest, self.check_row - 4), (lowest, self.check_row + 4), self.line_middle_color)
+            cv2.line(frame, (highest, self.check_row - 4), (highest, self.check_row + 4), self.line_middle_color)
+    ```
 
 1.  现在，我们将要在一个新的空框架上绘制 `diff`。让我们创建一个空框架——这只是一个 NumPy 数组：
 
-    [PRE51]
+    ```py
+            graph_frame = np.zeros((camera_stream.size[1], camera_stream.size[0], 3), np.uint8)
+    ```
 
     数组维度是行然后是列，所以我们将摄像机的 *X* 和 *Y* 值交换。
 
 1.  然后，我们将使用一个方法来制作一个简单的图表。我们将在下面进一步实现它。它的参数是要绘制图表的框架和图表的 *Y* 值。简单的图表方法暗示了 *X* 值为列号：
 
-    [PRE52]
+    ```py
+            self.make_cv2_simple_graph(graph_frame, diff)
+    ```
 
 1.  现在我们有了框架和图表框架，我们需要将它们连接起来，就像我们在颜色检测代码中的框架一样：
 
-    [PRE53]
+    ```py
+            display_frame = np.concatenate((frame, graph_frame), axis=1)
+    ```
 
 1.  我们现在可以对这些字节进行编码并将它们放入输出队列：
 
-    [PRE54]
+    ```py
+            encoded_bytes = camera_stream.get_encoded_bytes_for_frame(display_frame)
+            put_output_image(encoded_bytes)
+    ```
 
 1.  我们接下来需要实现的是这个 `make_cv2_simple_graph` 方法。它有点厚颜无耻，但在 *x* 轴上绘制了 *Y* 点之间的线条：
 
-    [PRE55]
+    ```py
+        def make_cv2_simple_graph(self, frame, data):
+    ```
 
 1.  我们需要存储我们最后所在的位置，这样代码就可以相对于这个位置绘制下一个值，从而得到一个线图。我们从项目 0 开始。我们还为图表设置了一个稍微任意的中间 *Y* 点。记住，我们知道 `diff` 值可以是负数：
 
-    [PRE56]
+    ```py
+            last = data[0]
+            graph_middle = 100
+    ```
 
 1.  接下来，我们应该枚举要绘制的数据，以便绘制每个项目：
 
-    [PRE57]
+    ```py
+            for x, item in enumerate(data):
+    ```
 
 1.  现在，我们可以从上一个项目 *Y* 位置绘制到下一个 *X* 位置的当前位置的线条。注意我们是如何通过图表中间偏移每个项目的：
 
-    [PRE58]
+    ```py
+                cv2.line(frame, (x, last + graph_middle), (x + 1, item + graph_middle), self.graph_color)
+    ```
 
 1.  然后我们需要更新最后一个项目到当前这个：
 
-    [PRE59]
+    ```py
+                last = item
+    ```
 
     好了——几乎完成了；这将把图表绘制在我们的框架上。
 
 1.  我们的行为已经完成；我们只需要外部代码来运行它！这段代码也应该类似于之前的相机示例：
 
-    [PRE60]
+    ```py
+    color_track_behavior.html template here.
+    ```
 
 您现在可以将其上传到您的机器人。然后，打开电机并运行它。因为这是基于网络的，请将浏览器指向 `http://myrobot.local:5001`。
 
@@ -714,7 +899,11 @@ PID 调节是一个重复的过程，需要大量的耐心和测试。
 
 1.  现在，我们可以修改这个声明的内容：
 
-    [PRE61]
+    ```py
+                else:
+                    self.robot.stop_motors()
+    running is false, we now set running to False every time. We also reset the PID every time.
+    ```
 
 将代码保存到机器人中，并运行它直到它丢失线路。这可能是因为偏离了路线或到达了线路的末端。机器人应该停止。它应该在尝试再次移动之前等待你按下启动按钮。请注意，你需要将其放回线路并按下启动按钮才能再次移动。
 

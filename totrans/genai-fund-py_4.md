@@ -36,11 +36,27 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 让我们考虑我们的StyleSprint场景。在决定最适合StyleSprint目标的一个模型之前，我们可能想要探索几个不同的模型来生成产品描述。我们可以在Google Colab中设置一个最小的工作原型来比较模型。再次强调，云平台提供了一个最优且易于访问的环境，用于初始测试、实验，甚至是一些轻量级的模型训练。以下是我们可以如何初步设置一个生成模型，开始为StyleSprint进行自动化产品描述生成的实验：
 
-[PRE0]
+```py
+# In a Colab or Jupyter notebook
+!pip install transformers
+# Google Colab Jupyter notebook
+from transformers import pipeline
+# Initialize a text generation pipeline with a generative model, say GPT-Neo
+text_generator = pipeline(
+    'text-generation', model='EleutherAI/gpt-neo-2.7B')
+# Example prompt for product description generation
+prompt = "This high-tech running shoe with advanced cushioning and support"
+# Generating the product description
+generated_text = text_generator(prompt, max_length=100, do_sample=True)
+# Printing the generated product description
+print(generated_text[0]['generated_text'])
+```
 
 **输出**：
 
-[PRE1]
+```py
+This high-tech running shoe with advanced cushioning and support combines the best of traditional running shoes and the latest technologies.
+```
 
 在这个简单的设置中，我们正在安装`transformers`库，它提供了一个方便的接口来访问各种预训练模型。然后，我们使用开源版本的GPT-Neo初始化一个文本生成管道，能够生成连贯且上下文相关的文本。这个设置作为StyleSprint在小型规模上实验生成创意产品描述的起点。
 
@@ -108,7 +124,11 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 接下来，我们设置一个结构化的项目目录以保持代码模块化和有序。我们还将使用 Git 初始化我们的工作目录，这使得我们能够与远程仓库同步代码。正如之前提到的，我们利用 Git 来跟踪代码变更并与他人更顺畅地协作。在 Visual Studio 的终端窗口中，我们可以使用三个简单的命令来初始化项目。我们使用 `mkdir` 来创建或“制作”一个目录。我们使用 `cd` 命令来更改目录。最后，我们使用 `git init` 来使用 Git 初始化我们的项目。请注意，这假设 Git 已经安装。有关安装 Git 的说明可在其网站上找到（[https://git-scm.com/](https://git-scm.com/))。
 
-[PRE2]
+```py
+mkdir StyleSprint
+cd StyleSprint
+git init
+```
 
 ## Docker 设置
 
@@ -128,7 +148,20 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 现在，我们可以继续创建一个具有我们应用程序规格的Dockerfile：
 
-[PRE3]
+```py
+# Use an official NVIDIA CUDA runtime as a base image
+FROM nvidia/cuda:11.0-base
+# Set the working directory in the container to /app
+WORKDIR /app
+# Copy the current directory contents into the container at /app
+COPY . /app
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+# Make port 80 available to the world outside this container
+EXPOSE 80
+# Run app.py when the container launches
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
+```
 
 此Dockerfile作为Docker构建我们的容器的蓝图。我们从官方的NVIDIA CUDA基础镜像开始，以确保GPU支持。容器中的工作目录设置为`/app`，然后我们复制项目的所有内容。之后，我们安装`requirements.txt`文件中列出的必要包。`端口80`对外部访问我们的应用程序开放。最后，我们指定启动应用程序的命令，该应用程序使用Python解释器运行`app.py`。这种设置封装了所有必要的组件，包括GPU支持，以确保我们的生成模型在类似生产的环境中高效运行。
 
@@ -136,7 +169,12 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 我们还需要一个方法来跟踪我们的Python特定依赖。容器将包含Python，但不会显示我们的Python应用程序有什么需求。我们可以在项目目录中定义一个`requirements.txt`文件，明确列出所有必要的Python包来指定这些依赖：
 
-[PRE4]
+```py
+fastapi==0.65.2
+torch==1.9.0
+transformers==4.9.2
+uvicorn==0.14.0
+```
 
 ## 应用程序代码
 
@@ -144,7 +182,29 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 以下代码片段创建了一个最小化的 API，该 API 将在另一个应用程序或软件请求 `/generate/` 端点时提供模型响应。这将使 StyleSprint 能够将其模型作为 Web 服务托管。这意味着其他应用程序（例如，移动应用程序、批处理过程）可以使用简单的 URL 访问模型。我们还可以添加异常处理以提供有关模型产生任何类型错误的 informative 错误消息：
 
-[PRE5]
+```py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from transformers import pipeline
+# Load the pre-trained model
+generator = pipeline('text-generation', 
+    model='EleutherAI/gpt-neo-2.7B')
+# Create the FastAPI app
+app = FastAPI()
+# Define the request body
+class GenerationInput(BaseModel):
+prompt: str
+# Define the endpoint
+@app.post("/generate")
+def generate_text(input: GenerationInput):
+try:
+    # Generate text based on the input prompt
+    generated_text = generator(input.prompt, max_length=150)
+    return {"generated_text": generated_text}
+except:
+    raise HTTPException(status_code=500,
+        detail="Model failed to generate text")
+```
 
 现在我们已经设置了 Docker 环境，下一步是将应用程序部署到主机服务器。我们可以通过 CI/CD 管道来简化此过程。目标是完全自动化所有部署步骤，包括一系列测试以确保任何代码更改不会引入任何错误。然后我们利用 GitHub Actions 创建一个与代码仓库直接集成的工作流程。
 
@@ -178,63 +238,121 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 1.  打开 `ci-cd.yml` 并定义以下工作流程：
 
-    [PRE6]
+    ```py
+    name: CI/CD Pipeline
+    ```
 
-    [PRE7]
+    ```py
+    on:
+    ```
 
-    [PRE8]
+    ```py
+      push:
+    ```
 
-    [PRE9]
+    ```py
+        branches:
+    ```
 
-    [PRE10]
+    ```py
+          - main
+    ```
 
-    [PRE11]
+    ```py
+    jobs:
+    ```
 
-    [PRE12]
+    ```py
+      build-and-test:
+    ```
 
-    [PRE13]
+    ```py
+        runs-on: ubuntu-latest
+    ```
 
-    [PRE14]
+    ```py
+      steps:
+    ```
 
-    [PRE15]
+    ```py
+        - name: Checkout code
+    ```
 
-    [PRE16]
+    ```py
+          uses: actions/checkout@v4
+    ```
 
-    [PRE17]
+    ```py
+        - name: Build Docker image
+    ```
 
-    [PRE18]
+    ```py
+      # assumes the Dockerfile is in the root (.)
+    ```
 
-    [PRE19]
+    ```py
+          run: docker build -t stylesprint .
+    ```
 
-    [PRE20]
+    ```py
+        - name: Run tests
+    ```
 
-    [PRE21]
+    ```py
+      # assumes a set of unit tests were defined
+    ```
 
-    [PRE22]
+    ```py
+          run: docker run stylesprint python -m unittest discover
+    ```
 
-    [PRE23]
+    ```py
+    deploy:
+    ```
 
-    [PRE24]
+    ```py
+      needs: build-and-test
+    ```
 
-    [PRE25]
+    ```py
+      runs-on: ubuntu-latest
+    ```
 
-    [PRE26]
+    ```py
+      steps:
+    ```
 
-    [PRE27]
+    ```py
+        - name: Checkout code
+    ```
 
-    [PRE28]
+    ```py
+          uses: actions/checkout@v4
+    ```
 
-    [PRE29]
+    ```py
+        - name: Login to DockerHub
+    ```
 
-    [PRE30]
+    ```py
+          run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+    ```
 
-    [PRE31]
+    ```py
+        - name: Push Docker image
+    ```
 
-    [PRE32]
+    ```py
+          run: |
+    ```
 
-    [PRE33]
+    ```py
+            docker tag stylesprint:latest ${{ secrets.DOCKER_USERNAME }}/stylesprint:latest
+    ```
 
-    [PRE34]
+    ```py
+            docker push ${{ secrets.DOCKER_USERNAME }}/stylesprint:latest
+    ```
 
 在这个设置中，我们的工作流程由两个主要任务组成：构建和测试以及部署。构建和测试任务负责从代码库检出代码，构建Docker镜像，并执行任何测试。另一方面，依赖于构建和测试完成的部署任务，处理*DockerHub*登录并将Docker镜像推送到那里。DockerHub，类似于GitHub，是一个专门用于Docker镜像的仓库。
 
@@ -338,7 +456,11 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 现在您的笔记本已设置好使用 GPU，以显著加快基准测试过程所需的计算。您可以使用以下代码片段来验证 GPU 的可用性：
 
-[PRE35]
+```py
+# Verify GPU is available
+import torch
+torch.cuda.is_available()
+```
 
 此代码片段将返回 `True` 如果有 GPU 可用，否则返回 `False`。此设置确保您拥有进行各种生成模型基准测试所需的计算资源。在处理大型模型和大量计算时，使用 GPU 将至关重要。
 
@@ -348,39 +470,69 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 1.  **安装必要的库**：我们首先在我们的 Colab 环境中安装所需的库。LangChain 简化了与 OpenAI 和 Hugging Face 上托管的模型交互。
 
-    [PRE36]
+    ```py
+    !pip -q install openai langchain huggingface_hub
+    ```
 
 1.  **设置凭据**：我们从 OpenAI 获取访问 GPT-3、GPT-4 或我们选择的任何封闭源模型所需的凭据。我们还提供 Hugging Face Hub 的凭据，该 Hub 托管着超过 350,000 个开源模型。我们必须安全地存储这些凭据，以防止任何未经授权的访问，尤其是在模型使用涉及成本的情况下。
 
-    [PRE37]
+    ```py
+    import os
+    ```
 
-    [PRE38]
+    ```py
+    os.environ['OPENAI_API_KEY'] = 'your_openai_api_key_here'
+    ```
 
-    [PRE39]
+    ```py
+    os.environ['HUGGINGFACEHUB_API_TOKEN'] = 
+    ```
 
-    [PRE40]
+    ```py
+        'your_huggingface_token_here'
+    ```
 
 1.  **加载模型**：使用 LangChain，我们可以快速加载模型并生成响应。以下示例演示了如何从 Hugging Face 加载 GPT-3 和 GPT-Neo：
 
-    [PRE41]
+    ```py
+    !pip install openai langchain[llms] huggingface_hub
+    ```
 
-    [PRE42]
+    ```py
+    from langchain.llms import OpenAI, HuggingFaceHub
+    ```
 
-    [PRE43]
+    ```py
+    # Loading GPT-3
+    ```
 
-    [PRE44]
+    ```py
+    llm_gpt3 = OpenAI(model_name='text-davinci-003',
+    ```
 
-    [PRE45]
+    ```py
+                      temperature=0.9,
+    ```
 
-    [PRE46]
+    ```py
+                      max_tokens = 256)
+    ```
 
-    [PRE47]
+    ```py
+    # Loading Neo from Hugging Face
+    ```
 
-    [PRE48]
+    ```py
+    llm_neo = HuggingFaceHub(repo_id=' EleutherAI/gpt-neo-2.7B',
+    ```
 
-    [PRE49]
+    ```py
+                             model_kwargs={"temperature":0.9}
+    ```
 
-    [PRE50]
+    ```py
+    )
+    ```
 
 注意，我们已经加载了两个在大小上显著不同的模型。正如模型签名所暗示的，GPT-Neo是在27亿个参数上训练的。同时，根据OpenAI提供的信息，Davinci是在1750亿个参数上训练的。正如讨论的那样，一个显著更大的模型预计会捕捉到更复杂的模式，并且可能会优于较小的模型。然而，这些非常大的模型通常由主要提供商托管，并且具有更高的使用成本。我们将在稍后重新审视成本考虑因素。现在，我们可以继续到下一步，即准备我们的测试数据。我们的测试数据应该为模型性能提供一个基准，这将告知成本与性能之间的权衡。
 
@@ -392,15 +544,59 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 让我们看看我们如何提取相关信息以进行进一步处理：
 
-[PRE51]
+```py
+import pandas as pd
+# Assume `product_data.csv` is a CSV file with product data
+# The CSV file has two columns: 'product_image' and 
+# 'product_description' 
+# Load the product data
+product_data = pd.read_csv('product_data.csv')
+# Split the data into testing and reference sets
+test_data = product_data.sample(frac=0.2, random_state=42)
+reference_data = product_data.drop(test_data.index)
+# Checkpoint the testing and reference data
+test_data.to_csv('test_data.csv', index=False)
+reference_data.to_csv('reference_data.csv', index=False)
+# Extract reference descriptions and image file paths
+reference_descriptions = /
+    reference_data['product_description'].tolist()
+product_images = reference_data['product_image'].tolist()
+```
 
 我们还必须以使产品数据准备好输入到描述生成模型中的方式对其进行格式化。这可能是仅产品标题或产品属性的组合：
 
-[PRE52]
+```py
+# Assume `product_metadata` is a column in the data that contains the collective information about the product including the title of the product and attributes.
+# Format the input data for the models
+model_input_data = reference_data['product_metadata].tolist()
+reference_descriptions = \
+    reference_data['product_description'].tolist()
+```
 
 最后，我们将要求模型使用每个模型生成一批产品描述。
 
-[PRE53]
+```py
+from langchain import LLMChain, PromptTemplate
+from tqdm.auto import tqdm
+template = """
+Write a creative product description for the following product: {product_metadata}
+"""
+PROMPT = PromptTemplate(template=template, 
+    input_variables=["product_metadata"])
+def generate_descriptions(
+    llm: object, 
+    prompt: PromptTemplate = PROMPT
+) -> list:
+    # Initialize the LLM chain
+    llm_chain = LLMChain(prompt=prompt, llm=llm)
+    descriptions = []
+    for i in tqdm(range(len(model_input_data))):
+        description = llm_chain.run(model_input_data[i])
+        descriptions.append(description)
+    return descriptions
+gpt3_descriptions = generate_descriptions(llm_gpt3)
+gptneo_descriptions = generate_descriptions(llm_neo)
+```
 
 现在，随着测试数据集的建立，我们有了结构化的产品信息、参考描述和图像数据集，这些数据集已准备好用于评估步骤。
 
@@ -410,17 +606,106 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 在下面的代码块中，我们应用`BLEU`、`ROUGE`和`METEOR`来评估生成文本与参考文本之间的词汇相似度。每个指标都有基于参考的假设。这意味着每个指标都假设我们是在与人类参考进行比较。我们已经为各种产品预留了参考描述（或黄金标准），以便与生成描述进行并排比较。
 
-[PRE54]
+```py
+!pip install rouge sumeval nltk
+# nltk requires an additional package
+import nltk
+nltk.download('wordnet')
+ from nltk.translate.bleu_score import sentence_bleu
+from rouge import Rouge
+from sumeval.metrics.rouge import RougeCalculator
+from nltk.translate.meteor_score import meteor_score
+def evaluate(
+    reference_descriptions: list, 
+    generated_descriptions: list
+) -> tuple:
+    # Calculating BLEU score
+    bleu_scores = [
+        sentence_bleu([ref], gen) 
+        for ref, gen in zip(reference_descriptions, generated_descriptions)
+    ]
+    average_bleu = sum(bleu_scores) / len(bleu_scores)
+    # Calculating ROUGE score
+    rouge = RougeCalculator()
+    rouge_scores = [rouge.rouge_n(gen, ref, 2) for ref,
+        gen in zip(reference_descriptions,
+        generated_descriptions)]
+    average_rouge = sum(rouge_scores) / len(rouge_scores)
+    # Calculating METEOR score
+    meteor_scores = [ meteor_score([ref.split() ],
+        gen.split()) for ref,
+        gen in zip(reference_descriptions,
+        generated_descriptions)]
+    average_meteor = sum(meteor_scores) / len(meteor_scores)
+    return average_bleu, average_rouge, average_meteor
+average_bleu_gpt3, average_rouge_gpt3, average_meteor_gpt3 = \
+    evaluate(reference_descriptions, gpt3_descriptions)
+print(average_bleu_gpt3, average_rouge_gpt3, average_meteor_gpt3)
+average_bleu_neo, average_rouge_neo, average_meteor_neo = \
+    evaluate(reference_descriptions, gptneo_descriptions)
+print(average_bleu_neo, average_rouge_neo, average_meteor_neo)
+```
 
 我们可以使用句子嵌入来评估生成描述的语义连贯性和相关性：
 
-[PRE55]
+```py
+!pip install sentence-transformers
+from sentence_transformers import SentenceTransformer, util
+model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+def cosine_similarity(reference_descriptions, generated_descriptions):
+    # Calculating cosine similarity for generated descriptions
+    cosine_scores = [util.pytorch_cos_sim(
+        model.encode(ref), model.encode(gen)) for ref,
+        gen in zip(reference_descriptions,
+        generated_descriptions)]
+    average_cosine = sum(cosine_scores) / len(cosine_scores)
+    return average_cosine
+average_cosine_gpt3 = cosine_similarity(
+    reference_descriptions, gpt3_descriptions)
+print(average_cosine_gpt3)
+average_cosine_neo = cosine_similarity(
+    reference_descriptions, gptneo_descriptions)
+print(average_cosine_neo)
+```
 
 ## 与CLIP的匹配
 
 我们再次利用CLIP模型来评估生成产品描述与相应图像之间的匹配度，类似于我们在[*第二章*](B21773_02.xhtml#_idTextAnchor045)中的方法。CLIP模型擅长关联视觉和文本内容，对每个产品图像及其关联的生成和参考描述进行一致性评分。参考描述作为准确性的基准。这些分数为我们生成模型在生成与产品图像匹配良好的描述方面的有效性提供了定量度量。以下是从一个处理生成描述及其对应图像以生成CLIP分数的组件中摘录的一段代码。完整的组件代码（包括图像预处理）可在本书GitHub仓库的`第4章`文件夹中找到，网址为[https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python](https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python))。
 
-[PRE56]
+```py
+clip_model = "openai/clip-vit-base-patch32"
+def clip_scores(images, descriptions,
+                model=clip_model,
+                processor=clip_processor
+):
+    scores = []
+    # Process all images and descriptions together
+    inputs = process_inputs(processor, descriptions, images)
+    # Get model outputs
+    outputs = model(**inputs)
+    logits_per_image = outputs.logits_per_image # Image-to-text logits
+    # Diagonal of the matrix gives the scores for each image-description pair
+    for i in range(logits_per_image.size(0)):
+        score = logits_per_image[i, i].item()
+    scores.append(score)
+    return scores
+reference_images = [
+    load_image_from_path(image_path) 
+    for image_path in reference_data.product_image_path
+]
+gpt3_generated_scores = clip_scores(
+    reference_images, gpt3_descriptions
+)
+reference_scores = clip_scores(
+    reference_images, reference_descriptions
+)
+# Compare the scores
+for i, (gen_score, ref_score) in enumerate(
+    zip(gpt3_generated_scores, reference_scores)
+):
+    print(f"Image {i}: Generated Score = {gen_score:.2f}, 
+        Reference Score = {ref_score:.2f}")
+```
 
 在使用CLIP模型评估产品描述时，为每个图像-描述对生成的匹配分数是相对于批次中的其他描述来计算的。本质上，CLIP评估特定描述（无论是生成的还是参考的）与给定图像相比，与其他批次内描述的匹配程度如何。例如，分数为33.79表示该描述与图像的匹配度比批次中其他描述与该图像的匹配度高出33.79%。在对比参考时，我们期望基于生成描述的分数应与基于参考描述的分数紧密匹配。
 
@@ -505,83 +790,157 @@ Jupyter笔记本的一个缺点是它们通常依赖于个人电脑的计算资�
 
 1.  在您的项目中的`requirements.txt`文件中包含必要的库：
 
-    [PRE57]
+    ```py
+    fastapi==0.68.0
+    ```
 
-    [PRE58]
+    ```py
+    uvicorn==0.15.0
+    ```
 
-    [PRE59]
+    ```py
+    openai==0.27.0
+    ```
 
-    [PRE60]
+    ```py
+    langchain==0.1.0
+    ```
 
 1.  **更新Dockerfile**：修改您的Dockerfile以确保安装更新的要求，并正确设置运行LangChain与FastAPI的环境：
 
-    [PRE61]
+    ```py
+    # Use an official Python runtime as a base image
+    ```
 
-    [PRE62]
+    ```py
+    FROM python:3.8-slim-buster
+    ```
 
-    [PRE63]
+    ```py
+    # Set the working directory in the container to /app
+    ```
 
-    [PRE64]
+    ```py
+    WORKDIR /app
+    ```
 
-    [PRE65]
+    ```py
+    # Copy the current directory contents into the container at /app
+    ```
 
-    [PRE66]
+    ```py
+    COPY . /app
+    ```
 
-    [PRE67]
+    ```py
+    # Install any needed packages specified in requirements.txt
+    ```
 
-    [PRE68]
+    ```py
+    RUN pip install --no-cache-dir -r requirements.txt
+    ```
 
-    [PRE69]
+    ```py
+    # Make port 80 available to the world outside this container
+    ```
 
-    [PRE70]
+    ```py
+    EXPOSE 80
+    ```
 
-    [PRE71]
+    ```py
+    # Define environment variable
+    ```
 
-    [PRE72]
+    ```py
+    ENV NAME World
+    ```
 
-    [PRE73]
+    ```py
+    # Run app.py when the container launches
+    ```
 
-    [PRE74]
+    ```py
+    CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
+    ```
 
 1.  **更新FastAPI应用程序**：修改您的FastAPI应用程序以利用Langchain与GPT-3.5交互。确保您的OpenAI API密钥安全存储且可供应用程序访问：
 
-    [PRE75]
+    ```py
+    from fastapi import FastAPI, HTTPException, Request
+    ```
 
-    [PRE76]
+    ```py
+    from langchain.llms import OpenAI
+    ```
 
-    [PRE77]
+    ```py
+    import os
+    ```
 
-    [PRE78]
+    ```py
+    # Initialize FastAPI app
+    ```
 
-    [PRE79]
+    ```py
+    app = FastAPI()
+    ```
 
-    [PRE80]
+    ```py
+    # Setup Langchain with GPT-3.5
+    ```
 
-    [PRE81]
+    ```py
+    llm = OpenAI(model_name='text-davinci-003',
+    ```
 
-    [PRE82]
+    ```py
+                 temperature=0.7,
+    ```
 
-    [PRE83]
+    ```py
+                 max_tokens=256,
+    ```
 
-    [PRE84]
+    ```py
+                 api_key=os.environ['OPENAI_API_KEY'])
+    ```
 
-    [PRE85]
+    ```py
+    @app.post("/generate/")
+    ```
 
-    [PRE86]
+    ```py
+    async def generate_text(request: Request):
+    ```
 
-    [PRE87]
+    ```py
+        data = await request.json()
+    ```
 
-    [PRE88]
+    ```py
+        prompt = data.get('prompt')
+    ```
 
-    [PRE89]
+    ```py
+        if not prompt:
+    ```
 
-    [PRE90]
+    ```py
+            raise HTTPException(status_code=400,
+    ```
 
-    [PRE91]
+    ```py
+                detail="Prompt is required")
+    ```
 
-    [PRE92]
+    ```py
+        response = llm(prompt)
+    ```
 
-    [PRE93]
+    ```py
+        return {"generated_text": response}
+    ```
 
 ## 测试和监控
 

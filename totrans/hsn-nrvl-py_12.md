@@ -160,7 +160,20 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 此功能允许在保持其大小的同时向存档中添加新的新颖点。其实现如下：
 
-[PRE0]
+```py
+        if len(self.novel_items) >= MAXNoveltyArchiveSize:
+            # check if this item has higher novelty than  
+            # last item in the archive (minimal novelty)
+            if item > self.novel_items[-1]:
+                # replace it
+                self.novel_items[-1] = item
+        else:
+            # just add new item
+            self.novel_items.append(item)
+
+        # sort items array in descending order by novelty score
+        self.novel_items.sort(reverse=True)
+```
 
 代码首先检查新颖存档的大小是否尚未超过，在这种情况下直接将新的新颖点附加到其中。否则，一个新的新颖点将替换存档中的最后一个项目，即具有最小新颖度得分的项目。我们可以确信存档中的最后一个项目具有最小的新颖度得分，因为在我们将新项目添加到存档后，我们按新颖度得分值降序排序。
 
@@ -170,15 +183,30 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  我们需要收集提供的创新项目与新颖存档中所有项目之间的距离：
 
-[PRE1]
+```py
+        distances = []
+        for n in self.novel_items:
+            if n.genomeId != item.genomeId:
+                distances.append(self.novelty_metric(n, item))
+            else:
+                print("Novelty Item is already in archive: %d" % 
+                       n.genomeId)
+```
 
 1.  之后，我们将提供的创新项目与当前种群中的所有项目之间的距离添加到其中：
 
-[PRE2]
+```py
+        for p_item in n_items_list:
+            if p_item.genomeId != item.genomeId:
+                distances.append(self.novelty_metric(p_item, item))
+```
 
 1.  最后，我们可以估计平均k-最近邻值：
 
-[PRE3]
+```py
+        distances = sorted(distances) 
+        item.novelty = sum(distances[:KNN])/KNN
+```
 
 我们将列表按距离升序排序，以确保最近的项首先出现在列表中。然后，我们计算列表中前*k=15*项的总和，并将其除以总和值的数量。因此，我们得到到*k-最近邻*的平均距离值。
 
@@ -206,7 +234,21 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 编码目标函数候选者表型的基因型必须产生具有至少一个输入节点和两个输出节点的表型配置，正如之前所讨论的。我们在`create_objective_fun`函数中实现种群创建如下：
 
-[PRE4]
+```py
+    params = create_objective_fun_params()
+    # Genome has one input (0.5) and two outputs (a and b)
+    genome = NEAT.Genome(0, 1, 1, 2, False, 
+        NEAT.ActivationFunction.TANH, # hidden layer activation
+        NEAT.ActivationFunction.UNSIGNED_SIGMOID, # output layer activation
+        1, params, 0)
+    pop = NEAT.Population(genome, params, True, 1.0, seed)
+    pop.RNG.Seed(seed)
+
+    obj_archive = archive.NoveltyArchive(
+                             metric=maze.maze_novelty_metric_euclidean)
+    obj_fun = ObjectiveFun(archive=obj_archive, 
+                             genome=genome, population=pop)
+```
 
 在此代码中，我们创建了一个具有一个输入节点、两个输出节点和一个隐藏节点的NEAT基因型。隐藏节点被预先种入初始基因组中以增强进化过程中的预定义非线性。隐藏层的激活函数类型被选为双曲正切，以支持负输出值。这一特性对于我们的任务至关重要。目标函数候选者产生的系数之一为负值可以表明迷宫求解代理适应性函数的特定组成部分具有负面影响，这会发出进化需要尝试其他路径的信号。
 
@@ -218,7 +260,20 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 迷宫求解代理需要从11个传感器获取输入并生成两个控制信号，这些信号影响机器人的角速度和线速度。因此，编码迷宫求解代理表型的基因组必须产生包含11个输入节点和两个输出节点的表型配置。您可以通过查看`create_robot`函数来了解迷宫求解代理初始基因组群体的创建过程：
 
-[PRE5]
+```py
+    params = create_robot_params()
+    # Genome has 11 inputs and two outputs
+    genome = NEAT.Genome(0, 11, 0, 2, False, 
+                        NEAT.ActivationFunction.UNSIGNED_SIGMOID, 
+                        NEAT.ActivationFunction.UNSIGNED_SIGMOID, 
+                        0, params, 0)
+    pop = NEAT.Population(genome, params, True, 1.0, seed)
+    pop.RNG.Seed(seed)
+
+    robot_archive = archive.NoveltyArchive(metric=maze.maze_novelty_metric)
+    robot = Robot(maze_env=maze_env, archive=robot_archive, genome=genome, 
+                  population=pop)
+```
 
 在代码中，我们从`create_robot_params`函数中获取适当的NEAT超参数。之后，我们使用它们来创建具有相应数量输入和输出节点的初始NEAT基因型。最后，我们创建一个`Robot`对象，它封装了与迷宫求解代理群体相关的所有数据，以及迷宫模拟环境。
 
@@ -242,13 +297,27 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  首先，我们遍历种群中的所有基因组，并为每个基因组收集新颖性点：
 
-[PRE6]
+```py
+    obj_func_genomes = NEAT.GetGenomeList(obj_function.population)
+    for genome in obj_func_genomes:
+        n_item = evaluate_individ_obj_function(genome=genome, 
+                                            generation=generation)
+        n_items_list.append(n_item)
+        obj_func_coeffs.append(n_item.data)
+```
 
 在代码中，从 `evaluate_individ_obj_function` 函数获得的新颖性点被追加到种群新颖性点列表中。此外，我们将新颖性点数据追加到系数对列表中。该系数对列表将用于估计个体迷宫求解器的适应度分数。
 
 1.  接下来，我们遍历种群基因组的列表，并使用上一步收集到的新颖性点来评估每个基因组的 novelty 分数：
 
-[PRE7]
+```py
+    max_fitness = 0
+    for i, genome in enumerate(obj_func_genomes):
+        fitness = obj_function.archive.evaluate_novelty_score(
+               item=n_items_list[i],n_items_list=n_items_list)
+        genome.SetFitness(fitness)
+        max_fitness = max(max_fitness, fitness)
+```
 
 使用新颖性点估计的新颖性分数已经收集在新颖性存档中和为当前种群创建的新颖性点列表中。之后，我们将估计的新颖性分数设置为相应基因组的适应度分数。此外，我们找到适应度分数的最大值，并返回它，以及系数对列表。
 
@@ -256,7 +325,26 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 此函数接受目标函数候选者的个体 NEAT 基因组，并返回新颖性点评估结果。我们按以下方式实现它：
 
-[PRE8]
+```py
+    n_item = archive.NoveltyItem(generation=generation, genomeId=genome_id)
+    # run the simulation
+    multi_net = NEAT.NeuralNetwork()
+    genome.BuildPhenotype(multi_net)
+    depth = 2
+    try:
+        genome.CalculateDepth()
+        depth = genome.GetDepth()
+    except:
+        pass
+    obj_net = ANN(multi_net, depth=depth)
+
+    # set inputs and get outputs ([a, b])
+    output = obj_net.activate([0.5])
+
+    # store coefficients
+    n_item.data.append(output[0])
+    n_item.data.append(output[1])
+```
 
 我们从创建一个 `NoveltyItem` 对象开始，以保存给定基因组的 novelty 点数据。之后，我们构建一个表型人工神经网络（ANN）并用输入 `0.5` 激活它。最后，我们使用 ANN 的输出创建 novelty 点。
 
@@ -276,17 +364,51 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  首先，我们将种群中的每个个体与迷宫模拟器进行评估，并找到轨迹末尾到迷宫出口的距离：
 
-[PRE9]
+```py
+    robot_genomes = NEAT.GetGenomeList(robot.population)
+    for genome in robot_genomes:
+        found, distance, n_item = evaluate_individual_solution(
+            genome=genome, generation=generation, robot=robot)
+        # store returned values
+        distances.append(distance)
+        n_items_list.append(n_item)
+```
 
 1.  接下来，我们遍历种群中的所有基因，并估计每个个体的新颖度得分。同时，我们使用之前收集的相应的到迷宫出口的距离，并将其与计算出的新颖度得分结合起来，以评估基因的适应度：
 
-[PRE10]
+```py
+    for i, n_item in enumerate(n_items_list):
+        novelty = robot.archive.evaluate_novelty_score(item=n_item, 
+                                         n_items_list=n_items_list)
+        # The sanity check
+        assert robot_genomes[i].GetID() == n_item.genomeId
+
+        # calculate fitness
+        fitness, coeffs = evaluate_solution_fitness(distances[i], 
+                                        novelty, obj_func_coeffs)
+        robot_genomes[i].SetFitness(fitness)
+```
 
 在代码的前半部分，我们使用`robot.archive.evaluate_novelty_score`函数来估计种群中每个个体的新颖度得分。后半部分调用`evaluate_solution_fitness`函数，使用新颖度得分和到迷宫出口的距离来估计每个个体的适应度得分。
 
 1.  最后，我们收集关于种群中最佳迷宫求解器基因的性能评估统计数据：
 
-[PRE11]
+```py
+        if not solution_found:
+            # find the best genome in population
+            if max_fitness < fitness:
+                max_fitness = fitness
+                best_robot_genome = robot_genomes[i]
+                best_coeffs = coeffs
+                best_distance = distances[i]
+                best_novelty = novelty
+        elif best_robot_genome.GetID() == n_item.genomeId:
+            # store fitness of winner solution
+            max_fitness = fitness
+            best_coeffs = coeffs
+            best_distance = distances[i]
+            best_novelty = novelty
+```
 
 最后，函数返回在种群评估过程中收集的所有统计数据。
 
@@ -298,13 +420,39 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  首先，我们创建迷宫求解器的表型人工神经网络（ANN），并将其用作控制器来引导机器人穿越迷宫：
 
-[PRE12]
+```py
+    n_item = archive.NoveltyItem(generation=generation, 
+                                 genomeId=genome_id)
+    # run the simulation
+    maze_env = copy.deepcopy(robot.orig_maze_environment)
+    multi_net = NEAT.NeuralNetwork()
+    genome.BuildPhenotype(multi_net)
+    depth = 8
+    try:
+        genome.CalculateDepth()
+        depth = genome.GetDepth()
+    except:
+        pass
+    control_net = ANN(multi_net, depth=depth)
+    distance = maze.maze_simulation_evaluate(
+        env=maze_env, net=control_net, 
+        time_steps=SOLVER_TIME_STEPS, n_item=n_item)
+```
 
 在代码中，我们创建一个`NoveltyItem`对象来保存创新点，该创新点由机器人在迷宫中的最终位置定义。之后，我们创建表型ANN并运行迷宫模拟器，将其用作控制ANN进行给定数量的时间步（400）。模拟完成后，我们接收迷宫求解器最终位置与迷宫出口之间的距离。
 
 1.  接下来，我们将模拟统计信息保存到我们在实验结束时分析的`AgentRecord`对象中：
 
-[PRE13]
+```py
+    record = agent.AgenRecord(generation=generation, 
+                              agent_id=genome_id)
+    record.distance = distance
+    record.x = maze_env.agent.location.x
+    record.y = maze_env.agent.location.y
+    record.hit_exit = maze_env.exit_found
+    record.species_id = robot.get_species_id(genome)
+    robot.record_store.add_record(record)
+```
 
 之后，该函数返回一个包含以下值的元组：一个标志，指示我们是否找到了解决方案，机器人轨迹末尾到迷宫出口的距离，以及封装有关发现的创新点信息的`NoveltyItem`对象。
 
@@ -314,7 +462,21 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 此函数是实现我们之前讨论过的迷宫求解器适应度函数。该函数接收到迷宫出口的距离、新颖度得分以及当前目标函数候选者生成器生成的系数对列表。然后，它使用接收到的输入参数来计算适应度得分，如下所示：
 
-[PRE14]
+```py
+    normalized_novelty = novelty
+    if novelty >= 1.00:
+        normalized_novelty = math.log(novelty)
+    norm_distance = math.log(distance)
+
+    max_fitness = 0
+    best_coeffs = [-1, -1]
+    for coeff in obj_func_coeffs:
+        fitness = coeff[0] / norm_distance + coeff[1] * normalized_novelty
+        if fitness > max_fitness:
+            max_fitness = fitness
+            best_coeffs[0] = coeff[0]
+            best_coeffs[1] = coeff[1]
+```
 
 首先，我们需要使用自然对数对距离和新颖度得分值进行归一化。这种归一化将保证距离和新颖度得分值始终处于相同的尺度。确保这些值处于相同的尺度是必要的，因为系数对始终在范围 `[0,1]` 内。因此，如果距离和新颖度得分值具有不同的尺度，一对系数将无法在计算适应度分数时影响每个值的显著性。
 
@@ -332,35 +494,98 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  我们从创建共同进化的物种对应种群开始：
 
-[PRE15]
+```py
+    robot = create_robot(maze_env, seed=seed)
+    obj_func = create_objective_fun(seed)
+```
 
 1.  接下来，我们开始进化循环，并如下评估两个种群：
 
-[PRE16]
+```py
+    for generation in range(n_generations):
+        # evaluate objective function population
+        obj_func_coeffs, max_obj_func_fitness = \
+                    evaluate_obj_functions(obj_func, generation)
+        # evaluate robots population
+        robot_genome, solution_found, robot_fitness, distances, \
+        obj_coeffs, best_distance, best_novelty = \
+          evaluate_solutions(robot=robot, 
+          obj_func_coeffs=obj_func_coeffs, generation=generation)
+```
 
 1.  在评估种群之后，我们将当前进化代的结果保存为统计数据：
 
-[PRE17]
+```py
+        stats.post_evaluate(max_fitness=robot_fitness, 
+                            errors=distances)
+        # store the best genome
+        best_fitness = robot.population.GetBestFitnessEver()
+        if solution_found or best_fitness < robot_fitness:
+            best_robot_genome_ser = pickle.dumps(robot_genome)
+            best_robot_id = robot_genome.GetID()
+            best_obj_func_coeffs = obj_coeffs
+            best_solution_novelty = best_novelty
+```
 
 1.  在进化循环结束时，如果当前代未找到解决方案，我们向两个种群发出信号，使其进入下一个时代：
 
-[PRE18]
+```py
+        if solution_found:
+            print('Solution found at generation: %d, best fitness: %f, species count: %d' % (generation, robot_fitness, len(pop.Species)))
+            break
+        # advance to the next generation
+        robot.population.Epoch()
+        obj_func.population.Epoch()
+```
 
 1.  在进化循环完成对指定代数的迭代后，我们可视化收集到的迷宫记录：
 
-[PRE19]
+```py
+        if args is None:
+            visualize.draw_maze_records(maze_env, 
+                       robot.record_store.records, 
+                       view=show_results)
+        else:
+            visualize.draw_maze_records(maze_env, 
+                      robot.record_store.records, 
+                      view=show_results, width=args.width, 
+                      height=args.height,
+                      filename=os.path.join(trial_out_dir, 
+                                     'maze_records.svg'))
+```
 
 这里提到的迷宫记录包含在进化过程中收集的迷宫模拟器中每个迷宫求解器基因组的评估统计数据，作为`AgentRecord`对象。在可视化中，我们使用迷宫绘制每个评估的迷宫求解器的最终位置。
 
 1.  接下来，我们使用在进化过程中找到的最佳求解器基因组创建的控制ANN进行迷宫求解模拟。迷宫求解器在模拟过程中的轨迹可以如下可视化：
 
-[PRE20]
+```py
+        multi_net = NEAT.NeuralNetwork()
+        best_robot_genome.BuildPhenotype(multi_net)
+
+        control_net = ANN(multi_net, depth=depth)
+        path_points = []
+        distance = maze.maze_simulation_evaluate(
+                                    env=maze_env, 
+                                    net=control_net, 
+                                    time_steps=SOLVER_TIME_STEPS,
+                                    path_points=path_points)
+        print("Best solution distance to maze exit: %.2f, novelty: %.2f" % (distance, best_solution_novelty))
+        visualize.draw_agent_path(robot.orig_maze_environment, 
+                          path_points, best_robot_genome,
+                          view=show_results, width=args.width, 
+                          height=args.height, 
+                          filename=os.path.join(trial_out_dir,
+                                      'best_solver_path.svg'))
+```
 
 首先，代码从最佳求解器基因组创建一个表型人工神经网络（ANN）。然后，它使用创建的表型ANN作为迷宫求解器控制器运行迷宫模拟器。我们随后绘制迷宫求解器的收集轨迹点。
 
 1.  最后，我们以下列方式绘制每代的平均适应度分数图：
 
-[PRE21]
+```py
+        visualize.plot_stats(stats, ylog=False, view=show_results, 
+           filename=os.path.join(trial_out_dir,'avg_fitness.svg'))
+```
 
 这里提到的所有可视化内容也都以SVG文件的形式保存在本地文件系统中，以后可用于结果分析。
 
@@ -376,19 +601,29 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  我们决定从一开始就有一个中等大小的种群，以提供足够的种群多样性：
 
-[PRE22]
+```py
+    params.PopulationSize = 250
+```
 
 1.  我们对在进化过程中产生紧凑的基因组拓扑结构以及限制种群中物种数量感兴趣。因此，我们在进化过程中定义了非常小的添加新节点和连接的概率：
 
-[PRE23]
+```py
+    params.MutateAddNeuronProb = 0.03
+    params.MutateAddLinkProb = 0.05
+```
 
 1.  新颖度得分奖励在迷宫中找到独特位置。实现这一目标的一种方法是在表型中增强数值动力学。因此，我们增加了连接权重的范围：
 
-[PRE24]
+```py
+    params.MaxWeight = 30.0
+    params.MinWeight = -30.0
+```
 
 1.  为了支持进化过程，我们选择通过定义传递到下一代基因组的比例来引入精英主义：
 
-[PRE25]
+```py
+    params.Elitism = 0.1
+```
 
 精英主义值决定了大约十分之一的个体将被带到下一代。
 
@@ -398,11 +633,16 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 1.  我们决定从一个小的种群开始，以减少计算成本。此外，预期目标函数候选的基因型不会非常复杂。因此，一个小种群应该足够：
 
-[PRE26]
+```py
+    params.PopulationSize = 100
+```
 
 1.  与迷宫求解器类似，我们感兴趣的是产生紧凑的基因组。因此，添加新节点和连接的概率保持非常小：
 
-[PRE27]
+```py
+    params.MutateAddNeuronProb = 0.03
+    params.MutateAddLinkProb = 0.05
+```
 
 我们不期望目标函数候选种群中的基因组拓扑结构复杂。因此，大多数超参数都设置为默认值。
 
@@ -410,7 +650,14 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 在这个实验中，我们使用MultiNEAT Python库。因此，我们需要创建一个合适的Python环境，其中包括这个库和其他依赖项。您可以使用以下命令在Anaconda的帮助下设置Python环境：
 
-[PRE28]
+```py
+$ conda create --name maze_co python=3.5
+$ conda activate maze_co
+$ conda install -c conda-forge multineat 
+$ conda install matplotlib
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 这些命令创建了一个使用Python 3.5的`maze_co`虚拟环境，并将所有必要的依赖项安装到其中。
 
@@ -418,13 +665,35 @@ SAFE方法基于一种互利共生协同进化方法，这意味着在进化过�
 
 现在，我们已经准备好在新创建的虚拟环境中运行实验。你可以通过克隆相应的Git仓库并使用以下命令运行脚本来开始实验：
 
-[PRE29]
+```py
+$ git clone https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python.git
+$ cd Hands-on-Neuroevolution-with-Python/Chapter9
+$ python maze_experiment_safe.py -t 1 -g 150 -m medium
+```
 
 不要忘记使用`conda activate maze_co`命令激活适当的虚拟环境。
 
 前面的命令启动了一个实验的试验，使用中等复杂性的迷宫配置进行150代的进化。大约在100代进化后，神经进化过程发现了一个成功的解决方案，你应该能够在控制台看到以下输出：
 
-[PRE30]
+```py
+****** Generation: 105 ******
+
+Maze solved in 338 steps
+
+Solution found at generation: 105, best fitness: 3.549289, species count: 7
+
+==================================
+Record store file: out/maze_medium_safe/5/data.pickle
+Random seed: 1571021768
+Best solution fitness: 3.901621, genome ID: 26458
+Best objective func coefficients: [0.7935419704765059, 0.9882050653334634]
+------------------------------
+Maze solved in 338 steps
+Best solution distance to maze exit: 3.56, novelty: 19.29
+------------------------
+Trial elapsed time: 4275.705 sec
+==================================
+```
 
 从这里展示的输出中，你可以看到在第105代找到了一个成功的迷宫求解器，并且能够在400步中解决迷宫。有趣的是，注意到由最佳目标函数候选者产生的系数对给迷宫求解器适应度函数的新颖度分数组件赋予了略微更多的重视。
 

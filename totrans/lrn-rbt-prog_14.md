@@ -264,19 +264,37 @@ IMU顶部有一个图示。前面的图示显示了该图示应该如何与机�
 
 1.  输入 `i2cdetect -y 1` 以检查您是否正确安装了设备。输出应该看起来像这样：
 
-    [PRE0]
+    ```py
+    pi@myrobot:~ $ i2cdetect -y 1
+         0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+    00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    60: -- -- -- -- -- -- -- -- 68 -- -- -- -- -- -- 6f 
+    70: 70 -- -- -- -- -- -- —             
+    ```
 
 1.  地址为 0x68 的设备是我们的新设备。如果您看不到这个，请关闭 Raspberry Pi 的电源并检查您的连线。其他两个设备（0x6f 和 0x70）是电机板和 LED 填片。
 
 1.  现在，我们可以安装这个库：
 
-    [PRE1]
+    ```py
+    pi@myrobot:~ $ git clone https://github.com/pimoroni/icm20948-python
+    pi@myrobot:~ $ cd icm20948-python/
+    pi@myrobot:~ $ sudo ./install.sh
+    pi@myrobot:~ $ cd
+    ```
 
 1.  您现在已经验证了 ICM20948 设备位于机器人的 I2C 总线上，并安装了 Pimoroni Python 库，以便与之通信。您现在可以开始与之通信了。
 
 我们还将添加一些新的软件来实时可视化我们的数据。有一个名为 **Visual Python** （**VPython**）的系统，它被设计用来实时创建图表和 3D 表示：
 
-[PRE2]
+```py
+pi@myrobot:~ $ pip3 install git+https://github.com/orionrobots/vpython-jupyter.git
+```
 
 现在，设备和库应该已经安装。如果您没有成功，请尝试查看下一节的 *故障排除* 部分。
 
@@ -304,15 +322,24 @@ IMU顶部有一个图示。前面的图示显示了该图示应该如何与机�
 
 1.  首先导入 Pimoroni 设备库 – 如果您使用其他 IMU 设备，这将是不同的：
 
-    [PRE3]
+    ```py
+    from icm20948 import ICM20948
+    ```
 
 1.  我们将创建一个 IMU 类来表示我们的设备。这设置了一个单个 IMU：
 
-    [PRE4]
+    ```py
+    class RobotImu:
+        def __init__(self):
+            self._imu = ICM20948()
+    ```
 
 1.  对于这个练习，我们只需要温度。让我们简单地包装一下：
 
-    [PRE5]
+    ```py
+        def read_temperature(self):
+            return self._imu.read_temperature()
+    ```
 
 使用这个，接口就准备好了。现在，我们可以用它来读取设备的温度。
 
@@ -332,43 +359,67 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 1.  首先导入 VPython 和我们的机器人 IMU 接口：
 
-    [PRE6]
+    ```py
+    vpython by importing it as vp.
+    ```
 
 1.  我们将在图表上绘制温度与时间的关系，因此我们需要一个时间参考。此外，我们将使用日志记录来查看发生了什么：
 
-    [PRE7]
+    ```py
+    import time
+    import logging
+    ```
 
 1.  让我们配置日志记录，以便我们可以看到所有 `INFO` 级别的日志：
 
-    [PRE8]
+    ```py
+    logging.basicConfig(level=logging.INFO)
+    ```
 
 1.  创建我们的 IMU 实例：
 
-    [PRE9]
+    ```py
+    imu = RobotImu()
+    ```
 
 1.  我们希望从图表中获得一些东西。由于 X 轴是时间，以秒为单位，将最小值设置为 `0`，最大值设置为 `60`，将显示一分钟的数据。我们还想让图表滚动，以便在记录超过一分钟的数据后显示新数据：
 
-    [PRE10]
+    ```py
+    vp.graph(xmin=0, xmax=60, scroll=True)
+    temp_graph = vp.gcurve()
+    ```
 
 1.  现在我们有了时间参考，让我们在进入循环之前记录开始时间：
 
-    [PRE11]
+    ```py
+    start = time.time()
+    ```
 
 1.  主循环是一个`while true`类型的循环。然而，我们需要使用`vp.rate`来让VPython知道我们正在动画化，并为我们的系统设置一个帧/更新率：
 
-    [PRE12]
+    ```py
+    while True:
+        vp.rate(100)
+    ```
 
 1.  现在，我们可以捕捉我们的温度，同时，我们还可以记录这个：
 
-    [PRE13]
+    ```py
+        temperature = imu.read_temperature()
+        logging.info("Temperature: {}".format(temperature))
+    ```
 
 1.  要将这个数据放入图表中，我们需要获取X轴的经过时间。我们可以通过从当前时间减去开始时间来获取这个时间：
 
-    [PRE14]
+    ```py
+        elapsed = time.time() - start
+    ```
 
 1.  最后，我们需要将这个数据绘制到我们的温度图表中，其中经过的时间作为`x`轴，温度作为`y`轴：
 
-    [PRE15]
+    ```py
+        temp_graph.plot(elapsed, temperature)
+    ```
 
 绘制温度的代码现在已生效。让我们在树莓派上运行这个代码。
 
@@ -378,11 +429,19 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 1.  在树莓派的SSH会话中，输入以下命令：
 
-    [PRE16]
+    ```py
+    $ VPYTHON_PORT=9020 VPYTHON_NOBROWSER=true python3 plot_temperature.py
+    ```
 
     我们选择了端口`9020`，这有点随意，但应该高于`1000`。我们将在本书的后面使用其他端口上的其他网络服务，而这个数字远远超出了它们的范围。当运行时，它应该记录一些消息来告诉你它已准备好：
 
-    [PRE17]
+    ```py
+    INFO:vpython.no_notebook:Creating server
+    http://localhost:9020
+    INFO:vpython.no_notebook:Server created
+    INFO:vpython.no_notebook:Starting serve forever loop
+    INFO:vpython.no_notebook:Started
+    ```
 
     注意，它显示的是本地主机地址。我们打算远程使用它。
 
@@ -400,7 +459,14 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 我在大约25秒时将手指放在传感器上。如图所示的前一个图表，环境温度为31度，上升至略低于34度。需要几秒钟才能升温。如果我将手指放在那里更长时间，它会增加更多。我有一个风扇，所以有一个急剧的下降——根据你的条件，可能会有更慢的下降。代码也将温度记录到控制台：
 
-[PRE18]
+```py
+INFO:root:Temperature 32.43858387995327
+INFO:root:Temperature 32.726120945278105
+INFO:root:Temperature 32.726120945278105
+INFO:root:Temperature 32.39066103573247
+INFO:root:Temperature 32.39066103573247
+INFO:root:Temperature 32.63027525683649
+```
 
 在这里，小数位有很多噪声，你可以忽略它们。当你关闭这个浏览器标签时，代码将停止绘图。
 
@@ -432,11 +498,15 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 1.  让我们为当前会话设置它。`alias`命令创建了一个别名，我们可以在以后再次使用。在这里，它被命名为`vpython`。它包含设置和`python3`命令：
 
-    [PRE19]
+    ```py
+    pi@myrobot:~ $ alias vpython="VPYTHON_PORT=9020 VPYTHON_NOBROWSER=true python3"
+    ```
 
 1.  为了在某个时候再次使用它，我们将将其放入当前用户的`.bashrc`文件中——这是一个Raspbian在您`ssh`登录时自动运行的文件：
 
-    [PRE20]
+    ```py
+    pi@myrobot:~ $ echo 'alias vpython="VPYTHON_PORT=9020 VPYTHON_NOBROWSER=true python3"' >>~/.bashrc
+    ```
 
     将某物包裹在`echo`中会将文本写出来而不是运行命令。`>>`将此追加到文件中——在这种情况下，是`.bashrc`文件。`~`标记选择当前用户的家目录。
 
@@ -492,19 +562,27 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 1.  我们正在操作VPython视图，因此我们需要导入它，如下所示：
 
-    [PRE21]
+    ```py
+    import vpython as vp
+    ```
 
 1.  然后，我们可以添加我们的函数来设置视图；我将其命名为`robot_view`：
 
-    [PRE22]
+    ```py
+    def robot_view():
+    ```
 
 1.  在这个函数中，我们需要设置VPython用于控制相机方向的两个属性：![img/B15660_12_15.jpg](img/B15660_12_15.jpg)
 
-    [PRE23]
+    ```py
+    vp.scene.forward = vp.vector(-3, -1, -1) 
+    ```
 
 1.  一个轴告诉我们沿着哪个方向看，但不知道哪个方向是*向上*的。我们需要相机将其对“向上”的定义与机器人（Z轴向上）对齐；否则，向量可能会颠倒或偏斜：
 
-    [PRE24]
+    ```py
+        vp.scene.up = vp.vector(0, 0, 1)
+    ```
 
 我们将在后面的章节中更多地使用这个姿态；然而，现在，看到Z轴现在是向上的，以及我们围绕不同轴旋转的位置是有用的。
 
@@ -516,7 +594,10 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 1.  我们将处理来自IMU的一些x、y和z组。我们将导入一个向量类型来存储这些。我在这里突出显示了新代码：
 
-    [PRE25]
+    ```py
+    from icm20948 import ICM20948
+    from vpython import vector
+    ```
 
 1.  向量是三个分量坐标系统的表示。现在，我们需要从底层IMU库中获取陀螺仪数据并将其存储在向量中：我们使用的`ICM20948`库没有返回仅陀螺仪数据的调用，但它有一个返回加速度计和陀螺仪数据的调用。
 
@@ -524,7 +605,9 @@ VPython 或 Visual Python 是一个旨在在 Python 中创建视觉（甚至是 
 
 1.  我们现在可以将三个陀螺仪值放入一个体向量中返回：
 
-    [PRE26]
+    ```py
+            return vector(x, y, z)
+    ```
 
 IMU库现在已准备好供我们从中读取陀螺仪数据。接下来，我们将读取它并在图表上绘制数据。
 
@@ -538,21 +621,43 @@ IMU库现在已准备好供我们从中读取陀螺仪数据。接下来，我�
 
 1.  我们将从导入、设置日志和IMU开始，就像我们之前做的那样：
 
-    [PRE27]
+    ```py
+    import vpython as vp
+    import logging
+    import time
+    from robot_imu import RobotImu
+    logging.basicConfig(level=logging.INFO)
+    imu = RobotImu()
+    ```
 
 1.  我们为陀螺仪输出的三个轴设置三个图表——X轴旋转、Y轴旋转和Z轴旋转。请注意，我们给每个图表分配了不同的颜色：
 
-    [PRE28]
+    ```py
+    vp.graph(xmin=0, xmax=60, scroll=True)
+    graph_x = vp.gcurve(color=vp.color.red)
+    graph_y = vp.gcurve(color=vp.color.green)
+    graph_z = vp.gcurve(color=vp.color.blue)
+    ```
 
     这三个图表将叠加在同一行上。
 
 1.  现在，我们需要设置一个开始时间，启动一个循环，并测量经过的时间：
 
-    [PRE29]
+    ```py
+    start = time.time()
+    while True:
+        vp.rate(100)
+        elapsed = time.time() – start
+    ```
 
 1.  我们现在可以读取IMU并将三个读数放入图表中：
 
-    [PRE30]
+    ```py
+        gyro = imu.read_gyroscope()
+        graph_x.plot(elapsed, gyro.x)
+        graph_y.plot(elapsed, gyro.y)
+        graph_z.plot(elapsed, gyro.z)
+    ```
 
 1.  上传文件并使用 `vpython plot_gyroscope.py` 运行它们。
 
@@ -602,7 +707,11 @@ IMU库现在已准备好供我们从中读取陀螺仪数据。接下来，我�
 
 1.  添加以下代码进行读取：
 
-    [PRE31]
+    ```py
+        def read_accelerometer(self):
+            accel_x, accel_y, accel_z, _, _, _ = self._imu.read_accelerometer_gyro_data()
+            return vector(accel_x, accel_y, accel_z)
+    ```
 
     这使用与陀螺仪相同的库调用；然而，现在它丢弃最后三个数据项，而不是前三个。
 
@@ -614,27 +723,52 @@ IMU库现在已准备好供我们从中读取陀螺仪数据。接下来，我�
 
 1.  创建一个名为`accelerometer_vector.py`的文件。从一些简单的导入开始，包括机器人视图、日志设置和初始化IMU：
 
-    [PRE32]
+    ```py
+    import vpython as vp
+    import logging
+    from robot_imu import RobotImu
+    from robot_pose import robot_view
+    logging.basicConfig(level=logging.INFO)
+    imu = RobotImu()
+    ```
 
 1.  让我们从我们倾向于观察机器人的角度来看看：
 
-    [PRE33]
+    ```py
+    robot_view()
+    ```
 
 1.  现在，我们想要定义四个箭头。VPython箭头沿着一个轴指向，可以设置其颜色和长度：
 
-    [PRE34]
+    ```py
+    accel_arrow = vp.arrow(axis=vp.vector(0, 0, 0))
+    x_arrow = vp.arrow(axis=vp.vector(1, 0, 0),
+                       color=vp.color.red)
+    y_arrow = vp.arrow(axis=vp.vector(0, 1, 0), 
+                       color=vp.color.green)
+    z_arrow = vp.arrow(axis=vp.vector(0, 0, 1), 
+                       color=vp.color.blue)
+    ```
 
 1.  现在，我们可以开始主循环：
 
-    [PRE35]
+    ```py
+    while True:
+        vp.rate(100)
+    ```
 
 1.  读取加速度计并记录：
 
-    [PRE36]
+    ```py
+        accel = imu.read_accelerometer()
+        print(f"Accelerometer: {accel}")
+    ```
 
 1.  因为颠簸可能会使我们的刻度失效，我们将向量归一化，使其长度为1。我们需要将这个放入箭头轴中：
 
-    [PRE37]
+    ```py
+        accel_arrow.axis = accel.norm()
+    ```
 
 1.  将此上传到Raspberry Pi，并用`vpython accelerometer_vector.py`启动它。将你的浏览器指向它，以查看以下输出：![img/B15660_12_18.jpg]
 
@@ -700,11 +834,16 @@ IMU库现在已准备好供我们从中读取陀螺仪数据。接下来，我�
 
 1.  在`RobotIMU`类中，在`read_gyroscope`方法之后，添加新的读取方法：
 
-    [PRE38]
+    ```py
+        def read_magnetometer(self):
+    ```
 
 1.  与加速度计和陀螺仪不同，它从底层的设备库中读取数据。我们将这个封装起来并返回一个向量。为了进行180度的俏皮旋转，我们取反Y和Z轴：
 
-    [PRE39]
+    ```py
+            mag_x, mag_y, mag_z = self._imu.read_magnetometer_data()
+            return vector(mag_x, -mag_y, -mag_z)
+    ```
 
 现在这个接口已经准备好使用，让我们获取一些读数。
 
@@ -716,23 +855,44 @@ IMU库现在已准备好供我们从中读取陀螺仪数据。接下来，我�
 
 1.  添加熟悉的导入和设置：
 
-    [PRE40]
+    ```py
+    import vpython as vp
+    import logging
+    from robot_imu import RobotImu
+    from robot_pose import robot_view
+    logging.basicConfig(level=logging.INFO)
+    imu = RobotImu()
+    robot_view()
+    ```
 
 1.  现在，我们将创建一个表示磁力计读数的箭头，以及参考X、Y和Z轴：
 
-    [PRE41]
+    ```py
+    mag_arrow = vp.arrow(pos=vp.vector(0, 0, 0))
+    x_arrow = vp.arrow(axis=vp.vector(1, 0, 0), color=vp.color.red)
+    y_arrow = vp.arrow(axis=vp.vector(0, 1, 0), color=vp.color.green)
+    z_arrow = vp.arrow(axis=vp.vector(0, 0, 1), color=vp.color.blue)
+    ```
 
 1.  接下来，我们开始主循环：
 
-    [PRE42]
+    ```py
+    while True:
+        vp.rate(100)
+    ```
 
 1.  现在，我们可以读取磁力计：
 
-    [PRE43]
+    ```py
+        mag = imu.read_magnetometer()
+    ```
 
 1.  最后，让我们设置一个与这个向量匹配的箭头轴。我们可以使用`.norm()`方法来归一化这个向量。我们还需要打印数据：
 
-    [PRE44]
+    ```py
+        mag_arrow.axis = mag.norm()
+        print(f"Magnetometer: {mag}")
+    ```
 
 1.  将此发送到机器人，并使用常规的VPython设置运行它。你应该会看到以下内容：
 

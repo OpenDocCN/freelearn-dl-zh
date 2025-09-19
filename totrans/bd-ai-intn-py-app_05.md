@@ -264,7 +264,31 @@ One AI提供的聊天机器人都是使用MongoDB Atlas平台构建的，拥有�
 
 **动态过滤器**是根据搜索查询的内容而变化的元数据片段。这些可以是数据的属性，例如一本书的出版时间或其价格。它们通常在用户执行搜索时与其普通英语查询一起选择。以下是一个示例：
 
-[PRE0]
+```py
+[
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210a"),
+        "paragraph_embedding": [0.43, 0.57, ...],
+        "page_number": 12,
+        "book_title": "A Philosophy of Software Design",
+        "publication_year": 2018
+    },
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210b"),
+        "paragraph_embedding": [0.72, 0.63, ...],
+        "page_number": 6,
+        "book_title": "Design Patterns: Elements of Reusable Object-Oriented  Software",
+        "publication_year": 1994
+    },
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210c"),
+        "paragraph_embedding": [0.12, 0.48, ...],
+        "page_number": 3,
+        "book_title": "Guide to Fortran",
+        "publication_year": 2008
+    }, ...
+]
+```
 
 动态过滤器在构建语义搜索应用时最常见，因为它们通常在用户在搜索栏中执行查询之前输入。这与完全基于自然语言的RAG界面形成对比。
 
@@ -328,7 +352,20 @@ One AI提供的聊天机器人都是使用MongoDB Atlas平台构建的，拥有�
 
 较低级别的上下文非常适合嵌入模型，而较高级别的上下文则可以通过关键词搜索很好地表示。MongoDB 允许用户尽可能地在这一方向上进行实验，同时允许在非键（而非简单的文档 `_id`）上联合查询模式。这使得可以为给定文档提供窗口级别的表示，这些表示可以通过不同的方法来考虑。以下代码展示了如何使用向量搜索索引对包含 `paragraph_embeddings` 的某些文档进行索引和查询，而包含 `full_page_content` 的其他文档则可以使用文本搜索索引进行索引和查询：
 
-[PRE1]
+```py
+[
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210d"),
+         "page_number": 81,
+        "paragraph_embedding": [0.43, 0.91, ...],
+    },
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210e"),
+        "full_page_content": "Pulling complexity down makes the most sense if (a) the complexity being pulled down is closely related to the class's existing functionality, (b) pulling the complexity down will result in many simplifications elsewhere in the application, and (c) pulling the complexity down simplifies the class's interface. ...",
+        "page_number": 36,
+    }, ...
+]
+```
 
 联合考虑前面代码中显示的两个查询的结果集，这被称为**混合搜索**，可以使用**互逆排名融合方法**来实现，如[https://www.mongodb.com/docs/atlas/atlas-search/tutorial/hybrid-search/](https://www.mongodb.com/docs/atlas/atlas-search/tutorial/hybrid-search/)中所示。将来，Atlas Vector Search 将提供对专用阶段的支持，这使得基于排名或分数组合结果集变得更加简单。然而，基本概念将保持不变。
 
@@ -336,7 +373,20 @@ One AI提供的聊天机器人都是使用MongoDB Atlas平台构建的，拥有�
 
 在您的数据集中可能存在多个向量相关性来源，您可能希望联合考虑，类似于您可能联合考虑整个页面的段落嵌入和关键词相关性。您正在考虑的二级嵌入字段可能是一个派生字段，例如由 LLM 生成的章节摘要然后嵌入的字段，或者它可能是一个完全不同的数据来源。以下代码展示了一个包含一组可以嵌入和索引使用向量搜索索引的源字段的单个文档：
 
-[PRE2]
+```py
+[
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210d"),
+        "book_title": "A Philosophy of Software Design",
+         "book_title_embedding": [0.67, 0.45, ...],
+         "chapter_title": "The Nature of Complexity",
+         "chapter_title_embedding": [0.51, 0.89, ...],
+         "chapter_summary": "This book is about how to design software systems to minimize their complexity. The first step is to understand the enemy. Exactly what is 'complexity'?...",
+         "chapter_summary_embedding": [0.36, 0.90, ...],
+         "raw_text "System designers sometimes assume that complexity can be measured by lines of code. They assume that if one implementation is shorter than another, then it must be simpler; if it only takes a few lines of code to make a change, then the change must be easy...",
+         "raw_text_embedding": [0.43, 0.11, ...],
+    }, ...
+```
 
 独立的 `$vectorSearch` 查询的结果可以采用与前面章节中看到的向量加词汇搜索查询模式相似的混合和融合模式，这将允许使用多个相关性来源来找到与查询最相关的文档。
 
@@ -354,7 +404,34 @@ One AI提供的聊天机器人都是使用MongoDB Atlas平台构建的，拥有�
 
 `$vectorSearch` 和使用点赞或踩作为用户相关性的代理的 `$sort` 阶段。
 
-[PRE3]
+```py
+[
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210a"),
+        "paragraph_embedding": [0.43, 0.57, ...],
+        "page_number": 12,
+        "score": 0.95,
+        "upvotes": 2,
+        "downvotes": 58
+    },
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210b"),
+        "paragraph_embedding": [0.72, 0.63, ...],
+        "page_number": 6,
+        "score": 0.90
+        "upvotes": 81,
+        "downvotes": 3
+    },
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210c"),
+        "paragraph_embedding": [0.12, 0.48, ...],
+        "page_number": 3,
+        "score": 0.67
+        "upvotes": 2,
+        "downvotes": 5
+    }, ...
+]
+```
 
 这是一个非常简单的方法，但其背后的原理可以扩展，以允许对内容进行更个性化的定制，其中相似的用户通过他们对不同内容的相似互动来定义，这是流行推荐系统算法——**协同过滤**的基础。
 
@@ -370,7 +447,20 @@ One AI提供的聊天机器人都是使用MongoDB Atlas平台构建的，拥有�
 
 使用这种模式，您只需在较低级别存储嵌入，然后查找包含大量文本的较高级别的上下文。如果您发现查询更容易将语义映射到更小的文本量，但您希望提供给用户或LLM的数据量很大，这可能很常见，这可能很有用。以下混合词汇和向量搜索的代码示例也是父文档检索的一个例子，因为向量嵌入被搜索以生成一整页内容提供给LLM。外键是`page_number`。
 
-[PRE4]
+```py
+[
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210d"),
+         "page_number": 81,
+        "paragraph_embedding": [0.43, 0.91, ...],
+    },
+    {
+        "_id": ObjectID("662043cfb084403cdcf5210e"),
+        "full_page_content": "Pulling complexity down makes the most sense if (a) the complexity being pulled down is closely related to the class's existing functionality, (b) pulling the complexity down will result in many simplifications elsewhere in the application, and (c) pulling the complexity down simplifies the class's interface. ...",
+        "page_number": 36,
+    }, ...
+]
+```
 
 需要注意的是，与所有其他元数据一样，以这种方式捕获MongoDB文档之间的关系必须在摄取时提取。
 

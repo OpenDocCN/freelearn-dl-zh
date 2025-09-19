@@ -60,27 +60,45 @@
 
 我们将从初始设置开始，这涉及到使用Transformers库加载**BLOOM-1b1**的一个较小变体。我们还将导入我们将需要应用PEFT的方法。对于这个例子，我们将依赖一些可以按以下方式安装的库：
 
-[PRE0]
+```py
+pip install sentence-transformers transformers peft datasets
+```
 
 安装完成后，我们可以开始导入：
 
-[PRE1]
+```py
+from transformers import (
+    AutoTokenizer, AutoModelForCausalLM)
+from peft import AdaLoraConfig, get_peft_model
+```
 
 下一步是加载分词器和模型：
 
-[PRE2]
+```py
+tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b1")
+model = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-1b1")
+```
 
 如前所述，我们正在引入PEFT以提高适应性：
 
-[PRE3]
+```py
+adapter_config = AdaLoraConfig(target_r=16)
+model.add_adapter(adapter_config)
+```
 
 PEFT技术，特别是通过`AdaLoraConfig`，允许我们引入一个紧凑、高效的层，这样我们就可以通过显著减少可训练参数的数量来将模型适应新的上下文——在这里，是金融领域：
 
-[PRE4]
+```py
+model = get_peft_model(model, adapter_config)
+model.print_trainable_parameters()
+```
 
 我们必须集成适配器以完成PEFT模型设置，从而有效地创建一个针对我们特定领域训练优化的模型变体，同时关注效率。我们可以通过检查我们的模型将使用的可训练参数数量来量化这一点：
 
-[PRE5]
+```py
+trainable params: 1,769,760 || all params: 1,067,084,088 || trainable%: 0.1658500974667331
+```
 
 上述代码为我们提供了以下信息：
 
@@ -94,21 +112,56 @@ PEFT技术，特别是通过`AdaLoraConfig`，允许我们引入一个紧凑、�
 
 接下来，我们将进入数据准备阶段。我们假设我们已经收集了涵盖Proxima产品及其服务（如**Proxima Passkey**）的广泛知识文本。CLM训练需要区分测试和训练阶段，以评估模型准确预测序列中下一个标记的能力。这确保了模型在训练数据之外也能很好地泛化到未见过的文本。在训练过程中，损失计算衡量模型预测的标记概率与实际标记之间的差异。它指导模型调整其参数以最小化这种损失，通过迭代提高其预测准确性。因此，我们必须定义训练和测试文本作为我们的数据集。本书的GitHub仓库（本章前面已链接）中包含了一个示例数据集。
 
-[PRE6]
+```py
+dataset = load_dataset("text",
+    data_files={"train": "./train.txt",
+        "test": "./test.txt"}
+    )
+```
 
 接下来，我们必须应用预处理和分词。文本被清理、标准化，然后转换为数值格式（`512`个标记，以便与模型的架构相匹配）：
 
-[PRE7]
+```py
+def preprocess_function(examples):
+    inputs = tokenizer(examples["text"], truncation=True,
+        padding="max_length", max_length=512)
+    inputs["labels"] = inputs["input_ids"].copy()
+    return inputs
+```
 
 `TrainingArguments`类配置了训练过程，设置如批量大小、训练轮数和保存模型检查点的目录等参数。这种配置对于高效学习和模型评估至关重要。同时，`Trainer`类协调模型的训练过程。再次强调，持续训练逐渐调整模型的参数，以生成和理解与Proxima Passkey相关的文本：
 
-[PRE8]
+```py
+from transformers import Trainer, TrainingArguments
+training_args = TrainingArguments(
+    output_dir="./model_output",
+    per_device_train_batch_size=2,
+    num_train_epochs=5,
+    logging_dir='./logs',
+    logging_steps=10,
+    load_best_model_at_end=True,
+    prediction_loss_only=True,
+)
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_datasets["train"],
+    eval_dataset=tokenized_datasets["test"],
+)
+trainer.train()
+model.save_pretrained("./proxima_da_model")
+```
 
 通常，我们的配置指定了训练参数并初始化`Trainer`类，同时专注于领域自适应。`TrainingArguments`类被定制以高效管理训练过程，包括日志记录和模型保存策略。记住，我们为训练模型选择的批量大小平衡了GPU的内存容量和模型从数据集中学习的速度。较大的批量大小允许一次处理更多数据，从而加快训练速度，但需要更多内存，如果GPU容量有限，这可能会成为限制。相反，较小的批量大小意味着模型使用较少的样本更频繁地更新其权重，这可以促进学习，但会导致通过数据集的整体进度变慢。
 
 训练完成后，我们可以使用自适应模型根据与Proxima Passkey相关的提示生成文本。模型考虑提示，生成表示续写的标记序列，然后将此序列解码回可读的文本：
 
-[PRE9]
+```py
+def predict(model, prompt="The Proxima Passkey is"):
+    inputs = tokenizer(prompt, return_tensors="pt")
+    output = model.generate(**inputs, max_length=50)
+    return tokenizer.decode(output[0], skip_special_tokens=True)
+```
 
 注意`model.generate()`函数，它接受分词输入并生成一系列标记作为输出。然后，这些标记被解码成文本。
 
@@ -118,7 +171,18 @@ PEFT技术，特别是通过`AdaLoraConfig`，允许我们引入一个紧凑、�
 
 定量评估和定性评估对于评估适应后的BLOOM模型与原始模型之间的差异至关重要，尤其是在Proxima语言的环境中。在定量方面，模型的输出通过与使用**ROUGE**度量标准反映Proxima产品语言的参考数据集进行比较。这种比较有助于衡量关键术语和风格的重叠程度。此外，为评估模型在Proxima相关的财务术语和概念方面的熟练程度，开发特定的度量标准是有益的：
 
-[PRE10]
+```py
+from rouge import Rouge
+# Example reference text (what we expect the model to generate after training on a complete dataset)
+reference = "Proxima's Passkey enables seamless integration of diverse financial portfolios, offering unparalleled access to global investment opportunities and streamlined asset management."
+# Example predicted model output
+predicted = "The Proxima Passkey provides a unified platform for managing various investment portfolios, granting access to worldwide investment options and efficient asset control."
+# Initialize the Rouge metric
+rouge = Rouge()
+# Compute the Rouge scores
+scores = rouge.get_scores(predicted, reference)
+print(scores)
+```
 
 ROUGE分数将通过比较本例中的两个文本来计算。该分数衡量预测输出与参考文本在**n-gram**（单词序列）方面的重叠。例如，**ROUGE-N**（其中*N*可以是1、2或L）计算预测文本和参考文本之间的n-gram重叠：
 

@@ -38,7 +38,9 @@
 
 移除特殊字符和标点符号是文本预处理的重要步骤。特殊字符和标点符号对文本的意义贡献不大，如果它们没有被移除，可能会给机器学习模型带来问题。执行此任务的一种方法是通过使用正则表达式，如下所示：
 
-[PRE0]
+```py
+re.sub(r"[^a-zA-Z0-9]+", "", string)
+```
 
 这将移除输入字符串中的非字符和数字。有时，我们可能希望将特殊字符替换为空格。请看以下示例：
 
@@ -150,7 +152,10 @@
 
 在这里，NER会将“Apple Inc.”识别为组织，将“Cupertino, California”识别为地点。命名实体识别系统的输出可以是句子的结构化表示，如下所示：
 
-[PRE1]
+```py
+{"organization": "Apple Inc.",
+"location": "Cupertino, California"}
+```
 
 命名实体识别（NER）在各个领域都有许多应用，包括**信息检索**、**问答**、**情感分析**等。它可以自动从无结构化文本数据中提取结构化信息，这些信息可以进一步分析或用于下游任务。
 
@@ -264,11 +269,19 @@ CRFs 是另一种常用于序列标注任务（包括 POS 标注）的概率模�
 
 下面是使用Python中的NLTK库进行词性标注的示例：
 
-[PRE2]
+```py
+import nltk
+input_sentence = "The young white cat jumps over the lazy dog"
+processed_tokens = nltk.word_tokenize(input_sentence)
+tags = nltk.pos_tag(processed_tokens)
+print(tags)
+```
 
 输出如下：
 
-[PRE3]
+```py
+[('The', 'DT'), (young, 'JJ'), (white, 'NN'), ('cat', 'NN'), ('jumps', 'VBZ'), ('over', 'IN'), ('the', 'DT'), ('lazy', 'JJ'), ('dog', 'NN')]
+```
 
 在这个例子中，使用了`nltk.pos_tag()`函数来标注句子中的单词。该函数返回一个元组列表，其中每个元组包含一个单词及其词性标签。这里使用的词性标签基于**宾州树库标签集**。
 
@@ -310,11 +323,22 @@ CRFs 是另一种常用于序列标注任务（包括 POS 标注）的概率模�
 
 这里是一个使用Python中的正则表达式从字符串中提取所有电子邮件地址的示例：
 
-[PRE4]
+```py
+import re
+text = "John's email is john@example.com and Jane's email is jane@example.com"
+# Pattern for email addresses:
+pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+regex = re.compile(pattern)
+# Search for all occurrences of the pattern in the text:
+matches = regex.findall(text)
+print(matches)
+```
 
 这里是输出：
 
-[PRE5]
+```py
+['john@example.com', 'jane@example.com']
+```
 
 接下来，我们将介绍文本清理。
 
@@ -410,7 +434,9 @@ BERT分词器的一个关键特性是它可以处理**词汇表外的**（**OOV*
 
 如以下代码所示，输入是一个带有编码标签的格式化文本，类似于我们可以从HTML网页中提取的内容：
 
-[PRE6]
+```py
+"<SUBJECT LINE> Employees details<END><BODY TEXT>Attached are 2 files,\n1st one is pairoll, 2nd is healtcare!<END>"
+```
 
 让我们看看将每个步骤应用到文本上的效果：
 
@@ -452,7 +478,9 @@ BERT分词器的一个关键特性是它可以处理**词汇表外的**（**OOV*
 
 对于这个例子，我们使用了Python的spaCy库来执行这些任务。我们的输入如下：
 
-[PRE7]
+```py
+The companies that would be releasing their quarterly reports tomorrow are Microsoft, 4pm, Google, 4pm, and AT&T, 6pm.
+```
 
 这是NER的输出：
 
@@ -468,7 +496,19 @@ BERT分词器的一个关键特性是它可以处理**词汇表外的**（**OOV*
 
 这是输出：
 
-[PRE8]
+```py
+[['companies', 'NOUN'],
+ ['releasing', 'VERB'],
+ ['quarterly', 'ADJ'],
+ ['reports', 'NOUN'],
+ ['tomorrow', 'NOUN'],
+ ['Microsoft', 'PROPN'],
+ ['pm', 'NOUN'],
+ ['Google', 'PROPN'],
+ ['pm', 'NOUN'],
+ ['AT&T', 'PROPN'],
+ ['pm', 'NOUN']]
+```
 
 以下代码示例展示了预处理的不同方面，预处理将原始文本转换为适合下游模型的形式，以便符合整体设计的用途。
 

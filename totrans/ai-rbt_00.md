@@ -50,11 +50,20 @@
 
 代码块设置如下：
 
-[PRE0]
+```py
+from roboflow import Roboflow
+rf = Roboflow(api_key="*****************")
+project = rf.workspace("toys").project("toydetector")
+dataset = project.version(1).download("yolov8")
+```
 
 任何命令行输入或输出都按以下方式编写：
 
-[PRE1]
+```py
+cd ~/ros2_ws/src
+ros2 pkg create –build-type ament-cmake ros_xarm
+colcon build
+```
 
 **粗体**: 表示新术语、重要单词或屏幕上看到的单词。例如，菜单或对话框中的单词以**粗体**显示。以下是一个示例：“在Roboflow上使用**生成**选项卡，然后点击**添加增强步骤**以选择将影响我们图像的操作类型。”
 

@@ -76,75 +76,141 @@ RLHF是传统RL的一种变体，它结合了人类反馈以及通常的风险/�
 
     **输出提示**：通过在输出提示中使用Markdown格式，模型知道提供这种格式，并返回以下内容：
 
-    [PRE0]
+    ```py
+    def square(number):
+    ```
 
-    [PRE1]
+    ```py
+        return number ** 2
+    ```
 
     使用LangChain生成JSON格式的输出，我们可以利用相同的方法。具体来说，LangChain的`PromptTemplate`提供了一个灵活的方式来动态定义我们提示的结构，并插入元素：
 
-    [PRE2]
+    ```py
+    from langchain.prompts import PromptTemplate
+    ```
 
-    [PRE3]
+    ```py
+    from langchain.llms import OpenAI
+    ```
 
-    [PRE4]
+    ```py
+    # Define a prompt template requesting JSON formatted output
+    ```
 
-    [PRE5]
+    ```py
+    prompt_structure = PromptTemplate(
+    ```
 
-    [PRE6]
+    ```py
+        template="""
+    ```
 
-    [PRE7]
+    ```py
+            Context: {context}
+    ```
 
-    [PRE8]
+    ```py
+            Instruction: {instruction}
+    ```
 
-    [PRE9]
+    ```py
+            Text: {text_to_process}
+    ```
 
-    [PRE10]
+    ```py
+            Output Cue: Format the response in JSON with one element called summary.
+    ```
 
-    [PRE11]
+    ```py
+        """,
+    ```
 
-    [PRE12]
+    ```py
+        input_variables=["context," "instruction",
+    ```
 
-    [PRE13]
+    ```py
+            "text_to_process"]
+    ```
 
-    [PRE14]
+    ```py
+    )
+    ```
 
-    [PRE15]
+    ```py
+    # Dynamic elements for the prompt
+    ```
 
-    [PRE16]
+    ```py
+    context = "Summarizing long text passages."
+    ```
 
-    [PRE17]
+    ```py
+    instruction = "Summarize the key points from the following text in JSON format."
+    ```
 
-    [PRE18]
+    ```py
+    text_to_process = """
+    ```
 
-    [PRE19]
+    ```py
+    Mars is the fourth planet from the Sun. The surface of Mars is orange-red because…
+    ```
 
-    [PRE20]
+    ```py
+    """
+    ```
 
-    [PRE21]
+    ```py
+    formatted_prompt = prompt_structure.format_prompt(
+    ```
 
-    [PRE22]
+    ```py
+        context=context,
+    ```
 
-    [PRE23]
+    ```py
+        instruction=instruction,
+    ```
 
-    [PRE24]
+    ```py
+        text_to_process=text_to_process
+    ```
 
-    [PRE25]
+    ```py
+    )
+    ```
 
-    [PRE26]
+    ```py
+    llm = OpenAI(model_name='gpt-3.5-turbo-instruct',
+    ```
 
-    [PRE27]
+    ```py
+        temperature=0.9, max_tokens = 256)
+    ```
 
-    [PRE28]
+    ```py
+    response = llm.invoke(formatted_prompt)
+    ```
 
-    [PRE29]
+    ```py
+    print(response)
+    ```
 
     这会产生以下内容：
 
-    [PRE30]
+    ```py
+    {
+    ```
 
-    [PRE31]
+    ```py
+        "summary": "Mars is the fourth planet from the Sun, known for its orange-red surface and high-contrast features that make it a popular object for telescope viewing."
+    ```
 
-    [PRE32]
+    ```py
+    }
+    ```
 
 使用大型语言模型（LLMs）进行零样本学习时，制定有效的提示需要清楚地理解任务，仔细构建提示结构，并考虑模型如何解释和响应提示中的不同元素。通过应用这些原则，我们可以引导模型准确有效地执行各种任务。随后，我们将探讨通过积极的肯定、情感参与和其他认知行为技术来引导模型行为的方法。
 
@@ -192,33 +258,80 @@ RLHF是传统RL的一种变体，它结合了人类反馈以及通常的风险/�
 
 LangChain等应用提供了少量示例实现的简单方便的模式。考虑一个场景，StyleSprint希望为其季节性系列生成标语。在这种情况下，我们可以向模型提供内容团队编写的示例，以引导模型与品牌语气保持一致：
 
-[PRE33]
+```py
+examples = [
+    {
+        "prompt": "Describe the new summer collection in a bold and adventurous tone.",
+        "response": "Dive into summer with StyleSprint's latest collection! Featuring daring designs and vibrant colors, it's all about making bold statements. Perfect for the fearless fashionista ready to conquer the heat."
+    },
+    {
+        "prompt": "How would you introduce our eco-friendly line to environmentally conscious customers?",
+        "response": "Embrace sustainable style with StyleSprint's eco-friendly line. Crafted from recycled materials, each piece combines fashion with responsibility, designed for the eco-conscious and trendy."
+    }
+]
+```
 
 LangChain API提供了`FewShotPromptTemplate`来格式化示例：
 
-[PRE34]
+```py
+from langchain.prompts.few_shot import FewShotPromptTemplate
+from langchain.prompts.prompt import PromptTemplate
+# Create a formatter
+prompt_format = PromptTemplate(
+    input_variables=["prompt", "response"],
+    template="Prompt: {prompt}\nResponse: {response}")
+# Create the FewShotPromptTemplate
+few_shot_prompt = FewShotPromptTemplate(
+    examples=examples, example_prompt=prompt_format,
+    suffix="Prompt: {input}", input_variables=["input"])
+```
 
 我们现在可以将模板应用于一个大型语言模型（LLM），生成一个我们预期将与我们示例的语气和风格紧密一致的响应：
 
-[PRE35]
+```py
+from langchain import LLMChain, OpenAI
+# Setup the LLM and LLMChain
+llm = OpenAI(temperature=0)
+llm_chain = LLMChain(llm=llm, prompt=few_shot_prompt)
+# Define the input prompt
+input_prompt = "Create a catchy tagline for our winter collection."
+# Invoke the chain to generate output
+response = llm_chain.run(input_prompt)
+# Extract and print the generated slogan
+generated_slogan = response
+print(generated_slogan) 
+    # => Response: "Stay warm,
+    stay stylish,
+    stay ahead with StyleSprint's winter collection!"
+```
 
 现在我们有了为模型提供示例的一致和程序化方法，我们可以通过提示链来迭代模型响应。提示链通常指的是将多个提示和LLM交互串联起来，与模型进行对话并迭代构建结果。记住，模型本身无法存储信息，实际上几乎没有记忆或先前的输入和输出。相反，应用层存储先前的输入和输出，这些输入和输出随后在每个交互中提供给模型。例如，您可能从一个初始提示开始，如下所示：
 
-[PRE36]
+```py
+"Write a slogan for a winter clothing line"
+```
 
 LLM可能会生成以下内容：
 
-[PRE37]
+```py
+"Be warm, be cozy, be you"
+```
 
 然后，您可以使用以下内容构建后续提示：
 
-[PRE38]
+```py
+"Modify the slogan to be more specific about the quality of the clothing"
+```
 
 然后，您可以继续迭代以改进输出。
 
 链接化有助于引导和交互式地完善生成的文本，而不是仅仅依赖于给定的示例。请注意，我们之前的少量示例代码已经建立了一个链，我们现在可以使用它来迭代如下：
 
-[PRE39]
+```py
+response = llm_chain.run("Rewrite the last tag to something about embracing the winter")
+Response # 
+=> Response: Embrace the winter wonderland with StyleSprint's latest collection. From cozy knits to chic outerwear, our pieces will keep you stylish and warm all season long.
+```
 
 模型现在正在从我们所提供的示例和我们想要作为链的一部分包含的任何附加指令中工作。提示链与少量示例学习相结合，提供了一个强大的框架，用于迭代引导语言模型输出。通过利用应用程序状态来维护对话上下文，我们可以引导模型朝着与提供的示例一致的期望响应。这种方法在利用模型的推理能力的同时，保持了对其创造性输出的控制。
 
@@ -242,15 +355,39 @@ RAG引入了两大优势。首先，类似于链式方法，索引的外部数�
 
 在我们的实践项目中，我们重新审视了StyleSprint产品的描述。这次，我们希望利用RAG检索有关产品的详细信息以生成非常具体的描述。为了使这个项目易于访问，我们将实现一个内存中的向量存储（Faiss）而不是外部数据库。我们首先安装必要的库。我们将利用LlamaIndex对Faiss的集成支持：
 
-[PRE40]
+```py
+pip install llama-index faiss-cpu llama-index-vector-stores-faiss
+```
 
 然后，我们将导入必要的库，加载数据，并创建索引。这个向量存储将依赖于OpenAI的嵌入，因此我们必须使用有效的密钥定义`OPENAI_API_KEY`：
 
-[PRE41]
+```py
+assert os.getenv("OPENAI_API_KEY") is not None, 
+    "Please set OPENAI_API_KEY"
+# load document vectors
+documents = SimpleDirectoryReader("products/").load_data()
+# load faiss index
+d = 1536 # dimension of the vectors
+faiss_index = faiss.IndexFlatL2(d)
+# create vector store
+vector_store = FaissVectorStore(faiss_index=faiss_index)
+# initialize storage context
+storage_context = StorageContext.from_defaults(
+    vector_store=vector_store)
+# create index
+index = VectorStoreIndex.from_documents(
+    documents,storage_context=storage_context)
+```
 
 现在我们有一个向量存储，模型可以依赖它来检索我们非常具体的产品数据。这意味着我们可以查询非常具体的、由我们的数据增强的响应：
 
-[PRE42]
+```py
+# query the index
+query_engine = index.as_query_engine()
+response = query_engine.query("describe summer dress with price")
+print(response) 
+=> A lightweight summer dress with a vibrant floral print is priced at 59.99.
+```
 
 结果是，不仅提供了夏季连衣裙的准确描述，还包括了价格等具体细节。这种详细程度丰富了客户的购物体验，为顾客在购买时考虑提供了相关和实时信息。
 
@@ -272,11 +409,35 @@ RAG引入了两大优势。首先，类似于链式方法，索引的外部数�
 
 以下是一个实现我们生成产品描述的RAGAS评估的简化代码片段。完整的可工作实现可在本书的GitHub配套文件夹的*第7章*中找到（[https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python](https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python))。
 
-[PRE43]
+```py
+# Define the evaluation data
+eval_data: Dict[str, Any] = {
+   "question": questions, # list of sampled questions
+   "answer": engine_responses, # responses from RAG application
+   "contexts": contexts, # product metadata
+"ground_truth": ground_truth, # corresponding descriptions written by a human
+}
+# Create a dataset from the evaluation data
+dataset: Dataset = Dataset.from_dict(eval_data)
+# Define the evaluation metrics
+metrics: List[Callable] = [
+    faithfulness,
+    answer_relevancy,
+    context_precision,
+    context_recall,
+    context_relevancy,
+    harmfulness,
+]
+# Evaluate the model using the defined metrics
+result: Dict[str, float] = evaluate(dataset, metrics=metrics)
+print(result)
+```
 
 我们的评估计划应产生以下结果：
 
-[PRE44]
+```py
+{'faithfulness': 0.9167, 'answer_relevancy': 0.9961, 'context_precision': 0.5000, 'context_recall': 0.7500, 'harmfulness': 0.0000}
+```
 
 我们可以观察到，系统在生成准确和相关的答案方面表现良好，这从高忠实度和答案相关性得分中可以看出。虽然上下文精确度还有改进的空间，但一半的相关信息被正确识别。上下文召回率有效，检索了大部分相关上下文。有害内容的缺失确保了安全交互。总体而言，系统在准确和上下文中回答方面表现出稳健的性能，但可以从改进最相关上下文片段的定位中受益。
 

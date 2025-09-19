@@ -80,11 +80,18 @@ Playground允许你交互式地探索各种深度学习模型，例如AlexNet，
 
 1.  打开本章的示例代码，该代码位于`Chapter_7_DQN_CNN.py`文件中。代码与`Chapter_6_lunar.py`非常相似，但有一些关键的不同之处。我们将只关注这个练习中的差异。如果你需要更好的代码解释，请回顾[第6章](a9e9aefb-40af-4886-9b4f-94e725dd2f92.xhtml)，*深入DQN*：
 
-[PRE0]
+```py
+from wrappers import *
+```
 
 1.  从顶部开始，唯一的改变是从一个名为`wrappers.py`的本地文件中导入一个新的模块。我们将通过创建环境来检查这个模块的作用：
 
-[PRE1]
+```py
+env_id = 'PongNoFrameskip-v4'
+env = make_atari(env_id)
+env = wrap_deepmind(env)
+env = wrap_pytorch(env)
+```
 
 1.  由于几个原因，我们在这里以相当不同的方式创建环境。三个函数`make_atari`、`wrap_deepmind`和`wrap_pytorch`都位于我们之前导入的新`wrappers.py`文件中。这些包装器基于OpenAI为创建Gym环境包装器而制定的规范。我们稍后会更多地讨论包装器，但现在，这三个函数执行以下操作：
 
@@ -96,19 +103,39 @@ Playground允许你交互式地探索各种深度学习模型，例如AlexNet，
 
 1.  之后，我们需要修改一些设置超参数的其他代码，如下所示：
 
-[PRE2]
+```py
+epsilon_start = 1.0
+epsilon_final = 0.01
+epsilon_decay = 30000
+
+epsilon_by_episode = lambda episode: epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1\. * episode / epsilon_decay)
+
+plt.plot([epsilon_by_episode(i) for i in range(1000000)])
+plt.show()
+```
 
 1.  突出的行显示了我们所做的更改。我们主要改变的是增加值——很多。Pong Atari环境是最简单的，但仍可能需要一百万次迭代才能解决。在某些系统上，这可能需要几天时间：
 
-[PRE3]
+```py
+model = CnnDQN(env.observation_space.shape, env.action_space.n)
+optimizer = optim.Adam(model.parameters(), lr=0.00001)
+
+replay_start = 10000
+replay_buffer = ReplayBuffer(100000)
+```
 
 1.  在前面的代码块中，我们可以看到我们正在构建一个新的类`CnnDQN`。我们很快就会接触到它。之后，代码基本上相同，除了有一个新的变量`replay_start`以及现在设置的回放缓冲区的大小。我们的缓冲区大小增加了100倍，从1,000条记录增加到100,000条记录。然而，我们希望在缓冲区完全填满之前就能训练智能体。毕竟，那是一个很大的数字。因此，我们使用`replay_start`来表示当缓冲区用于训练智能体时的训练起点：
 
-[PRE4]
+```py
+episodes = 1400000
+```
 
 1.  接下来，我们将剧集计数更新到一个更高的数值。这是因为我们可以预期这个环境至少需要一百万个剧集来训练一个智能体：
 
-[PRE5]
+```py
+if episode % 200000 == 0:
+  plot(episode, all_rewards, losses) 
+```
 
 1.  除了训练循环的最后部分之外，所有其他代码都保持不变，这部分代码可以在前面的代码中看到。这段代码显示我们每200,000个回合绘制一次迭代。以前，我们每2,000个回合就做一次。当然，你可以增加这个值，或者完全删除它，如果长时间训练感到烦恼的话。
 
@@ -128,11 +155,53 @@ Playground允许你交互式地探索各种深度学习模型，例如AlexNet，
 
 1.  到目前为止，我们只需要关注一个名为`CnnDQN`的新类的代码，如下所示：
 
-[PRE6]
+```py
+class CnnDQN(nn.Module):
+ def __init__(self, input_shape, num_actions):
+   super(CnnDQN, self).__init__()
+
+   self.input_shape = input_shape
+   self.num_actions = num_actions
+
+   self.features = nn.Sequential(
+     nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
+     nn.ReLU(),
+     nn.Conv2d(32, 64, kernel_size=4, stride=2),
+    nn.ReLU(),
+     nn.Conv2d(64, 64, kernel_size=3, stride=1),
+     nn.ReLU())
+   self.fc = nn.Sequential(
+     nn.Linear(self.feature_size(), 512),
+     nn.ReLU(),
+     nn.Linear(512, self.num_actions))
+
+  def forward(self, x):
+    x = self.features(x)
+    x = x.view(x.size(0), -1)
+    x = self.fc(x)
+    return x
+
+ def feature_size(self): 
+   return self.features(autograd.Variable(torch.zeros(1,
+     *self.input_shape))).view(1, -1).size(1)
+
+  def act(self, state, epsilon):
+    if random.random() > epsilon:
+      state = autograd.Variable(torch.FloatTensor(
+        np.float32(state)).unsqueeze(0), volatile=True)
+      q_value = self.forward(state)
+      action = q_value.max(1)[1].data[0]
+    else:
+      action = random.randrange(env.action_space.n)
+    return action
+```
 
 1.  上述类替换了我们的先前vanilla DQN版本。两者之间存在一些关键差异，所以让我们从网络设置和构建第一个卷积层开始，如下所示：
 
-[PRE7]
+```py
+self.features = nn.Sequential(
+     nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
+```
 
 1.  首先要注意的是，我们正在构建一个新的模型并将其放入`self.features`。`features`将是我们的模型，用于执行卷积和分离特征。第一层是通过传递`input_shape`、过滤器数量（32）、`kernel_size`（8）和`stride`（4）来构建的。所有这些输入的详细信息都可以在这里找到：
 
@@ -152,11 +221,20 @@ Playground允许你交互式地探索各种深度学习模型，例如AlexNet，
 
 1.  在图像上应用内核的过程是通过简单地乘以块中的值与图像中的每个值来完成的。所有这些值相加，然后输出为输出滤波器操作的结果中的单个元素：
 
-[PRE8]
+```py
+self.fc = nn.Sequential(
+     nn.Linear(self.feature_size(), 512),
+```
 
 1.  使用构建卷积层模型的代码，我们构建另一个线性模型，就像我们在之前的例子中所构建的那样。这个模型将卷积层的输出展平，并使用这个展平的模型来预测动作。在这种情况下，我们最终有两个网络模型，但请注意，我们将从第一个模型传递输出到第二个模型，以及从第一个模型反向传播错误到第二个模型。`feature_size`函数只是一个辅助函数，以便我们可以计算CNN模型到`Linear`模型的输入：
 
-[PRE9]
+```py
+def forward(self, x):
+  x = self.features(x)
+  x = x.view(x.size(0), -1)
+  x = self.fc(x)
+  return x
+```
 
 1.  在`forward`函数内部，我们可以看到我们模型的预测已经改变。现在，我们将通过将其传递到`self.features`或我们模型的CNN部分来分解预测。然后，我们需要展平数据，并通过`self.fc`将其馈入线性部分。
 
@@ -184,29 +262,80 @@ DQN和DDQN之间的区别
 
 1.  打开`Chapter_7_DoubleDQN.py`文件中的代码示例。这个例子是从我们之前看过的`Chapter_6_DQN_lunar.py`文件构建的。这里有一些细微的变化，所以我们将详细审查每一个，从模型构建开始：
 
-[PRE10]
+```py
+current_model = DQN(env.observation_space.shape[0], env.action_space.n)
+target_model = DQN(env.observation_space.shape[0], env.action_space.n)
+
+optimizer = optim.Adam(current_model.parameters())
+```
 
 1.  如其名称所示，我们现在构建了两个DQN模型：一个用于在线使用，一个作为目标。我们训练`current_model`的值，然后每*x*次迭代后使用以下代码切换回目标模型：
 
-[PRE11]
+```py
+def update_target(current_model, target_model):
+  target_model.load_state_dict(current_model.state_dict())
+
+update_target(current_model, target_model)
+```
 
 1.  `update_target`函数通过使用`current_model`更新`target_model`，确保目标Q值总是足够地提前或落后，因为我们使用跳过跟踪并回顾过去。
 
 1.  随后是`compute_td_loss`函数，需要按照以下方式更新：
 
-[PRE12]
+```py
+def compute_td_loss(batch_size):
+ state, action, reward, next_state, done = replay_buffer.sample(batch_size)
+
+ state = autograd.Variable(torch.FloatTensor(np.float32(state)))
+ next_state = autograd.Variable(torch.FloatTensor(np.float32(next_state)),
+   volatile=True)
+ action = autograd.Variable(torch.LongTensor(action))
+ reward = autograd.Variable(torch.FloatTensor(reward))
+ done = autograd.Variable(torch.FloatTensor(done))
+
+ q_values = current_model(state)
+ next_q_values = current_model(next_state)
+ next_q_state_values = target_model(next_state)
+
+ q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1) 
+ next_q_value = next_q_state_values.gather(1,
+ torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
+ expected_q_value = reward + gamma * next_q_value * (1 - done)
+
+ loss = (q_value - autograd.Variable(expected_q_value.data)).pow(2).mean()
+
+ optimizer.zero_grad()
+ loss.backward()
+ optimizer.step()
+
+ return loss
+```
 
 1.  函数中突出显示的行显示了被更改的行。注意新的模型`current_model`和`target_model`是如何现在用来预测损失，而不仅仅是单个模型本身。最后，在训练或试错循环中，我们可以看到一些最终的变化：
 
-[PRE13]
+```py
+action = current_model.act(state, epsilon)
+```
 
 1.  第一个变化是我们现在从`current_model`模型中获取动作：
 
-[PRE14]
+```py
+if episode % 500 == 0:
+ update_target(current_model, target_model)
+```
 
 1.  第二个变化是使用`update_target`更新`target_model`，使用`current_model`的权重：
 
-[PRE15]
+```py
+def play_game():
+ done = False
+ state = env.reset()
+ while(not done):
+   action = current_model.act(state, epsilon_final)
+   next_state, reward, done, _ = env.step(action)
+   env.render()
+   state = next_state
+```
 
 1.  我们还需要更新`play_game`函数，以便我们可以从`current_model`中获取动作。如果你将其更改为目标模型，可能会很有趣地看到会发生什么。
 
@@ -228,21 +357,69 @@ DDQN的详细可视化
 
 1.  这个例子使用之前的例子作为源，但在许多重要细节上有所不同：
 
-[PRE16]
+```py
+class DDQN(nn.Module):
+ def __init__(self, num_inputs, num_outputs):
+   super(DDQN, self).__init__() 
+
+   self.feature = nn.Sequential(
+     nn.Linear(num_inputs, 128),
+     nn.ReLU())
+
+   self.advantage = nn.Sequential(
+     nn.Linear(128, 128),
+     nn.ReLU(),
+     nn.Linear(128, num_outputs))
+
+   self.value = nn.Sequential(
+     nn.Linear(128, 128),
+     nn.ReLU(),
+     nn.Linear(128, 1))
+
+ def forward(self, x):
+   x = self.feature(x)
+   advantage = self.advantage(x)
+   value = self.value(x)
+   return value + advantage - advantage.mean()
+
+ def act(self, state, epsilon):
+   if random.random() > epsilon:
+     state = autograd.Variable(torch.FloatTensor(state).unsqueeze(0),
+       volatile=True)
+     q_value = self.forward(state)
+     action = q_value.max(1)[1].item() 
+  else:
+    action = random.randrange(env.action_space.n)
+  return action
+```
 
 1.  除了`act`函数外，DDQN类几乎完全是新构建的。在`init`函数中，我们可以看到三个子模型的构建：`self.feature`、`self.value`和`self.advantage`。然后，在`forward`函数中，我们可以看到输入**x**是如何被第一个**feature**子模型转换的，然后输入到优势和价值子模型中。然后，输出`advantage`和`value`被用来计算预测值，如下所示：
 
-[PRE17]
+```py
+return value + advantage - advantage.mean()
+```
 
 1.  我们可以看到预测值是表示为价值的州价值。这被添加到优势或组合状态-动作值中，并从平均值或平均中减去。结果是最佳优势的预测或智能体可能学习到的优势：
 
-[PRE18]
+```py
+current_model = DDQN(env.observation_space.shape[0], env.action_space.n)
+target_model = DDQN(env.observation_space.shape[0], env.action_space.n)
+```
 
 1.  下一个变化是我们现在在之前的double DQN示例中构建两个DDQN模型实例，而不是一个DQN。这意味着我们也继续使用两个模型来评估我们的目标。毕竟，我们不想退步。
 
 1.  下一个主要变化发生在`compute_td_loss`函数中。更新的行如下：
 
-[PRE19]
+```py
+q_values = current_model(state)
+next_q_values = target_model(next_state)
+
+q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+next_q_value = next_q_values.max(1)[0]
+expected_q_value = reward + gamma * next_q_value * (1 - done)
+
+loss = (q_value - expected_q_value.detach()).pow(2).mean()
+```
 
 1.  这实际上简化了前面的代码。现在，我们可以清楚地看到我们的下一个_q_values是从`target_model`中获取的。
 
@@ -264,13 +441,75 @@ DDQN的详细可视化
 
 1.  这个样本的第一个重大变化是将 `ReplayBuffer` 类升级到 `NaivePrioritizedBuffer`，如下所示：
 
-[PRE20]
+```py
+class NaivePrioritizedBuffer(object):
+ def __init__(self, capacity, prob_alpha=0.6):
+   self.prob_alpha = prob_alpha
+   self.capacity = capacity
+   self.buffer = []
+   self.pos = 0
+   self.priorities = np.zeros((capacity,), dtype=np.float32)
+
+ def push(self, state, action, reward, next_state, done):
+   assert state.ndim == next_state.ndim
+   state = np.expand_dims(state, 0)
+   next_state = np.expand_dims(next_state, 0)
+   max_prio = self.priorities.max() if self.buffer else 1.0
+
+   if len(self.buffer) < self.capacity:
+     self.buffer.append((state, action, reward, next_state, done))
+   else:
+     self.buffer[self.pos] = (state, action, reward, next_state, done)
+
+   self.priorities[self.pos] = max_prio
+   self.pos = (self.pos + 1) % self.capacity
+
+ def sample(self, batch_size, beta=0.4):
+   if len(self.buffer) == self.capacity:
+     prios = self.priorities
+   else:
+     prios = self.priorities[:self.pos]
+
+   probs = prios ** self.prob_alpha
+   probs /= probs.sum()
+
+   indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+   samples = [self.buffer[idx] for idx in indices]
+
+   total = len(self.buffer)
+   weights = (total * probs[indices]) ** (-beta)
+   weights /= weights.max()
+   weights = np.array(weights, dtype=np.float32)
+
+   batch = list(zip(*samples))
+   states = np.concatenate(batch[0])
+   actions = batch[1]
+   rewards = batch[2]
+   next_states = np.concatenate(batch[3])
+   dones = batch[4]
+
+   return states, actions, rewards, next_states, dones, indices, weights
+
+  def update_priorities(self, batch_indices, batch_priorities):
+    for idx, prio in zip(list(batch_indices), [batch_priorities]):
+      self.priorities[idx] = prio
+
+  def __len__(self):
+    return len(self.buffer)
+```
 
 1.  这段代码天真地根据观察到的错误预测分配优先级。然后，它根据优先级顺序对这些值进行排序。接着，它随机抽取这些事件。再次，由于抽样是随机的，但样本是按优先级对齐的，因此随机抽样通常会抽取平均误差的样本。
 
 1.  发生的事情是通过重新排序样本，我们重新排序到预期的实际数据分布。因此，为了解决这个问题，我们引入了一个新的因子，称为 **beta**，或 **重要性抽样**。**Beta** 允许我们控制事件的分布，并基本上将它们重置到原始位置：
 
-[PRE21]
+```py
+beta_start = 0.4
+beta_episodes = episodes / 10 
+beta_by_episode = lambda episode: min(1.0,
+  beta_start + episode * (1.0 - beta_start) / beta_episodes)
+
+plt.plot([beta_by_episode(i) for i in range(episodes)])
+```
 
 1.  现在，我们将定义一个函数，使用前面的代码返回随剧集增加的 beta。然后，代码像我们绘制 epsilon 一样绘制 beta，如下所示：
 
@@ -280,15 +519,56 @@ beta 和 epsilon 绘图示例
 
 1.  在修改了重放缓冲区中的样本函数之后，我们还需要更新 `compute_td_loss` 函数，如下所示：
 
-[PRE22]
+```py
+def compute_td_loss(batch_size, beta):
+  state, action, reward, next_state, done, indices, 
+ weights = replay_buffer.sample(batch_size, beta)
+
+  state = autograd.Variable(torch.FloatTensor(np.float32(state)))
+  next_state = autograd.Variable(torch.FloatTensor(np.float32(next_state)))
+  action = autograd.Variable(torch.LongTensor(action))
+  reward = autograd.Variable(torch.FloatTensor(reward))
+  done = autograd.Variable(torch.FloatTensor(done))
+  weights = autograd.Variable(torch.FloatTensor(weights))
+
+  q_values = current_model(state)
+  next_q_values = target_model(next_state)
+
+  q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+  next_q_value = next_q_values.max(1)[0]
+  expected_q_value = reward + gamma * next_q_value * (1 - done)
+
+  loss = (q_value - expected_q_value.detach()).pow(2).mean()
+  prios = loss + 1e-5
+  loss = loss.mean()
+
+  optimizer.zero_grad()
+  loss.backward()
+  replay_buffer.update_priorities(indices, prios.data.cpu().numpy())
+  optimizer.step()
+
+  return loss
+```
 
 1.  只有前面突出显示的行与我们已经看到的有所不同。第一个区别是返回了两个新的值：`indices` 和 `weights`。然后，我们可以看到 `replay_buffer` 根据之前返回的 `indices` 调用 `update_priorities`：
 
-[PRE23]
+```py
+if done:
+  if episode > buffer_size and avg_reward > min_play_reward:
+    play_game() 
+  state = env.reset()
+  all_rewards.append(episode_reward)
+  episode_reward = 0
+```
 
 1.  接下来，在训练循环内部，我们更新了 `play_game` 的调用，并引入了一个新的 `min_play_reward` 阈值。这允许我们在渲染游戏之前设置一些最低奖励阈值。渲染游戏可能相当耗时，这将也会加快训练速度：
 
-[PRE24]
+```py
+if len(replay_buffer) > batch_size:
+  beta = beta_by_episode(episode)
+  loss = compute_td_loss(batch_size, beta)
+  losses.append(loss.item())
+```
 
 1.  继续在训练循环内部，我们可以看到我们如何提取 `beta` 并在 `td_compute_loss` 函数中使用它。
 

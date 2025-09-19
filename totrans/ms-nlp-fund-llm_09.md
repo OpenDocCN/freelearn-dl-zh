@@ -130,25 +130,42 @@
 
 在这个例子中，我们希望使用 LLM 告诉我们一个简单问题的答案，这个问题需要训练有素的 LLM 应该拥有的常识：
 
-[PRE0]
+```py
+"Who are the members of Metallica. List them as comma separated."
+```
 
 然后，我们定义了一个简单的链，称为 `LLMChain`，并给它提供 `LLM` 变量和提示。
 
 LLM 确实知道答案，并从其知识库中返回：
 
-[PRE1]
+```py
+'James Hetfield, Lars Ulrich, Kirk Hammett, Robert Trujillo'
+```
 
 ## 请求输出结构 – 使 LLM 以特定的数据格式提供输出
 
 这次，我们希望输出具有特定的语法，这可能允许我们以计算方式使用它进行下游任务：
 
-[PRE2]
+```py
+"List the first 10 elements from the periodical table as comma separated list."
+```
 
 现在，我们添加了一个用于实现语法的功能。我们定义了 `output_parser 变量`，并使用不同的函数生成输出，`predict_and_parse()`。
 
 输出如下：
 
-[PRE3]
+```py
+['Hydrogen',
+'Helium',
+'Lithium',
+'Beryllium',
+'Boron',
+'Carbon',
+'Nitrogen',
+'Oxygen',
+'Fluorine',
+'Neon']
+```
 
 ## 发展到流畅的对话 – 插入记忆元素，以便将先前交互作为后续提示的参考和上下文
 
@@ -158,39 +175,91 @@ LLM 确实知道答案，并从其知识库中返回：
 
 而不是使用基本模板进行提示，例如
 
-[PRE4]
+```py
+"List all the holidays you know as comma separated list."
+```
 
 现在模板已经适应了记忆功能：
 
-[PRE5]
+```py
+"Current conversation:
+{history}
+Your task:
+{input}}"
+```
 
 在这里，你可以将这个字符串视为类似于Python `f"…"`字符串的格式，其中`history`和`input`是字符串变量。`ConversationChain()`函数处理这个提示模板，并插入这两个变量以完成提示字符串。`input`变量由函数本身生成，当我们激活记忆机制时，然后我们运行以下内容：
 
-[PRE6]
+```py
+conversation.predict_and_parse(input="Write the first 10 holidays you know, as a comma separated list.")
+```
 
 输出如下：
 
-[PRE7]
+```py
+['Christmas',
+'Thanksgiving',
+"New Year's Day",
+'Halloween',
+'Easter',
+'Independence Day',
+"Valentine's Day",
+"St. Patrick's Day",
+'Labor Day',
+'Memorial Day']
+```
 
 现在，让我们提出一个只有在前一个请求和输出上下文中才能理解的后续请求：
 
-[PRE8]
+```py
+conversation.predict_and_parse(input=" Observe the list of holidays you printed and remove all the non-religious holidays from the list.")
+```
 
 的确，我们得到了适当的输出：
 
-[PRE9]
+```py
+['Christmas',
+'Thanksgiving',
+"New Year's Day",
+'Easter',
+"Valentine's Day",
+"St. Patrick's Day,"]
+```
 
 为了完成这个例子，让我们假设我们的意图是快速生成一个包含名称和描述的节日表格：
 
-[PRE10]
+```py
+"For each of these, tell about the holiday in 2 sentences.
+Form the output in a json format table.
+The table's name is "holidays" and the fields are "name" and "description".
+For each row, the "name" is the holiday's name, and the "description" is the description you generated.
+The syntax of the output should be a json format, without newline characters."
+```
 
 现在，我们从链中得到了一个格式化的字符串：
 
-[PRE11]
+```py
+{
+  "holidays": [
+    {
+      "name": "Christmas",
+      "description": "Christmas is a religious holiday that celebrates the birth of Jesus Christ and is widely observed as a secular cultural and commercial phenomenon."
+    },
+    {
+      "name": "Thanksgiving",
+      "description": "Thanksgiving is a national holiday in the United States, celebrated on the fourth Thursday of November, and originated as a harvest festival."
+    },
+    {
+      "name": "Easter",
+      "description": "Easter is […]
+```
 
 我们可以使用pandas将这个字符串转换为表格：
 
-[PRE12]
+```py
+dict = json.loads(output)
+pd.json_normalize(dict[ "holidays"])
+```
 
 在pandas将`dict`处理为DataFrame之后，我们可以在*表9.1*中观察到它：
 
@@ -251,17 +320,44 @@ LLM 确实知道答案，并从其知识库中返回：
 
 我们要求LLM审阅内容，整理一个总结，并以英语、俄语和德语呈现该总结：
 
-[PRE13]
+```py
+Please review the entire content, summarize it to the length of 4 sentence, then translate it to Russian and to German.
+Make sure the summary is consistent with the content.
+Put the string '\n----\n' between the English part of the answer and the Russian part.
+Put the string '\n****\n' between the Russian part of the answer and the German part.
+```
 
 返回的输出非常准确，因为它完全捕捉了TED演讲的精髓。我们编辑它以移除分隔字符串，得到：
 
-[PRE14]
+```py
+The content emphasizes the importance of good
+relationships in keeping us happy and healthy
+throughout our lives. It discusses how social
+connections, quality of close relationships, and
+avoiding conflict play crucial roles in our well-
+being. The study follows the lives of 724 men over
+75 years, highlighting the significance of
+relationships over wealth and fame in leading a
+fulfilling life.
+Russian:
+Содержание подчеркивает
+Важность [...]
+German:
+Der
+Inhalt betont die Bedeutung  [...]
+```
 
 现在，为了使内容对德语使用者来说简单易懂，我们要求LLM将德语总结形成几个最佳描述视频内容的要点。
 
 它做得很好，输出如下：
 
-[PRE15]
+```py
+- Betonung der Bedeutung guter Beziehungen für Glück und Gesundheit
+- Diskussion über soziale Verbindungen, Qualität enger Beziehungen und Konfliktvermeidung
+- Verfolgung des Lebens von 724 Männern über 75 Jahre in der Studie
+- Hervorhebung der Bedeutung von Beziehungen im Vergleich zu Reichtum und Ruhm
+- Fokus auf Beziehungen als Schlüssel zu einem erfüllten Leben
+```
 
 虽然此代码旨在作为一个基本的证明概念，但人们可以看到如何简单地向其中添加更多数据源，自动化它以持续运行，并根据发现采取行动。虽然一个可读的总结很有帮助，但人们可以将代码修改为根据确定的内容采取行动并执行下游应用。
 
@@ -299,7 +395,9 @@ LLMLingua利用一个紧凑、训练有素的语料库模型，如LLaMA-7B，来
 
 为了缩小该功能的范围以便进行一系列实验，出版物来自特定的AI出版物类别，用户提出的问题是以下内容：
 
-[PRE16]
+```py
+"Does this publication involve Reinforcement Learning?"
+```
 
 这个问题需要对每一篇出版物进行深入和有洞察力的审查，因为在某些情况下，一篇出版物讨论了一种新颖的算法，其中在出版物的任何地方都没有明确提到强化学习这个术语，但根据算法的描述，可以推断出它确实利用了强化学习的概念，并将其标记为强化学习。
 
@@ -477,7 +575,11 @@ AutoGen由微软、宾夕法尼亚州立大学和华盛顿大学的研究合作�
 
 下面是屏幕上显示的自动化对话的要点：
 
-[PRE17]python
+```py
+lead (to manager_0):
+Refer to the Python dict that is in this [...]
+programmer (to manager_0):
+```python
 
 import pandas as pd
 
@@ -503,7 +605,71 @@ programmer (向 manager_0):
 
 终止
 
-[PRE18]
+```py
+
+As can be seen, the conversation had four interactions, each between two agents. Each interaction starts by telling the user which agent is talking to which other agent; these parts are in bold letters in the preceding printout.
+
+In the second interaction, the programmer provided a complete Python script. We pasted only the first four commands to keep it short, but you can observe the full script in the notebook. The QA engineer ran the script and reported that it ran well. If it hadn’t run well, it would have returned an `exitcode: 1` and would have provided the programmer with the error specification for the programmer to fix the code; the conversation would have continued until a solution was found, or, if not, the team would report failure and conclude the conversation.
+
+This task provided us with the code to create the visual we wanted. Note that we didn’t ask the agents to run the code and provide us with the visual; we asked for the code itself. One could, if desired, configure the LLMs to run the code and provide us with the resulting image. See AutoGen’s repo for the various examples and capabilities.
+
+In the next code cell, we pasted the code that the team created. The code runs well and visualizes the three distributions exactly as we asked the team (see *Figure 9**.2*):
+
+![Figure 9.2 – Visualizing the value that prompt compression provides](img/B18949_09_2.jpg)
+
+Figure 9.2 – Visualizing the value that prompt compression provides
+
+The top visualization displays the distributions of the token count for the original prompts (blue/light shade) and the compressed prompts (orange/dark shade), and the bottom part of the figure shows the distribution of the ratio between each pair of prompts. *Figure 9**.2* shows just how effective the reduction rate is, as this ratio translates to a reduction in API cost.
+
+This concludes the visualization of the significance of the experiments.
+
+#### Human intervention in the team’s tasks
+
+Note that all three agents are driven by LLMs, thus making this entire task automatically performed without human intervention. One could change the lead’s configuration to represent a human user, meaning you. If you did that, then you would be able to intervene and demand certain verifications from the QA engineer or certain additional features in the code from the programmer.
+
+This could be particularly useful if you wanted to run the code yourself in your environment instead of letting the QA engineer agent run it in its own environment. Your environments are different. One advantage of doing this is when the code is required to load a data file that you have locally. If you told the agent to write code that loads this file, then when the QA engineer agent ran it, it would tell you the code failed since that data file doesn’t exist in its environment. In this case, you may elect to be the one who iterates with the programmer and the one who runs the code during the iterations and provides feedback.
+
+Another case where you would want to be the one running the code and providing feedback is when the QA engineer encounters an error or a bug in the programmer’s code, but the two agents aren’t able to figure out the solution. In that case, you would want to intervene and provide your insight. For instance, in a case where a for loop iterates over a dict’s keys instead of its values, you may intervene and enter *The code runs but the for loop is iterating on the dict’s keys. It should iterate over its values for the* *key ‘key1.*
+
+We can now move on to the second part of concluding the evaluation.
+
+#### Reviewing the results of the experiments and forming an educated conclusion
+
+As with every complex evaluation where we perform experiments to target the impact of a particular feature, we would now like to derive a qualitative summary of the results and suggest a conclusion for our audience, whether it is the decision-makers in the company or the research community in academia.
+
+What is unique about this part is that the act of deriving a conclusion has never been left to any mathematical or algorithmic model to derive. As we humans govern the various evaluations, and although we may seek to automate as much as possible to feed into the final conclusion, we are the entity that forms the final impression and conclusion.
+
+Here, we attempt to automate that final part. We will assign a team of expert agents to provide an educated summary of the results that the evaluation notebook printed out. We'll then push the team to provide us with a recommendation as to whether we should implement the new feature of prompt compression or not. We provide the team with the actual results of the evaluation notebook, but in order to examine its reliability, we then task it again, this time providing it with mocked results that are much poorer, hoping that the team will apply judgment and provide a different recommendation. All of this is done without any human intervention.
+
+As we did before, we start by defining the task for our team to fulfill.
+
+#### Defining the task to be fulfilled by the team
+
+Our aim is to provide the team with the printout of the evaluation notebook from the previous section. That printout describes, in words, the change in agreement rate, the impact on the number of prompt tokens, and the processing runtime, all due to employing the LLMLingua prompt compression method.
+
+We then copy that from the previous notebook and paste it as a text string.
+
+Note that we have also created another text string of results (which are mocked results that are much worse than the true results), but we see that the agreement rate is very low, and the reduction in token count due to compression is much less significant.
+
+As we did in the visualization case, we then create the instructions for the team; we paste the results into the task description for the team to refer to when deriving its conclusion. We have two task descriptions, as we will have two separate runs, one with the true results and one with the mocked bad results.
+
+We will now allocate the roles.
+
+#### Defining the agents and assigning team members roles
+
+For this task, we would need three team members: a principal engineer who is an experienced technical person, a technical writer who writes the conclusion as per the principal engineer’s feedback, and a team lead to verify when the task is complete, which was defined in the previous task.
+
+#### Defining a group conversation
+
+Here, we define the group conversation, just like we did in the visualization part. This time, we have a new group conversation manager, as the group consists of different agents.
+
+#### Deploying the team
+
+The team lead tasks the manager with the task we defined. The manager then delegates the work to the writer and the principal engineer.
+
+Here are the highlights of that automated conversation as it appears on the screen:
+
+```
 
 lead (向 manager_1):
 
@@ -523,11 +689,29 @@ principal_engineer (向 manager_1):
 
 [...]
 
-[PRE19]
+```py
+
+The agents have a few iterations between them and come to an agreement regarding the summary and the conclusion.
+
+They provide a summary of the numeric results and seal it with the following recommendation:
+
+```
 
 仔细考虑提示压缩带来的权衡是至关重要的，因为虽然它可能导致资源节约，但可能会对处理效率产生影响。采用提示压缩的决定应该基于对这些权衡的全面理解。
 
-[PRE20]
+```py
+
+The team agrees on a cautious approach to presenting the various trade-offs and avoids making a decision in spite of being tasked to do so.
+
+One would wonder, could a definite decision to adopt or not to adopt the method be made here?
+
+#### Evaluation of the team’s judgment
+
+Now, we will ask the team to perform the same action, this time providing it with the mocked results that make the compression method seem much less effective and with a great reduction in agreement with the classification of the noncompressed method.
+
+The team has a conversation, and the final agreement summary is sealed with the following statement:
+
+```
 
 总体而言，结果表明，虽然提示压缩可能导致成本节约和资源减少，但它是以降低分类性能和显著增加处理时间为代价的。
 

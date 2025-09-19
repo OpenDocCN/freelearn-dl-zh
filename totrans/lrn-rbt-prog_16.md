@@ -168,7 +168,9 @@
 
 1.  通过 SSH 登录。在终端中，键入以下内容：
 
-    [PRE0]
+    ```py
+    pi@myrobot:~ $ sudo raspi-config
+    ```
 
 1.  现在，你应该能看到 `raspi-config`。使用光标键选择**接口选项**菜单项，然后按*Enter*。
 
@@ -176,7 +178,9 @@
 
 1.  你需要重新启动以使此更改生效：
 
-    [PRE1]
+    ```py
+    pi@myrobot:~ $ sudo reboot
+    ```
 
 为了验证我们能否获取图片，我们需要 `picamera` 包。在撰写本文时，Raspberry Pi OS 中已经安装了 `picamera`。
 
@@ -188,7 +192,9 @@
 
 1.  重新连接到 Raspberry Pi 并键入以下内容以获取图片：
 
-    [PRE2]
+    ```py
+    raspistill command takes a still image, and the -o parameter tells it to store that image in test.jpg. This command may take a while; taking a still can be slow if light conditions are poor.
+    ```
 
 1.  然后，你可以使用你的 SFTP 客户端（我们在 [*第 4 章*](B15660_04_Final_ASB_ePub.xhtml#_idTextAnchor063)，*为机器人准备无头 Raspberry Pi*）下载此镜像并在你的电脑上验证它。你会注意到图片是颠倒的，这是由于相机安装方式造成的。不用担心——我们将通过软件进行纠正。
 
@@ -202,23 +208,36 @@
 
 1.  OpenCV有一些依赖项需要首先安装：
 
-    [PRE3]
+    ```py
+    pi@myrobot:~ $ sudo apt install -y libavcodec58 libilmbase23 libgtk-3-0 libatk1.0-0 libpango-1.0-0 libavutil56 libavformat58 libjasper1 libopenexr23 libswscale5 libpangocairo-1.0-0 libtiff5 libcairo2 libwebp6 libgdk-pixbuf2.0-0 libcairo-gobject2 libhdf5-dev
+    pi@myrobot:~ $ sudo pip3 install "opencv_python_headless<4.5" "opencv_contrib_python_headless<4.5"
+    ```
 
 1.  树莓派操作系统需要为OpenCV工作而识别一个库。此行会在每次登录到Pi时识别该库。我们也应该为此会话做好准备：
 
-    [PRE4]
+    ```py
+    pi@myrobot:~ $ echo export LD_PRELOAD=/usr/lib/arm-linux-gnueabihf/libatomic.so.1 >>.bashrc
+    pi@myrobot:~ $ source .bashrc
+    ```
 
 1.  **Flask**是一个用于创建网络服务器的库，我们将使用它将视频数据流式传输到浏览器：
 
-    [PRE5]
+    ```py
+    pi@myrobot:~ $ sudo pip3 install flask
+    ```
 
 1.  **NumPy**，这个数值Python库，非常适合处理大量数字。存储在计算机上的图像本质上是一大块数字，每个小点都有与我们在[*第9章*](B15660_09_Final_ASB_ePub.xhtml#_idTextAnchor171)，“用Python编程RGB LED灯带”中发送到LED的三色数字相似的内容：
 
-    [PRE6]
+    ```py
+    pi@myrobot:~ $ sudo apt install -y libgfortran5 libatlas3-base
+    pi@myrobot:~ $ sudo pip3 install numpy
+    ```
 
 1.  我们需要为`picamera`安装大型数组扩展。这将帮助我们将其数据转换为NumPy和OpenCV可以使用的形式：
 
-    [PRE7]
+    ```py
+    pi@myrobot:~ $ sudo pip3 install picamera[array]
+    ```
 
 在接下来的几个操作中，我们将继续在外部电源上进行测试。
 
@@ -260,21 +279,33 @@
 
 1.  以以下导入开始`camera_stream.py`文件：
 
-    [PRE8]
+    ```py
+    PiCamera code needed to access our camera. cv2 is OpenCV, the computer vision library used to process the images. Here, NumPy is *aliased*, or nicknamed, np. 
+    ```
 
 1.  接下来的几行设置了捕获大小和图像质量的参数：
 
-    [PRE9]
+    ```py
+    encode parameter. 
+    ```
 
 1.  添加一个设置摄像头的函数：
 
-    [PRE10]
+    ```py
+    def setup_camera():
+        camera = PiCamera()
+        camera.resolution = size
+        camera.rotation = 180
+        return camera
+    ```
 
     初始化摄像头后，我们将其分辨率设置为大小。我提到摄像头是颠倒的，因此我们将其旋转设置为180度以翻转图片。
 
 1.  我们需要一个函数来开始捕获一系列图像（一个视频，但一次一个帧）：
 
-    [PRE11]
+    ```py
+    PiRGBArray instance, a type for storing RGB images. We then set up the stream of data with capture_continuous, a picamera method to take photos repeatedly. We pass it to the image store and tell it to format the output data as bgr (blue, green, red), which is how OpenCV stores color data. The last parameter to this is use_video_port, which, when set to true, results in a reduction in image quality in exchange for faster production of frames. 
+    ```
 
 1.  我们可以循环遍历`cam_stream`直到我们选择停止。Python有一个概念，即`for`循环是一个生成器。每次循环都会产生流捕获的帧的原始`.array`。这意味着循环可以使用`start_stream`函数的输出，因此当循环遍历时，这个`for`循环中的代码将运行足够的时间以产生一个原始帧，然后是下一个，依此类推。Python生成器是构建处理管道的一种方式。
 
@@ -282,7 +313,11 @@
 
 1.  我们添加到`camera_stream.py`脚本中的最后一件事是一个函数，用于将图像编码为`jpeg`然后转换为字节以发送，如下所示：
 
-    [PRE12]
+    ```py
+    def get_encoded_bytes_for_frame(frame):
+        result, encoded_image = cv2.imencode('.jpg', frame, encode_param)
+        return encoded_image.tostring()
+    ```
 
 我们将使用`camera_stream`库来执行我们的某些行为，这使我们能够获取和编码摄像头帧，既可用于输入，也可用于显示。有了这些准备，让我们在一个测试应用程序中使用它来在浏览器中提供帧。
 
@@ -292,31 +327,45 @@
 
 1.  我们需要导入所有这些组件并设置一个 Flask 应用程序：
 
-    [PRE13]
+    ```py
+    Flask app object, which handles routing; a way to render templates into output; and a way to make our web app response. We import the camera_stream library we've just made, and we import time so we can limit the frame rate to something sensible. After the imports, we create a Flask app object for us to register everything with.
+    ```
 
 1.  Flask 在路由中工作，这些路由是您击中 Web 服务器地址和注册的处理函数之间的链接。在我们的服务器应用程序中请求的匹配地址将运行相应的函数。让我们设置最基本的路由：
 
-    [PRE14]
+    ```py
+    '/' route will be the index page, what you get by default if you just land on the robot's app server. Our function renders a template, which we'll write in the next section. 
+    ```
 
 1.  现在我们来到了一个棘手的部分，视频流。尽管 `camera_stream` 进行了一些编码，但我们还需要将帧转换为浏览器期望的连续数据流，即数据流。我将在 `frame_generator` 函数中实现这一点，我们稍后会对其进行分解。让我们先设置相机流：
 
-    [PRE15]
+    ```py
+    time.sleep is here because we need to let the camera warm up after turning it on. Otherwise, we may not get usable frames from it. 
+    ```
 
 1.  接下来，我们需要遍历来自 `camera_stream` 的帧：
 
-    [PRE16]
+    ```py
+    start_stream, encoding each frame to JPG. 
+    ```
 
 1.  为了将编码的帧字节发送回浏览器，我们使用另一个带有 `yield` 的生成器，这样 Flask 就会将其视为多部分流——由多个数据块组成的响应，这些块被延迟到稍后处理——这对于同一视频的多个帧来说很常见。注意，HTTP 内容声明是编码字节的序言：
 
-    [PRE17]
+    ```py
+    b in front of this string to tell Python to treat this as raw bytes and not perform further encoding on the information. The \r and \n items are raw line-ending characters. That completes the frame_generator function. 
+    ```
 
 1.  下一个函数，命名为 `display`，将 Flask 路由到来自 `frame_generator` 的可循环 HTTP 帧流：
 
-    [PRE18]
+    ```py
+    display route generates a response from frame_generator. As that is a generator, Flask will keep consuming items from that generator and sending those parts to the browser. The response also specifies a content type with a boundary between items. This boundary must be a string of characters. We have used `frame`. The boundary must match in `mimetype` and the boundary (`--frame`) in the content (*step 5*).
+    ```
 
 1.  现在，我们只需添加代码来启动 Flask。我已经将此应用程序放在端口 `5001`：
 
-    [PRE19]
+    ```py
+    app.run(host="0.0.0.0", debug=True, port=5001)
+    ```
 
 应用程序几乎准备好了，但我们提到了一个模板——让我们用这个来描述相机流将在网页上显示的内容。
 
@@ -326,15 +375,27 @@ Flask 使用 HTML 模板创建网页，这些模板将函数渲染到输出中�
 
 1.  我们的模板从 HTML 标签开始，有一个标题和一级标题：
 
-    [PRE20]
+    ```py
+    <html>
+        <head>
+            <title>Robot Image Server</title>
+        </head>
+        <body>
+            <h1>Robot Image Server</h1>
+    ```
 
 1.  现在，我们添加一个图像链接来显示服务器输出：
 
-    [PRE21]
+    ```py
+    url_for here. Flask can use a template renderer, Jinja, to insert the URL from a route in Flask by its function name.
+    ```
 
 1.  最后，我们只需在模板中关闭标签：
 
-    [PRE22]
+    ```py
+        </body>
+    </html>
+    ```
 
 我们可以在主服务器应用程序中提供这个模板。
 
@@ -412,47 +473,89 @@ Flask 使用 HTML 模板创建网页，这些模板将函数渲染到输出中�
 
 1.  让我们从一些导入开始。我们将这段代码放在 `image_app_core.py` 文件中：
 
-    [PRE23]
+    ```py
+    Queue and Process to create the process and communicate with it. We then use the same imports for Flask that we used previously. Note—we are *not* importing any of the camera parts in this module.
+    ```
 
 1.  接下来，我们定义我们的 Flask 应用和队列。我们实际上只想有一个帧排队，但以防在传输过程中出现故障，我们放入了一个——尽管我们可以检查 `Queue` 实例是否为空，但这并不总是100%可靠的，我们不希望应用程序的一部分等待另一部分：
 
-    [PRE24]
+    ```py
+    app = Flask(__name__)
+    control_queue = Queue()
+    display_queue = Queue(maxsize=2)
+    ```
 
 1.  我们还将在这里定义一个全局的 `display_template`，在其中我们将存储主应用程序模板：
 
-    [PRE25]
+    ```py
+    display_template = 'image_server.html'
+    ```
 
 1.  现在我们为这个 Flask 应用添加路由。索引路由只在其使用 `display_template` 方面有所不同：
 
-    [PRE26]
+    ```py
+    @app.route('/')
+    def index():
+        return render_template(display_template)
+    ```
 
 1.  接下来，我们将创建获取帧的循环：`frame_generator` 的修改版。这个函数是我们的主要视频源。为了防止它*旋转*（即，在紧密的循环中非常快速地运行），我们加入了一个0.05秒的睡眠，以将帧率限制在每秒20帧：
 
-    [PRE27]
+    ```py
+    def frame_generator():
+        while True:
+            time.sleep(0.05)
+    ```
 
 1.  睡眠之后，我们应该尝试从 `display_queue` 中获取数据（我们稍后会把帧放入队列）。就像在 `image_server` 中做的那样，这个循环也将我们的数据转换成多部分数据：
 
-    [PRE28]
+    ```py
+            encoded_bytes = display_queue.get()
+            yield (b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + encoded_bytes + b'\r\n')
+    ```
 
 1.  现在通过一个显示块使其可用：
 
-    [PRE29]
+    ```py
+    @app.route('/display')
+    def display():
+        return Response(frame_generator(),
+            mimetype='multipart/x-mixed-replace; boundary=frame')
+    ```
 
 1.  我们需要一种方法来向我们的应用程序发送控制消息。`control` 路由接受这些消息，获取它们的表单数据（一个包含指令的字典），并使用 `control_queue.put` 将其传递给机器人行为：
 
-    [PRE30]
+    ```py
+    @app.route('/control', methods=['POST'])
+    def control():
+        control_queue.put(request.form)
+        return Response('queued')
+    ```
 
 1.  这为我们提供了所有核心内部结构，但我们也需要启动服务器进程。之前启动我们服务器的应用程序部分，我们现在将其放入一个名为 `start_server_process` 的函数中：
 
-    [PRE31]
+    ```py
+    template_name in the global display_template. The preceding index route uses the template. Instead of calling app.run, we create a Process object. The Process parameter target is a function to run (app.run), and some parameters need to be given to that function (the host and port settings). We then start the server process and return the process handle so our code can stop it later.
+    ```
 
 1.  下一个界面任务是将在*步骤1*中创建的队列中的图像放入队列。为了确保我们不会消耗太多内存，我们只打算让队列长度为1。这意味着第一个帧会过时，但下一个帧很快就会到达，不会影响用户：
 
-    [PRE32]
+    ```py
+    def put_output_image(encoded_bytes):
+        if display_queue.empty():
+            display_queue.put(encoded_bytes)
+    ```
 
 1.  最后，对于这个界面，我们需要一个函数来获取控制消息。这个函数不会等待，如果有消息则返回消息，否则返回`None`表示没有消息：
 
-    [PRE33]
+    ```py
+    def get_control_instruction():
+        if control_queue.empty():
+            return None
+        else:
+            return control_queue.get()
+    ```
 
 `image_app_core.py`文件为我们提供了一个可控的基础，我们可以用它来构建视觉处理机器人行为，或者实际上任何具有网络界面、控制指令、输出流和后台进程的行为。接下来，让我们用简单行为测试这个核心。
 
@@ -462,23 +565,43 @@ Flask 使用 HTML 模板创建网页，这些模板将函数渲染到输出中�
 
 1.  让我们创建一个名为`control_image_behavior.py`的新文件，从导入`image_app_core`接口和`camera_stream`开始：
 
-    [PRE34]
+    ```py
+    import time
+    from image_app_core import start_server_process, get_control_instruction, put_output_image
+    import camera_stream
+    ```
 
 1.  然后，我们添加一个函数，在主循环中运行我们的简单行为。由于这个函数有点复杂，所以我将其拆分。首先，我们将设置摄像头并使用睡眠来给摄像头预热时间：
 
-    [PRE35]
+    ```py
+    def controlled_image_server_behavior():
+        camera = camera_stream.setup_camera()
+        time.sleep(0.1)
+    ```
 
 1.  接下来，我们在`for`循环中从摄像头流中获取帧，并将这些帧作为编码的字节放在输出队列中：
 
-    [PRE36]
+    ```py
+        for frame in camera_stream.start_stream(camera):
+            encoded_bytes = camera_stream.get_encoded_bytes_for_frame(frame)
+            put_output_image(encoded_bytes)
+    ```
 
 1.  在循环中，我们将尝试接受一个退出控制指令。通常指令将是`None`，表示没有等待的控制指令。但如果我们有消息，我们应该匹配其中的命令以退出：
 
-    [PRE37]
+    ```py
+    return to stop the behavior when it receives the exit instruction from the control queue. 
+    ```
 
 1.  然后，我们需要启动服务器并开始我们的行为。我们总是希望停止网络服务器进程。通过将行为包裹在`try`和`finally`中，它将*总是*运行`finally`部分中的任何内容，在这种情况下，确保进程被终止（停止）：
 
-    [PRE38]
+    ```py
+    process = start_server_process('control_image_behavior.html')
+    try:
+        controlled_image_server_behavior()
+    finally:
+        process.terminate()
+    ```
 
 现在我们有一个简单的可控行为；然而，它提到了`control_image_behavior.html`模板。我们需要提供这个模板。
 
@@ -486,7 +609,19 @@ Flask 使用 HTML 模板创建网页，这些模板将函数渲染到输出中�
 
 这个模板，在`templates/control_image_behavior.html`中，与之前的相同，但有两个重要的不同之处，这里用粗体标出：
 
-[PRE39]
+```py
+<html>
+    <head>
+        <script src="img/jquery-3.3.1.min.js"></script>
+        <title>Robot Image Server</title>
+    </head>
+    <body>
+        <h1>Robot Image Server</h1>
+        <img src="img/{{ url_for('display') }}"><br>
+        <a href="#" onclick="$.post('/control', {'command': 'exit'}); ">Exit</a>
+    </body>
+</html>
+```
 
 差异如下：
 
@@ -580,7 +715,14 @@ OpenCV有一个函数，`cv2.cvtColor`，可以将整个图像在不同色彩空
 
 1.  打开`pid_controller.py`文件，并在以下片段中做出粗体字的变化。首先，添加`windup_limit`参数，如果你不设置限制，它默认为`None`：
 
-    [PRE40]
+    ```py
+    class PIController(object):
+        def __init__(self, proportional_constant=0, integral_constant=0, windup_limit=None):
+            self.proportional_constant = proportional_constant
+            self.integral_constant = integral_constant
+            self.windup_limit = windup_limit
+            self.integral_sum = 0
+    ```
 
 1.  如果我们有上限并达到它，我们想要防止积分增长。如果以下任何一种情况发生，积分将改变：
 
@@ -594,11 +736,21 @@ OpenCV有一个函数，`cv2.cvtColor`，可以将整个图像在不同色彩空
 
     让我们看看代码示例——这段代码将替换之前的`handle_integral`方法：
 
-    [PRE41]
+    ```py
+        def handle_integral(self, error):
+            if self.windup_limit is None or \
+                    (abs(self.integral_sum) < self.windup_limit) or \
+                    ((error > 0) != (self.integral_sum > 0)):
+                self.integral_sum += error
+            return self.integral_constant * self.integral_sum
+    ```
 
 1.  我们可以从网页上`start`和`stop`这个行为。如果我们再次开始移动，我们不想让PID携带旧值。让我们添加一个`reset`函数来将积分总和清零：
 
-    [PRE42]
+    ```py
+        def reset(self):
+            self.integral_sum = 0
+    ```
 
 PID控制器现在可以重置，并且有一个防风振限制来停止大的超调。让我们构建使用它的其他行为组件。
 
@@ -614,7 +766,12 @@ PID控制器现在可以重置，并且有一个防风振限制来停止大的�
 
 1.  我们将添加两个额外的控制项，`start`和`stop`，这里用粗体显示：
 
-    [PRE43]
+    ```py
+            <img src="img/{{ url_for('display') }}"><br>
+            <a href="#" onclick="$.post('/control', {'command': 'start'});">Start</a>
+            <a href="#" onclick="$.post('/control', {'command': 'stop'})">Stop</a><br>
+            <a href="#" onclick="$.post('/control', {'command': 'exit'});">Exit</a>
+    ```
 
     我们打算首先停止机器人运行程序，这样我们就可以用手机或浏览器进行微调，查看机器人检测到什么，然后点击**开始**按钮让它移动。
 
@@ -626,107 +783,191 @@ PID控制器现在可以重置，并且有一个防风振限制来停止大的�
 
 1.  没有什么奇怪的，我们首先开始导入。因为我们正在组合许多元素，所以有很多，但我们之前都见过：
 
-    [PRE44]
+    ```py
+    import time
+    from image_app_core import start_server_process, get_control_instruction, put_output_image
+    import cv2
+    import numpy as np
+    import camera_stream
+    from pid_controller import PIController
+    from robot import Robot
+    ```
 
 1.  现在，我们添加`Behavior`类来寻找并接近一个彩色对象。我们传递这个`robot`对象：
 
-    [PRE45]
+    ```py
+    class ColorTrackingBehavior:
+        def __init__(self, robot):
+            self.robot = robot
+    ```
 
 1.  这些值旨在针对颜色掩码和对象大小进行调整：
 
-    [PRE46]
+    ```py
+    low_range and high_range values for the color filter (as seen in *Figure 13.13*). Colors that lie between these HSV ranges would be white in the masked image. Our hue is 25 to 80, which correspond to 50 to 160 degrees on a hue wheel. Saturation is 70 to 255—any lower and we'd start to detect washed out or gray colors. Light is 25 (very dark) to 255 (fully lit).The `correct_radius` value sets the size we intend to keep the object at and behaves as a distance setting. `center` should be half the horizontal resolution of the pictures we capture.
+    ```
 
 1.  这里设置的最后一个成员变量是`running`。当我们想让机器人移动时，它将被设置为`True`。当设置为`False`时，处理仍然发生，但电机和PID将停止：
 
-    [PRE47]
+    ```py
+            self.running = False
+    ```
 
 1.  下一段代码是处理来自Web应用的任何控制指令：
 
-    [PRE48]
+    ```py
+    start, stop, and exit buttons. It uses the running variable to start or stop the robot moving. 
+    ```
 
 1.  接下来，我们有代码来从一个帧中找到一个对象。这实现了*图13.13*中显示的管道。不过，我们将稍微分解这个函数：
 
-    [PRE49]
+    ```py
+        def find_object(self, original_frame):
+            """Find the largest enclosing circle for all contours in a masked image.
+            Returns: the masked image, the object coordinates, the object radius"""
+    ```
 
     因为这段代码很复杂，所以我们有一个文档字符串或**docstring**来解释它做什么以及它返回什么。
 
 1.  接下来，这个方法将帧转换为HSV，这样就可以使用`inRange`进行过滤，只留下我们帧中的`masked`像素：
 
-    [PRE50]
+    ```py
+            frame_hsv = cv2.cvtColor(original_frame, cv2.COLOR_BGR2HSV)
+            masked = cv2.inRange(frame_hsv, self.low_range, self.high_range)
+    ```
 
 1.  现在我们有了掩码图像，我们可以在它周围绘制轮廓（轮廓点）：
 
-    [PRE51]
+    ```py
+    RETR_LIST. OpenCV is capable of more detailed types, but they take more time to process. The last parameter is the method used to find the contours. We use the `CHAIN_APPROX_SIMPLE` method to simplify the outline to an approximate chain of points, such as four points for a rectangle. Note the `_` in the return values; there is optionally a hierarchy returned here, but we neither want nor use it. The `_` means ignore the hierarchy return value.
+    ```
 
 1.  下一步是找到每个轮廓的所有包围圆。我们使用一个微小的循环来完成这个操作。`minEnclosingCircle`方法获取完全包围轮廓中所有点的最小圆：
 
-    [PRE52]
+    ```py
+    cv2 returns each circle as a radius and coordinates—exactly what we want. 
+    ```
 
 1.  然而，我们只想得到最大的一个。让我们过滤出来：
 
-    [PRE53]
+    ```py
+    largest value of 0, and then we loop through the circles. If the circle has a radius larger than the circle we last stored, we replace the stored circle with the current circle. We also convert the values to int here, as minEnclosingCircle produces non-integer floating-point numbers.
+    ```
 
 1.  我们通过返回掩码图像、最大坐标和最大半径来结束这个方法：
 
-    [PRE54]
+    ```py
+            return masked, largest[0], largest[1]
+    ```
 
 1.  我们下一个方法将接受原始帧和已处理帧，然后将它们转换成双屏显示（两个相同比例的水平拼接图像）并输出到队列，最终传递到Web应用：
 
-    [PRE55]
+    ```py
+    np.concatenate function to join the two images, which are equivalent to NumPy arrays. You could change the axis parameter to 0 if you wanted screens stacked vertically instead of horizontally.
+    ```
 
 1.  下一个方法通过前面的函数处理一帧数据，找到对象并设置显示。然后，它以以下方式返回对象信息：
 
-    [PRE56]
+    ```py
+    cvtColor to change the masked image to a three-channel image—the original frame and processed frame must use the same color system to join them into a display. We use cv2.circle to draw a circle around the tracked object on the original frame so we can see what our robot has tracked on the web app, too.
+    ```
 
 1.  下一个方法是将前面的坐标和半径转换为机器人运动的实际行为。当我们开始行为时，云台可能不会指向正前方。我们应该确保机制面向前方，将两个伺服电机设置为`0`，然后启动相机：
 
-    [PRE57]
+    ```py
+        def run(self):
+            self.robot.set_pan(0)
+            self.robot.set_tilt(0)
+            camera = camera_stream.setup_camera()
+    ```
 
 1.  当伺服电机移动且相机预热时，我们可以准备我们需要的两个PID控制器，用于速度（基于半径）和方向（基于水平中间的距离）：
 
-    [PRE58]
+    ```py
+    speed_pid = PIController(proportional_constant=0.8, 
+                integral_constant=0.1, windup_limit=100)
+    direction_pid = PIController(proportional_constant=0.25, 
+                integral_constant=0.05, windup_limit=400)
+    ```
 
     这些值是通过大量调整得到的；你可能需要进一步调整这些值。*调整PID控制器设置*部分将介绍如何调整PID。
 
 1.  现在，我们等待一会儿，让相机和云台伺服电机稳定下来，然后在中位位置关闭伺服电机：
 
-    [PRE59]
+    ```py
+            time.sleep(0.1)
+            self.robot.servos.stop_all()
+    ```
 
 1.  我们通过`print`语句通知用户，并输出一些调试标题：
 
-    [PRE60]
+    ```py
+            print("Setup Complete")
+            print('Radius, Radius error, speed value, direction error, direction value')
+    ```
 
 1.  然后，我们可以进入主循环。首先，我们从帧中获取处理后的数据。注意，我们使用括号将`coordinates`解包到`x`和`y`：
 
-    [PRE61]
+    ```py
+            for frame in camera_stream.start_stream(camera):
+                (x, y), radius = self.process_frame(frame)
+    ```
 
 1.  在这一点上，我们应该检查我们的控制消息。然后，我们检查我们是否被允许移动，或者是否有足够大的对象值得寻找。如果有，我们可以这样开始：
 
-    [PRE62]
+    ```py
+                self.process_control()
+                if self.running and radius > 20:
+    ```
 
 1.  现在我们知道机器人应该移动，所以让我们计算误差值来输入PID控制器。我们获取大小误差并将其输入到速度PID以获取速度值：
 
-    [PRE63]
+    ```py
+                   radius_error = self.correct_radius - radius
+                    speed_value = speed_pid.get_value(radius_error)
+    ```
 
 1.  我们使用中心坐标和当前对象`x`来计算方向误差，并将其输入到方向PID中：
 
-    [PRE64]
+    ```py
+                    direction_error = self.center - x
+                    direction_value = direction_pid.get_value(direction_error)
+    ```
 
 1.  这样我们就可以调试这个了；我们在这里打印一个与之前显示的标题匹配的调试信息：
 
-    [PRE65]
+    ```py
+                    print(f"{radius}, {radius_error}, {speed_value:.2f}, {direction_error}, {direction_value:.2f}")
+    ```
 
 1.  我们可以使用速度和方向值来产生左右电机速度：
 
-    [PRE66]
+    ```py
+                    self.robot.set_left(speed_value - direction_value)
+                    self.robot.set_right(speed_value + direction_value)
+    ```
 
 1.  我们已经处理了电机运行时应该做什么。如果它们没有运行，或者没有值得检查的对象，那么我们应该停止电机。如果我们按下了**停止**按钮，我们还应该重置PID，这样它们就不会积累奇怪的价值：
 
-    [PRE67]
+    ```py
+                else:
+                    self.robot.stop_motors()
+                    if not self.running:
+                        speed_pid.reset()
+                        direction_pid.reset()
+    ```
 
 1.  我们现在已经完成了这个函数和`ColorTrackingBehavior`类。现在，剩下的只是设置我们的行为和Web应用核心，然后启动它们：
 
-    [PRE68]
+    ```py
+    print("Setting up")
+    behavior = ColorTrackingBehavior(Robot())
+    process = start_server_process('color_track_behavior.html')
+    try:
+        behavior.run()
+    finally:
+        process.terminate()
+    ```
 
 这段行为代码已经构建并准备好运行。你已经看到了如何转换图像，然后针对特定颜色进行掩码处理，以及如何围绕掩码中的blob绘制，然后找到最大的一个。我还展示了如何通过PID将这种视觉处理转换为机器人移动行为，通过输入这些数据并使用它们的输出控制电机运动。让我们试试吧！
 
@@ -870,71 +1111,160 @@ PID控制器现在可以重置，并且有一个防风振限制来停止大的�
 
 1.  导入几乎与我们的`color_track_behavior`相同：
 
-    [PRE69]
+    ```py
+    import time
+    from image_app_core import start_server_process, get_control_instruction, put_output_image
+    import cv2
+    import os
+    import camera_stream
+    from pid_controller import PIController
+    from robot import Robot
+    ```
 
 1.  行为类的`init`函数略有不同，它从加载Haar级联开始。同一目录下还有许多其他级联文件，你可以尝试跟踪除了人脸之外的其他事物。此代码使用`assert`来验证文件是否存在于此处，因为如果OpenCV找不到它，在`detectMultiscale`中会返回神秘的错误：
 
-    [PRE70]
+    ```py
+    class FaceTrackBehavior:
+        def __init__(self, robot):
+            self.robot = robot
+            cascade_path = "/usr/local/lib/python3.7/dist-packages/cv2/data/haarcascade_frontalface_default.xml"
+            assert os.path.exists(cascade_path), f"File {cascade_path} not found"
+            self.cascade = cv2.CascadeClassifier(cascade_path)
+    ```
 
 1.  调节参数包括中心位置和最小人脸大小。我还将PID控制器带到了类中，因此它们可以在这里调节，然后在控制处理程序中重置（你还可以将重置添加到先前的行为中）：
 
-    [PRE71]
+    ```py
+            self.center_x = 160
+            self.center_y = 120
+            self.min_size = 20
+            self.pan_pid = PIController(proportional_constant=0.1, integral_constant=0.03)
+            self.tilt_pid = PIController(proportional_constant=-0.1, integral_constant=-0.03)
+    ```
 
 1.  我们的构造函数仍然跟踪行为是否正在运行电机：
 
-    [PRE72]
+    ```py
+            self.running = False
+    ```
 
 1.  此处的流程控制不同；当接收到`stop`指令时，它停止电机并重置PID：
 
-    [PRE73]
+    ```py
+        def process_control(self):
+            instruction = get_control_instruction()
+            if instruction:
+                command = instruction['command']
+                if command == "start":
+                    self.running = True
+                elif command == "stop":
+                    self.running = False
+                    self.pan_pid.reset()
+                    self.tilt_pid.reset()
+                    self.robot.servos.stop_all()
+                elif command == "exit":
+                    print("Stopping")
+                    exit()
+    ```
 
 1.  此行为仍然有一个`find_object`方法，它接受原始帧。首先，我们将图像转换为灰度以减少搜索所需的数据量：
 
-    [PRE74]
+    ```py
+        def find_object(self, original_frame):
+            gray_img = cv2.cvtColor(original_frame, cv2.COLOR_BGR2GRAY)
+    ```
 
 1.  接下来，我们使用带有级联`detectMultiScale`方法的灰度图像来获取匹配项列表：
 
-    [PRE75]
+    ```py
+    detectMultiScale method creates the integral image and applies the Haar cascade algorithm. It will return several objects as rectangles, with x, y, width, and height values. 
+    ```
 
 1.  我们可以使用类似于颜色跟踪行为的循环来通过面积找到最大的矩形。首先，我们需要设置一个存储当前最大矩形的存储库，在一个包含面积的数据结构中，然后是一个包含`x`、`y`、宽度和高度的子列表：
 
-    [PRE76]
+    ```py
+    largest = 0, (0, 0, 0, 0) 
+            for (x, y, w, h) in objects:
+                item_area = w * h
+                if item_area > largest[0]:
+                    largest = item_area, (x, y, w, h)
+    ```
 
 1.  我们返回那个最大矩形的坐标和尺寸：
 
-    [PRE77]
+    ```py
+            return largest[1]
+    ```
 
 1.  `make_display`方法比颜色跟踪行为简单，因为只有一个图像。尽管如此，它仍然需要编码图像：
 
-    [PRE78]
+    ```py
+        def make_display(self, display_frame):
+            encoded_bytes = camera_stream.get_encoded_bytes_for_frame(display_frame)
+            put_output_image(encoded_bytes)
+    ```
 
 1.  `process_frame`方法找到对象，然后在帧上绘制一个矩形进行输出。`cv2.rectangle`函数需要两个坐标：起始`x`、`y`和结束`x`、`y`，以及一个颜色值。为了得到结束坐标，我们需要将宽度和高度加回来：
 
-    [PRE79]
+    ```py
+        def process_frame(self, frame):
+            (x, y, w, h) = self.find_object(frame)
+            cv2.rectangle(frame, (x, y), (x + w, y + w), [255, 0, 0])
+            self.make_display(frame)
+            return x, y, w, h
+    ```
 
 1.  接下来是`run`函数。我们开始于摄像头设置和预热时间：
 
-    [PRE80]
+    ```py
+        def run(self):
+            camera = camera_stream.setup_camera()
+            time.sleep(0.1)
+            print("Setup Complete")
+    ```
 
 1.  与颜色跟踪行为一样，我们通过处理帧并检查控制指令来启动主循环：
 
-    [PRE81]
+    ```py
+            for frame in camera_stream.start_stream(camera):
+                (x, y, w, h) = self.process_frame(frame)
+                self.process_control()
+    ```
 
 1.  我们只想在检测到足够大的对象（使用高度，因为人脸在这个维度上通常更大）并且机器人正在运行时移动：
 
-    [PRE82]
+    ```py
+                if self.running and h > self.min_size:
+    ```
 
 1.  当我们知道机器人正在运行时，我们将PID和输出值直接发送到伺服电机，用于水平和垂直移动。请注意，为了找到对象的中心，我们取坐标并加上其宽度或高度的一半：
 
-    [PRE83]
+    ```py
+                    pan_error = self.center_x - (x + (w / 2))
+                    pan_value = self.pan_pid.get_value(pan_error)
+                    self.robot.set_pan(int(pan_value))
+                    tilt_error = self.center_y - (y + (h /2))
+                    tilt_value = self.tilt_pid.get_value(tilt_error)
+                    self.robot.set_tilt(int(tilt_value))
+    ```
 
 1.  为了跟踪这里发生的事情，建议使用调试`print`语句：
 
-    [PRE84]
+    ```py
+                    print(f"x: {x}, y: {y}, pan_error: {pan_error}, tilt_error: {tilt_error}, pan_value: {pan_value:.2f}, tilt_value: {tilt_value:.2f}")
+    ```
 
 1.  最后，我们需要添加设置和运行我们行为的代码。请注意，我们仍然使用颜色跟踪模板：
 
-    [PRE85]
+    ```py
+    print("Setting up")
+    behavior = FaceTrackBehavior(Robot())
+    process = start_server_process('color_track_behavior.html')
+    try:
+        behavior.run()
+    finally:
+        process.terminate()
+    ```
 
 代码准备就绪，包括设置函数，我们可以尝试运行并查看行为运行。
 
@@ -958,7 +1288,9 @@ PID控制器现在可以重置，并且有一个防风振限制来停止大的�
 
 +   如果应用程序找不到Haar级联文件，请检查文件所在位置。这些文件在OpenCV包装版本之间可能已经移动，也可能再次移动。请确认您没有输入错误。如果没有，那么请尝试以下命令：
 
-    [PRE86]
+    ```py
+    $ find /usr/ -iname "haarcas*"
+    ```
 
     此命令应显示Raspberry Pi上文件的位置。
 

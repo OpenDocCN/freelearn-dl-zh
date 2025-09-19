@@ -246,43 +246,96 @@
 
 1.  让我们创建一个名为`test_encoders.py`的文件，从常用的机器人类、`import`和`time`开始，并添加日志记录：
 
-    [PRE0]
+    ```py
+    from robot import Robot
+    import time
+    import logging
+    ...
+    ```
 
 1.  接下来，我们为GPIO Zero输入设备添加一个导入。我们可以使用它设置的引脚来计数脉冲：
 
-    [PRE1]
+    ```py
+    ...
+    from gpiozero import DigitalInputDevice
+    logger = logging.getLogger("test_encoders")
+    ...
+    ```
 
     我们还设置了一个与文件名匹配的系统日志记录器。
 
 1.  编码器生成脉冲；我们想要计数它们并跟踪它们的状态。我们使用多个它们。从一开始就创建一个类似乎是一个正确的策略。从这里，我们可以将我们的I/O引脚号传递给构造函数。它需要做的第一件事是设置脉冲计数器：
 
-    [PRE2]
+    ```py
+    ...
+    class EncoderCounter(object):
+        def __init__(self, pin_number):
+            self.pulse_count = 0
+            ...
+    ```
 
 1.  仍然在构造函数中，我们需要设置设备和如何使用它来计数脉冲。设备有一个`.pin`对象，我们使用引脚号来设置它。`.pin`有一个`when_changed`事件，我们可以将处理程序放入其中，以便每次引脚改变时都会调用它。对于每个槽，引脚从上到下（上升和下降）变化：
 
-    [PRE3]
+    ```py
+          ...
+          self.device = DigitalInputDevice(pin=pin_number)
+          self.device.pin.when_changed = self.when_changed
+      ...
+    ```
 
 1.  我们需要为我们的类定义一个`when_changed`方法来将一个值添加到`pulse_count`。此方法必须尽可能小/快，因为GPIO Zero在后台为每次脉冲变化调用它。它需要一个`time_ticks`参数和一个`state`参数。我们不会使用`time_ticks`，所以用下划线标记：
 
-    [PRE4]
+    ```py
+        ...
+        def when_changed(self, _, state):
+            self.pulse_count += 1
+    ...
+    ```
 
 1.  我们可以设置我们的`robot`对象并为每侧的传感器创建一个`EncoderCounter`。我们将设备连接到引脚`4`和`26`：
 
-    [PRE5]
+    ```py
+    ...
+    bot = Robot()
+    left_encoder = EncoderCounter(4)
+    right_encoder = EncoderCounter(26)
+    ...
+    ```
 
 1.  要显示值，而不是仅仅使用`sleep`，我们循环，检查结束时间。在我们记录任何内容之前，`logging.basicConfig`设置日志参数。我们启动电机并进入主循环：
 
-    [PRE6]
+    ```py
+    ...
+    stop_at_time = time.time() + 1
+    logging.basicConfig(level=logging.INFO)
+    bot.set_left(90)
+    bot.set_right(90)
+    while time.time() < stop_at_time:
+        ...
+    ```
 
     在这个循环中，我们记录了两个传感器的读数。
 
 1.  由于紧密循环可能会导致事物损坏（例如GPIO Zero从传感器线程调用我们的代码），它应该稍微休眠一下：
 
-    [PRE7]
+    ```py
+    f prefix lets us format variables into a string.
+    ```
 
 您可以将此代码发送到机器人并运行它。现在您可以看到机器人通过编码器的值偏斜。输出应该看起来有点像这样：
 
-[PRE8]
+```py
+pi@myrobot:~ $ python3 test_encoders.py
+INFO:test_encoders:Left: 0 Right: 0
+INFO:test_encoders:Left: 0 Right: 1
+INFO:test_encoders:Left: 2 Right: 2
+INFO:test_encoders:Left: 3 Right: 4
+INFO:test_encoders:Left: 5 Right: 7
+INFO:test_encoders:Left: 8 Right: 10
+INFO:test_encoders:Left: 10 Right: 14
+...
+INFO:test_encoders:Left: 56 Right: 74
+```
 
 编码器正在计数，这表明机器人左轮移动较少，右轮移动较多，并向左偏斜。`INFO:test_encoders:`部分是由日志引入的，显示日志级别和记录器名称。距离是以编码器*脉冲*计算的，每个计数事件为一个脉冲。
 
@@ -310,31 +363,55 @@
 
 1.  让我们先添加导入和类声明。`EncoderCounter`类与上一节以相同的方式开始：
 
-    [PRE9]
+    ```py
+    from gpiozero import DigitalInputDevice
+    class EncoderCounter:
+        def __init__(self, pin_number):
+            self.pulse_count = 0
+    ```
 
 1.  我添加了一个`direction`成员来处理反转：
 
-    [PRE10]
+    ```py
+            self.direction = 1
+    ```
 
 1.  构造函数(`__init__`)通过设置设备和分配`when_changed`处理器来完成：
 
-    [PRE11]
+    ```py
+          self.device = DigitalInputDevice(pin=pin_number)
+          self.device.pin.when_changed = self.when_changed
+    ```
 
 1.  我们的`when_changed`处理器应该添加方向而不是1，这样它可以向上或向下计数：
 
-    [PRE12]
+    ```py
+        def when_changed(self, time_ticks, state):
+            self.pulse_count += self.direction
+    ```
 
 1.  我们还应该有一个设置此方向的方法，这样我们就可以断言以验证我们的设置，如果不满足给定文本中的条件，则抛出异常——这是一种便宜但粗暴的方法，以确保输入值有意义：
 
-    [PRE13]
+    ```py
+        def set_direction(self, direction):
+            """This should be -1 or 1."""
+            assert abs(direction)==1, "Direction %s should be 1 or -1" % direction
+            self.direction = direction
+    ```
 
 1.  一个重置方法意味着我们可以处理在运动之间的计数器重启：
 
-    [PRE14]
+    ```py
+        def reset(self):
+            self.pulse_count = 0
+    ```
 
 1.  为了清理，我们需要一种方法来停止计数器，这样它们就不会再次调用处理器：
 
-    [PRE15]
+    ```py
+        def stop(self):
+            self.device.close()
+    ```
 
 在编码器库准备就绪后，我们可以在代码中使用它。库意味着我们可以在不同的地方重用我们的编码器计数器，也可以用具有相似属性的另一个设备替换它。为了使它对许多行为可用，将其导入到机器人库中会很有用。
 
@@ -346,15 +423,39 @@
 
 1.  首先导入`EncoderCounter`：
 
-    [PRE16]
+    ```py
+    ...
+    import leds_led_shim
+    from servos import Servos
+    from encoder_counter import EncoderCounter
+    ...
+    ```
 
 1.  在`__init__`构造方法中，我们需要设置左右编码器。我就在距离传感器之后做了这件事：
 
-    [PRE17]
+    ```py
+            ...
+            # Setup The Distance Sensors
+    self.left_distance_sensor = DistanceSensor(echo=17, trigger=27, queue_len=2)
+            self.right_distance_sensor = DistanceSensor(echo=5, trigger=6, queue_len=2)
+            # Setup the Encoders
+            self.left_encoder = EncoderCounter(4)
+            self.right_encoder = EncoderCounter(26)
+            ...
+    ```
 
 1.  为了确保当我们的`Robot`对象停止时，代码清理了编码器处理器，我们在`stop_all`方法中调用编码器的`stop`方法：
 
-    [PRE18]
+    ```py
+            ...
+            # Clear the display
+            self.leds.clear()
+            self.leds.show()
+            # Clear any sensor handlers
+            self.left_encoder.stop()
+            self.right_encoder.stop()
+            ...
+    ```
 
 带有编码器的`robot.py`的完整代码在GitHub上([https://github.com/PacktPublishing/Learn-Robotics-Programming-Second-Edition/blob/master/chapter11/robot.py](https://github.com/PacktPublishing/Learn-Robotics-Programming-Second-Edition/blob/master/chapter11/robot.py))。我们现在可以使用它来构建一个测量毫米距离的行为。为此，我们将了解编码器脉冲与移动毫米距离之间的关系。
 
@@ -382,27 +483,69 @@
 
 1.  创建一个名为`test_distance_travelled.py`的新文件。在文件的顶部，我们需要导入`math`进行计算，`Robot`对象，以及`time`：
 
-    [PRE19]
+    ```py
+    from robot import Robot
+    import time
+    import math
+    import logging
+    logger = logging.getLogger("test_distance_travelled")
+    ...
+    ```
 
 1.  接下来，我们定义我们的常数——轮子的直径和每转的刻度数。请使用您获得的数据，而不是我这里显示的值：
 
-    [PRE20]
+    ```py
+    ...
+    wheel_diameter_mm = 70.0
+    ticks_per_revolution = 40.0
+    ...
+    ```
 
 1.  创建一个函数，将计数的刻度转换为距离。由于毫米的分数不适用于这种测量，因此将其转换为整数。由于转换的一部分不会改变，我们也将其作为常数：
 
-    [PRE21]
+    ```py
+    ...
+    ticks_to_mm_const = (math.pi / ticks_per_revolution) * wheel_diameter_mm
+    def ticks_to_mm(ticks):
+        return int(ticks_to_mm_const * ticks)
+    ...
+    ```
 
 1.  接下来，我们定义我们的机器人，设置停止时间，并启动电机：
 
-    [PRE22]
+    ```py
+    ...
+    bot = Robot()
+    stop_at_time = time.time() + 1
+    logging.basicConfig(level=logging.INFO)
+    bot.set_left(90)
+    bot.set_right(90)
+    ...
+    ```
 
 1.  在循环中，我们通过调用`ticks_to_mm`函数在脉冲计数上显示距离：
 
-    [PRE23]
+    ```py
+    ...
+    while time.time() < stop_at_time:
+        logger.info("Left: {} Right: {}".format(
+            ticks_to_mm(bot.left_encoder.pulse_count),
+            ticks_to_mm(bot.right_encoder.pulse_count)))    time.sleep(0.05)
+    ```
 
 当上传到机器人并运行时，输出看起来像这样：
 
-[PRE24]
+```py
+pi@myrobot:~ $ python3 test_distance_travelled.py
+INFO:test_distance_travelled:Left: 0 Right: 0
+INFO:test_distance_travelled:Left: 5 Right: 0
+INFO:test_distance_travelled:Left: 16 Right: 10
+INFO:test_distance_travelled:Left: 32 Right: 21
+...
+...
+INFO:test_distance_travelled:Left: 368 Right: 384
+INFO:test_distance_travelled:Left: 395 Right: 417
+```
 
 这个输出显示了左右两侧行驶的明显差异。右侧电机比左侧电机移动得稍快。这种差异会累积，使机器人转向。因此，在下一节中，让我们使用这些信息来调整方向。
 
@@ -448,7 +591,12 @@
 
 右电机速度如下：
 
-[PRE25]
+```py
+...
+integral_sum = integral_sum  + error
+right_motor_speed = speed + (error * proportional_constant) + (integral_sum * integral_constant)
+...
+```
 
 我们需要一个未使用的电机速度容量，以便能够稍微加速。如果速度太接近 100%，我们会得到剪辑。具有剪辑的积分行为可能会使机器人行为相当奇怪，所以要注意 100% 的剪辑！
 
@@ -466,11 +614,21 @@ PID 控制器代码是制作直线的基本机器人构建块，我们将在后�
 
 1.  以下代码处理两个组件的值。处理积分的效果是增加积分总和：
 
-    [PRE26]
+    ```py
+    ...
+        def handle_proportional(self, error):
+            return self.proportional_constant * error
+        def handle_integral(self, error):
+            self.integral_sum += error
+            return self.integral_constant * self.integral_sum
+    ...
+    ```
 
 1.  以下代码块处理误差以生成调整：
 
-    [PRE27]
+    ```py
+    p and i; since we log these values, we can configure logging to show them when debugging and tuning the controller.
+    ```
 
 在 PI 代码就绪后，我们就可以制作一个能够将误差与先前值结合，并按比例缩放以使其在某种运动环境中有用的机器人。我们将在下一节中使用这个 PID 控制器来调整直线。
 
@@ -480,39 +638,112 @@ PID 控制器代码是制作直线的基本机器人构建块，我们将在后�
 
 1.  让我们导入 `Robot` 对象、`time` 和我们新的 PI 控制器。我们将设置日志记录以获取 PID 控制器的调试信息。你可以将其调整回 `INFO` 或者在太多的情况下删除该行：
 
-    [PRE28]
+    ```py
+    from robot import Robot
+    from pid_controller import PIController
+    import time
+    import logging
+    logger = logging.getLogger("straight_line ")
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("pid_controller").setLevel(logging.DEBUG)
+    ```
 
 1.  也设置 `Robot` 对象，并设置一个稍长的 `stop_at_time` 值，这样我们的机器人可以行驶得更远：
 
-    [PRE29]
+    ```py
+    bot = Robot()
+    stop_at_time = time.time() + 15
+    ...
+    ```
 
 1.  以 `80` 的主速度值开始，并将两个电机都设置为这个值：
 
-    [PRE30]
+    ```py
+    ...
+    speed = 80
+    bot.set_left(speed)
+    bot.set_right(speed)
+    ...
+    ```
 
 1.  在进入主循环之前，设置控制器。你可能需要调整这些常数。注意积分常数的值有多小：
 
-    [PRE31]
+    ```py
+    ...
+    pid = PIController(proportional_constant=5, integral_constant=0.3)
+    ...
+    ```
 
 1.  在循环中，我们稍微 `sleep` 一下，这样我们的编码器就有东西可以测量。通常，不使用 `sleep` 来给其他事物运行机会的“紧密”循环也是一个坏主意。获取编码器值并计算误差：
 
-    [PRE32]
+    ```py
+    ...
+    while time.time() < stop_at_time:
+        time.sleep(0.01)
+        # Calculate the error
+        left = bot.left_encoder.pulse_count
+        right = bot.right_encoder.pulse_count
+        error = left - right
+        ...
+    ```
 
 1.  这个误差需要由控制器处理，并用于生成 `right_speed`：
 
-    [PRE33]
+    ```py
+        ...
+        # Get the speed
+        adjustment = pid.get_value(error)
+        right_speed = int(speed + adjustment)
+        left_speed = int(speed - adjustment)
+        ...
+    ```
 
 1.  我们可以在这里记录调试信息。注意我们有两个级别：用于错误和调整的调试，以及用于速度的信息。当前配置设置为 `INFO`，除非修改，否则我们不会看到调试信息：
 
-    [PRE34]
+    ```py
+        ...
+        logger.debug(f"error: {error} adjustment: {adjustment:.2f}")
+        logger.info(f"left: {left} right: {right}, left_speed: {left_speed} right_speed: {right_speed}")
+        ...
+    ```
 
 1.  然后我们将电机速度设置为调整后的值并完成循环：
 
-    [PRE35]
+    ```py
+        ...
+        bot.set_left(left_speed)
+        bot.set_right(right_speed)
+    ```
 
 当我们运行这个程序时，机器人应该会沿着一条相当直的路线行驶。它可能一开始不稳定，但应该会逐渐调整到一个恒定的值：
 
-[PRE36]
+```py
+pi@myrobot:~ $ python3 straight_line_drive.py
+DEBUG:pid_controller:P: 0, I: 0.00
+INFO:straight_line:left: 3 right: 3, left_speed: 80 right_speed: 80
+DEBUG:pid_controller:P: 0, I: 0.00
+INFO:straight_line:left: 5 right: 5, left_speed: 80 right_speed: 80
+DEBUG:pid_controller:P: -4, I: -0.20
+INFO:straight_line:left: 5 right: 6, left_speed: 84 right_speed: 75
+DEBUG:pid_controller:P: 0, I: -0.20
+...
+INFO:straight_line:left: 13 right: 15, left_speed: 89 right_speed: 71
+DEBUG:pid_controller:P: -8, I: -1.40
+INFO:straight_line:left: 15 right: 17, left_speed: 89 right_speed: 70
+DEBUG:pid_controller:P: -8, I: -1.80
+INFO:straight_line:left: 17 right: 19, left_speed: 89 right_speed: 70
+DEBUG:pid_controller:P: -8, I: -2.20
+INFO:straight_line:left: 19 right: 21, left_speed: 90 right_speed: 69
+...
+DEBUG:pid_controller:P: 0, I: 0.60
+INFO:straight_line:left: 217 right: 217, left_speed: 79 right_speed: 80
+DEBUG:pid_controller:P: 0, I: 0.60
+INFO:straight_line:left: 219 right: 219, left_speed: 79 right_speed: 80
+DEBUG:pid_controller:P: 0, I: 0.60
+INFO:straight_line:left: 221 right: 221, left_speed: 79 right_speed: 80
+DEBUG:pid_controller:P: 0, I: 0.60
+INFO:straight_line:left: 223 right: 223, left_speed: 79 right_speed: 80
+```
 
 机器人启动时没有误差，因为电机开始工作，但右边速度更快。在 13 个脉冲时，控制器将调整拉得很高。注意 `P` 如何跳跃，但 `I` 在一段时间后会稳定在一个恒定值，这将使机器人保持直线。
 
@@ -544,23 +775,46 @@ PID 控制器代码是制作直线的基本机器人构建块，我们将在后�
 
 1.  打开你的 `encoder_counter.py` 类。首先，我们需要导入 `math`：
 
-    [PRE37]
+    ```py
+    from gpiozero import DigitalInputDevice
+    import math
+    ...
+    ```
 
 1.  在类顶部，将 `ticks_to_mm_const` 添加为类变量（而不是实例变量）以使用它而无需任何类的实例。最初将其设置为 none，以便我们可以计算它：
 
-    [PRE38]
+    ```py
+    ...
+    class EncoderCounter:
+        ticks_to_mm_const = None # you must set this up before using distance methods
+         ...
+    ```
 
 1.  在我们的类中，我们想要直接从编码器获取车轮行驶的距离，以毫米为单位。将以下内容添加到文件末尾：
 
-    [PRE39]
+    ```py
+    ticks_to_mm_const from the class and not self (the instance). 
+    ```
 
 1.  我们还想要计算相反的值：从毫米距离计算出的脉冲数。为此，将毫米距离除以我们乘以的相同常数。这被设置为 `staticmethod`，因此它不需要后续代码使用实例：
 
-    [PRE40]
+    ```py
+        ...
+        @staticmethod
+        def mm_to_ticks(mm):
+            return mm / EncoderCounter.ticks_to_mm_const
+        ...
+    ```
 
 1.  在文件中添加设置常数的途径（用于不同的机器人配置）：
 
-    [PRE41]
+    ```py
+        ...
+        @staticmethod
+     def set_constants(wheel_diameter_mm, ticks_per_revolution):
+         EncoderCounter.ticks_to_mm_const = (math.pi / ticks_per_revolution) * wheel_diameter_mm
+        ...
+    ```
 
 当你保存后，`EncoderCounter`现在可以转换距离和编码器刻度。我们现在需要设置特定机器人的轮子直径。
 
@@ -570,11 +824,26 @@ PID 控制器代码是制作直线的基本机器人构建块，我们将在后�
 
 1.  在`robot.py`中，在构造函数之前，指定一些这些数字：
 
-    [PRE42]
+    ```py
+    ...
+    class Robot:
+        wheel_diameter_mm = 70.0
+        ticks_per_revolution = 40.0
+        wheel_distance_mm = 140.0
+        def __init__(self, motorhat_addr=0x6f):
+            ...
+    ```
 
 1.  将这些与编码器注册：
 
-    [PRE43]
+    ```py
+            ...
+            # Setup the Encoders
+            EncoderCounter.set_constants(self.wheel_diameter_mm, self.ticks_per_revolution)
+            self.left_encoder = EncoderCounter(4)
+            self.right_encoder = EncoderCounter(26)
+            ....
+    ```
 
 准备好常数后，我们已经使编码器准备好测量距离。我们可以使用这一点来创建一个行驶距离的行为。
 
@@ -584,37 +853,84 @@ PID 控制器代码是制作直线的基本机器人构建块，我们将在后�
 
 1.  首先导入`EncoderCounter`以使用其度量，`PIController`和`Robot`对象，并设置一个记录器：
 
-    [PRE44]
+    ```py
+    from robot import Robot, EncoderCounter
+    from pid_controller import PIController
+    import time
+    import logging
+    logger = logging.getLogger("drive_distance")
+    ...
+    ```
 
 1.  定义`drive_distance`函数，它接受一个机器人实例，一个以刻度为单位的距离，以及一个默认为80的可选速度。我们首先创建一个主电机和副电机以及控制器决策：
 
-    [PRE45]
+    ```py
+    set_left and set_right functions in variables – we can just call the variables like functions. 
+    ```
 
 1.  现在我们有一个明确的主电机和副电机。设置一个`PIController`并启动两个电机：
 
-    [PRE46]
+    ```py
+        ...
+        controller = PIController(proportional_constant=5, integral_constant=0.3)
+        # start the motors and start the loop
+        set_primary(speed)
+        set_secondary(speed)
+        ...
+    ```
 
 1.  现在，我们处于驾驶距离循环中。我们应该继续循环，直到两个编码器都达到正确的距离。我们需要在循环的其余部分之前暂停，以便我们有数据用于计算：
 
-    [PRE47]
+    ```py
+        ...
+        while primary_encoder.pulse_count < distance or secondary_encoder.pulse_count < distance:
+            time.sleep(0.01)
+            ...
+    ```
 
 1.  获取错误并将其输入控制器：
 
-    [PRE48]
+    ```py
+            ...
+            # How far off are we?
+            error = primary_encoder.pulse_count - secondary_encoder.pulse_count
+            adjustment = controller.get_value(error)
+            ...
+    ```
 
 1.  我们可以将这些发送到电机并调试数据。因为调整是一个非整数，所以我们使用`{:.2f}`允许两位小数：
 
-    [PRE49]
+    ```py
+    ... 
+            # How fast should the motor move to get there?
+            set_primary(int(speed - adjustment))
+            set_secondary(int(speed + adjustment))
+            # Some debug
+    logger.debug(f"Encoders: primary: {primary_encoder.pulse_count}, secondary: {secondary_encoder.pulse_count}," 
+                        f"e:{error} adjustment: {adjustment:.2f}")
+            logger.info(f"Distances: primary: {primary_encoder.distance_in_mm()} mm, secondary: {econdary_encoder.distance_in_mm()} mm")
+    ...
+    ```
 
 1.  设置机器人，让它计算你想让它走多远，然后让它开始移动：
 
-    [PRE50]
+    ```py
+    ...
+    logging.basicConfig(level=logging.INFO)
+    bot = Robot()
+    distance_to_drive = 1000 # in mm - this is a meter
+    distance_in_ticks = EncoderCounter.mm_to_ticks(distance_to_drive)
+    drive_distance(bot, distance_in_ticks)
+    ```
 
 1.  我们让机器人清理（`atexit`）停止电机。
 
 当你运行这个程序时，机器人会行驶一米然后停止。我的机器人在停止时看起来是这样的：
 
-[PRE51]
+```py
+INFO:drive_distance:Distances: primary: 997 mm, secondary: 991 mm
+INFO:drive_distance:Distances: primary: 1002 mm, secondary: 1002 mm
+```
 
 有2毫米的超调，这可能在舍入值和检测时间中丢失。我们不能制作部分刻度。
 
@@ -654,47 +970,119 @@ Python有数学函数可以将度数转换为弧度。
 
 1.  从`drive_distance.py`的副本开始，并将其命名为`drive_square.py`。添加`math`导入，如下所示：
 
-    [PRE52]
+    ```py
+    from robot import Robot, EncoderCounter
+    from pid_controller import PIController
+    import time
+    import math
+    import logging
+    logger = logging.getLogger("drive_square")
+    ...
+    ```
 
 1.  我们可以修改此文件的末尾来声明我们想要做什么。命名你计划拥有的函数，然后实现它们以适应。我们还将其缩小到略小于一米的尺寸。为了测试半径，我在机器人的轮距上增加了100毫米。任何小于轮距和转弯中心的东西都在轮子之间而不是轮子外面：
 
-    [PRE53]
+    ```py
+    ...
+    bot = Robot()
+    distance_to_drive = 300 # in mm
+    distance_in_ticks = EncoderCounter.mm_to_ticks(distance_to_drive)
+    radius = bot.wheel_distance_mm + 100 # in mm
+    radius_in_ticks = EncoderCounter.mm_to_ticks(radius)
+    ...
+    ```
 
 1.  由于我们在正方形内行驶，我们想要行驶四次。对于直线，让每个轮子行驶相同的距离，然后以半径为圆心画90度的弧。我已经降低了弧的速度，以减少打滑问题：
 
-    [PRE54]
+    ```py
+    ...
+    for n in range(4):
+        drive_distances(bot, distance_in_ticks, distance_in_ticks)
+        drive_arc(bot, 90, radius_in_ticks, speed=50)
+    ```
 
 1.  让我们回到文件顶部，将我们的驱动距离方法升级为一次驱动两个距离，一个用于每个轮子。我已经将`drive_distance`函数重命名为`drive_distances`：
 
-    [PRE55]
+    ```py
+    ...
+    def drive_distances(bot, left_distance, right_distance, speed=80):
+        ...
+    ```
 
 1.  根据我们想要转向的角度，任一电机都可以作为外电机，驱动更长的距离。由于速度有一个上限，我们根据更长的距离来选择我们的主电机和副电机。将设置主/副电机的代码替换为以下内容：
 
-    [PRE56]
+    ```py
+    abs, the absolute value, to decide, because a longer distance in reverse should *still* be the primary motor. So, to determine how far the secondary wheel should go, we compute a ratio – to multiply with speed now, and later the primary encoder output. 
+    ```
 
 1.  由于我们多次使用此方法，重置编码器计数。我在设置`PIController`之前放置了这个：
 
-    [PRE57]
+    ```py
+        ...
+        primary_encoder.reset()
+        secondary_encoder.reset()
+
+        controller = PIController(proportional_constant=5, integral_constant=0.2)
+        ...
+    ```
 
 1.  由于我们可能正在向任何方向行驶，设置编码器方向。Python有一个`copysign`方法来确定值的符号。然后，启动电机：
 
-    [PRE58]
+    ```py
+    ...
+        # Ensure that the encoder knows which way it is going
+        primary_encoder.set_direction(math.copysign(1, speed))
+        secondary_encoder.set_direction(math.copysign(1, secondary_speed))
+        # start the motors, and start the loop
+        set_primary(speed)
+        set_secondary(int(secondary_speed))
+    ...
+    ```
 
 1.  当我们开始这个循环时，我们再次需要意识到一个或两个电机可能正在倒退。我们再次使用`abs`来去除符号：
 
-    [PRE59]
+    ```py
+    ...
+        while abs(primary_encoder.pulse_count) < abs(primary_distance) or abs(secondary_encoder.pulse_count) < abs(secondary_distance):
+            time.sleep(0.01)
+    ...
+    ```
 
 1.  计算副电机的误差取决于两个距离之间的比率：
 
-    [PRE60]
+    ```py
+    ...
+            # How far off are we?
+            secondary_target = primary_encoder.pulse_count * primary_to_secondary_ratio
+            error = secondary_target - secondary_encoder.pulse_count
+            adjustment = controller.get_value(error)
+            ...
+    ```
 
 1.  这仍然通过`pid`进行相同的调整计算；然而，这种调整也可能导致方向上的变化。现在，我们设置副电机的速度：
 
-    [PRE61]
+    ```py
+          ...
+          # How fast should the motors move to get there?
+          set_secondary(int(secondary_speed + adjustment))
+          secondary_encoder.set_direction(math.copysign(1, secondary_speed+adjustment))
+          # Some debug
+          logger.debug(f"Encoders: primary: {primary_encoder.pulse_count}, secondary: {secondary_encoder.pulse_count}, e:{error} adjustment: {adjustment:.2f}")
+          logger.info(f"Distances: primary: {primary_encoder.distance_in_mm()} mm, secondary: {secondary_encoder.distance_in_mm()} mm")
+          ...
+    ```
 
 1.  您可以扩展我们为了二级速度和目标必须考虑的调试。现在，因为我们追求精确度，主电机可能会在二级电机之前达到目标，并且没有设置为反向。所以，当它达到目标时停止这个电机，并将二级电机的基准速度设置为零，这意味着只有如果有调整，则适用。注意，我们在这里仍然使用绝对值：
 
-    [PRE62]
+    ```py
+            ...
+            # Stop the primary if we need to
+            if abs(primary_encoder.pulse_count) >= abs(primary_distance):
+                logger.info("primary stop")
+                set_primary(0)
+                secondary_speed = 0
+            ...
+    ```
 
 我们已经完成了驾驶距离函数。我们可以使用它来直线行驶，或者为每个轮子提供单独的目标距离，并使用它来弧形行驶。我们将在下一节中利用这一点。
 
@@ -704,19 +1092,47 @@ Python有数学函数可以将度数转换为弧度。
 
 1.  从函数定义和有用的文档字符串开始：
 
-    [PRE63]
+    ```py
+    ...
+    def drive_arc(bot, turn_in_degrees, radius, speed=80):
+        """ Turn is based on change in heading. """
+        ...
+    ```
 
 1.  我们将机器人的宽度转换为tick，这是距离的内部测量单位，并使用其中的一半来获取轮子半径。我们还确定哪个是内轮：
 
-    [PRE64]
+    ```py
+        ...
+        # Get the bot width in ticks
+        half_width_ticks = EncoderCounter.mm_to_ticks(bot.wheel_distance_mm/2.0)
+        if turn_in_degrees < 0:
+            left_radius = radius - half_width_ticks
+            right_radius = radius + half_width_ticks
+        else:
+            left_radius = radius + half_width_ticks
+            right_radius = radius - half_width_ticks
+        logger.info(f"Arc left radius {left_radius:.2f}, right_radius {right_radius:.2f}")
+        ...
+    ```
 
 1.  我们显示调试信息，以了解半径是多少。将此与弧度转弯结合，以获取距离。我们将转弯的绝对值转换为度数。我们不想反向进入转弯，而是要向相反方向转弯：
 
-    [PRE65]
+    ```py
+        ...
+        radians = math.radians(abs(turn_in_degrees))
+        left_distance = int(left_radius * radians)
+        right_distance = int(right_radius * radians)
+        logger.info(f"Arc left distance {left_distance}, right_distance {right_distance}")
+        ...
+    ```
 
 1.  最后，将这些距离输入到`drive_distances`函数中：
 
-    [PRE66]
+    ```py
+        ...
+        drive_distances(bot, left_distance, right_distance, speed=speed)
+    ...
+    ```
 
 机器人应该能够以正方形形状行驶。它仍然可能因为打滑或测量不准确而错过目标。需要调整比例和积分控制值。
 

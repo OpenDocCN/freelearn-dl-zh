@@ -30,7 +30,9 @@
 
 或者，如果你有Python的`pip`安装程序，你可以使用以下命令安装它：
 
-[PRE0]
+```py
+pip install –U scikit-learn
+```
 
 你可以在[https://github.com/PacktPublishing/Artificial-Intelligence-for-Robotics-2e](https://github.com/PacktPublishing/Artificial-Intelligence-for-Robotics-2e)找到本章的代码。
 
@@ -169,11 +171,18 @@
 
 1.  下面是我们的决策树分类器程序：
 
-    [PRE1]
+    ```py
+    # decision tree classifier
+    # author: Francis X Govers III #
+    # example from book "Artificial Intelligence for Robotics" #
+    ```
 
 1.  我们首先导入我们将要使用的库。有一个额外的库称为 `graphviz`，它对于绘制决策树图像很有用。您可以使用以下命令安装它：
 
-    [PRE2]
+    ```py
+    pandas package, which provides a lot of data table-handling tools:
+
+    ```
 
     `from sklearn import tree`
 
@@ -185,11 +194,17 @@
 
     `import graphviz`
 
-    [PRE3]
+    ```py
+
+    ```
 
 1.  我们的第一步是读取我们的数据。我在 Microsoft Excel 中创建了我的表格，并将其导出为 **逗号分隔值**（**CSV**）格式。这允许我们直接读取数据文件并带有列标题。我打印出数据文件的大小和形状以供参考。我的文件版本有 18 行和 11 列。最后一列只是我对每个玩具实际名称的备注。我们不会使用最后一列进行任何操作。我们正在构建一个分类器，该分类器将根据类型对玩具进行分类：
 
-    [PRE4]
+    ```py
+    toyData = pd.read_csv("toy_classifier_tree.csv")
+    print ("Data length ",len(toyData))
+    print ("Data Shape ",toyData.shape)
+    ```
 
 1.  现在，我们可以开始构建我们的决策树分类器。我们首先创建 `DecisionTreeClassifier` 对象的一个实例。有两种不同的 **决策树分类**（**DTC**）算法可供选择：
 
@@ -203,11 +218,16 @@ G(S) = 1− ∑ i=1 n p i 2
 
 我们有4辆玩具车，共18个玩具，所以玩具车在组中的概率是*4/18*或0.222。决策树将继续细分类别，直到组的基尼系数为0：
 
-[PRE5]
+```py
+dTree = tree.DecisionTreeClassifier(criterion ="gini")
+```
 
 1.  我们需要将数据表中的值分离出来。第一列的数据，在Python中称为列`0`，是我们的分类标签。我们需要单独提取这些标签，因为它们用于将玩具分类。从我们之前使用神经网络的工作中，这些将是我们输出或我们在其他机器学习过程中使用的标签数据。我们将训练我们的分类器，根据表中的属性（大小、重量、颜色等）来预测玩具的类别。我们使用切片来从pandas表中提取数据。我们的pandas数据表称为`toyData`。如果我们想要表中的条目，我们需要请求`toyData.values`，这将返回一个二维数组：
 
-    [PRE6]
+    ```py
+    dataValues=toyData.values[:,1:10]
+    classValues = toyData.values[:,0]
+    ```
 
 如果你不太熟悉Python中的切片表示法，语句`toyData.values[:,1:10]`返回表中从1到10的列——它省略了列0。实际上，我们的表中确实有11列，但由于Python从0开始编号，我们最终需要1到10。你可能猜到另一种表示法只是抓取第一列的数据。
 
@@ -221,15 +241,30 @@ G(S) = 1− ∑ i=1 n p i 2
 
 现在，我们的类别名表和由 `LabelEncoder` 生成的枚举相匹配。我们稍后会用到这个：
 
-[PRE7]
+```py
+lencoder = preproc.LabelEncoder() lencoder.fit(classValues)
+classes = lencoder.transform(classValues)
+classValues = list(sorted(set(classValues)))
+```
 
 1.  为了方便起见，我创建了一个函数来自动找出我们的数据中哪些列由字符串组成，并将这些列转换为数字。我们首先构建一个空列表来存储我们的数据。我们将遍历我们的数据列，查看第一个数据值是否为字符串。如果是，我们将使用我们创建的标签编码器对象（`lencoder`）将整个列转换为数字。标签编码过程有两个部分。我们调用 `lencoder.fit()` 来查看我们的列中有多少唯一的字符串，并为每个创建一个数字。然后，我们使用 `lencoder.transpose` 将这些数字插入到列表中：
 
-    [PRE8]
+    ```py
+    newData = []
+    for ii in range(len(dataValues[0]))
+    line = dataValues[:,ii]
+    if type(line[0])==str:
+         lencoder.fit(line)
+      line = lencoder.transform(line)
+    ```
 
 1.  现在，我们将所有数据放回 `newData` 列表中，但有一个问题——我们已经将所有列转换成了行！我们使用 `numpy` 的 `transpose` 函数来纠正这个问题。但是等等！我们不再有数组了，因为我们将其转换成了列表，以便将其拆分并重新组合（你无法用 `numpy` 数组这样做——相信我，我试过了）：
 
-    [PRE9]
+    ```py
+    newData.append(line)
+    newDataArray = np.asarray(newData)
+    newDataArray = np.transpose(newDataArray)
+    ```
 
 1.  现在，所有的预处理都完成了，所以我们最终可以调用真正的 `DecisionTreeClassifier`。它需要两个参数：
 
@@ -239,17 +274,26 @@ G(S) = 1− ∑ i=1 n p i 2
 
 `DecisionTreeClassifier` 将确定表格中哪些具体数据对预测我们的玩具属于哪个类别是有用的：
 
-[PRE10]
+```py
+dTree = dTree.fit(newDataArray,classes)
+```
 
 就这样——一行。但是等等——我们想看到结果。如果我们只是尝试打印决策树，我们会得到以下内容：
 
-[PRE11]
+```py
+DecisionTreeClassifier(class_weight=None, criterion='gini', max_depth=None, max_features=None, max_leaf_nodes=None,
+min_impurity_split=1e-07, min_samples_leaf=1, min_samples_split=2, min_weight_fraction_leaf=0.0, presort=False, random_state=None, splitter='best')
+```
 
 这并没有告诉我们任何东西；这是对 `DecisionTreeClassifier` 对象的描述（它确实显示了我们可以设置的参数，这就是为什么我把它放在这里）。
 
 1.  因此，我们使用一个名为 `graphviz` 的包，它非常擅长打印决策树。我们甚至可以将我们的列名和类别名传递给图形。最后两行将图形输出为 `.pdf` 文件并存储在硬盘上：
 
-    [PRE12]
+    ```py
+    c_data=tree.export_graphviz(dTree,out_file=None,feature_names=toyData.colum ns, class_names=classValues, filled = True, rounded=True,special_characters=True)
+    graph = graphviz.Source(c_data)
+    graph.render("toy_graph_gini")
+    ```
 
 这里是结果。我要提醒你，这可能会上瘾：
 
@@ -295,7 +339,9 @@ G(S) = 1− ∑ i=1 n p i 2
 
 为了在我们的程序中将熵作为我们的组标准，我们只需要更改一行：
 
-[PRE13]
+```py
+dTree = tree.DecisionTreeClassifier(criterion ="entropy")
+```
 
 结果在以下图表中显示：
 
@@ -354,35 +400,69 @@ G(S) = 1− ∑ i=1 n p i 2
 
 1.  顶部标题部分与之前相同 —— 我们有相同的导入：
 
-    [PRE14]
+    ```py
+    # decision tree classifier
+    # with One Hot Encoding and Gini criteria #
+    # Author: Francis X Govers III #
+    # Example from book "Artificial Intelligence for Robotics" #
+    from sklearn import tree
+    import numpy as np
+    import pandas as pd
+    import sklearn.preprocessing as preproc
+    import graphviz
+    ```
 
 1.  我们将像之前一样开始读取表格。我在我的末端添加了一个额外的列，称为 `Toy Name`，这样我就可以跟踪哪个玩具是哪个。我们不需要这个列来进行决策树，所以我们可以使用 pandas 的 `del` 函数通过指定要删除的列名来移除它：
 
-    [PRE15]
+    ```py
+    toyData = pd.read_csv("toy_classifier_tree.csv")
+    del toyData["Toy Name"]   # we don't need this for now
+    ```
 
 1.  现在，我们将创建一个列表，列出我们将从 pandas `dataTable` 中删除并替换的列。这些是 `Color`、`Soft` 和 `Material` 列。我使用术语 *Soft* 来标识那些柔软且容易压扁的玩具（与硬塑料或金属相比），因为这是我们可能需要用于我们的机器人手的一个单独标准。我们生成虚拟值，并用 18 个新列替换这 3 个列。pandas 会自动将列名命名为旧列名和值的组合。例如，单个 `Color` 列被替换为 `Color_white`、`Color_blue`、`Color_green` 等等：
 
-    [PRE16]
+    ```py
+    textCols = ['Color','Soft','Material']
+    toyData = pd.get_dummies(toyData,columns=textCols)
+    ```
 
 1.  我在这里添加了一个 `print` 语句，只是为了检查所有内容是否正确组装。这是可选的。我对 pandas 在数据表方面的能力印象深刻 —— 它有很多功能可以执行数据库类型的功能和数据分析：
 
-    [PRE17]
+    ```py
+    print toyData
+    ```
 
 1.  现在，我们已经准备好生成我们的决策树。我们实例化对象并命名为 `dTree`，将分类标准设置为 Gini。然后我们从 `toyData` 数据框中提取数据值，并将第一个（0号）列中的类别值放入 `classValues` 变量中，使用数组切片运算符：
 
-    [PRE18]
+    ```py
+    dTree = tree.DecisionTreeClassifier(criterion ="gini")
+    dataValues=toyData.values[:,1:]
+    classValues = toyData.values[:,0]
+    ```
 
 1.  我们仍然需要使用 `LabelEncoder` 将类别名称转换为枚举类型，就像我们在前两个例子中所做的那样。我们不需要进行独热编码。每个类别代表我们的分类示例的终端状态——决策树上的叶子。如果我们进行神经网络分类器，这些将是我们的输出神经元。一个很大的不同之处在于，当使用决策树时，计算机会告诉你它用来分类和分离项目的标准。而在神经网络中，它会进行分类，但你无法知道使用了什么标准：
 
-    [PRE19]
+    ```py
+    lencoder = preproc.LabelEncoder()
+    lencoder.fit(classValues)
+    classes = lencoder.transform(classValues)
+    ```
 
 1.  正如我们所说的，为了在最终输出中使用类别值名称，我们必须消除任何重复的名称并按字母顺序排序。这对嵌套函数做到了这一点：
 
-    [PRE20]
+    ```py
+    classValues = list(sorted(set(classValues)))
+    ```
 
 1.  这就是我们的程序结论。实际上创建决策树只需要一行代码，因为我们已经设置了所有数据。我们使用之前相同的步骤，然后使用 `graphviz` 创建图形并将其保存为PDF。这并不难——现在我们已经有了所有这些设置经验：
 
-    [PRE21]
+    ```py
+    print ""
+    dTree = dTree.fit(dataValues,classes)
+    c_data=tree.export_graphviz(dTree,out_file=None,feature_names=toyData.columns,
+    class_names=classValues, filled = True, rounded=True,special_characters=True)
+    graph = graphviz.Source(c_data) graph.render("toy_decision_tree_graph_oneHot_gini")
+    ```
 
 结果是以下图中所示的流程图。这种使用独热编码的输出比 *图8**.4* 更容易阅读，因为我们可以看到每个类别的数字。你会注意到每个叶子（终端节点）只有一个类别和一个计数（两个填充动物和三个乐器）：
 
@@ -520,47 +600,126 @@ A*过程的概念与我们之前使用其他路径规划器所做的是非常相
 
 1.  我们保留一个集合，包含我们在地图上计算值的所有网格方块。我们将这个称为`exploredMap`。我们的地图网格方块对象看起来是这样的：
 
-    [PRE22]
+    ```py
+    # globals
+    mapLength = 1280
+    mapWidth = 1200
+    mapSize = mapLength*mapWidth
+    map = []
+    ```
 
 1.  现在，我们将地图填充为零以初始化一切。我们将在代码中稍后定义`mapGridSquare`函数——它创建我们的数据结构：
 
-    [PRE23]
+    ```py
+    for ii in range(0, mapWidth):
+        for jj in range(0,mapLength):
+            mapSq = mapGridSquare()#defined later
+            mapSq.position = [ii,jj]
+            mapSq.sType =EMPTY
+    ```
 
 1.  下一个部分将在地图上创建所有障碍。我们将放置要*填充*或使其不可通行的网格方块的位置：
 
-    [PRE24]
+    ```py
+    # create obstacles
+    obstacles = [[1,1],[1,2],[1,3],[45,18],[32,15] …..[1000,233]]
+    # iterate through obstacles and mark on the map
+    for pos in obstacles:
+        map[pos]. sType = OBSTACLE
+    pathGrid = []
+    ```
 
 1.  现在，我们声明我们的起始和结束位置：
 
-    [PRE25]
+    ```py
+    START = [322, 128]
+    GOAL = [938,523]
+    exploredMap = []
+    A_Star_navigation(start, goal, exploredMap, map)
+    ```
 
 1.  在本节中，我们正在创建我们的数据结构来跟踪我们做出的所有计算。`G` 值是从起点计算出的距离，`H` 值是到目标的估计距离。`F` 只是这两个值的总和。我们还创建了一个函数来计算这些值：
 
-    [PRE26]
+    ```py
+    def mapGridSquare():
+        def __init__(self):
+            self.F_value = 0.0  #total of G and H
+            self.G_value = 0.0  # distance to start
+            self.H_value = 0.0  # distance to goal
+            self.position=[0,0]   # grid location x and y
+            self. predecessor =None   # pointer to previous square
+            self.sType = PATH
+        def compute(self, goal, start):
+            self.G_value = distance(goal.position,self.position)
+            self.H_value = distance(start.position,self.position
+            self.F_value = self.G_value + self.H_value
+            return self.F_value
+    ```
 
 1.  一旦完成地图计算，我们需要一个函数来追踪从目标到起点的路径。这个函数被称为 `reconstructPath`：
 
-    [PRE27]
+    ```py
+    def reconstructPath(current):
+        totalPath=[current]
+        done=False
+        while not done:
+            a_square = current.predecessor
+            if a_square == None:  # at start position?
+                done = True
+            totalPath.append(a_square)
+            current = a_square
+        return totalPath
+    ```
 
 1.  我们创建了一个 `findMin` 函数来定位我们探索过的网格块中具有最低 `F` 分数的那个：
 
-    [PRE28]
+    ```py
+    def findMin(map):
+        minmap = []
+        for square in map:
+            if minmap == []:
+                minmap = square
+                continue
+            if square.F_value < minmap.F_value:
+                minmap = square
+        return minmap
+    ```
 
 1.  然后，我们创建 `navigation` 函数本身：
 
-    [PRE29]
+    ```py
+    def A_Star_navigation(start, goal, exploredMap, map):
+        while len(exploredMap>0):
+            current = findMin(exploredMap)
+            if current.position == goal.position:
+                # we are done – we are at the goal
+                return reconstructPath(current)
+            neighbors = getNeighbors(current)
+    ```
 
 1.  `neighbors` 函数返回当前方块所有未标记为障碍物的相邻方块：
 
-    [PRE30]
+    ```py
+            for a_square in neighbors:
+                if a_square.predecessor == None:
+    ```
 
 1.  我们只计算每个网格方块一次：
 
-    [PRE31]
+    ```py
+                    old_score = a_square.F_value
+        score = a_square.compute(GOAL, START)
+    ```
 
 1.  现在，我们寻找具有最低 `G` 值的方块——即离起点最近的那个：
 
-    [PRE32]
+    ```py
+        if a_square.G_value < current.G_value:
+            a_square.predecessor = current
+            current = a_square
+            current.compute(GOAL, START)
+            exploredMap.append(current)
+    ```
 
 因此，在本节中，我们介绍了在已知所有障碍物位置的情况下，在地图上找到最短路径的 A* 方法。但如果我们不知道呢？我们可以使用的另一种方法是 D* 算法。
 

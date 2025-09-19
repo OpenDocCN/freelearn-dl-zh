@@ -104,7 +104,17 @@
 
 每个过程都可以用一组像这样的语句来表示，这些语句同时填充滚筒并保持其加热：
 
-[PRE0]
+```py
+start water pump
+turn on the water heater
+while water is not filled and water is not hot enough:
+  if water filled then
+    stop water pump
+  if the water is hot enough then
+    turn off heater
+  else
+    turn on the water heater
+```
 
 注意那里的`else`，以防水温略低于正确温度。然后洗衣机开始启动滚筒旋转序列 – 缓慢转动，快速旋转，感应速度以满足标准。它将排出滚筒中的水，将衣物甩干，释放门锁，并停止。
 

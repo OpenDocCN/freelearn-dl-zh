@@ -68,31 +68,57 @@ LangChain 是一个用于开发由 LLM 驱动的应用的框架。LangChain 简�
 
 1.  首先，安装必要的依赖项：
 
-    [PRE0]
+    ```py
+    pip3 install --quiet --upgrade langchain==0.1.22 langchain-mongodb==0.1.8 langchain_community==0.2.12 langchain-openai==0.1.21 pymongo==4.5.1 polars==1.5.0 pypdf==3.15.0
+    ```
 
 1.  运行以下代码以导入所需的包：
 
-    [PRE1]
+    ```py
+    import getpass, os, pymongo, pprint
+    from langchain_community.document_loaders import PyPDFLoader
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.runnables import RunnablePassthrough
+    from langchain_mongodb import MongoDBAtlasVectorSearch
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from langchain.prompts import PromptTemplate
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from pymongo import MongoClient
+    ```
 
 1.  在导入必要的包之后，请确保环境变量设置正确。你有两个重要的秘密需要存储为环境变量：你的 **OpenAI API 密钥** 和 **MongoDB Atlas** 连接字符串。
 
     运行以下命令以将你的 OpenAI API 密钥存储为环境变量：
 
-    [PRE2]
+    ```py
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("OpenAI API Key:")
+    mongodb+srv://<username>:<password>@<clusterName>.<hostname>.mongodb.net
+    ```
 
     运行以下命令以将你的 MongoDB Atlas 连接字符串存储为环境变量：
 
-    [PRE3]
+    ```py
+    ATLAS_CONNECTION_STRING = getpass.getpass("MongoDB Atlas SRV Connection String:")
+    ```
 
     现在，你已经准备好连接到 MongoDB Atlas 集群。
 
 1.  接下来，你需要实例化 `MongoClient` 并将你的连接字符串传递给 MongoDB Atlas 数据库以建立通信。运行以下代码以建立连接：
 
-    [PRE4]
+    ```py
+    # Connect to your Atlas cluster
+    client = MongoClient(ATLAS_CONNECTION_STRING)
+    ```
 
 1.  接下来，您将指定要创建的数据库和集合的名称。在这个例子中，您将创建一个名为 `langchain_db` 的数据库和一个名为 `test` 的集合。您还将定义要创建并使用以下代码的向量搜索索引的名称：
 
-    [PRE5]
+    ```py
+    # Define collection and index name
+    db_name = "langchain_db"
+    collection_name = "test"
+    atlas_collection = client[db_name][collection_name]
+    vector_search_index = "vector_index"
+    ```
 
 通过这些步骤，您已设置连接的基本设置。现在，您有了数据库的骨架，您将想要定义您的应用程序做什么。
 
@@ -110,11 +136,22 @@ LangChain 是一个用于开发由 LLM 驱动的应用的框架。LangChain 简�
 
 使用 `PyPDFLoader` 获取公开可用的 PDF 文件相当简单。在以下代码中，您将获取一个公开可访问的 PDF 文档，并将其分割成更小的块，您可以稍后将其上传到您的 MongoDB 数据库中：
 
-[PRE6]
+```py
+# Load the PDF
+loader = PyPDFLoader("https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HkJP")
+data = loader.load()
+# Split PDF into documents
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
+docs = text_splitter.split_documents(data)
+# Print the first document
+docs[0]
+```
 
 然后，您将收到以下输出：
 
-[PRE7]
+```py
+Document(metadata={'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HKJP', 'page': 0}, page_content='Mong oDB Atlas Best Practices January 20 19A MongoD B White P aper')
+```
 
 使用此代码，您首先实例化了 `PyPDFLoader`，然后传递了公开可访问的 PDF 文件的 URL：[https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HkJP](https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HkJP)。接下来，您将获取的 PDF 文件加载到 `data` 变量中。
 
@@ -126,7 +163,15 @@ LangChain 是一个用于开发由 LLM 驱动的应用的框架。LangChain 简�
 
 在您将文档分割成块之后，您将使用以下代码实例化向量存储：
 
-[PRE8]
+```py
+# Create the vector store
+vector_store = MongoDBAtlasVectorSearch.from_documents(
+    documents = docs,
+    embedding = OpenAIEmbeddings(disallowed_special=()),
+    collection = atlas_collection,
+    index_name = vector_search_index
+)
+```
 
 在前面的代码中，您使用 `MongoDBAtlasVectorSearch.from_documents` 方法创建了一个名为 `vector_store` 的向量存储，并指定了各种参数：
 
@@ -140,7 +185,22 @@ LangChain 是一个用于开发由 LLM 驱动的应用的框架。LangChain 简�
 
 您还需要在MongoDB数据库中创建您的**Atlas向量搜索索引**。有关如何操作的详细说明，请参阅[*第8章*](B22495_08.xhtml#_idTextAnchor180)，*在AI应用中实现向量搜索*。这必须在成功运行前面的代码之前完成。在创建向量搜索索引时，请使用以下索引定义：
 
-[PRE9]
+```py
+{
+   "fields":[
+      {
+         "type": "vector",
+         "path": "embedding",
+         "numDimensions": 1536,
+         "similarity": "cosine"
+      },
+      {
+         "type": "filter",
+         "path": "page"
+      }
+   ]
+}
+```
 
 此索引定义了两个字段：
 
@@ -160,11 +220,24 @@ LangChain提供了一些特别有用的方法来对您的数据进行语义搜�
 
 您将在这里使用的方法是`similarity_search_with_score`：
 
-[PRE10]
+```py
+query = "MongoDB Atlas security"
+results = vector_store.similarity_search_with_score(
+   query = query, k = 3
+)
+pprint.pprint(results)
+```
 
 您将查询传递给`similarity_search_with_score`函数，并将`k`参数指定为`3`以限制返回的文档数量为3。然后，您可以打印输出：
 
-[PRE11]
+```py
+[(Document (page_content='To ensure a secure system right out of the box, \nauthentication and IP Address whitelist ing are\nautomatically enabled. \nReview the security section of the MongoD B Atlas', metadata={'_id': {'Soid": "667 20a81b6cb1d87043c0171'), 'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HKJP', 'page': 17}),
+0.9350903034210205),
+(Document(page_content='MongoD B Atlas team are also monitoring the underlying\ninfrastructure, ensuring that it i s always in a healthy state. \nApplication Logs And Database L ogs', metadata={'_id': {'soid': '66720a81b6cb1d87043 c013c'), 'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HKJP', 'page': 15}),
+0.9336163997650146),
+(Document(page_content="MongoD B.\nMongoD B Atlas incorporates best practices to help keep\nmanaged databases heal thy and optimized. T hey ensure\noperational continuity by converting complex manual tasks', metadata={'_id': {'so id: '66728a81b6cb1d87043c011f'), 'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HKJP', 'p age': 13)),
+0.9317773580551147)]
+```
 
 正如您在输出中看到的，返回了三个具有最高相关性分数的文档。每个返回的文档都附有一个介于0到1之间的相关性分数。
 
@@ -174,7 +247,15 @@ MongoDB允许你使用match表达式预过滤数据，以在执行更计算密�
 
 这里有一个代码片段，展示了如何使用预过滤进行语义搜索：
 
-[PRE12]
+```py
+query = "MongoDB Atlas security"
+results = vector_store.similarity_search_with_score(
+   query = query,
+   k = 3,
+   pre_filter = { "page": { "$eq": 17 } }
+)
+pprint.pprint(results)
+```
 
 在此代码示例中，你有与之前执行普通语义搜索相同的查询字符串。`k`值设置为`3`，因此它只返回最匹配的前三个文档。你还提供了一个`pre_filter`查询，这基本上是一个MQL表达式，使用`$eq`运算符指定MongoDB应仅返回位于原始PDF文档第`17`页的内容和分块信息。
 
@@ -188,7 +269,39 @@ LangChain的功能不仅限于在存储在向量数据库中的数据上执行�
 
 +   使用带有LLM的自定义RAG提示来根据检索到的文档回答问题：
 
-[PRE13]
+```py
+# Instantiate Atlas Vector Search as a retriever
+retriever = vector_store.as_retriever(
+   search_type = "similarity",
+   search_kwargs = { "k": 3 }
+)
+# Define a prompt template
+template = """
+Use the following pieces of context to answer the question at the end.If you don't know the answer, just say that you don't know, don't try to make up an answer.
+{context}
+Question: {question}
+"""
+custom_rag_prompt = PromptTemplate.from_template(template)
+llm = ChatOpenAI()
+def format_docs(docs):
+   return "\n\n".join(doc.page_content for doc in docs)
+# Construct a chain to answer questions on your data
+rag_chain = (
+   { "context": retriever | format_docs, "question": RunnablePassthrough()}
+   | custom_rag_prompt
+   | llm
+   | StrOutputParser()
+)
+# Prompt the chain
+question = "How can I secure my MongoDB Atlas cluster?"
+answer = rag_chain.invoke(question)
+print(«Question: « + question)
+print(«Answer: « + answer)
+# Return source documents
+documents = retriever.get_relevant_documents(question)
+print(«\nSource documents:»)
+pprint.pprint(documents)
+```
 
 上一段代码将Atlas Vector Search实例化为`k`值为`3`，以仅搜索最相关的三个文档。
 
@@ -208,7 +321,15 @@ LangChain的功能不仅限于在存储在向量数据库中的数据上执行�
 
 你将使用此链处理有关MongoDB Atlas安全建议的示例输入查询，格式化查询，检索查询结果，然后返回一个响应给用户，并附带用作上下文的文档。由于LLM的变异性，你很可能永远不会收到完全相同的两次响应，但以下是一个显示潜在输出的示例：
 
-[PRE14]
+```py
+Question: How can I secure my MongoDB Atlas cluster?
+Answer: To secure your MongoDB Atlas cluster, you can enable authentication and IP Address whitelisting, review the security section of the MongoDB Atlas documentation, and utilize encryption of data at rest with encrypted storage volumes. Additionally, you can set up global clusters with a few clicks in the MongoDB Atlas UI, ensure operational continuity by converting complex manual tasks, and consider setting up a larger number of replica nodes for increased protection against database downtime.
+Source documents:
+[Document (page_content='To ensure a secure system right out of the box, \nauthentication and IP Address whitelisti ng are\nautomatically enabled.\nReview the security section of the MongoD B Atlas', metadata={'_id': {'$oid': '6672
+@a81b6cb1d87043c0171'), 'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HKJP', 'page': 17}),
+Document(page_content='MongoD B Atlas team are also monitoring the underlying\ninfrastructure, ensuring that it is always in a healthy state. \nApplication L ogs And Database L ogs', metadata('id': ('soid': '66728a81b6cb1d87043c0 13c'), 'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RE4HKJP', 'page': 15}),
+Document(page_content='All the user needs to do in order for MongoD B Atlas to\nautomatically deploy the cluster i s to select a handful of\noptions: \n Instance size\n•Storage size (optional) \n Storage speed (optional)', metadata= {"_id": "soid: '66728a81b6cb1d87043c012a'), 'source': 'https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/ RE4HKJP', 'page': 14)),
+```
 
 此输出不仅回答了用户的问题，还提供了来源信息，这不仅增加了用户的信任，还增强了用户根据需要跟进并获得更多细节的能力。
 
@@ -238,7 +359,20 @@ pandas 库是一个功能强大且灵活的开源 Python 数据操作和分析�
 
 下一个示例显示了如何在 pandas 中使用布尔掩码过滤数据。在这里，您将打印出 DataFrame 格式：
 
-[PRE15]
+```py
+pip3 install pandas==1.5.3
+import pandas as pd
+# Create a DataFrame
+data = {
+    'Name': ['Alice', 'Bob', 'Charlie', 'David', 'Eve'],
+    'Age': [24, 27, 22, 32, 29],
+    'City': ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix']
+}
+df = pd.DataFrame(data)
+# Display the DataFrame
+print("DataFrame:")
+print(df)
+```
 
 您的输出应采用与 *图 7.1* 类似的 pandas DataFrame 格式：
 
@@ -248,7 +382,11 @@ pandas 库是一个功能强大且灵活的开源 Python 数据操作和分析�
 
 您可以通过各种方式操作这些数据，每次输出您认为合适的结果，但始终以 pandas DataFrame 的格式输出。要打印用户的年龄，您可以使用以下代码：
 
-[PRE16]
+```py
+# Select a column
+print("\nAges:")
+print(df['Age'])
+```
 
 您将得到 *图 7.2* 中所示的输出：
 
@@ -258,7 +396,11 @@ pandas 库是一个功能强大且灵活的开源 Python 数据操作和分析�
 
 您还可以过滤输出。在这里，您将过滤数据以仅显示年龄大于 25 的人，然后将结果作为 DataFrame 展示：
 
-[PRE17]
+```py
+# Filter data
+print("\nPeople older than 25:")
+print(df[df['Age'] > 25])
+```
 
 此代码将过滤数据，然后将结果以 DataFrame 格式输出，如图 *图 7**.3*：
 
@@ -268,7 +410,12 @@ pandas 库是一个功能强大且灵活的开源 Python 数据操作和分析�
 
 你也可以以直接的方式使用 pandas 库进行计算。例如，要计算平均年龄，你会使用如下代码：
 
-[PRE18]
+```py
+# Calculate average age
+average_age = df['Age'].mean()
+print("\nAverage Age:")
+print(average_age)
+```
 
 你的输出将类似于 *图 7**.4*：
 
@@ -294,29 +441,54 @@ PyMongoArrow 简化了将数据从 MongoDB 加载到其他支持的数据格式�
 
 1.  首先，安装并导入 PyMongoArrow 的最新版本：
 
-    [PRE19]
+    ```py
+    pip3 install PyMongoArrow
+    import pymongoarrow as pa
+    ```
 
 1.  现在，请确保你手头有 Atlas 集群连接字符串：
 
-    [PRE20]
+    ```py
+    import getpass, os, pymongo, pprint
+    ```
 
 1.  接下来，您将通过 `pymongoarrow.monkey` 模块扩展 PyMongo 驱动程序。这允许您直接将 PyMongoArrow 功能添加到 Atlas 中的 MongoDB 集合中。通过从 `pymongoarrow.monkey` 调用 `patch_all()`，新的集合实例将包括 PyMongoArrow API，例如 `pymongoarrow.api.find_pandas_all()`。这很有用，因为您现在可以轻松地将数据从 MongoDB 导出为各种格式，如 pandas。
 
-    [PRE21]
+    ```py
+    from pymongoarrow.monkey import patch_all
+    patch_all()
+    ```
 
 1.  向您的集合添加一些测试数据：
 
-    [PRE22]
+    ```py
+    from datetime import datetime
+    from pymongo import MongoClient
+    client = MongoClient(ATLAS_CONNECTION_STRING)
+    client.db.data.insert_many([
+      {'_id': 1, 'amount': 21, 'last_updated': datetime(2020, 12, 10, 1, 3, 1), 'account': {'name': 'Customer1', 'account_number': 1}, 'txns': ['A']},
+      {'_id': 2, 'amount': 16, 'last_updated': datetime(2020, 7, 23, 6, 7, 11), 'account': {'name': 'Customer2', 'account_number': 2}, 'txns': ['A', 'B']},
+      {'_id': 3, 'amount': 3,  'last_updated': datetime(2021, 3, 10, 18, 43, 9), 'account': {'name': 'Customer3', 'account_number': 3}, 'txns': ['A', 'B', 'C']},
+      {'_id': 4, 'amount': 0,  'last_updated': datetime(2021, 2, 25, 3, 50, 31), 'account': {'name': 'Customer4', 'account_number': 4}, 'txns': ['A', 'B', 'C', 'D']}])
+    ```
 
 1.  PyMongoArrow 使用一个 `schema` 对象，并将字段名映射到类型指定符：
 
-    [PRE23]
+    ```py
+    from pymongoarrow.api import Schema
+    schema = Schema({'_id': int, 'amount': float, 'last_updated': datetime})
+    ```
 
     MongoDB 的关键特性是它能够使用嵌入文档表示嵌套数据，同时支持列表和嵌套列表。PyMongoArrow 默认完全支持这些特性，为处理嵌入文档、列表和嵌套列表提供了第一级功能。
 
 1.  让我们在数据上执行一些 `find` 操作。以下代码演示了使用 PyMongoArrow 将查询结果转换为不同数据格式，查询名为 `data` 的 MongoDB 集合中 `amount` 字段大于 `0` 的文档。用于转换的预定义模式是可选的。如果您省略模式，PyMongoArrow 将尝试根据第一批数据自动应用模式：
 
-    [PRE24]
+    ```py
+    df = client.db.data.find_pandas_all({'amount': {'$gt': 0}}, schema=schema)
+    arrow_table = client.db.data.find_arrow_all({'amount': {'$gt': 0}}, schema=schema)
+    df = client.db.data.find_polars_all({'amount': {'$gt': 0}}, schema=schema)
+    ndarrays = client.db.data.find_numpy_all({'amount': {'$gt': 0}}, schema=schema)
+    ```
 
     第一行代码将查询结果转换为 pandas DataFrame。第二行代码将查询结果集转换为 arrow 表。第三行将查询结果集转换为 polars DataFrame，最后，第四行将查询结果集转换为 NumPy 数组。
 
@@ -324,7 +496,9 @@ PyMongoArrow 简化了将数据从 MongoDB 加载到其他支持的数据格式�
 
 例如，以下代码在 MongoDB 数据库的数据集合上执行聚合查询，将所有文档分组并计算 `amount` 字段的总额：
 
-[PRE25]
+```py
+df = client.db.data.aggregate_pandas_all([{'$group': {'_id': None, 'total_amount': { '$sum': '$amount' }}}])
+```
 
 此代码的结果被转换为包含总计的 pandas DataFrame。
 
@@ -368,19 +542,47 @@ OpenAI API已经成为了某种行业标准，许多生成式AI工具和技术�
 
 1.  要开始，你需要从终端或命令行安装`openai`：
 
-    [PRE26]
+    ```py
+    pip3 install --upgrade openai==1.41.0
+    ```
 
 1.  在环境变量文件中包含你的OpenAI API密钥：
 
-    [PRE27]
+    ```py
+    export OPENAI_API_KEY='your-api-key-here'
+    ```
 
 1.  使用Python库向OpenAI API发送第一个API测试请求。为此，使用终端或IDE创建一个名为`openai-test.py`的文件。然后，在文件内部，复制并粘贴以下示例之一：
 
-    [PRE28]
+    ```py
+    from openai import OpenAI
+    client = OpenAI()
+    completion = client.chat.completions.create(
+      model="gpt-4o-mini",
+      messages=[
+        {"role": "system", "content": "You are a poetic assistant, skilled in explaining complex programming concepts with creative flair."},
+        {"role": "user", "content": "Compose a poem that explains the concept of recursion in programming."}
+      ]
+    )
+    print(completion.choices[0].message)
+    ```
 
 1.  通过在终端或命令行中输入`python openai-test.py`来运行代码。这将输出一首关于递归的创意诗。每个结果都是不同的，因为GPT会每次都使用创造力来创造新的东西。这是它在这次尝试中创造的：
 
-    [PRE29]
+    ```py
+    In code’s endless labyrinth, a tale is spun,
+    Of functions nested deep, where paths rerun.
+    A whisper in the dark, a loop within,
+    Where journeys start anew as they begin.
+    Behold the call, a serpent chasing tail,
+    The dragon’s circle, a fractal’s holy grail.
+    In depths unseen, the echoing refrain,
+    A self-same mirror where the parts contain.
+    A climb up winding stairs, each step the same,
+    Yet every twist, a slight and altered game.
+    In finite bounds, infinity unfurls,
+    A loop of dreams within its spiral swirls.
+    ```
 
     结果令人惊讶地好。你应该亲自尝试一下，看看会创作出什么样的新创意诗。
 
@@ -408,11 +610,17 @@ GenAI应用开发者可以使用**Hugging Face Transformers API**来访问特定
 
 1.  首先，确保您已安装必要的软件包。请注意，至少应安装TensorFlow或PyTorch中的一个。在这里，我们将使用TensorFlow：
 
-    [PRE30]
+    ```py
+    pip3 install transformers tensorflow
+    ```
 
 1.  接下来，导入`pipeline()`函数。您还将创建一个`pipeline()`函数的实例，并指定您想使用它的任务，即情感分析：
 
-    [PRE31]
+    ```py
+    from transformers import pipeline
+    analyse_sentiment = pipeline(«sentiment-analysis»)
+    analyse_sentiment("The weather is very nice today.")
+    ```
 
     您将收到以下输出：
 
@@ -424,7 +632,9 @@ GenAI应用开发者可以使用**Hugging Face Transformers API**来访问特定
 
 您还可以将多个输入文本作为数组传递给模型进行情感分类：
 
-[PRE32]
+```py
+analyse_sentiment(["The weather is very nice today.", "I don't like it when it rains in winter."])
+```
 
 您将收到以下输出：
 
@@ -440,7 +650,10 @@ GenAI应用开发者可以使用**Hugging Face Transformers API**来访问特定
 
 除了情感分析，你还可以使用Transformers库执行许多其他NLP任务，例如文本生成。在这里，你将提供一个提示，模型将通过生成剩余的文本来自动完成它：
 
-[PRE33]
+```py
+generator = pipeline("text-generation")
+generator("I love AI, it has")
+```
 
 对于前面的代码，你将得到以下输出：
 
@@ -452,7 +665,14 @@ GenAI应用开发者可以使用**Hugging Face Transformers API**来访问特定
 
 接下来，指定在文本生成时`pipeline`函数中要使用的模型名称。以下代码提供了更多自定义细节，例如要生成的不同序列的数量和输出文本的最大长度：
 
-[PRE34]
+```py
+generator = pipeline("text-generation", model="distilgpt2")
+generator(
+    "I love AI, it has",
+    max_length=25,
+    num_return_sequences=2,
+)
+```
 
 在提供这些附加参数后，你现在将收到以下输出：
 

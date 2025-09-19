@@ -41,11 +41,24 @@
 
 您还需要安装 MongoDB、LangChain 和 OpenAI 的 Python 库。您可以在 Python 3 环境中按照以下步骤安装这些库：
 
-[PRE0]
+```py
+%pip3 install --upgrade --quiet pymongo pythondns langchain langchain-community langchain-mongodb langchain-openai 
+```
 
 要成功执行本章中的示例，您需要在 MongoDB Atlas 集群上创建一个 MongoDB Atlas 向量索引。索引名称必须是 `text_vector_index`，在 `embeddings.text` 集合上创建，如下所示：
 
-[PRE1]
+```py
+{
+  "fields": [
+    {
+      "numDimensions": 1024,
+      "path": "embedding",
+      "similarity": "cosine",
+      "type": "vector"
+    }
+  ]
+}
+```
 
 # 嵌入模型是什么？
 
@@ -264,11 +277,109 @@ Hugging Face的**大规模文本嵌入基准**（**MTEB**）排行榜是一个�
 
 现在你已经探索了各种嵌入模型类型，你将看到使用它们的工作代码是什么样的。以下Python脚本（命名为`semantic_search.py`）使用`langchain-openai`库，结合OpenAI的`text-embedding-3-large`模型嵌入文本数据，该模型定制为产生1,024维向量而不是3,072维：
 
-[PRE2]
+```py
+import os, pprint, time
+from langchain_mongodb import MongoDBAtlasVectorSearch
+from langchain_openai import OpenAIEmbeddings
+from pymongo import MongoClient
+
+os.environ["OPENAI_API_KEY"] = "YOUR-OPENAI-API-KEY"
+MONGODB_ATLAS_CONNECTION_STRING = "YOUR-MONGODB_ATLAS-CONNSTRING"
+client = MongoClient(MONGODB_ATLAS_CONNECTION_STRING, tls=True, tlsAllowInvalidCertificates=True)
+
+db_name = "embeddings"
+collection_name = "text"
+coll = client[db_name][collection_name]
+vector_search_index = "text_vector_index"
+
+coll.delete_many({})
+
+texts = []
+texts.append("A martial artist agrees to spy on a reclusive crime lord using his invitation to a tournament there as cover.")
+texts.append("A group of intergalactic criminals are forced to work together to stop a fanatical warrior from taking control of the universe.")
+texts.append("When a boy wishes to be big at a magic wish machine, he wakes up the next morning and finds himself in an adult body.")
+embedding_model = OpenAIEmbeddings(
+    model="text-embedding-3-large", 
+    dimensions=1024,
+    disallowed_special=()
+)
+
+embeddings = embedding_model.embed_documents(texts)
+
+docs = []
+for i in range(len(texts)):
+    docs.append(
+        {
+            "text": texts[i], 
+            "embedding": embeddings[i]
+        }
+    )
+
+coll.insert_many(docs)
+print("Documents embedded and inserted successfully.")
+
+time.sleep(3) # allow vector store (Atlas) to undergo indexing
+
+semantic_queries = []
+semantic_queries.append("Secret agent captures underworld boss.")
+semantic_queries.append("Awkward team of space defenders.")
+semantic_queries.append("A magical tale of growing up.")
+
+vector_search = MongoDBAtlasVectorSearch(
+    collection= coll,
+    embedding= OpenAIEmbeddings(
+      model="text-embedding-3-large", 
+      dimensions=1024,
+      disallowed_special=()),
+    index_name= vector_search_index
+)
+
+for q in semantic_queries:
+    results = vector_search.similarity_search_with_score(
+        query = q, 
+        k = 3
+    )
+    print("SEMANTIC QUERY: " + q)
+    print("RANKED RESULTS: ")
+    pprint.pprint(results)
+    print("")
+```
 
 控制台输出将如下所示：
 
-[PRE3]
+```py
+(myenv) % python3 semantic_search.py
+0
+1
+2
+Documents embedded and inserted successfully.
+SEMANTIC QUERY: Secret agent captures underworld boss.
+RANKED RESULTS:
+[(Document(metadata={'_id': '66aada5537ef2109b3058ccb'}, page_content='A martial artist agrees to spy on a reclusive crime lord using his invitation to a tournament there as cover.'),
+  0.770392894744873),
+(Document(metadata={'_id': '66aada5537ef2109b3058ccc'}, page_content='A group of intergalactic criminals are forced to work together to stop a fanatical warrior from taking control of the universe.'),
+  0.6555435657501221),
+(Document(metadata={'_id': '66aada5537ef2109b3058ccd'}, page_content='When a boy wishes to be big at a magic wish machine, he wakes up the next morning and finds himself in an adult body.'),
+  0.5847723484039307)]
+
+SEMANTIC QUERY: Awkward team of space defenders.
+RANKED RESULTS:
+[(Document(metadata={'_id': '66aada5537ef2109b3058ccc'}, page_content='A group of intergalactic criminals are forced to work together to stop a fanatical warrior from taking control of the universe.'),
+  0.7871642112731934),
+(Document(metadata={'_id': '66aada5537ef2109b3058ccb'}, page_content='A martial artist agrees to spy on a reclusive crime lord using his invitation to a tournament there as cover.'),
+  0.6236412525177002),
+(Document(metadata={'_id': '66aada5537ef2109b3058ccd'}, page_content='When a boy wishes to be big at a magic wish machine, he wakes up the next morning and finds himself in an adult body.'),
+  0.5492569208145142)]
+
+SEMANTIC QUERY: A magical tale of growing up.
+RANKED RESULTS:
+[(Document(metadata={'_id': '66aada5537ef2109b3058ccd'}, page_content='When a boy wishes to be big at a magic wish machine, he wakes up the next morning and finds himself in an adult body.'),
+  0.7488957047462463),
+(Document(metadata={'_id': '66aada5537ef2109b3058ccb'}, page_content='A martial artist agrees to spy on a reclusive crime lord using his invitation to a tournament there as cover.'),
+  0.5904781222343445),
+(Document(metadata={'_id': '66aada5537ef2109b3058ccc'}, page_content='A group of intergalactic criminals are forced to work together to stop a fanatical warrior from taking control of the universe.'),
+  0.5809941291809082)]
+```
 
 示例设置了环境，使用API密钥对OpenAI进行身份验证，并连接到MongoDB Atlas。然后嵌入并存储在MongoDB Atlas（向量存储）中的三个电影的图，然后执行不同的向量搜索以展示具有排序结果的语义搜索。
 

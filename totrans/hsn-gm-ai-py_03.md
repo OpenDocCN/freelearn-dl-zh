@@ -28,11 +28,24 @@ DP是由理查德·E·贝尔曼在20世纪50年代开发的，作为一种优化
 
 1.  这段代码是使用递归查找斐波那契序列中第*n*个数字的示例，如下所示：
 
-[PRE0]
+```py
+def Fibonacci(n): 
+    if n<0: 
+        print("Outside bounds")
+    elif n==1:
+        return 0 # n==1, returns 0  
+    elif n==2: 
+        return 1 # n==2, returns 1
+    else: 
+        return Fibonacci(n-1)+Fibonacci(n-2) 
+print(Fibonacci(9))
+```
 
 1.  回想一下，我们可以通过将序列中的前两个数字相加来解决问题序列的第*n*个元素。我们考虑当`n == 1`时，值为`0`，当`n == 2`时，返回的值是`1`。因此，序列中的第三个元素将是`Fibonacci(1)`和`Fibonacci(2)`的和，并将返回一个值为`1`。这在以下代码行中得到了反映：
 
-[PRE1]
+```py
+return Fibonacci(n-1)+Fibonacci(n-2)
+```
 
 1.  因此，使用递归的线性规划版本找到第四个元素的解决方案如下所示：
 
@@ -50,7 +63,19 @@ DP是由理查德·E·贝尔曼在20世纪50年代开发的，作为一种优化
 
 1.  修改后的代码，带有高亮显示的额外行，如下所示供参考：
 
-[PRE2]
+```py
+def Fibonacci(n):     
+    if n<0: 
+        print("Outside bounds")
+    elif n==1: 
+        return 0 # n==1, returns 0 
+    elif n==2: 
+        return 1 # n==2, returns 1
+    else:   
+        print("Solving for {}".format(n))
+        return Fibonacci(n-1)+Fibonacci(n-2)
+print(Fibonacci(9))
+```
 
 1.  我们所做的一切只是打印出我们需要计算两个更多序列以返回总和的时刻。运行代码并注意以下截图所示的输出：
 
@@ -68,19 +93,41 @@ DP是由理查德·E·贝尔曼在20世纪50年代开发的，作为一种优化
 
 1.  作为参考，我们之前示例中的整个代码块已被修改如下：
 
-[PRE3]
+```py
+fibSequence = [0,1]
+
+def Fibonacci(n):     
+    if n<0: 
+        print("Outside bounds")
+   elif n<= len(fibSequence): 
+ return fibSequence[n-1] 
+    else:   
+        print("Solving for {}".format(n))
+        fibN = Fibonacci(n-1) + Fibonacci(n-2)
+ fibSequence.append(fibN)
+ return fibN 
+
+print(Fibonacci(9))
+```
 
 1.  再次强调，高亮显示的行表示代码更改，但在这个例子中，我们将更详细地逐个分析代码更改，从第一个更改开始，如下所示：
 
-[PRE4]
+```py
+fibSequence = [0,1]
+```
 
 1.  这条新线创建了一个新的斐波那契列表，包含我们的两个基数`0`和`1`。我们仍然使用递归函数，但现在我们还存储每次独特计算的每个结果以供以后使用：
 
-[PRE5]
+```py
+elif n<= len(fibSequence): 
+        return fibSequence[n-1]
+```
 
 1.  下一个代码更改是在算法返回之前存储的值的地方，例如`0`或`1`，或者计算后存储在`fibSequence`列表中：
 
-[PRE6]
+```py
+fibN = Fibonacci(n-1) + Fibonacci(n-2) fibSequence.append(fibN) return fibN 
+```
 
 1.  最后一批代码更改现在保存了递归计算，将新值添加到整个序列中。这现在要求算法只需计算序列的第*n*个值一次。
 
@@ -162,17 +209,23 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  从命令行运行以下命令：
 
-[PRE7]
+```py
+conda create -n chapter2 python=3.6
+```
 
 1.  这将为您的开发创建一个新的虚拟环境。虚拟环境允许您隔离依赖项并控制版本。如果您不使用Anaconda，您可以使用Python虚拟环境来创建一个新环境。您还应该注意到，我们正在强制环境使用Python 3.6。再次强调，这确保我们知道我们使用的是哪个版本的Python。
 
 1.  安装完成后，我们使用以下命令激活环境：
 
-[PRE8]
+```py
+activate chapter2
+```
 
 1.  接下来，我们使用以下命令安装Gym：
 
-[PRE9]
+```py
+pip install gym
+```
 
 1.  Gym将安装几个依赖项，包括我们稍后将在其上训练的各种样本环境。
 
@@ -184,19 +237,45 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  为了参考，代码如下所示：
 
-[PRE10]
+```py
+from os import system, name
+import time
+import gym
+import numpy as np
+
+env = gym.make('FrozenLake-v0')
+env.reset()
+
+def clear():
+    if name == 'nt': 
+        _ = system('cls')    
+    else: 
+        _ = system('clear')
+
+for _ in range(1000):
+    clear()
+    env.render()
+    time.sleep(.5)
+    env.step(env.action_space.sample()) # take a random action
+env.close()
+```
 
 1.  在顶部，我们有导入语句，用于加载`system`模块以及`gym`、`time`和`numpy`。`numpy`是一个辅助库，我们用它来构建张量。张量是数学/编程概念，可以描述单个值或数字的多维数组。
 
 1.  接下来，我们使用以下代码构建和重置环境：
 
-[PRE11]
+```py
+env = gym.make('FrozenLake-v0')
+env.reset()
+```
 
 1.  之后，我们有一个`clear`函数，我们用它来清除对示例不重要的渲染。代码应该也是不言自明的。
 
 1.  这将带我们到`for`循环，也就是所有动作发生的地方。以下是最重要的那一行：
 
-[PRE12]
+```py
+env.step(env.action_space.sample())
+```
 
 1.  `env`变量代表环境，在那一行中，我们让算法每一步或迭代随机采取一个动作。在这个例子中，代理目前什么也没学到，只是随机移动。
 
@@ -224,7 +303,47 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  为了参考，整个代码块 `Chapter_2_5.py` 显示如下：
 
-[PRE13]
+```py
+from os import system, name
+import time
+import gym
+import numpy as np
+env = gym.make('FrozenLake-v0')
+env.reset()
+
+def clear():
+    if name == 'nt': 
+        _ = system('cls')    
+    else: 
+        _ = system('clear')
+
+def act(V, env, gamma, policy, state, v):
+    for action, action_prob in enumerate(policy[state]):                
+        for state_prob, next_state, reward, end in env.P[state][action]:                                        
+            v += action_prob * state_prob * (reward + gamma * V[next_state])                    
+            V[state] = v
+
+def eval_policy(policy, env, gamma=1.0, theta=1e-9, terms=1e9):     
+    V = np.zeros(env.nS)  
+    delta = 0
+    for i in range(int(terms)): 
+        for state in range(env.nS):            
+            act(V, env, gamma, policy, state, v=0.0)         
+        clear()
+        print(V)
+        time.sleep(1) 
+        v = np.sum(V)
+        if v - delta < theta:
+            return V
+        else:
+            delta = v
+    return V
+
+policy = np.ones([env.env.nS, env.env.nA]) / env.env.nA
+V = eval_policy(policy, env.env)
+
+print(policy, V)
+```
 
 1.  在代码的开始，我们执行与我们的测试示例相同的初始步骤。我们加载 `import` 语句，初始化和加载环境，然后定义 `clear` 函数。
 
@@ -232,13 +351,32 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  现在，向上移动到 `eval_policy` 函数并关注双重循环，如下面的代码块所示：
 
-[PRE14]
+```py
+for i in range(int(terms)):
+  for state in range(env.nS):
+    act(V, env, gamma, policy, state, v=0.0)
+  clear()
+  print(V)
+  time.sleep(1)
+  v = np.sum(V)
+  if v - delta < theta:
+    return V
+  else:
+    delta = v
+return V
+```
 
 1.  第一个 `for` 循环遍历在终止之前的项数或迭代次数。在这里我们设置一个限制以防止无限循环。在内循环中，通过 `act` 函数对环境中的所有状态进行迭代并采取行动。之后，我们使用之前的渲染代码来显示更新的值。第一个 `for` 循环结束时，我们检查计算出的 `v` 值的总变化是否小于特定的阈值，`theta`。如果值的变化小于阈值，函数返回计算出的值函数，`V`。
 
 1.  算法的核心是 `act` 函数以及更新方程操作的地方；该函数内部的显示如下：
 
-[PRE15]
+```py
+for action, action_prob in enumerate(policy[state]):   
+  for state_prob, next_state, reward, end
+ in env.P[state][action]:   
+    v += action_prob * state_prob * (reward + gamma * V[next_state]) #update 
+    V[state] = v
+```
 
 1.  第一个 `for` 循环遍历给定状态下策略中的所有动作。回想一下，我们首先将策略初始化为每个 `action` 函数的 `0.25`，即 `action_prob = 0.25`。然后，我们遍历从状态和动作到每个转换并应用更新。更新在突出显示的方程中显示。最后，当前状态的价值函数 `V` 更新为 `v`。
 
@@ -256,13 +394,53 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  为了简洁起见，以下从`Chapter_2_6.py`中摘录的代码仅显示了添加到上一个示例中的新代码部分：
 
-[PRE16]
+```py
+def evaluate(V, action_values, env, gamma, state):
+    for action in range(env.nA):
+        for prob, next_state, reward, terminated in env.P[state][action]:
+            action_values[action] += prob * (reward + gamma * V[next_state])
+    return action_values
+
+def lookahead(env, state, V, gamma):
+    action_values = np.zeros(env.nA)
+    return evaluate(V, action_values, env, gamma, state)
+
+def improve_policy(env, gamma=1.0, terms=1e9):    
+    policy = np.ones([env.nS, env.nA]) / env.nA
+    evals = 1
+    for i in range(int(terms)):
+        stable = True       
+        V = eval_policy(policy, env, gamma=gamma)
+        for state in range(env.nS):
+            current_action = np.argmax(policy[state])
+            action_value = lookahead(env, state, V, gamma)
+            best_action = np.argmax(action_value)
+            if current_action != best_action:
+                stable = False               
+                policy[state] = np.eye(env.nA)[best_action]
+            evals += 1                
+            if stable:
+                return policy, V
+
+#replaced bottom code from previous sample with
+policy, V = improve_policy(env.env) 
+print(policy, V)
+```
 
 1.  在上一个示例中添加了三个新的函数：`improve_policy`、`lookahead`和`evaluate`。`improve_policy`使用有限循环遍历当前环境中的状态；在遍历每个状态之前，它调用`eval_policy`通过传递当前的`policy`、`environment`和`gamma`（折扣因子）参数来更新`value`函数。然后，它调用`lookahead`函数，该函数内部调用一个`evaluate`函数来更新状态的动作值。`evaluate`是`act`函数的一个修改版本。
 
 1.  虽然`eval_policy`和`improve_policy`这两个函数都使用有限循环的术语来防止无限循环，但它们仍然使用非常大的限制；在示例中，默认值是`1e09`。因此，我们仍然希望确定一个条件，以便在术语限制之前尽早停止循环。在策略评估中，我们通过观察价值函数的变化或delta来控制这一点。在策略改进中，我们现在要改进实际策略，为此，我们假设一个贪婪策略。换句话说，我们希望改进我们的策略，使其总是选择具有最高价值的动作，如下面的代码所示：
 
-[PRE17]
+```py
+action_value = lookahead(env, state, V, gamma)best_action = np.argmax(action_value)
+if current_action != best_action:                
+  stable = False   
+  policy[state] = np.eye(env.nA)[best_action]
+evals += 1 
+
+if stable:
+  return policy, V
+```
 
 1.  上述代码块首先使用`numpy`函数——`np.argmax`在`lookahead`函数返回的`action_value`列表上返回最大值或`best_action`，换句话说，就是贪婪动作。然后我们考虑`current_action`是否不等于`best_action`；如果不等于，那么我们认为策略是不稳定的，将`stable`设置为`false`。由于动作不是最好的，我们还使用`np.eye`为定义的形状更新`policy`，使用单位张量。这一步只是将策略的值分配为`1.0`给最佳/贪婪动作，而其他所有动作的值为`0.0`。
 
@@ -284,21 +462,60 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  这个代码示例建立在之前的示例之上。示例`Chapter_2_7.py`中的新代码变化如下：
 
-[PRE18]
+```py
+def value_iteration(env, gamma=1.0, theta=1e-9, terms=1e9):
+    V = np.zeros(env.nS)
+    for i in range(int(terms)):
+        delta = 0
+        for state in range(env.nS):
+            action_value = lookahead(env, state, V, gamma)
+            best_action_value = np.max(action_value)
+            delta = max(delta, np.abs(V[state] - best_action_value))
+            V[state] = best_action_value             
+        if delta < theta: break
+    policy = np.zeros([env.nS, env.nA])
+    for state in range(env.nS):
+        action_value = lookahead(env, state, V, gamma)
+        best_action = np.argmax(action_value)
+        policy[state, best_action] = 1.0
+    return policy, V
+
+#policy, V = improve_policy(env.env) 
+#print(policy, V)
+
+policy, V = value_iteration(env.env)
+print(policy, V)
+```
 
 1.  这段代码的大部分与我们之前在示例中已经审查过的代码非常相似，但也有一些值得注意的细微差别。
 
 1.  首先，这次，在有限项循环内部，我们遍历状态并使用`lookahead`函数进行直接前瞻性查看。此代码的详细信息如下：
 
-[PRE19]
+```py
+for state in range(env.nS):
+ action_value = lookahead(env, state, V, gamma)
+ best_action_value = np.max(action_value)
+ delta = max(delta, np.abs(V[state] - best_action_value))
+ V[state] = best_action_value 
+
+```
 
 1.  与政策评估和改进相比，前述代码的细微差别在于，这次我们立即进行前瞻性查看，遍历动作值，然后根据最佳值更新`value`函数。在这段代码块中，我们还计算了一个新的`delta`值或从先前最佳动作值的变化量：
 
-[PRE20]
+```py
+if delta < theta: break
+```
 
 1.  在循环之后，有一个`if`语句检查计算出的`delta`值或动作值变化量是否低于特定的阈值`theta`。如果`delta`足够小，我们就中断有限项循环：
 
-[PRE21]
+```py
+policy = np.zeros([env.nS, env.nA])
+  for state in range(env.nS):
+    action_value = lookahead(env, state, V, gamma)
+    best_action = np.argmax(action_value)
+    policy[state, best_action] = 1.0
+return policy, V
+```
 
 1.  从那里，我们使用`numpy np.zeros`函数将`policy`初始化为零。然后，我们再次遍历所有状态，并使用`lookahead`函数进行另一步前瞻性查看。这个函数返回一个动作值的列表，我们确定最大索引值，即`best_action`。然后我们将`policy`设置为`1.0`；我们假设最佳动作总是为该状态选择。最后，我们返回新的策略和`value`函数，`V`。
 
@@ -318,25 +535,74 @@ Gym 的安装相当简单，但同时我们想要避免任何可能让你感到�
 
 1.  打开`Chapter_2_8.py`示例。此示例基于之前的代码示例，因此我们只展示新的附加代码：
 
-[PRE22]
+```py
+def play(env, episodes, policy):
+    wins = 0
+    total_reward = 0
+    for episode in range(episodes):
+        term = False
+        state = env.reset()
+        while not term:
+            action = np.argmax(policy[state])
+            next_state, reward, term, info = env.step(action)
+            total_reward += reward
+            state = next_state
+            if term and reward == 1.0:
+                wins += 1
+    average_reward = total_reward / episodes
+    return wins, total_reward, average_reward
+
+policy, V = improve_policy(env.env)
+print(policy, V)
+
+wins, total, avg = play(env.env, 1000, policy)
+print(wins)
+
+policy, V = value_iteration(env.env)
+print(policy, V)
+
+wins, total, avg = play(env.env, 1000, policy)
+print(wins)
+```
 
 1.  附加代码包括一个新的函数`play`和末尾的不同测试代码。在末尾的代码中，我们首先使用`improve_policy`函数计算策略，该函数执行策略迭代：
 
-[PRE23]
+```py
+wins, total, avg = play(env.env, 1000, policy)print(wins)
+```
 
 1.  接下来，我们使用`play`函数评估`policy`的获胜次数。之后，我们打印获胜次数。
 
 1.  然后，我们使用价值迭代评估一个新的策略，再次使用`play`函数评估获胜次数，并打印结果：
 
-[PRE24]
+```py
+for episode in range(episodes):
+  term = False
+  state = env.reset()
+  while not term:
+    action = np.argmax(policy[state])
+    next_state, reward, term, info = env.step(action)
+    total_reward += reward
+    state = next_state
+    if term and reward == 1.0:
+      wins += 1
+average_reward = total_reward / episodes    return wins, total_reward, average_reward
+```
 
 1.  在`play`函数中，我们遍历次数。每个回合都被认为是智能体从起点移动到目标的一次尝试。在这个例子中，回合的终止发生在智能体遇到洞或目标时。如果它达到目标，它将获得`1.0`的奖励。大部分代码都是自解释的，除了智能体执行动作并再次显示的时刻如下：
 
-[PRE25]
+```py
+next_state, reward, term, info = env.step(action)
+```
 
 1.  回想一下，在我们的 Gym 环境测试中，我们只是随机移动智能体。现在，在前面代码中，我们执行由策略设定的特定动作。执行动作的回报是`next_state`、`reward`（如果有）、`term`或终止，以及一个`info`变量。这一行代码完全控制智能体，并允许其移动并与环境交互：
 
-[PRE26]
+```py
+total_reward += reward
+state = next_state
+if term and reward == 1.0:
+  wins += 1
+```
 
 1.  智能体移动一步后，我们更新`total_reward`和`state`。然后，我们测试智能体是否获胜，环境是否终止，以及返回的奖励是否为`1.0`。否则，智能体继续。智能体也可能因掉入洞而结束回合。
 

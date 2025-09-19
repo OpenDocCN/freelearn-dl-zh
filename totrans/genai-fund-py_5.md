@@ -152,19 +152,38 @@ StyleSprint 可以提供有效的示例，帮助模型理解查询的本质，�
 
 首先，我们安装所需的库：
 
-[PRE0]
+```py
+!pip install transformers peft sentence-transformers
+```
 
 然后，我们从transformers库中导入问答模块。对于我们的项目，我们将使用谷歌的**Flan T5（小型**），这被认为是GPT 3.5的SOTA替代品。我们的一个目标继续是衡量性能与效率之间的权衡，因此我们从Flan T5的最小版本开始，它有80M个参数。这将使训练更快，迭代更迅速。然而，请注意，即使在少量epoch上训练的小型模型也需要高RAM的运行环境：
 
-[PRE1]
+```py
+from transformers import (
+    AutoModelForQuestionAnswering, AutoTokenizer)
+model_name = " google/flan-t5-small"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+```
 
 在预训练模型实例化后，我们现在可以配置模型以适应其训练过程，使用AdaLoRA，正如我们所学的，它专门设计用于在微调过程中高效地分配参数预算：
 
-[PRE2]
+```py
+from peft import AdaLoraConfig
+# Example configuration; adjust parameters as needed
+adapter_config = AdaLoraConfig(target_r=16)
+model.add_adapter(adapter_config)
+```
 
 正如讨论的那样，微调在很大程度上依赖于训练数据的质量和大小。在StyleSprint场景中，公司可以从其FAQ页面、社交媒体和客户服务记录中聚合问答对。为此练习，我们将构建一个类似于以下的数据集：
 
-[PRE3]
+```py
+demo_data = [{
+"question": "What are the latest streetwear trends available at Stylesprint?",
+  "answer": "Stylesprint's latest streetwear collection includes hoodies, and graphic tees, all inspired by the latest hip-hop fashion trends."
+...
+}]
+```
 
 然而，为了将我们的数据集与问答管道集成，我们首先应该了解`Trainer`类。Hugging Face transformers库中的`Trainer`类期望训练和评估数据集以特定格式提供，通常是一个PyTorch `Dataset`对象，而不仅仅是简单的字典列表。此外，数据集中的每个条目都需要进行标记化，并使用必要的字段结构化，如`input_ids`、`attention_mask`，对于问答任务，还需要`start_positions`和`end_positions`。让我们更详细地探讨这些内容：
 
@@ -176,13 +195,47 @@ StyleSprint 可以提供有效的示例，帮助模型理解查询的本质，�
 
 有这样的理解后，我们可以创建一个类，使我们的数据集适应训练器的期望，如下所示：
 
-[PRE4]
+```py
+from torch.utils.data import Dataset
+class StylesprintDataset(Dataset):
+   def __init__(self, tokenizer, data):
+       tokenizer.pad_token = tokenizer.eos_token
+       self.tokenizer = tokenizer
+       self.data = data
+```
 
 要查看完整的自定义数据集类代码，请访问此书的GitHub仓库：[https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python](https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python)。
 
 在准备完训练集并将我们的管道配置为应用AdaLoRA方法后，我们最终可以进入训练步骤。对于这个项目，我们将配置训练只运行几个周期，但在StyleSprint场景中，需要一个更加稳健的训练过程：
 
-[PRE5]
+```py
+from transformers import Trainer, TrainingArguments
+# Split the mock dataset into training and evaluation sets (50/50)
+train_data = StylesprintDataset(
+    tokenizer, demo_data[:len(demo_data)//2])
+eval_data = StylesprintDataset(
+    tokenizer, demo_data[len(demo_data)//2:])
+# Training arguments
+training_args = TrainingArguments(
+    output_dir="./results",
+    num_train_epochs=10,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=64,
+    warmup_steps=500,
+    weight_decay=0.01,
+    logging_dir="./logs",
+    logging_steps=10,
+)
+# Initialize the Trainer
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_data,
+    eval_dataset=eval_data
+)
+# Start training
+trainer.train()
+```
 
 对于我们的简单实验，我们并不期望模型有很高的性能；然而，我们可以学习如何解释训练输出，它描述了模型在评估样本上的表现。`Trainer`类将输出一个包含损失指标的训练摘要。
 
@@ -194,7 +247,35 @@ StyleSprint 可以提供有效的示例，帮助模型理解查询的本质，�
 
 下一步是使用我们新微调的模型进行推理或预测。我们还应该确保我们的训练模型参数安全，这样我们就可以在不重新训练的情况下重用它：
 
-[PRE6]
+```py
+import torch
+# save parameters
+model.save_pretrained("./stylesprint_qa_model")
+def ask_question(model, question, context):
+   # Tokenize the question and context
+   inputs = tokenizer.encode_plus(question, context,
+        add_special_tokens=True, return_tensors="pt")
+   # Get model predictions
+   with torch.no_grad():
+       outputs = model(**inputs)
+   # Get the start and end positions
+   answer_start_scores = outputs.start_logits
+   answer_end_scores = outputs.end_logits
+   # Find the tokens with the highest `start` and `end` scores
+   answer_start = torch.argmax(answer_start_scores)
+   answer_end = torch.argmax(answer_end_scores) + 1
+   # Convert the tokens to the answer string
+   answer = tokenizer.convert_tokens_to_string(
+        tokenizer.convert_ids_to_tokens(
+            inputs["input_ids"][0][answer_start:answer_end]
+            )
+        )
+   return answer
+question = "What is the return policy for online purchases?"
+context = """Excerpt from return policy returned from search."""
+answer = ask_question(model, question, context)
+print(answer)
+```
 
 如前所述，我们将上下文和问题一起引入模型，以便它可以识别哪个上下文片段最恰当地响应查询。因此，我们可能希望考虑集成一个向量搜索系统（如RAG），根据与查询的语义相似性自动从大型数据集中识别相关文档。这些搜索结果可能不会提供具体的答案，但训练好的QA模型可以从结果中提取更精确的答案。
 
@@ -204,7 +285,46 @@ StyleSprint 可以提供有效的示例，帮助模型理解查询的本质，�
 
 为了评估我们的模型结果，StyleSprint可能会应用我们在本章中已经讨论过的定性和定量方法。为了我们的实验目的，我们可以使用一个简单的语义相似度度量来衡量模型输出的黄金标准响应：
 
-[PRE7]
+```py
+from sentence_transformers import SentenceTransformer, util
+import pandas as pd
+# Example of a gold standard answer written by a human
+gs = "Our policy at Stylesprint is to accept returns on online purchases within 30 days, with the condition that the items are unused and remain in their original condition."
+# Example of answer using GPT 3.5 with in-context learning reusing a relevant subset of the training data examples
+gpt_35 = "Stylesprint accepts returns within 30 days of purchase, provided the items are unworn and in their original condition."
+# Load your dataset
+dataset = pd.DataFrame([
+   (gs, gpt_35, answer)
+])# pd.read_csv("dataset.csv")
+dataset.columns = ['gold_standard_response',
+    'in_context_response', 'fine_tuned_response']
+# Load a pre-trained sentence transformer model
+eval_model = SentenceTransformer('all-MiniLM-L6-v2')
+# Function to calculate semantic similarity
+def calculate_semantic_similarity(model, response, gold_standard):
+    response_embedding = model.encode(
+        response, convert_to_tensor=True)
+    gold_standard_embedding = model.encode(gold_standard,
+        convert_to_tensor=True)
+    return util.pytorch_cos_sim(response_embedding,
+        gold_standard_embedding).item()
+# Measure semantic similarity
+dataset['in_context_similarity'] = dataset.apply(
+    lambda row:calculate_semantic_similarity(
+        eval_model, row['in_context_response'],
+        row['gold_standard_response']
+    ), axis=1)
+dataset['fine_tuned_similarity'] = dataset.apply(
+    lambda row:calculate_semantic_similarity(
+        eval_model, row['fine_tuned_response'],
+        row['gold_standard_response']
+    ), axis=1)
+# Print semantic similarity
+print("Semantic similarity for in-context learning:", 
+    dataset['in_context_similarity'])
+print("Semantic similarity for fine-tuned model:", 
+    dataset['fine_tuned_similarity'])
+```
 
 我们评估的结果如下：
 

@@ -140,31 +140,49 @@ Pimoroni LED SHIM很容易连接到Raspberry Pi。我们将其放在电机控制
 
 1.  首先，我们需要安装LED SHIM库。因此，在Raspberry Pi上，输入以下内容：
 
-    [PRE0]
+    ```py
+    pi@myrobot:~ $ pip3 install ledshim
+    ```
 
 1.  我们的代码必须首先导入此设置并设置设备。将以下代码放入`leds_led_shim.py`（以设备类型命名）：
 
-    [PRE1]
+    ```py
+    import ledshim to set the device up.We have set up a property for the number of LEDs in our LED class, called `count`. This property can be read like a variable but is read-only, and our code can't accidentally overwrite it.  
+    ```
 
 1.  现在，我们创建与条带交互的方法。设置单个LED相当直接：
 
-    [PRE2]
+    ```py
+    (r, g, b), the LED SHIM library expects them to be separate parameters. Python has a trick for expanding a tuple into a set of parameters by using an asterisk with the variable name. This expansion is what *color means on the second line.The LED SHIM code raises `KeyError` if the user attempts to set an LED out of range.
+    ```
 
 1.  设置多个LEDs在我们的代码中也是一个简单的包装器：
 
-    [PRE3]
+    ```py
+        def set_range(self, led_range, color):
+            ledshim.set_multiple_pixels(led_range, color)
+    ```
 
 1.  我们还希望有一种方法来设置所有的LEDs。此代码与设置单个LED的代码类似：
 
-    [PRE4]
+    ```py
+        def set_all(self, color):
+            ledshim.set_all(*color)
+    ```
 
 1.  让我们添加一个清除LEDs的方法：
 
-    [PRE5]
+    ```py
+        def clear(self):
+            ledshim.clear()
+    ```
 
 1.  最后，我们需要`show`代码，将我们配置的颜色发送到LEDs。Pimoroni LED SHIM库使得这个过程非常简单：
 
-    [PRE6]
+    ```py
+        def show(self):
+            ledshim.show()
+    ```
 
 我们已经安装了LED SHIM库，并为我们自己创建了一个接口。我们可以使用这个接口与LEDs通信，并且它被设计成可以替换为不同类型LED设备的兼容代码。现在，我们将这个LED接口在我们的`Robot`对象中可用。
 
@@ -174,19 +192,46 @@ Pimoroni LED SHIM很容易连接到Raspberry Pi。我们将其放在电机控制
 
 1.  首先，将`leds_led_shim`文件添加到导入中（新的代码用粗体表示）：
 
-    [PRE7]
+    ```py
+    from Raspi_MotorHAT import Raspi_MotorHAT
+    from gpiozero import DistanceSensor
+    import atexit
+    import leds_led_shim
+    ```
 
 1.  接下来，我们在`Robot`的构造函数（`init`）方法中添加SHIM的一个实例（新的代码用粗体表示）：
 
-    [PRE8]
+    ```py
+    class Robot:
+        def __init__(self, motorhat_addr=0x6f):
+           # Setup the motorhat with the passed in address
+           self._mh = Raspi_MotorHAT(addr=motorhat_addr)
+           # get local variable for each motor
+           self.left_motor = self._mh.getMotor(1)
+           self.right_motor = self._mh.getMotor(2)
+           # Setup The Distance Sensors
+           self.left_distance_sensor = DistanceSensor(echo=17, trigger=27, queue_len=2)
+            self.right_distance_sensor = DistanceSensor(echo=5, trigger=6, queue_len=2)
+            # Setup the Leds
+            self.leds = leds_led_shim.Leds()
+    ```
 
 1.  由于我们需要停止的不仅仅是电机，我们将在`atexit`调用中将`stop_motors`替换为新的`stop_all`方法，以停止其他设备（如LEDs）：
 
-    [PRE9]
+    ```py
+            # ensure everything gets stopped when the code exits
+            atexit.register(self.stop_all)
+    ```
 
 1.  创建`stop_all`方法，该方法停止电机并清除LEDs：
 
-    [PRE10]
+    ```py
+        def stop_all(self):
+            self.stop_motors()
+            # Clear the display
+            self.leds.clear()
+            self.leds.show()
+    ```
 
     重要提示
 
@@ -204,25 +249,40 @@ Pimoroni LED SHIM很容易连接到Raspberry Pi。我们将其放在电机控制
 
 1.  通过SSH连接到机器人，并输入`python3`。Raspberry Pi应该这样响应：
 
-    [PRE11]
+    ```py
+    pi@myrobot:~ $ python3
+    Python 3.7.3 (default, Apr  3 2019, 05:39:12) 
+    [GCC 8.2.0] on linux
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>>
+    ```
 
 1.  让我们准备好我们的`robot`库以便使用。输入以下粗体显示的部分：
 
-    [PRE12]
+    ```py
+    >>> import robot
+    >>> r = robot.Robot()
+    ```
 
 1.  现在，尝试打开一个LED，将其设置为红色：
 
-    [PRE13]
+    ```py
+    >>> r.leds.set_one(0, (255, 0, 0))
+    ```
 
 1.  嗯 – 没有发生任何事情。记住，我们需要调用`leds.show`来显示我们的设置：
 
-    [PRE14]
+    ```py
+    >>> r.leds.show()
+    ```
 
     你现在应该看到一个红色的LED。
 
 1.  让我们尝试将另一种颜色设置为紫色，通过混合红色和蓝色LED：
 
-    [PRE15]
+    ```py
+    leds.show to send the colors to the LED device.
+    ```
 
 1.  要停止此会话，请在空行上按 *Ctrl* +*D*。`atexit` 代码会自动关闭所有LED。
 
@@ -260,19 +320,30 @@ Pimoroni LED SHIM很容易连接到Raspberry Pi。我们将其放在电机控制
 
 1.  首先，我们需要导入。我们需要导入我们的 `R` 库和 `time` 来动画化：
 
-    [PRE16]
+    ```py
+    from robot import Robot
+    from time import sleep
+    ```
 
 1.  现在，让我们设置我们的机器人，以及一些命名颜色：
 
-    [PRE17]
+    ```py
+    bot = Robot()
+    red = (255, 0, 0)
+    blue = (0, 0, 255)
+    ```
 
 1.  下一个部分是主循环。它交替两种颜色，使用 `sleep`：
 
-    [PRE18]
+    ```py
+    set_all method to set all the LEDs to red and call the show method to send it to the device. The code uses sleep to wait for half a second, before switching to blue. Important noteThe complete code is at [https://github.com/PacktPublishing/Learn-Robotics-Fundamentals-of-Robotics-Programming-Second-Edition/blob/master/chapter8/leds_test.py](https://github.com/PacktPublishing/Learn-Robotics-Fundamentals-of-Robotics-Programming-Second-Edition/blob/master/chapter8/leds_test.py).
+    ```
 
 1.  当你将这些文件上传到Raspberry Pi后，输入以下命令以显示红/蓝交替LED显示：
 
-    [PRE19]
+    ```py
+    pi@myrobot:~ $ python3 leds_test.py
+    ```
 
 1.  在终端中按 *Ctrl* + *C* 停止运行。
 
@@ -320,13 +391,17 @@ RGB是硬件期望的颜色。然而，RGB在表达中间颜色或创建它们�
 
 要制作明亮的青色，我们需要将色调移动到大约0.6的位置，饱和度为1.0，亮度也为1.0：
 
-[PRE20]
+```py
+cyan = colorsys.hsv_to_rgb(0.6, 1.0, 1.0)
+```
 
 然而，这还不够。`colorsys`调用的输出是一个元组，包含三个项目，用于R、G和B组件。
 
 输出组件也是以0到1.0为单位的。大多数RGB系统期望值在0到255之间。为了使用它们，我们需要通过乘以它们将这些值转换回来：
 
-[PRE21]
+```py
+cyan_rgb = [int(c * 255) for c in cyan]
+```
 
 在上一行中，我们遍历每个组件`c`，并将其乘以255。通过在Python中用方括号将`for`循环放在那里，我们可以遍历元素，并将结果放回列表中。
 
@@ -344,7 +419,17 @@ RGB是硬件期望的颜色。然而，RGB在表达中间颜色或创建它们�
 
 让我们开始吧！创建一个名为`led_rainbow.py`的新文件：
 
-[PRE22]
+```py
+import colorsys
+def show_rainbow(leds, led_range):
+    led_range = list(led_range)
+    hue_step = 1.0 / len(led_range)
+    for index, led_address in enumerate(led_range):
+        hue = hue_step * index
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 0.6)
+        rgb = [int(c*255) for c in rgb]
+        leds.set_one(led_address, rgb)
+```
 
 让我们逐行分析这个文件：
 
@@ -366,7 +451,21 @@ RGB是硬件期望的颜色。然而，RGB在表达中间颜色或创建它们�
 
 让我们用名为`test_rainbow.py`的文件来测试这个：
 
-[PRE23]
+```py
+from time import sleep
+from robot import Robot
+from led_rainbow import show_rainbow
+bot = Robot()
+while True:
+    print("on")
+    show_rainbow(bot.leds, range(bot.leds.count))
+    bot.leds.show()
+    sleep(0.5)
+    print("off")
+    bot.leds.clear()
+    bot.leds.show()
+    sleep(0.5)
+```
 
 这与我们的之前的红蓝测试非常相似。然而，在第一部分，我们使用了`show_rainbow`函数，该函数是从`led_rainbow`模块导入的。它传递了机器人的LED，并创建了一个覆盖所有LED的范围。
 
@@ -398,43 +497,81 @@ RGB是硬件期望的颜色。然而，RGB在表达中间颜色或创建它们�
 
 1.  在我们可以在这种行为中使用LED之前，我们需要将它们分开成条。在`ObstacleAvoidingBehavior`的`__init__`方法中添加以下内容：
 
-    [PRE24]
+    ```py
+            # Calculations for the LEDs
+            self.led_half = int(self.robot.leds.leds_count/2)
+    ```
 
 1.  接下来，我们需要为感应时的LED选择一种颜色。我选择了红色。我鼓励你尝试另一种颜色：
 
-    [PRE25]
+    ```py
+            self.sense_colour = 255, 0, 0
+    ```
 
 1.  在设置好变量之后，让我们添加一个将距离转换为LED的方法。我在`__init__`方法之后添加了这个方法：
 
-    [PRE26]
+    ```py
+        def distance_to_led_bar(self, distance):
+    ```
 
 1.  距离是以米为单位的，1.0代表1米，所以从1.0减去距离会反转这个值。`max`函数将返回两个值中的较大值，在这里它被用来确保我们不会低于零：
 
-    [PRE27]
+    ```py
+    # Invert so closer means more LED's. 
+            inverted = max(0, 1.0 - distance)
+    ```
 
 1.  现在，我们将这个数字乘以0到1之间的某个分数，乘以`self.led_half`的值，以得到要使用的LED数量。我们将其向上取整，并用`int(round())`将其转换为整数，因为我们只能打开整数的LED。向上取整意味着在我们的乘法之后，如果我们得到一个如3.8这样的值，我们将它向上取整到4.0，然后将其转换为整数以点亮四个LED。我们给这个数加1，这样至少总有一个LED被点亮，然后返回它：
 
-    [PRE28]
+    ```py
+            led_bar = int(round(inverted * self.led_half))
+            return led_bar
+    ```
 
 1.  下一个方法是一个更复杂的方法；它将创建两个条。让我们首先声明该方法并清除LED：
 
-    [PRE29]
+    ```py
+        def display_state(self, left_distance, right_distance):
+            # Clear first
+            self.robot.leds.clear()
+    ```
 
 1.  对于左侧条形，我们将左侧传感器的距离转换为LED数量，然后创建一个从0到这个数量的范围。它使用`set_range`方法将一组LED设置为`sense_color`。请注意，你的LED可能方向相反，在这种情况下，在这个`display`方法中交换`left_distance`和`right_distance`：
 
-    [PRE30]
+    ```py
+            # Left side
+            led_bar = self.distance_to_led_bar(left_distance)
+            self.robot.leds.set_range(range(led_bar), self.sense_colour)
+    ```
 
 1.  右侧稍微复杂一些；在转换为LED数量后，我们需要为LED创建一个范围。变量`led_bar`保存要点亮的LED数量。为了点亮条形的右侧，我们需要从这个LED数量中减去，以找到第一个LED，并从那里创建一个到总长度的范围。我们必须从长度中减去1 – 否则它将多计算1个LED：
 
-    [PRE31]
+    ```py
+            # Right side
+            led_bar = self.distance_to_led_bar(right_distance)
+            # Bit trickier - must go from below the leds count up to the leds count.
+            start = (self.robot.leds.count – 1) - led_bar
+            self.robot.leds.set_range(range(start, self.robot.leds.count - 1), self.sense_colour)
+    ```
 
 1.  接下来，我们想要展示我们现在制作的显示：
 
-    [PRE32]
+    ```py
+            # Now show this display
+            self.robot.leds.show()
+    ```
 
 1.  然后，我们在行为中的`run`方法内部调用`display_state`来在LED上显示我们的读数。这里有一些上下文中的几行，其中额外的一行被突出显示：
 
-    [PRE33]
+    ```py
+                # Get the sensor readings in meters
+                left_distance = self.robot.left_distance_sensor.distance
+                right_distance = self.robot.right_distance_sensor.distance
+                # Display this
+                self.display_state(left_distance, right_distance)
+                # Get speeds for motors from distances
+                nearest_speed, furthest_speed, delay = self.get_speeds(min(left_distance, right_distance))
+    ```
 
 保存此代码，将其发送到Raspberry Pi并运行。当它在运行时，你应该能够看到LED根据距离点亮成条形。这既令人满意，也很好地感受到了机器人正在检测的内容。让我们通过添加彩虹让它更有趣。
 
@@ -454,15 +591,27 @@ RGB是硬件期望的颜色。然而，RGB在表达中间颜色或创建它们�
 
 1.  在顶部，导入`led_rainbow`以便我们可以使用它：
 
-    [PRE34]
+    ```py
+    from robot import Robot
+    from time import sleep
+    from led_rainbow import show_rainbow
+    ```
 
 1.  我们现有的代码显示了左侧的条形。在这里，我们不需要条形，而是显示一个彩虹。我们需要确保至少有一个项目：
 
-    [PRE35]
+    ```py
+         # Left side
+         led_bar = self.distance_to_led_bar(left_distance)
+         show_rainbow(self.robot.leds, range(led_bar))
+    ```
 
 1.  再次，右侧将稍微复杂一些；因为我们想让彩虹朝相反方向延伸，所以我们需要让彩虹的范围也倒计数。Python的`range`函数，连同`start`和`end`参数，还有一个步长参数。通过将步长设置为-1，我们可以在范围内倒计数：
 
-    [PRE36]
+    ```py
+            start = (self.robot.leds.count – 1) - led_bar
+            right_range = range(self.robot.leds.count - 1, start, -1)
+            show_rainbow(self.robot.leds, right_range)
+    ```
 
 1.  上传此代码并运行它，条形图将显示彩虹颜色而不是纯色。
 

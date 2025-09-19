@@ -148,13 +148,43 @@ ES-HyperNEAT使用四叉树数据结构，从数据科学家预定义的输入�
 
 视网膜空间特定部分的像素允许配置的每种配置都可以表示为一个单独的视觉对象。封装相关功能的Python类命名为`VisualObject`，并在`retina_experiment.py`文件中定义。它具有以下构造函数：
 
-[PRE0]
+```py
+    def __init__(self, configuration, side, size=2):
+        self.size = size
+        self.side = side
+        self.configuration = configuration
+        self.data = np.zeros((size, size))
+
+        # Parse configuration
+        lines = self.configuration.splitlines()
+        for r, line in enumerate(lines):
+            chars = line.split(" ")
+            for c, ch in enumerate(chars):
+                if ch == 'o':
+                    # pixel is ON
+                    self.data[r, c] = 1.0
+                else:
+                    # pixel is OFF
+                    self.data[r, c] = 0.0
+```
 
 构造函数接收一个特定视觉对象的配置字符串，以及该对象在视网膜空间中的有效位置。之后，它将接收到的参数分配给内部字段，并创建一个二维数据数组，用于存储视觉对象中像素的状态。
 
 通过以下方式解析视觉对象配置字符串以获取像素的状态：
 
-[PRE1]
+```py
+        # Parse configuration
+        lines = self.configuration.splitlines()
+        for r, line in enumerate(lines):
+            chars = line.split(" ")
+            for c, ch in enumerate(chars):
+                if ch == 'o':
+                    # pixel is ON
+                    self.data[r, c] = 1.0
+                else:
+                    # pixel is OFF
+                    self.data[r, c] = 0.0
+```
 
 视觉对象配置字符串由四个字符组成，不包括换行符，这些字符定义了视觉对象中相应像素的状态。如果配置行中特定位置的符号是`o`，则将视觉对象中相应位置的像素设置为开启状态，并将值`1.0`保存到数据数组中的该位置。
 
@@ -166,11 +196,48 @@ ES-HyperNEAT使用四叉树数据结构，从数据科学家预定义的输入�
 
 在此函数中，我们按照以下方式创建数据集的视觉对象：
 
-[PRE2]
+```py
+    def create_data_set(self):
+        # set left side objects
+        self.visual_objects.append(VisualObject(". .\n. .", 
+                                                side=Side.BOTH))
+        self.visual_objects.append(VisualObject(". .\n. o", 
+                                                side=Side.BOTH))
+        self.visual_objects.append(VisualObject(". o\n. o", 
+                                                side=Side.LEFT))
+        self.visual_objects.append(VisualObject(". o\n. .", 
+                                                side=Side.BOTH))
+        self.visual_objects.append(VisualObject(". o\no o", 
+                                                side=Side.LEFT))
+        self.visual_objects.append(VisualObject(". .\no .", 
+                                                side=Side.BOTH))
+        self.visual_objects.append(VisualObject("o o\n. o", 
+                                                side=Side.LEFT))
+        self.visual_objects.append(VisualObject("o .\n. .", 
+                                                side=Side.BOTH))
+```
 
 上述代码创建了视网膜左侧的视觉对象。右侧的视觉对象可以以类似的方式创建：
 
-[PRE3]
+```py
+       # set right side objects
+       self.visual_objects.append(VisualObject(". .\n. .", 
+                                               side=Side.BOTH))
+       self.visual_objects.append(VisualObject("o .\n. .", 
+                                               side=Side.BOTH))
+       self.visual_objects.append(VisualObject("o .\no .", 
+                                               side=Side.RIGHT))
+       self.visual_objects.append(VisualObject(". .\no .", 
+                                               side=Side.BOTH))
+       self.visual_objects.append(VisualObject("o o\no .", 
+                                               side=Side.RIGHT))
+       self.visual_objects.append(VisualObject(". o\n. .", 
+                                               side=Side.BOTH))
+       self.visual_objects.append(VisualObject("o .\no o", 
+                                               side=Side.RIGHT))
+       self.visual_objects.append(VisualObject(". .\n. o", 
+                                               side=Side.BOTH))
+```
 
 创建的对象被添加到视觉对象列表中，定义为评估从基底产生的神经进化过程中检测器ANN适应度的数据集。
 
@@ -182,23 +249,41 @@ ES-HyperNEAT使用四叉树数据结构，从数据科学家预定义的输入�
 
 1.  首先，我们按照在基底配置中定义的顺序准备检测器人工神经网络（ANN）的输入。
 
-[PRE4]
+```py
+        inputs = left.get_data() + right.get_data()
+        inputs.append(0.5) # the bias
+
+        net.Input(inputs)
+```
 
 `inputs`数组以左侧数据开始，然后继续添加右侧数据。之后，将偏差值附加到`inputs`数组的末尾，并将数组数据作为输入提供给检测器ANN。
 
 1.  在检测器ANN激活特定次数之后，获得输出并四舍五入。
 
-[PRE5]
+```py
+        outputs = net.Output()
+        outputs[0] = 1.0 if outputs[0] >= 0.5 else 0.0
+        outputs[1] = 1.0 if outputs[1] >= 0.5 else 0.0
+```
 
 1.  接下来，我们需要计算平方检测错误，这是输出向量与真实值向量之间的欧几里得距离。因此，我们首先创建以下具有真实值的向量：
 
-[PRE6]
+```py
+        left_target = 1.0 if left.side == Side.LEFT or \
+                             left.side == Side.BOTH else 0.0
+        right_target = 1.0 if right.side == Side.RIGHT or \
+                              right.side  == Side.BOTH else 0.0
+        targets = [left_target, right_target]
+```
 
 如果视觉对象对于视网膜的给定侧面或两侧都是有效的，则将相应的真实值设置为`1.0`。否则，将其设置为`0.0`以指示视觉对象位置不正确。
 
 1.  最后，计算平方检测错误如下：
 
-[PRE7]
+```py
+    error = (outputs[0]-targets[0]) * (outputs[0]-targets[0]) + \
+            (outputs[1]-targets[1]) * (outputs[1]-targets[1])
+```
 
 该函数返回检测错误和检测器ANN的输出。在下一节中，我们将讨论视网膜实验运行器的实现。
 
@@ -218,7 +303,24 @@ ES-HyperNEAT使用四叉树数据结构，从数据科学家预定义的输入�
 
 1.  首先是初始化初始CPPN基因组的种群：
 
-[PRE8]
+```py
+    seed = 1569777981
+    # Create substrate
+    substrate = create_substrate()
+    # Create CPPN genome and population
+    g = NEAT.Genome(0,
+             substrate.GetMinCPPNInputs(),
+             2, # hidden units
+             substrate.GetMinCPPNOutputs(),
+             False,
+             NEAT.ActivationFunction.TANH,
+             NEAT.ActivationFunction.SIGNED_GAUSS, # hidden 
+             1, # hidden layers seed
+             params, 
+             1) # one hidden layer
+    pop = NEAT.Population(g, params, True, 1.0, seed)
+    pop.RNG.Seed(seed)
+```
 
 首先，前面的代码将随机种子值设置为我们在通过顺序运行许多实验试验以生成成功解决方案时发现的有用值。之后，我们创建适合视网膜实验的底物配置，考虑到视网膜空间的几何形状。
 
@@ -226,49 +328,143 @@ ES-HyperNEAT使用四叉树数据结构，从数据科学家预定义的输入�
 
 1.  接下来，我们准备中间变量来保存实验执行结果以及统计收集器。之后，我们运行进化循环，进行一定数量的代数：
 
-[PRE9]
+```py
+    start_time = time.time()
+    best_genome_ser = None
+    best_ever_goal_fitness = 0
+    best_id = -1
+    solution_found = False
+
+    stats = Statistics()
+    ...
+```
 
 1.  在进化循环内部，我们获取当前种群中属于当前种群的基因组列表，并按照以下方式对其进行测试环境评估：
 
-[PRE10]
+```py
+        # get list of current genomes
+        genomes = NEAT.GetGenomeList(pop)
+
+        # evaluate genomes
+        genome, fitness, errors = eval_genomes(genomes, 
+                         rt_environment=rt_environment, 
+                         substrate=substrate, 
+                         params=params)
+        stats.post_evaluate(max_fitness=fitness, errors=errors)
+        solution_found = fitness >= FITNESS_THRESHOLD
+```
 
 `eval_genomes`函数返回一个元组，包含以下组件：最佳拟合基因组、所有评估基因组的最高适应度分数以及每个评估基因组的检测错误列表。我们将适当的参数保存到统计收集器中，并将获得的适应度分数与搜索终止标准进行比较，该标准定义为`FITNESS_THRESHOLD`常量，其值为`1000.0`。如果种群中的最佳适应度分数大于或等于`FITNESS_THRESHOLD`值，进化搜索将成功终止。
 
 1.  如果找到了成功的解决方案，或者当前种群的最佳适应度分数高于之前达到的最高适应度分数，我们将按照以下方式保存最佳CPPN基因组和当前适应度分数：
 
-[PRE11]
+```py
+        if solution_found or best_ever_goal_fitness < fitness:
+            # dump to pickle to freeze the genome state
+            best_genome_ser = pickle.dumps(genome)
+            best_ever_goal_fitness = fitness
+            best_id = genome.GetID()
+```
 
 1.  之后，如果`solution_found`变量的值被设置为`True`，我们将终止进化循环：
 
-[PRE12]
+```py
+        if solution_found:
+            print('Solution found at generation: %d, best fitness: %f, species count: %d' % (generation, fitness, len(pop.Species)))
+            break
+```
 
 1.  如果进化未能产生成功的解决方案，我们将打印当前代的统计数据，并移动到下一个时代：
 
-[PRE13]
+```py
+        # advance to the next generation
+        pop.Epoch()
+
+        # print statistics
+        gen_elapsed_time = time.time() - gen_time
+        print("Best fitness: %f, genome ID: %d" % 
+               (fitness, best_id))
+        print("Species count: %d" % len(pop.Species))
+        print("Generation elapsed time: %.3f sec" % 
+               (gen_elapsed_time))
+        print("Best fitness ever: %f, genome ID: %d" % 
+               (best_ever_goal_fitness, best_id))
+```
 
 实验运行器代码的其余部分以不同的格式报告实验结果。
 
 1.  我们使用进化循环中收集的统计数据，以文本和视觉格式报告实验结果。此外，可视化结果也以SVG矢量格式保存到本地文件系统中：
 
-[PRE14]
+```py
+    print("\nBest ever fitness: %f, genome ID: %d" % 
+             (best_ever_goal_fitness, best_id))
+    print("\nTrial elapsed time: %.3f sec" % (elapsed_time))
+    print("Random seed:", seed)
+```
 
 代码的前三行打印了关于实验执行的通用统计数据，例如达到的最高适应度分数、实验执行所花费的时间以及随机生成器的种子值。
 
 1.  代码的下一部分是关于可视化实验结果，这是最有信息量的部分，你应该特别注意。我们从可视化在进化过程中找到的最佳基因组创建的CPPN网络开始：
 
-[PRE15]
+```py
+    if save_results or show_results:        
+        # Draw CPPN network graph
+        net = NEAT.NeuralNetwork()
+        best_genome.BuildPhenotype(net)
+        visualize.draw_net(net, view=False, node_names=None, 
+                           filename="cppn_graph.svg", 
+                           directory=trial_out_dir, fmt='svg')
+        print("\nCPPN nodes: %d, connections: %d" % 
+                     (len(net.neurons), len(net.connections)))
+```
 
 1.  之后，我们可视化使用最佳CPPN基因组和视网膜基板创建的检测器ANN拓扑结构：
 
-[PRE16]
+```py
+        net = NEAT.NeuralNetwork()
+        best_genome.BuildESHyperNEATPhenotype(net, substrate, 
+                                              params)
+        visualize.draw_net(net, view=False, node_names=None, 
+                           filename="substrate_graph.svg", 
+                           directory=trial_out_dir, fmt='svg')
+        print("\nSubstrate nodes: %d, connections: %d" % 
+                 (len(net.neurons), 
+               len(net.connections)))
+        inputs = net.NumInputs()
+        outputs = net.NumOutputs()
+        hidden = len(net.neurons) - net.NumInputs() - \
+                 net.NumOutputs()
+        print("\n\tinputs: %d, outputs: %d, hidden: %d" % 
+                (inputs, outputs, hidden))
+```
 
 1.  此外，我们还打印了前述代码创建的检测器ANN对完整数据集和两个随机选择的视觉对象的评估结果：
 
-[PRE17]
+```py
+        # Test against random retina configuration
+        l_index = random.randint(0, 15)
+        r_index = random.randint(0, 15)
+        left = rt_environment.visual_objects[l_index]
+        right = rt_environment.visual_objects[r_index]
+        err, outputs = rt_environment._evaluate(net, left, 
+                                                right, 3)
+        print("Test evaluation error: %f" % err)
+        print("Left flag: %f, pattern: %s" % (outputs[0], left))
+        print("Right flag: %f, pattern: %s" % (outputs[1], right))
+
+        # Test against all visual objects
+        fitness, avg_error, total_count, false_detections = \
+                     rt_environment.evaluate_net(net, debug=True)
+        print("Test evaluation against full data set [%d], fitness: %f, average error: %f, false detections: %f" % (total_count, fitness, avg_error, false_detections))
+```
 
 最后，我们将实验期间收集的统计数据以如下方式呈现：
 
-[PRE18]
+```py
+        # Visualize statistics
+        visualize.plot_stats(stats, ylog=False, view=show_results, 
+              filename=os.path.join(trial_out_dir,            ‘avg_fitness.svg’))
+```
 
 这里提到的所有可视化图表都可以在本地文件系统的 `trial_out_dir` 目录中实验执行后找到。现在，让我们讨论基板构建函数的实现。
 
@@ -280,17 +476,53 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 1.  首先，我们创建基板输入层的配置。如您在“*初始基板配置*”部分所记得，输入层的八个节点放置在XZ平面内，该平面垂直于XY平面。此外，为了反映视网膜空间的几何形状，左侧对象的节点需要放置在平面的左侧，右侧对象的节点相应地放置在平面的右侧。偏置节点应位于输入节点平面的中心。因此，输入层创建如下：
 
-[PRE19]
+```py
+    # The input layer
+    x_space = np.linspace(-1.0, 1.0, num=4)
+    inputs = [
+        # the left side
+        (x_space[0], 0.0, 1.0), (x_space[1], 0.0, 1.0), 
+        (x_space[0], 0.0, -1.0), (x_space[1], 0.0, -1.0),
+        # the right side
+        (x_space[2], 0.0, 1.0), (x_space[3], 0.0, 1.0), 
+        (x_space[2], 0.0, -1.0), (x_space[3], 0.0, -1.0), 
+        (0,0,0) # the bias
+        ]
+```
 
 两个输出节点位于XY平面内，该平面垂直于输入平面。这种基板配置通过将发现的隐藏节点放置在XY平面内，允许基板自然进化。
 
 1.  输出层创建如下：
 
-[PRE20]
+```py
+        # The output layer
+        outputs = [(-1.0, 1.0, 0.0), (1.0, 1.0, 0.0)]
+```
 
 1.  接下来，我们定义基板的一般配置参数如下：
 
-[PRE21]
+```py
+    # Allow connections: input-to-hidden, hidden-to-output, 
+    # and  hidden-to- hidden
+    substrate.m_allow_input_hidden_links = True
+    substrate.m_allow_hidden_output_links = True
+    substrate.m_allow_hidden_hidden_links = True
+
+    substrate.m_allow_input_output_links = False
+    substrate.m_allow_output_hidden_links = False
+    substrate.m_allow_output_output_links = False
+    substrate.m_allow_looped_hidden_links = False
+    substrate.m_allow_looped_output_links = False
+
+    substrate.m_hidden_nodes_activation = \
+           NEAT.ActivationFunction.SIGNED_SIGMOID
+    substrate.m_output_nodes_activation = \
+           NEAT.ActivationFunction.UNSIGNED_SIGMOID
+
+    # send connection length to the CPPN as a parameter
+    substrate.m_with_distance = True 
+    substrate.m_max_weight_and_bias = 8.0
+```
 
 我们允许基板从输入到隐藏层、隐藏层到隐藏层以及隐藏层到输出节点之间有连接。我们指定隐藏节点应使用带符号的Sigmoid激活函数，而输出节点应使用无符号的Sigmoid激活函数。我们选择无符号的Sigmoid激活函数用于输出节点，以便检测器ANN的输出值在范围 `[0,1]` 内。
 
@@ -304,17 +536,47 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 此函数评估整体群体的适应性。它具有以下定义：
 
-[PRE22]
+```py
+def eval_genomes(genomes, substrate, rt_environment, params):
+    best_genome = None
+    max_fitness = 0
+    errors = []
+    for genome in genomes:
+        fitness, error, total_count, false_detetctions = eval_individual(
+                               genome, substrate, rt_environment, params)
+        genome.SetFitness(fitness)
+        errors.append(error)
+
+        if fitness > max_fitness:
+            max_fitness = fitness
+            best_genome = genome
+
+    return best_genome, max_fitness, errors
+```
 
 `eval_genomes`函数接受当前种群中的CPPN基因组列表、底物配置、初始化的测试环境和ES-HyperNEAT超参数作为参数。
 
 在代码的开始部分，我们创建一个中间对象来收集每个特定基因组的评估结果：
 
-[PRE23]
+```py
+    best_genome = None
+    max_fitness = 0
+    errors = []
+```
 
 之后，我们开始循环遍历所有基因组，并对每个基因组进行给定测试环境的评估：
 
-[PRE24]
+```py
+    for genome in genomes:
+        fitness, error, total_count, false_detetctions = eval_individual(
+                               genome, substrate, rt_environment, params)
+        genome.SetFitness(fitness)
+        errors.append(error)
+
+        if fitness > max_fitness:
+            max_fitness = fitness
+            best_genome = genome
+```
 
 最后，函数返回一个元组，其中包含最佳基因组、最高适应度分数以及每个评估基因组的所有检测错误列表。
 
@@ -322,7 +584,16 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 此函数评估每个个体的适应度，其定义如下：
 
-[PRE25]
+```py
+def eval_individual(genome, substrate, rt_environment, params):
+    # Create ANN from provided CPPN genome and substrate
+    net = NEAT.NeuralNetwork()
+    genome.BuildESHyperNEATPhenotype(net, substrate, params)
+
+    fitness, dist, total_count, false_detetctions = \
+       rt_environment.evaluate_net(net, max_fitness=MAX_FITNESS)
+    return fitness, dist, total_count, false_detetctions
+```
 
 它接受要评估的CPPN基因组、底物配置、测试环境和ES-HyperNEAT超参数作为参数。使用提供的参数，我们创建检测器ANN的神经网络配置，并对其在给定的测试环境中进行评估。然后，该函数返回评估结果。
 
@@ -336,23 +607,41 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 1.  我们决定使用中等大小的CPPN基因组种群。这样做是为了通过从一开始就提供大量解决方案搜索选项来增强进化。种群的大小定义如下：
 
-[PRE26]
+```py
+    params.PopulationSize = 300
+```
 
 1.  接下来，我们在`[5,15]`范围内定义在进化过程中要保留的物种数量，并将物种停滞设置为`100`代。这种配置使我们能够在物种之间保持健康的多样性，并让它们存活足够长的时间，以产生我们正在寻找的解决方案：
 
-[PRE27]
+```py
+    params.SpeciesMaxStagnation = 100
+    params.MinSpecies = 5
+    params.MaxSpecies = 15
+```
 
 1.  我们对生成一个非常紧凑的CPPN基因组配置感兴趣。因此，我们为控制新节点和连接在基因组中引入的频率设置了非常小的概率值：
 
-[PRE28]
+```py
+    params.MutateAddLinkProb = 0.03
+    params.MutateAddNeuronProb = 0.03
+```
 
 1.  ES-HyperNEAT方法是HyperNEAT方法的一个扩展。因此，在进化过程中，它会改变隐藏和输出节点中激活函数的类型。在这个实验中，为了产生适当的底物配置，我们对以下激活类型感兴趣，这些类型以相等的概率被选中：
 
-[PRE29]
+```py
+    params.ActivationFunction_SignedGauss_Prob = 1.0
+    params.ActivationFunction_SignedStep_Prob = 1.0
+    params.ActivationFunction_Linear_Prob = 1.0
+    params.ActivationFunction_SignedSine_Prob = 1.0
+    params.ActivationFunction_SignedSigmoid_Prob = 1.0
+```
 
 1.  最后，我们定义了 ES-HyperNEAT 特定的超参数，这些参数控制着基质的进化方式。以下超参数控制着在进化过程中，基质内节点和连接创建的动态：
 
-[PRE30]
+```py
+    params.DivisionThreshold = 0.5
+    params.VarianceThreshold = 0.03
+```
 
 `params.DivisionThreshold` 控制在每一代进化中引入基质的新节点和连接的数量。`params.VarianceThreshold` 确定在修剪和提取阶段后允许保留在基质中的节点和连接的数量。有关这些阈值的更多详细信息，请参阅 *Quadtree 信息提取和 ES-HyperNEAT 基础* 部分。
 
@@ -360,7 +649,15 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 在这个实验中，我们使用提供 ES-HyperNEAT 算法实现的 MultiNEAT Python 库。因此，我们需要创建一个适当的 Python 环境，其中包括 MultiNEAT Python 库和所有必要的依赖项。这可以通过在命令行中执行以下命令来完成：
 
-[PRE31]
+```py
+$ conda create --name rt_multineat python=3.5
+$ conda activate vd_multineat
+$ conda install -c conda-forge multineat 
+$ conda install matplotlib
+$ conda install -c anaconda seaborn
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 这些命令创建并激活了 Python 3.5 的 `rt_multineat` 虚拟环境。之后，它们安装了最新版本的 MultiNEAT Python 库，以及我们代码用于结果可视化的依赖项。
 
@@ -368,7 +665,11 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 在这个阶段，我们已经在 `retina_experiment.py` Python 脚本中完全定义了实验运行脚本。你可以通过克隆相应的 Git 仓库并运行以下命令来开始实验：
 
-[PRE32]
+```py
+$ git clone https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python.git
+$ cd Hands-on-Neuroevolution-with-Python/Chapter8
+$ python retina_experiment.py -t 1 -g 1000
+```
 
 不要忘记使用以下命令激活适当的虚拟环境：
 
@@ -376,7 +677,20 @@ ES-HyperNEAT方法运行神经进化过程，这包括CPPN基因组的进化以�
 
 前面的命令开始了一个实验，该实验进行了 1,000 代进化的试验。在特定的代数之后，应该找到成功的解决方案，你将在控制台看到以下输出：
 
-[PRE33]
+```py
+****** Generation: 949 ******
+
+Solution found at generation: 949, best fitness: 1000.000000, species count: 6
+
+Best ever fitness: 1000.000000, genome ID: 284698
+
+Trial elapsed time: 1332.576 sec
+Random seed: 1569777981
+
+CPPN nodes: 21, connections: 22
+
+Substrate nodes: 15, connections: 28
+```
 
 如你在输出中看到的那样，成功的解决方案是在第 `949` 代找到的。它是由一个具有 21 个节点和 22 个节点之间连接的 CPPN 基因组产生的。同时，确定检测器 ANN 拓扑结构的基质有 15 个节点和它们之间的 28 个连接。成功的解决方案是使用随机种子值 `1569777981` 产生的。使用其他随机种子值可能无法产生成功的解决方案，或者它将需要更多代的进化。
 

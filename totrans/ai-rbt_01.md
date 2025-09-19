@@ -324,15 +324,32 @@ Albert机器人的主要控制器是英伟达Nano**单板计算机（SBC**），
 
 1.  我们首先导入我们的库。我们首先从`time`模块开始并不奇怪。我们还将使用`numpy`（Python数值分析）中的`mean`函数和`matplotlib`来在最后绘制我们的图表。我们还将进行一些数学计算来模拟我们的处理并创建对帧率的负载：
 
-    [PRE0]
+    ```py
+    import time
+    from numpy import mean
+    import matplotlib.pyplot as plt
+    import math
+    #
+    ```
 
 1.  现在我们有一些参数来控制我们的测试。这是你可以尝试不同定时的地方。我们的基本控制是`FRAMERATE`——我们想要尝试每秒更新多少次？让我们从`30`开始，就像我们在之前讨论的例子中做的那样：
 
-    [PRE1]
+    ```py
+    # set our frame rate - how many cycles per second to run our loop?
+    FRAMERATE = 30
+    # how long does each frame take in seconds?
+    FRAME = 1.0/FRAMERATE
+    # initialize myTimer
+    # This is one of our timer variables where we will store the clock time from the operating system.
+    myTimer = 0.0
+    ```
 
 1.  测试的持续时间由`counter`变量设置。测试将花费的时间是`FRAME`时间乘以`counter`中的循环次数。在我们的例子中，2,000帧除以30 fps等于66.6秒，或者略超过一分钟来运行测试：
 
-    [PRE2]
+    ```py
+    # how many cycles to test? counter*FRAME = runtime in seconds
+    counter = 2000
+    ```
 
     我们将以两种方式控制我们的定时循环：
 
@@ -344,23 +361,61 @@ Albert机器人的主要控制器是英伟达Nano**单板计算机（SBC**），
 
 +   我们控制循环的第二种方式是通过测量整个帧的时间——计算时间加上休息时间——并查看我们是否超出了或低于帧时间。我们使用`TIME_CORRECTION`为此功能调整睡眠时间，以考虑睡眠函数的变异性以及从操作系统返回的任何延迟：
 
-    [PRE3]
+    ```py
+    # factor for our timing loop computations
+    TIME_CORRECTION= 0.0
+    ```
 
 1.  我们将在程序结束时收集一些数据来绘制一个抖动图。我们使用`dataStore`结构来完成这项工作。让我们在屏幕上放一个标题来告诉您程序已经开始，因为完成它需要一段时间：
 
-    [PRE4]
+    ```py
+    # place to store data
+    dataStore = []
+    # Operator information ready to go
+    # We create a heading to show that the program is starting its test
+    print "START COUNTING: FRAME TIME", FRAME, "RUN TIME:",FRAME*counter
+    ```
 
 1.  在这一步，我们将设置一些变量来测量我们的时间。正如我们提到的，目标是有一系列计算帧，每个帧的长度都相同。每个帧有两个部分：`myTime`是帧的*顶部时间*，即帧开始时的时间。`newTime`是工作周期计时器的结束。我们使用`masterTime`来计算程序运行的总时间：
 
-    [PRE5]
+    ```py
+    # initialize the precision clock
+     myTime = newTime = time.time()
+     # save the starting time for later
+     masterTime=myTime
+     # begin our timing loop
+     for ii in range(counter):
+    ```
 
 1.  这个部分是我们的**有效载荷**——执行工作的代码部分。这可能是臂角计算、状态估计或命令解释器。我们将插入一些三角函数和一些数学运算，让CPU为我们做一些工作。通常，这个*工作*部分是我们帧的大部分，所以让我们重复这些数学术语1,000次：
 
-    [PRE6]
+    ```py
+        # we start our frame - this represents doing some detailed 
+        math calculations
+        # this is just to burn up some CPU cycles
+        for jj in range(1000):
+              x = 100
+              y = 23 + ii
+              z = math.cos(x)
+              z1 = math.sin(y)
+        #
+        # read the clock after all compute is done
+        # this is our working frame time
+        #
+    ```
 
 1.  现在我们读取时钟以找到工作时间。我们现在可以计算出在下一个帧之前需要睡眠进程多长时间。重要的是*工作时间 + 睡眠时间 = 帧时间*。我将称这个为`timeError`：
 
-    [PRE7]
+    ```py
+        newTime = time.time()
+        # how much time has elapsed so far in this frame
+        # time = UNIX clock in seconds
+        # so we have to subract our starting time to get the elapsed
+        time
+        myTimer = newTime-myTime
+        # what is the time left to go in the frame?
+        timeError = FRAME-myTimer
+    ```
 
     我们在这里向前传递一些来自前一帧的信息。`TIME_CORRECTION`是我们对前一帧时间中任何时间错误的调整。我们在开始循环之前将其初始化为零，以避免在这里出现未定义变量错误。我们还进行了一些范围检查，因为我们可能会因为操作系统而得到一些大的抖动，这可能导致如果我们尝试睡眠负时间，我们的睡眠计时器会崩溃：
 
@@ -368,25 +423,77 @@ Albert机器人的主要控制器是英伟达Nano**单板计算机（SBC**），
 
 我们使用Python的`max`函数作为快速将睡眠时间限制为零或更大的方法。它返回两个参数中较大的一个。另一种方法是类似这样的代码：`if a < 0 : a = 0`。
 
-[PRE8]
+```py
+    # OK time to sleep
+    # the TIME CORRECTION helps account for all of this clock
+    reading
+    # this also corrects for sleep timer errors
+    # we are using a porpotional control to get the system to
+    converge
+    # if you leave the divisor out, then the system oscillates
+    out of control
+    sleepTime = timeError + (TIME_CORRECTION/2.0)
+    # quick way to eliminate any negative numbers
+    # which are possible due to jitter
+    # and will cause the program to crash
+    sleepTime=max(sleepTime,0.0)
+```
 
 1.  因此，这是我们实际的睡眠命令。`sleep`命令并不总是提供精确的时间间隔，因此我们将检查错误：
 
-    [PRE9]
+    ```py
+        # put this process to sleep
+        time.sleep(sleepTime)
+    ```
 
 1.  这是时间校正部分。我们计算出我们的帧时间总共有多长（工作和睡眠时间）并从我们希望帧时间达到的值（`FrameTime`）中减去。然后我们将时间校正设置为该值。我还会将测量的帧时间保存到数据存储中，这样我们就可以使用`matplotlib`来绘制我们之后的图表。这种技术是Python更有用的特性之一：
 
-    [PRE10]
+    ```py
+        #print timeError,TIME_CORRECTION
+        # set our timer up for the next frame
+        time2=time.time()
+        measuredFrameTime = time2-myTime
+        ##print measuredFrameTime,
+        TIME_CORRECTION=FRAME-(measuredFrameTime)
+        dataStore.append(measuredFrameTime*1000)
+        #TIME_CORRECTION=max(-FRAME,TIME_CORRECTION)
+        #print TIME_CORRECTION
+        myTime = time.time()
+    ```
 
     这完成了程序的循环部分。这个例子做了每秒30帧的2000个周期，并在66.6秒内完成。你可以尝试不同的周期时间和帧率。
 
 1.  现在我们已经完成了程序，我们可以制作一个小报告和图表。我们打印出帧时间和总运行时间，计算平均帧时间（总时间/计数器），并显示我们遇到的平均误差，这可以通过平均`dataStore`中的数据来获得：
 
-    [PRE11]
+    ```py
+    # Timing loop test is over - print the results
+    #
+    # get the total time for the program
+    endTime = time.time() - masterTime
+    # compute the average frame time by dividing total time by our number of frames
+    avgTime = endTime / counter
+    #print report
+     print "FINISHED COUNTING"
+     print "REQUESTED FRAME TIME:",FRAME,"AVG FRAME TIME:",avgTime
+     print "REQUESTED TOTAL TIME:",FRAME*counter,"ACTUAL TOTAL TIME:", endTime
+     print "AVERAGE ERROR",FRAME-avgTime, "TOTAL_ERROR:",(FRAME*counter) - endTime
+     print "AVERAGE SLEEP TIME: ",mean(dataStore),"AVERAGE RUN TIME",(FRAME*1000)-mean(dataStore)
+     # loop is over, plot result
+     # this lets us see the "jitter" in the result
+     plt.plot(dataStore)
+     plt.show()
+    ```
 
     我们程序的结果在下面的代码块中显示。请注意，平均误差仅为0.00018秒，或者说在33毫秒的帧中只有0.18毫秒：
 
-    [PRE12]
+    ```py
+    START COUNTING: FRAME TIME 0.0333333333333 RUN TIME: 66.6666666667
+    FINISHED COUNTING
+    REQUESTED FRAME TIME: 0.0333333333333 AVG FRAME TIME: 0.0331549999714
+    REQUESTED TOTAL TIME: 66.6666666667 ACTUAL TOTAL TIME: 66.3099999428
+    AVERAGE ERROR 0.000178333361944 TOTAL_ERROR: 0.356666723887
+    AVERAGE SLEEP TIME: 33.1549999714 AVERAGE RUN TIME 0.178333361944
+    ```
 
 下图显示了我们的程序计时图：
 

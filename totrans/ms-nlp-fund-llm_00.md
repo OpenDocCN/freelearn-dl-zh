@@ -83,11 +83,24 @@
 
 代码块设置如下：
 
-[PRE0]
+```py
+import pandas as pd
+import matplotlib.pyplot as plt
+# Load the record dict from URL
+import requests
+import pickle
+```
 
 当我们希望您注意代码块中的特定部分时，相关的行或项目将以粗体显示：
 
-[PRE1]
+```py
+qa_engineer (to manager_0):
+exitcode: 0 (execution succeeded)
+Code output:
+Figure(640x480)
+programmer (to manager_0):
+TERMINATE
+```
 
 **粗体**：表示新术语、重要单词或屏幕上出现的单词。例如，菜单或对话框中的单词以 **粗体** 显示。以下是一个示例：“虽然我们选择了一个特定的数据库，但您可以通过参考 **Vector Store** 页面来了解更多关于不同选择的信息。”
 

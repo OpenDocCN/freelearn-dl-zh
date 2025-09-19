@@ -44,31 +44,50 @@ NEAT-Python 算法的缺点如下：
 
 1.  加载 NEAT 设置和初始基因组配置：
 
-[PRE0]
+```py
+config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet, neat.DefaultStagnation, config_file)
+
+```
 
 这里，`config_file` 参数指向包含 NEAT-Python 库设置和初始基因组默认配置的文件。
 
 1.  从配置数据创建生物体种群：
 
-[PRE1]
+```py
+p = neat.Population(config)
+```
 
 1.  添加统计报告器和检查点收集器：
 
-[PRE2]
+```py
+# Output progress to the stdout
+p.add_reporter(neat.StdOutReporter(True)) 
+stats = neat.StatisticsReporter()
+p.add_reporter(stats)
+p.add_reporter(neat.Checkpointer(5))
+```
 
 1.  在特定数量的代数（在我们的例子中是 `300`）上运行进化过程：
 
-[PRE3]
+```py
+winner = p.run(eval_genomes, 300)
+```
 
 这里，`eval_genomes` 是一个函数，用于评估种群中所有生物体的基因组与特定适应度函数，而 `winner` 是找到的最佳表现型基因型。
 
 1.  可以如下从基因组创建表型 ANN：
 
-[PRE4]
+```py
+winner_ann = neat.nn.FeedForwardNetwork.create(winner, config)
+```
 
 1.  之后，可以使用输入数据查询 ANN 以计算结果：
 
-[PRE5]
+```py
+for xi in xor_inputs: 
+    output = winner_ann.activate(xi)
+    print(xi, output) # print results
+```
 
 该库可在 [https://github.com/CodeReclaimers/neat-python](https://github.com/CodeReclaimers/neat-python) 获取。
 
@@ -104,39 +123,76 @@ PyTorch NEAT 的缺点如下：
 
 1.  加载NEAT设置和种子基因组配置：
 
-[PRE6]
+```py
+config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, 
+      neat.DefaultSpeciesSet, neat.DefaultStagnation, config_file)
+```
 
 在这里，`config_file`文件存储了NEAT算法设置以及默认的基因组配置。
 
 1.  从配置数据创建生物种群：
 
-[PRE7]
+```py
+pop = neat.Population(config)
+```
 
 1.  基于PyTorch和OpenAI GYM准备多环境基因组评估器：
 
-[PRE8]
+```py
+def make_env(): 
+    return gym.make("CartPole-v0")
+
+def make_net(genome, config, bs): 
+    return RecurrentNet.create(genome, config, bs)
+
+def activate_net(net, states): 
+    outputs = net.activate(states).numpy()
+    return outputs[:, 0] > 0.5
+
+evaluator = MultiEnvEvaluator( 
+    make_net, activate_net, make_env=make_env, 
+    max_env_steps=max_env_steps
+)
+
+def eval_genomes(genomes, config): 
+    for _, genome in genomes:
+        genome.fitness = evaluator.eval_genome(genome, config)
+```
 
 在这里，对`gym.make("CartPole-v0")`函数的调用是调用OpenAI GYM框架以创建单个倒立摆平衡环境。
 
 1.  添加统计和日志报告器：
 
-[PRE9]
+```py
+stats = neat.StatisticsReporter()
+pop.add_reporter(stats)
+reporter = neat.StdOutReporter(True)
+pop.add_reporter(reporter)
+logger = LogReporter("neat.log", evaluator.eval_genome)
+pop.add_reporter(logger)
+```
 
 1.  在特定的代数（在我们的例子中是`100`）上运行进化过程：
 
-[PRE10]
+```py
+winner = pop.run(eval_genomes, 100)
+```
 
 在这里，`eval_genomes`是一个用于评估种群中所有生物的基因组的函数，而`winner`是找到的最佳表现型基因型。
 
 1.  可以从基因组创建表型ANN，如下面的代码所示：
 
-[PRE11]
+```py
+winner_ann = RecurrentNet.create(genome, config, bs)
+```
 
 在这里，`genome`是NEAT基因组配置，`config`是一个封装NEAT设置的对象，而`bs`是一个指示所需批量大小的参数。
 
 1.  之后，可以使用输入数据查询ANN以获得结果：
 
-[PRE12]
+```py
+action = winner_ann.activate(states).numpy()
+```
 
 在这里，`action`是用于模拟的动作指定符，而`states`是包含从模拟器获得的当前环境状态的张量。
 
@@ -182,19 +238,51 @@ MultiNEAT库的缺点如下：
 
 1.  创建NEAT配置设置：
 
-[PRE13]
+```py
+params = NEAT.Parameters()
+params.PopulationSize = 100
+# The rest of the settings omitted for brevity
+```
 
 1.  创建一个最小基因组配置并从这个基因组中生成一个生物种群：
 
-[PRE14]
+```py
+g = NEAT.Genome(0, 3, 0, 1, False, 
+      NEAT.ActivationFunction.UNSIGNED_SIGMOID,
+      NEAT.ActivationFunction.UNSIGNED_SIGMOID, 0, params, 0)
+pop = NEAT.Population(g, params, True, 1.0, i)
+```
 
 1.  在`1000`代或找到胜者之前运行进化过程：
 
-[PRE15]
+```py
+for generation in range(1000):
+    # Evaluate genomes
+    genome_list = NEAT.GetGenomeList(pop)
+    fitnesses = EvaluateGenomeList_Serial(genome_list, 
+                            evaluate_xor, display=False)
+    [genome.SetFitness(fitness) for genome, fitness in zip(genome_list, fitnesses)]
+
+    # Evaluate fitness value against specific threshold
+    best = max(fitness_list)
+    if best > 15.0:
+        # get the phenotype of a best organism
+        net = NEAT.NeuralNetwork()
+        pop.Species[0].GetLeader().BuildPhenotype(net)
+        # return the fitness and phenotype ANN of the winner
+        return (best, net)
+
+    # Next epoch
+    pop.Epoch()
+```
 
 1.  以下是对查询胜者表型ANN的查询，以及一些输入以获取结果：
 
-[PRE16]
+```py
+net.Input( [ 1.0, 0.0, 1.0 ] )
+net.Activate()
+output = net.Output()
+```
 
 你可以在[https://github.com/peter-ch/MultiNEAT](https://github.com/peter-ch/MultiNEAT)找到这个库。
 
@@ -281,13 +369,18 @@ Pipenv 是一个将包管理器与虚拟环境管理器结合在一起的工具�
 
 可以使用以下命令通过 PIP（Python 的包安装器）进行安装：
 
-[PRE17]
+```py
+$ pip install --user pipenv
+```
 
 上述命令将 `pipenv` 工具安装到用户空间，以防止它破坏任何系统范围的包。
 
 要安装所有依赖项并为您的项目创建一个新的虚拟环境（如果尚不存在），请切换到项目的目录并运行安装过程，如下所示：
 
-[PRE18]
+```py
+$ cd my_project_folder
+$ pipenv install <package>
+```
 
 此命令在 `my_project_folder` 中创建一个新的虚拟环境并将 `<package>` 安装到其中。就是这样。
 
@@ -303,27 +396,38 @@ Virtualenv 是一个纯虚拟环境管理器，它不提供任何包管理例程
 
 1.  使用以下方式使用 PIP 安装 Virtualenv：
 
-[PRE19]
+```py
+$ pip install virtualenv
+```
 
 1.  测试安装是否成功：
 
-[PRE20]
+```py
+$ virtualenv --version
+```
 
 1.  使用以下命令为您项目创建虚拟环境：
 
-[PRE21]
+```py
+$ cd my_project_folder
+$ virtualenv venv
+```
 
 此命令在 `my_project_folder` 中创建一个新的虚拟环境。新的环境包括一个包含 Python 可执行文件的文件夹，以及 PIP 库的副本，这是一个允许我们安装其他依赖项的包管理器。
 
 1.  在开始使用之前，您需要使用以下命令激活虚拟环境，该命令可以输入到您选择的终端应用程序中：
 
-[PRE22]
+```py
+$ source /path/to/ENV/bin/activate
+```
 
 在执行上述命令后，所有必要的环境变量都将设置为针对您项目特定的正确值，并且当前终端应用程序会话将使用它来执行任何后续输入的命令。
 
 1.  可以使用 PIP 将其他包轻松安装到活动环境中：
 
-[PRE23]
+```py
+$ pip install sqlite
+```
 
 上述命令将 SQLite 包安装到当前活动环境中。
 
@@ -339,25 +443,36 @@ Anaconda Distribution 是一个包和一个虚拟环境管理器，在数据科�
 
 之后，可以使用以下命令为您项目创建新的环境：
 
-[PRE24]
+```py
+$ cd my_project_folder
+$ conda create --name ENV_NAME <package>
+```
 
 上述命令为您项目创建一个新的虚拟环境，并将指定的包或多个包安装到其中。在激活后，可以轻松地将其他包安装到新环境中。
 
 可以使用以下命令列出系统中可用的所有环境：
 
-[PRE25]
+```py
+$ conda env list
+```
 
 任何现有环境都可以按以下方式激活：
 
-[PRE26]
+```py
+$ conda activate ENV_NAME
+```
 
 要停用当前活动环境，请使用以下命令：
 
-[PRE27]
+```py
+$ conda deactivate
+```
 
 可以通过标准 PIP 或使用 `conda install` 命令将额外的库安装到当前环境中：
 
-[PRE28]
+```py
+$ conda install sqlite
+```
 
 执行上述命令后，SQLite 将被安装到当前活动环境中。
 

@@ -50,21 +50,29 @@
 
 1.  然后，我们需要使用以下命令从你的Anaconda或Python shell中安装TensorBoard：
 
-[PRE0]
+```py
+pip install tensorboard --upgrade
+```
 
 这将在你的虚拟环境中安装TensorBoard。
 
 1.  接下来，为了避免可能出现的依赖性问题，我们需要运行以下命令：
 
-[PRE1]
+```py
+pip install future
+```
 
 1.  安装完成后，我们可以使用以下命令运行TensorBoard：
 
-[PRE2]
+```py
+tensorboard --logdir runs
+```
 
 1.  这将在默认的`6006`端口启动一个服务器应用程序，并从名为`runs`的文件夹中拉取日志，这是PyTorch默认使用的。如果你需要自定义端口或输入日志文件夹，可以使用以下命令选项：
 
-[PRE3]
+```py
+tensorboard --logdir=/path_to_log_dir/ --port 6006
+```
 
 1.  TensorBoard是一个具有网络界面的服务器应用程序。这对于我们总是希望运行并从某些输出日志或其他数据处理文件夹中提取数据的应用程序来说是很常见的。以下图显示了在shell中运行的TensorBoard：
 
@@ -92,31 +100,149 @@ TensorBoard启动中
 
 1.  整个代码列表太长了，无法在这里全部展示，所以我们将查看重要的部分。我们将从**QRDQN**或**Quantile Regressive DQN**开始。分位数回归是一种从观察中预测分布的技术。QRDQN的列表如下：
 
-[PRE4]
+```py
+class QRDQN(nn.Module):
+    def __init__(self, num_inputs, num_actions, num_quants):
+        super(QRDQN, self).__init__()
+
+        self.num_inputs = num_inputs
+        self.num_actions = num_actions
+        self.num_quants = num_quants
+
+        self.features = nn.Sequential(
+            nn.Linear(num_inputs, 32),
+            nn.ReLU(),
+            nn.Linear(32, 64),
+            nn.ReLU(),
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_actions * self.num_quants)
+        )        
+        self.num_quants, use_cuda=USE_CUDA)
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        x = self.features(x)    
+        x = x.view(batch_size, self.num_actions, self.num_quants)        
+        return x
+
+    def q_values(self, x):
+        x = self.forward(x)
+        return x.mean(2)
+
+    def act(self, state, epsilon):
+        if random.random() > epsilon:
+            state = autograd.Variable(torch.FloatTensor(np.array(state, dtype=np.float32)).unsqueeze(0), volatile=True)
+            qvalues = self.forward(state).mean(2)
+            action = qvalues.max(1)[1]
+            action = action.data.cpu().numpy()[0]
+        else:
+            action = random.randrange(self.num_actions)
+        return action
+```
 
 1.  这段代码的大部分看起来和之前一样，但需要注意的一点是`qvalues`表示一个Q值（状态-动作），而不是像PG方法中我们看到的那样表示Q策略值。
 
 1.  接下来，我们将滚动到`projection_distribution`函数，如下所示：
 
-[PRE5]
+```py
+def projection_distribution(dist, next_state, reward, done):
+    next_dist = target_model(next_state)
+    next_action = next_dist.mean(2).max(1)[1]
+    next_action = next_action.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, num_quant)
+    next_dist = next_dist.gather(1, next_action).squeeze(1).cpu().data
+
+    expected_quant = reward.unsqueeze(1) + 0.99 * next_dist * (1 - done.unsqueeze(1))
+    expected_quant = autograd.Variable(expected_quant)
+
+    quant_idx = torch.sort(dist, 1, descending=False)[1]
+
+    tau_hat = torch.linspace(0.0, 1.0 - 1./num_quant, num_quant) + 0.5 / num_quant
+    tau_hat = tau_hat.unsqueeze(0).repeat(batch_size, 1)
+    quant_idx = quant_idx.cpu().data
+    batch_idx = np.arange(batch_size)
+    tau = tau_hat[:, quant_idx][batch_idx, batch_idx]
+
+    return tau, expected_quant
+```
 
 1.  这段代码相当数学化，并且超出了本书的范围。它本质上只是提取它认为的Q值的分布。
 
 1.  之后，我们可以看到我们两个模型的构建，这表明我们在这里正在使用以下代码构建一个DDQN模型：
 
-[PRE6]
+```py
+current_model = QRDQN(env.observation_space.shape[0], env.action_space.n, num_quant)
+target_model = QRDQN(env.observation_space.shape[0], env.action_space.n, num_quant)
+```
 
 1.  之后，我们得到使用`computer_td_loss`函数计算TD损失，如下所示：
 
-[PRE7]
+```py
+def compute_td_loss(batch_size):
+    state, action, reward, next_state, done = replay_buffer.sample(batch_size) 
+
+    state = autograd.Variable(torch.FloatTensor(np.float32(state)))
+    next_state = autograd.Variable(torch.FloatTensor(np.float32(next_state)), volatile=True)
+    action = autograd.Variable(torch.LongTensor(action))
+    reward = torch.FloatTensor(reward)
+    done = torch.FloatTensor(np.float32(done))
+
+    dist = current_model(state)
+    action = action.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, num_quant)
+    dist = dist.gather(1, action).squeeze(1)
+
+    tau, expected_quant = projection_distribution(dist, next_state, reward, done)
+    k = 1
+
+    huber_loss = 0.5 * tau.abs().clamp(min=0.0, max=k).pow(2)
+    huber_loss += k * (tau.abs() - tau.abs().clamp(min=0.0, max=k))
+    quantile_loss = (tau - (tau < 0).float()).abs() * huber_loss
+    loss = torch.tensor(quantile_loss.sum() / num_quant, requires_grad=True)
+
+    optimizer.zero_grad()
+    loss.backward()
+    nn.utils.clip_grad_norm(current_model.parameters(), 0.5)
+    optimizer.step()
+
+    return loss
+```
 
 1.  这个损失计算函数与我们之前看到的其他DQN实现类似，尽管这个实现确实暴露了一些曲折。大多数曲折都是通过使用**分位数回归**（**QR**）引入的。QR本质上是通过使用分位数或分位数来预测分布，即概率的切片，以迭代地确定预测分布。然后使用这个预测分布来确定网络损失，并通过深度学习网络进行训练。如果你向上滚动，你可以注意到引入了三个新的超参数，允许我们调整搜索。这里显示的新值允许我们定义迭代次数`num_quants`和搜索范围`Vmin`和`Vmax`：
 
-[PRE8]
+```py
+num_quant = 51
+Vmin = -10
+Vmax = 10
+```
 
 1.  最后，我们可以通过滚动到代码的底部并在这里查看，来了解训练代码是如何运行的：
 
-[PRE9]
+```py
+state = env.reset()
+for iteration in range(1, iterations + 1):
+    action = current_model.act(state, epsilon_by_frame(iteration))
+
+    next_state, reward, done, _ = env.step(action)
+    replay_buffer.push(state, action, reward, next_state, done)
+
+    state = next_state
+    episode_reward += reward
+
+    if done:
+        state = env.reset()
+        all_rewards.append(episode_reward)
+        episode_reward = 0
+
+    if len(replay_buffer) > batch_size:
+        loss = compute_td_loss(batch_size)
+        losses.append(loss.item())
+
+    if iteration % 200 == 0:
+        plot(iteration, all_rewards, losses, episode_reward)
+
+    if iteration % 1000 == 0:
+        update_target(current_model, target_model)
+```
 
 1.  我们在第六章和第七章中已经看到过非常类似的代码，当时我们之前查看DQN时，所以这里不会进行回顾。相反，如果你需要的话，再次熟悉一下DQN模型。注意它与PG方法之间的区别。当你准备好时，像平常一样运行代码。运行样本的输出如下所示：
 
@@ -132,7 +258,9 @@ Chapter_10_QRDQN.py的示例输出
 
 1.  打开与你在运行之前的练习代码示例相同的文件夹的shell。切换到你的虚拟环境或专门用于TB的特殊环境，然后运行以下命令以启动过程：
 
-[PRE10]
+```py
+tensorboard --logdir=runs
+```
 
 1.  这将在当前文件夹中启动TB，使用该`runs`文件夹作为数据转储目录。样本运行一段时间后，当你现在访问TB网络界面时，你可能看到以下类似的内容：
 
@@ -144,13 +272,28 @@ TensorBoard输出来自Chapter_10_QRDQN.py
 
 1.  现在，我们需要回到`Chapter_10_QRDQN.py`示例代码，看看我们是如何生成这些输出数据的。首先，注意新的`import`和声明一个新变量`writer`，它是从`torch.utils.tensorboard`导入的`SummaryWriter`类，如下所示：
 
-[PRE11]
+```py
+from common.replay_buffer import ReplayBuffer
+from torch.utils.tensorboard import SummaryWriter
+
+env_id = "LunarLander-v2"
+env = gym.make(env_id)
+writer = SummaryWriter()
+```
 
 1.  `writer` 对象用于输出到在 `run` 文件夹中构建的日志文件。现在每次我们运行这个示例代码块时，这个 writer 都会输出到 `run` 文件夹。你可以通过将目录输入到 `SummaryWriter` 构造函数中来改变这种行为。
 
 1.  接下来，向下滚动到修订的 `plot` 函数。这个函数，如这里所示，现在生成我们可以用 TB 可视化的日志输出：
 
-[PRE12]
+```py
+def plot(iteration, rewards, losses, ep_reward): 
+    print("Outputing Iteration " + str(iteration))
+    writer.add_scalar('Train/Rewards', rewards[-1], iteration)
+    writer.add_scalar('Train/Losses', losses[-1], iteration) 
+    writer.add_scalar('Train/Exploration', epsilon_by_frame(iteration), iteration)
+    writer.add_scalar('Train/Episode', ep_reward, iteration)
+    writer.flush()
+```
 
 1.  这个更新的代码块现在使用 TB `writer` 而不是我们之前使用的 `matplotlib plot` 输出结果。每次调用 `writer.add_scalar` 都会将一个值添加到我们之前可视化的数据图中。有许多其他你可以调用的函数来添加许多不同类型的输出。考虑到我们生成令人印象深刻输出的容易程度，你可能永远不会再次需要使用 `matplotlib`。
 
@@ -176,19 +319,124 @@ TensorBoard输出来自Chapter_10_QRDQN.py
 
 1.  这是一个很大的例子，所以我们只会关注重要的部分。让我们先向下滚动，看看这里的`NoisyDQN`类：
 
-[PRE13]
+```py
+class NoisyDQN(nn.Module):
+    def __init__(self, num_inputs, num_actions):
+        super(NoisyDQN, self).__init__()
+
+        self.linear = nn.Linear(env.observation_space.shape[0], 128)
+        self.noisy1 = NoisyLinear(128, 128)
+ self.noisy2 = NoisyLinear(128, env.action_space.n)
+
+    def forward(self, x):
+        x = F.relu(self.linear(x))
+        x = F.relu(self.noisy1(x))
+        x = self.noisy2(x)
+        return x
+
+    def act(self, state):
+        state = autograd.Variable(torch.FloatTensor(state).unsqueeze(0), volatile=True)
+        q_value = self.forward(state)
+        action = q_value.max(1)[1].item()
+        return action
+
+    def reset_noise(self):
+        self.noisy1.reset_noise()
+        self.noisy2.reset_noise()
+```
 
 1.  这与我们的之前的DQN示例非常相似，但有一个关键的区别：添加了一个新的专业深度学习网络层类型，称为`NoisyLinear`**。**
 
 1.  继续向下滚动，我们可以看到`td_compute_loss`函数已更新以处理噪声或模糊层：
 
-[PRE14]
+```py
+def compute_td_loss(batch_size, beta):
+    state, action, reward, next_state, done, weights, indices = replay_buffer.sample(batch_size, beta) 
+
+    state = autograd.Variable(torch.FloatTensor(np.float32(state)))
+    next_state = autograd.Variable(torch.FloatTensor(np.float32(next_state)))
+    action = autograd.Variable(torch.LongTensor(action))
+    reward = autograd.Variable(torch.FloatTensor(reward))
+    done = autograd.Variable(torch.FloatTensor(np.float32(done)))
+    weights = autograd.Variable(torch.FloatTensor(weights))
+
+    q_values = current_model(state)
+    next_q_values = target_model(next_state)
+
+    q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+    next_q_value = next_q_values.max(1)[0]
+    expected_q_value = reward + gamma * next_q_value * (1 - done)
+
+    loss = (q_value - expected_q_value.detach()).pow(2) * weights
+    prios = loss + 1e-5
+    loss = loss.mean()
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    replay_buffer.update_priorities(indices, prios.data.cpu().numpy())
+    current_model.reset_noise()
+    target_model.reset_noise()
+
+    return loss
+```
 
 1.  这个函数与我们之前的vanilla DQN示例非常相似，这是因为所有的工作/差异都在新的噪声层中，我们将在稍后讨论。
 
 1.  滚动回`NoisyLinear`类的定义，如下所示：
 
-[PRE15]
+```py
+class NoisyLinear(nn.Module):
+    def __init__(self, in_features, out_features, std_init=0.4):
+        super(NoisyLinear, self).__init__()
+
+        self.in_features = in_features
+        self.out_features = out_features
+        self.std_init = std_init
+
+        self.weight_mu = nn.Parameter(torch.FloatTensor(out_features, in_features))
+        self.weight_sigma = nn.Parameter(torch.FloatTensor(out_features, in_features))
+        self.register_buffer('weight_epsilon', torch.FloatTensor(out_features, in_features))
+
+        self.bias_mu = nn.Parameter(torch.FloatTensor(out_features))
+        self.bias_sigma = nn.Parameter(torch.FloatTensor(out_features))
+        self.register_buffer('bias_epsilon', torch.FloatTensor(out_features))
+
+        self.reset_parameters()
+        self.reset_noise()
+
+    def forward(self, x):
+        if self.training: 
+            weight = self.weight_mu + self.weight_sigma.mul(autograd.Variable(self.weight_epsilon))
+            bias = self.bias_mu + self.bias_sigma.mul(autograd.Variable(self.bias_epsilon))
+        else:
+            weight = self.weight_mu
+            bias = self.bias_mu
+
+        return F.linear(x, weight, bias)
+
+    def reset_parameters(self):
+        mu_range = 1 / math.sqrt(self.weight_mu.size(1))
+
+        self.weight_mu.data.normal_(-mu_range, mu_range)
+        self.weight_sigma.data.fill_(self.std_init / math.sqrt(self.weight_sigma.size(1)))
+
+        self.bias_mu.data.normal_(-mu_range, mu_range)
+        self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.bias_sigma.size(0)))
+
+    def reset_noise(self):
+        epsilon_in = self._scale_noise(self.in_features)
+        epsilon_out = self._scale_noise(self.out_features)
+
+        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
+        self.bias_epsilon.copy_(self._scale_noise(self.out_features))
+
+    def _scale_noise(self, size):
+        x = torch.randn(size)
+        x = x.sign().mul(x.abs().sqrt())
+        return x
+```
 
 1.  `NoisyLinear`类是一个使用正态分布来定义层中每个权重的层。这个分布被假定为正态分布，这意味着它由均值、mu和标准差、sigma定义。因此，如果我们之前在一个层中假设有100个权重，我们现在将有两个值（mu和sigma）来定义权重的采样方式。反过来，mu和sigma的值也成为了我们在网络上训练的值。
 
@@ -218,7 +466,11 @@ TensorBoard输出来自Chapter_10_QRDQN.py
 
 1.  我们可以通过查看主要代码来了解beta是如何定义的：
 
-[PRE16]
+```py
+beta_start = 0.4
+beta_iterations = 50000 
+beta_by_iteration = lambda iteration: min(1.0, beta_start + iteration * (1.0 - beta_start) / beta_iterations)
+```
 
 1.  这个设置和方程再次与之前定义的epsilon类似。这里的区别在于beta是逐渐增加的。
 
@@ -226,13 +478,31 @@ TensorBoard输出来自Chapter_10_QRDQN.py
 
 1.  打开同一项目中 `common` 文件夹中的 `replay_buffer.py` 文件。向下滚动到 `sample` 函数，并注意代码，如图所示：
 
-[PRE17]
+```py
+assert beta > 0
+
+idxes = self._sample_proportional(batch_size)
+
+weights = []
+p_min = self._it_min.min() / self._it_sum.sum()
+max_weight = (p_min * len(self._storage)) ** (-beta)
+
+for idx in idxes:
+    p_sample = self._it_sum[idx] / self._it_sum.sum()
+    weight = (p_sample * len(self._storage)) ** (-beta)
+    weights.append(weight / max_weight)
+weights = np.array(weights)
+encoded_sample = self._encode_sample(idxes)
+return tuple(list(encoded_sample) + [weights, idxes])
+```
 
 1.  `sample` 函数是我们使用的 `PrioritizedExperienceReplay` 类的一部分，用于存储经验。除了意识到它按优先级排序经验之外，我们不需要审查这个类的全部内容。
 
 1.  最后，回到示例代码并回顾一下绘图函数。现在TensorBoard中生成我们的beta绘图的那一行看起来是这样的：
 
-[PRE18]
+```py
+writer.add_scalar('Train/Beta', beta_by_iteration(iteration), iteration)
+```
 
 1.  到目前为止，你可以回顾更多的代码，或者尝试调整新的超参数，然后再继续。
 
@@ -248,7 +518,57 @@ PPO等方法已被用于克服DRL当前的一些最大挑战。实际上，PPO�
 
 1.  到现在为止，这个例子应该已经很熟悉了，我们将限制自己只查看差异，从下面这里 `RainbowDQN` 类的主要实现开始：
 
-[PRE19]
+```py
+class RainbowDQN(nn.Module):
+    def __init__(self, num_inputs, num_actions, num_atoms, Vmin, Vmax):
+        super(RainbowDQN, self).__init__()
+
+        self.num_inputs = num_inputs
+        self.num_actions = num_actions
+        self.num_atoms = num_atoms
+        self.Vmin = Vmin
+        self.Vmax = Vmax
+
+        self.linear1 = nn.Linear(num_inputs, 32)
+        self.linear2 = nn.Linear(32, 64)
+
+        self.noisy_value1 = NoisyLinear(64, 64, use_cuda=False)
+        self.noisy_value2 = NoisyLinear(64, self.num_atoms, use_cuda=False)
+
+        self.noisy_advantage1 = NoisyLinear(64, 64, use_cuda=False)
+        self.noisy_advantage2 = NoisyLinear(64, self.num_atoms * self.num_actions, use_cuda=False)
+
+    def forward(self, x):
+        batch_size = x.size(0)
+
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+
+        value = F.relu(self.noisy_value1(x))
+        value = self.noisy_value2(value)
+
+        advantage = F.relu(self.noisy_advantage1(x))
+        advantage = self.noisy_advantage2(advantage)
+
+        value = value.view(batch_size, 1, self.num_atoms)
+        advantage = advantage.view(batch_size, self.num_actions, self.num_atoms)        
+        x = value + advantage - advantage.mean(1, keepdim=True)
+        x = F.softmax(x.view(-1, self.num_atoms)).view(-1, self.num_actions, self.num_atoms)        
+        return x
+
+    def reset_noise(self):
+        self.noisy_value1.reset_noise()
+        self.noisy_value2.reset_noise()
+        self.noisy_advantage1.reset_noise()
+        self.noisy_advantage2.reset_noise()
+
+    def act(self, state):
+        state = autograd.Variable(torch.FloatTensor(state).unsqueeze(0), volatile=True)
+        dist = self.forward(state).data.cpu()
+        dist = dist * torch.linspace(self.Vmin, self.Vmax, self.num_atoms)
+        action = dist.sum(2).max(1)[1].numpy()[0]
+        return action
+```
 
 1.  上述代码定义了Rainbow DQN的网络结构。这个网络有点复杂，所以我们已经将主要元素放在这里的图中：
 
@@ -260,7 +580,14 @@ Rainbow网络架构
 
 1.  我们还不能离开前面的代码，我们需要再次审查act函数，如下所示：
 
-[PRE20]
+```py
+def act(self, state):
+        state = autograd.Variable(torch.FloatTensor(state).unsqueeze(0), volatile=True)
+        dist = self.forward(state).data.cpu()
+        dist = dist * torch.linspace(self.Vmin, self.Vmax, self.num_atoms)
+        action = dist.sum(2).max(1)[1].numpy()[0]
+        return action
+```
 
 1.  `act`函数展示了智能体如何选择动作。我们在这里已经细化了动作选择策略，现在使用`Vmin`、`Vmax`和`num_atoms`的值。我们将这些值作为输入传递给`torch.linspace`，以此创建一个从`Vmin`到`Vmax`的离散分布，步长由`num_atoms`定义。这会输出最小/最大范围内的缩放值，然后这些值乘以`forward`函数输出的原始分布`dist`。将`forward`函数返回的分布与由`torch.linspace`生成的分布相乘，这是一种缩放类型。
 
@@ -268,13 +595,49 @@ Rainbow网络架构
 
 1.  接下来，我们将向下滚动并查看`projection_distribution`函数中的差异。记住这个函数是执行寻找分布的分布部分，而不是离散值：
 
-[PRE21]
+```py
+def projection_distribution(next_state, rewards, dones):
+    batch_size = next_state.size(0)
+
+    delta_z = float(Vmax - Vmin) / (num_atoms - 1)
+    support = torch.linspace(Vmin, Vmax, num_atoms)
+
+    next_dist = target_model(next_state).data.cpu() * support
+    next_action = next_dist.sum(2).max(1)[1]
+    next_action = next_action.unsqueeze(1).unsqueeze(1).expand(next_dist.size(0), 1, next_dist.size(2))
+    next_dist = next_dist.gather(1, next_action).squeeze(1)
+
+    rewards = rewards.unsqueeze(1).expand_as(next_dist)
+    dones = dones.unsqueeze(1).expand_as(next_dist)
+    support = support.unsqueeze(0).expand_as(next_dist)
+
+    Tz = rewards + (1 - dones) * 0.99 * support
+    Tz = Tz.clamp(min=Vmin, max=Vmax)
+    b = (Tz - Vmin) / delta_z
+    l = b.floor().long()
+    u = b.ceil().long()
+
+    offset = torch.linspace(0, (batch_size - 1) * num_atoms, batch_size).long()\
+                    .unsqueeze(1).expand(batch_size, num_atoms)
+
+    proj_dist = torch.zeros(next_dist.size()) 
+    proj_dist.view(-1).index_add_(0, (l + offset).view(-1), (next_dist * (u.float() - b)).view(-1))
+    proj_dist.view(-1).index_add_(0, (u + offset).view(-1), (next_dist * (b - l.float())).view(-1))
+
+    return proj_dist
+```
 
 1.  这段代码与我们之前查看的量分回归代码有很大不同。这里的主要区别是使用了PyTorch库，而之前代码更底层。使用库会使代码更加冗长，但希望你现在可以欣赏到代码的说明性比之前的示例更清晰。
 
 1.  这里需要注意的是，我们继续使用`epsilon`进行探索，如下面的代码所示：
 
-[PRE22]
+```py
+epsilon_start = 1.0
+epsilon_final = 0.01
+epsilon_decay = 50000
+
+epsilon_by_frame = lambda iteration: epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1\. * iteration / epsilon_decay)
+```
 
 1.  按照常规方式运行示例，并观察输出。
 

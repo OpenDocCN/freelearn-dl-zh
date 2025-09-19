@@ -270,21 +270,63 @@ Jupyter笔记本支持实时代码执行、可视化以及解释性文本，非�
 
 在第一个单元格中，我们使用以下 `bash` 命令安装所有依赖项。注意行首的感叹号，它告诉我们的环境深入到底层进程并安装所需的软件包：
 
-[PRE0]
+```py
+!pip install pytorch-fid torch diffusers clip transformers accelerate
+```
 
 接下来，我们导入我们刚刚安装的库，使它们可供我们的 Python 程序使用：
 
-[PRE1]
+```py
+from typing import List
+import torch
+import matplotlib.pyplot as plt
+from diffusers import StableDiffusionPipeline, DDPMScheduler
+```
 
 现在，我们已经准备好我们的三个函数，它们将执行三个任务——加载预训练模型、根据提示生成图像以及渲染图像：
 
-[PRE2]
+```py
+def load_model(model_id: str) -> StableDiffusionPipeline:
+    """Load model with provided model_id."""
+    return StableDiffusionPipeline.from_pretrained(
+        model_id, 
+        torch_dtype=torch.float16, 
+        revision="fp16", 
+        use_auth_token=False
+    ).to("cuda")
+def generate_images(
+    pipe: StableDiffusionPipeline, 
+    prompts: List[str]
+) -> torch.Tensor:
+    """Generate images based on provided prompts."""
+    with torch.autocast("cuda"):
+        images = pipe(prompts).images
+    return images
+def render_images(images: torch.Tensor):
+    """Plot the generated images."""
+    plt.figure(figsize=(10, 5))
+    for i, img in enumerate(images):
+        plt.subplot(1, 2, i + 1)
+        plt.imshow(img)
+        plt.axis("off")
+    plt.show()
+```
 
 总结来说，`load_model` 函数将使用 `model_id` 识别的机器学习模型加载到 GPU 上以实现更快的处理。`generate_images` 函数接受这个模型和一系列提示来创建我们的图像。在这个函数中，你会注意到 `torch.autocast("cuda")`，这是一个特殊的命令，允许 PyTorch（我们的底层机器学习库）在保持准确性的同时更快地执行操作。最后，`render_images` 函数以简单的网格格式显示这些图像，利用 `matplotlib` 可视化库来渲染我们的输出。
 
 定义了我们的函数后，我们选择我们的模型版本，定义我们的流水线，并执行我们的图像生成过程：
 
-[PRE3]
+```py
+# Execution
+model_id = "CompVis/stable-diffusion-v1-4"
+prompts = [
+    "A hyper-realistic photo of a friendly lion",
+    "A stylized oil painting of a NYC Brownstone"
+]
+pipe = load_model(model_id)
+images = generate_images(pipe, prompts)
+render_images(images)
+```
 
 *图 2.1* 的输出是一个生动的例子，展示了我们通常期望从人类艺术中得到的想象力和创造力，这些完全是由扩散过程生成的。但是，我们如何衡量模型是否忠实于提供的文本呢？
 
@@ -300,27 +342,91 @@ CLIP 通过学习在共享空间中将相似图像和文本放置在一起来训
 
 再次，我们将导入必要的库：
 
-[PRE4]
+```py
+from typing import List, Tuple
+from PIL import Image
+import requests
+from transformers import CLIPProcessor, CLIPModel
+import torch
+```
 
 我们首先加载 CLIP 模型、处理器和必要的参数：
 
-[PRE5]
+```py
+# Constants
+CLIP_REPO = "openai/clip-vit-base-patch32"
+def load_model_and_processor(
+    model_name: str
+) -> Tuple[CLIPModel, CLIPProcessor]:
+    """
+    Loads the CLIP model and processor.
+    """
+    model = CLIPModel.from_pretrained(model_name)
+    processor = CLIPProcessor.from_pretrained(model_name)
+    return model, processor
+```
 
 接下来，我们定义一个处理函数来调整文本提示和图像，确保它们以正确的格式适用于 CLIP 推理：
 
-[PRE6]
+```py
+def process_inputs(
+    processor: CLIPProcessor, prompts: List[str],
+    images: List[Image.Image]) -> dict:
+"""
+Processes the inputs using the CLIP processor.
+"""
+    return processor(text=prompts, images=images,
+        return_tensors="pt", padding=True)
+```
 
 在此步骤中，我们通过将图像和文本提示输入到 CLIP 模型中来启动评估过程。这是在多个设备上并行进行的，以优化性能。然后，模型为每个图像-文本对计算相似度分数，称为 logits。这些分数表示每个图像与文本提示的对应程度。为了更直观地解释这些分数，我们将它们转换为概率，这表示图像与任何给定提示对齐的可能性：
 
-[PRE7]
+```py
+def get_probabilities(
+    model: CLIPModel, inputs: dict) -> torch.Tensor:
+"""
+Computes the probabilities using the CLIP model.
+"""
+    outputs = model(**inputs)
+    logits = outputs.logits_per_image
+    # Define temperature - higher temperature will make the distribution more uniform.
+    T = 10
+    # Apply temperature to the logits
+    temp_adjusted_logits = logits / T
+    probs = torch.nn.functional.softmax(
+        temp_adjusted_logits, dim=1)
+    return probs
+```
 
 最后，我们显示图像及其分数，直观地表示每个图像如何遵守提供的提示：
 
-[PRE8]
+```py
+def display_images_with_scores(
+    images: List[Image.Image], scores: torch.Tensor) -> None:
+"""
+Displays the images alongside their scores.
+"""
+    # Set print options for readability
+    torch.set_printoptions(precision=2, sci_mode=False)
+    for i, image in enumerate(images):
+        print(f"Image {i + 1}:")
+        display(image)
+        print(f"Scores: {scores[i, :]}")
+        print()
+```
 
 详细说明完毕后，让我们按照以下步骤执行管道：
 
-[PRE9]
+```py
+# Load CLIP model
+model, processor = load_model_and_processor(CLIP_REPO)
+# Process image and text inputs together
+inputs = process_inputs(processor, prompts, images)
+# Extract the probabilities
+probs = get_probabilities(model, inputs)
+# Display each image with corresponding scores
+display_images_with_scores(images, probs)
+```
 
 现在我们有了基于 CLIP 模型的每个合成图像的分数，该模型将图像和文本数据解释为一种结合的数学表示（或几何空间），并可以测量它们的相似性。
 

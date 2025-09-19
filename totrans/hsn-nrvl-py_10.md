@@ -144,23 +144,62 @@ CPPN的另一个基本特征是，与仅使用一种激活函数（通常来自S
 
 我们在`VisualField` Python类中存储了之前讨论的75次试验中每个试验的视觉场配置。它具有以下构造函数：
 
-[PRE0]
+```py
+    def __init__(self, big_pos, small_pos, field_size):
+        self.big_pos = big_pos
+        self.small_pos = small_pos
+        self.field_size = field_size
+        self.data = np.zeros((field_size, field_size))
+
+        # store small object position
+        self._set_point(small_pos[0], small_pos[1])
+
+        # store big object points
+        offsets = [-1, 0, 1]
+        for xo in offsets:
+            for yo in offsets:
+                self._set_point(big_pos[0] + xo, big_pos[1] + yo)
+```
 
 `VisualField`的构造函数接受一个包含大物体和小物体坐标（*x*，*y*）的元组，以及视觉场的大小。我们考虑的是正方形视觉场，因此视觉场沿每个轴的大小相等。视觉场在内部表示为一个二维二进制数组，其中1表示被物体占据的位置，而0是空空间。它存储在`self.data`字段中，这是一个形状为（2，2）的NumPy数组。
 
 小物体的大小为1 x 1，大物体是它的三倍大。以下是从构造函数源代码中创建大物体表示的片段：
 
-[PRE1]
+```py
+        offsets = [-1, 0, 1]
+        for xo in offsets:
+            for yo in offsets:
+                self._set_point(big_pos[0] + xo, big_pos[1] + yo)
+```
 
 `VisualField`类的构造函数接收大物体中心的坐标作为元组（`x`，`y`）。前面的代码从左上角（`x-1`，`y-1`）开始绘制大物体，并结束于右下角（`x+1`，`y+1`）。
 
 前面代码中提到的`_set_point(self, x, y)`函数在`self.data`字段中的特定位置设置`1.0`值：
 
-[PRE2]
+```py
+    def _set_point(self, x, y):
+        px, py = x, y
+        if px < 0:
+            px = self.field_size + px
+        elif px >= self.field_size:
+            px = px - self.field_size
+
+        if py < 0:
+            py = self.field_size + py
+        elif py >= self.field_size:
+            py = py - self.field_size
+
+        self.data[py, px] = 1 # in Numpy index is: [row, col]
+```
 
 `_set_point(self, x, y)`函数在坐标值超过每轴允许的维度数时执行坐标包裹。例如，对于*x*轴，坐标值包裹的源代码如下：
 
-[PRE3]
+```py
+        if px < 0:
+            px = self.field_size + px
+        elif px >= self.field_size:
+            px = px - self.field_size
+```
 
 沿着*y*轴的坐标包裹源代码类似。
 
@@ -174,57 +213,160 @@ NumPy索引为`[行, 列]`。因此，我们需要在索引的第一个位置使
 
 +   类构造函数定义如下：
 
-[PRE4]
+```py
+    def __init__(self, small_object_positions, big_object_offset, 
+                 field_size):
+        self.s_object_pos = small_object_positions
+        self.data_set = []
+        self.b_object_offset = big_object_offset
+        self.field_size = field_size
+
+        self.max_dist = self._distance((0, 0), 
+                             (field_size - 1, field_size - 1))
+
+        # create test data set
+        self._create_data_set()
+```
 
 `VDEnvironment`构造函数的第一个参数是一个数组，包含所有可能的小物体位置的定义，作为每个轴上坐标值的序列。第二个参数定义了大物体中心坐标相对于小物体坐标的偏移量。在我们的实验中，我们使用`5`作为此参数的值。最后，第三个参数是视觉场的大小，包括两个维度。
 
 在所有接收到的参数都保存到对象字段后，我们计算视觉场中两点之间的最大可能距离如下：
 
-[PRE5]
+```py
+self.max_dist = self._distance((0, 0), 
+                     (field_size - 1, field_size - 1))
+```
 
 可视场左上角和右下角之间的欧几里得距离随后存储在`self.max_dist`字段中。此值将用于后续通过保持它们在`[0, 1]`范围内来归一化视觉场中点之间的距离。
 
 +   `_create_data_set()`函数根据指定的环境参数创建所有可能的数据集。此函数的源代码如下：
 
-[PRE6]
+```py
+    def _create_data_set(self):
+        for x in self.s_object_pos:
+            for y in self.s_object_pos:
+                # diagonal
+                vf = self._create_visual_field(x, y, 
+                                  x_off=self.b_object_offset, 
+                                  y_off=self.b_object_offset)
+                self.data_set.append(vf)
+                # right
+                vf = self._create_visual_field(x, y, 
+                                  x_off=self.b_object_offset,
+                                  y_off=0)
+                self.data_set.append(vf)
+                # down
+                vf = self._create_visual_field(x, y, 
+                                  x_off=0, 
+                                  y_off=self.b_object_offset)
+                self.data_set.append(vf)
+```
 
 函数遍历两个轴上的小物体位置，并尝试在相对于小物体坐标的右侧、下方或对角线位置创建大物体。
 
 +   `_create_visual_field` 函数使用小物体的坐标（`sx`，`sy`）和大物体中心偏移量（`x_off`，`y_off`）创建适当的视觉场配置。以下源代码显示了如何实现这一点：
 
-[PRE7]
+```py
+    def _create_visual_field(self, sx, sy, x_off, y_off):
+        bx = (sx + x_off) % self.field_size # wrap by X coordinate
+        by = (sy + y_off) % self.field_size # wrap by Y coordinate
+
+        # create visual field
+        return VisualField(big_pos=(bx, by), small_pos=(sx, sy), 
+                           field_size=self.field_size)
+```
 
 如果前面函数计算的大物体坐标超出了视觉场空间，我们按以下方式应用包装：
 
-[PRE8]
+```py
+        if bx >= self.field_size:
+            bx = bx - self.field_size # wrap
+```
 
 前面的代码片段显示了沿 *x* 轴的包装。沿 *y* 轴的包装类似。最后，创建并返回 `VisualField` 对象以附加到数据集中。
 
 +   然而，`VDEnvironment` 定义中最激动人心的部分与判别器 ANN 的评估有关，该评估在 `evaluate_net(self, net)` 函数中定义如下：
 
-[PRE9]
+```py
+    def evaluate_net(self, net):
+        avg_dist = 0
+
+        # evaluate predicted positions
+        for ds in self.data_set:
+            # evaluate and get outputs
+            outputs, x, y = self.evaluate_net_vf(net, ds)
+
+            # find the distance to the big object
+            dist = self._distance((x, y), ds.big_pos)
+            avg_dist = avg_dist + dist
+
+        avg_dist /= float(len(self.data_set))
+
+        # normalized position error
+        error = avg_dist / self.max_dist
+        # fitness
+        fitness = 1.0 - error
+
+        return fitness, avg_dist
+```
 
 前面的函数接收判别器人工神经网络（ANN）作为参数，并返回评估的适应度分数以及所有评估视觉场中检测到的目标坐标与计算的所有真实值之间的平均距离。平均距离的计算如下：
 
-[PRE10]
+```py
+        for ds in self.data_set:
+            # evaluate and get outputs
+            _, x, y = self.evaluate_net_vf(net, ds)
+
+            # find the distance to the big object
+            dist = self._distance((x, y), ds.big_pos)
+            avg_dist = avg_dist + dist
+
+        avg_dist /= float(len(self.data_set))
+```
 
 前面的源代码遍历数据集中的所有 `VisualField` 对象，并使用判别器 ANN 确定大物体的坐标。之后，我们计算真实值与预测位置之间的距离（检测误差）。最后，我们找到检测误差的平均值，并按以下方式归一化：
 
-[PRE11]
+```py
+        # normalized detection error
+        error = avg_dist / self.max_dist
+```
 
 根据前面的代码，最大可能的误差值是 `1.0`。适应度分数的值是误差值的 `1.0` 的补充，因为随着误差的减小而增加：
 
-[PRE12]
+```py
+        # fitness
+        fitness = 1.0 - error
+```
 
 `evaluate_net` 函数返回计算出的适应度分数以及未归一化的检测误差。
 
 +   `evaluate_net_vf(self, net, vf)` 函数提供了一种评估判别器 ANN 对特定 `VisualField` 对象的方法。它定义如下：
 
-[PRE13]
+```py
+   def evaluate_net_vf(self, net, vf):
+        depth = 1 # we just have 2 layers
+
+        net.Flush()
+        # prepare input
+        inputs = vf.get_data()
+        net.Input(inputs)
+        # activate
+        [net.Activate() for _ in range(depth)]
+
+        # get outputs
+        outputs = net.Output()
+        # find coordinates of big object
+        x, y = self._big_object_coordinates(outputs)
+
+        return outputs, x, y
+```
 
 前面的函数接收判别器 ANN 作为第一个参数，`VisualField` 对象作为第二个参数。之后，它从 `VisualField` 对象中获取展平的输入数组，并将其用作判别器 ANN 的输入：
 
-[PRE14]
+```py
+        inputs = vf.get_data()
+        net.Input(inputs)
+```
 
 在我们设置判别器 ANN 的输入之后，它必须被激活以将输入值传播到所有网络节点。我们的判别器 ANN 只有两层，这是由空间三明治底座配置确定的。因此，我们需要激活它两次——每层一次。在判别器 ANN 的两层中传播激活信号之后，我们可以确定目标场中大物体的位置，作为输出数组中最大值的索引。使用 `_big_object_coordinates(self, outputs)` 函数，我们可以提取目标场中大物体的笛卡尔坐标（*x*，*y*）。
 
@@ -232,15 +374,39 @@ NumPy索引为`[行, 列]`。因此，我们需要在索引的第一个位置使
 
 +   `_big_object_coordinates(self, outputs)` 函数从从判别器 ANN 获得的原始输出中提取目标字段空间中大物体的笛卡尔坐标。该函数的源代码如下：
 
-[PRE15]
+```py
+    def _big_object_coordinates(self, outputs):
+        max_activation = -100.0
+        max_index = -1
+        for i, out in enumerate(outputs):
+            if out > max_activation:
+                max_activation = out
+                max_index = i
+
+        # estimate the maximal activation's coordinates
+        x = max_index % self.field_size
+        y = int(max_index / self.field_size)
+
+        return (x, y)
+```
 
 首先，该函数遍历输出数组并找到最大值的索引：
 
-[PRE16]
+```py
+        max_activation = -100.0
+        max_index = -1
+        for i, out in enumerate(outputs):
+            if out > max_activation:
+                max_activation = out
+                max_index = I
+```
 
 之后，它使用找到的索引来估计笛卡尔坐标，考虑到目标字段的大小：
 
-[PRE17]
+```py
+        x = max_index % self.field_size
+        y = int(max_index / self.field_size)
+```
 
 最后，该函数返回包含目标字段内大物体笛卡尔坐标的元组 (*x*, *y*)。
 
@@ -262,7 +428,24 @@ NumPy索引为`[行, 列]`。因此，我们需要在索引的第一个位置使
 
 在以下代码中，首先，我们使用当前系统时间初始化随机数生成器种子。之后，我们为能够操作实验视觉字段维度的判别器 ANN 创建适当的基质配置。接下来，我们使用创建的基质配置创建 CPPN 基因组：
 
-[PRE18]
+```py
+    # random seed
+    seed = int(time.time())
+    # Create substrate
+    substrate = create_substrate(num_dimensions)
+    # Create CPPN genome and population
+    g = NEAT.Genome(0,
+                    substrate.GetMinCPPNInputs(),
+                    0,
+                    substrate.GetMinCPPNOutputs(),
+                    False,
+                    NEAT.ActivationFunction.UNSIGNED_SIGMOID,
+                    NEAT.ActivationFunction.UNSIGNED_SIGMOID,
+                    0,
+                    params, 0)
+    pop = NEAT.Population(g, params, True, 1.0, seed)
+    pop.RNG.Seed(seed)
+```
 
 在前面的代码中创建的 CPPN 基因组具有由基质提供的适当数量的输入和输出节点。最初，它使用无符号的 Sigmoid 作为节点激活函数。后来，在进化过程中，CPPN 中每个节点的激活函数类型将根据 HyperNEAT 算法流程进行更改。最后，使用初始化的 CPPN 基因组和 HyperNEAT 超参数创建初始种群。
 
@@ -270,25 +453,62 @@ NumPy索引为`[行, 列]`。因此，我们需要在索引的第一个位置使
 
 在本部分的开始，我们创建中间变量以保存执行结果，并创建统计收集器（`Statistics`）。之后，我们根据`n_generations`参数指定的代数执行进化循环：
 
-[PRE19]
+```py
+    start_time = time.time()
+    best_genome_ser = None
+    best_ever_goal_fitness = 0
+    best_id = -1
+    solution_found = False
+
+    stats = Statistics()
+    for generation in range(n_generations):
+```
 
 在进化循环中，我们获取当前代种群所属的基因组列表，并将列表中的所有基因组与测试环境进行评估，如下所示：
 
-[PRE20]
+```py
+        genomes = NEAT.GetGenomeList(pop)
+        # evaluate genomes
+        genome, fitness, distances = eval_genomes(genomes, 
+                                      vd_environment=vd_environment, 
+                                      substrate=substrate, 
+                                      generation=generation)
+        stats.post_evaluate(max_fitness=fitness, distances=distances)
+        solution_found = fitness >= FITNESS_THRESHOLD
+```
 
 我们将当前代`eval_genomes(genomes, substrate, vd_environment, generation)`函数返回的值保存到统计收集器中。我们还使用`eval_genomes`返回的适应度分数来估计是否找到了成功的解决方案。如果适应度分数超过`FITNESS_THRESHOLD`值，我们认为找到了成功的解决方案。
 
 如果找到成功的解决方案或当前适应度分数是迄今为止达到的最大适应度分数，我们将保存CPPN基因组和当前适应度分数：
 
-[PRE21]
+```py
+        if solution_found or best_ever_goal_fitness < fitness:
+            best_genome_ser = pickle.dumps(genome)
+            best_ever_goal_fitness = fitness
+            best_id = genome.GetID()
+```
 
 此外，如果找到成功的解决方案，我们将退出进化循环，并进入后续的报表步骤，我们将在后面讨论：
 
-[PRE22]
+```py
+        if solution_found:
+            print('Solution found at generation: %d, best fitness: %f, species count: %d' % (generation, fitness, len(pop.Species)))
+            break
+```
 
 如果没有找到成功的解决方案，我们将打印当前代的统计数据，并使用以下代码进入下一代：
 
-[PRE23]
+```py
+        # advance to the next generation
+        pop.Epoch()
+        # print statistics
+        gen_elapsed_time = time.time() - gen_time
+        print("Best fitness: %f, genome ID: %d" % (fitness, best_id))
+        print("Species count: %d" % len(pop.Species))
+        print("Generation elapsed time: %.3f sec" % (gen_elapsed_time))
+        print("Best fitness ever: %f, genome ID: %d" 
+               % (best_ever_goal_fitness, best_id))
+```
 
 在主要进化循环之后，报告实验结果，这使用了循环中收集的统计数据。
 
@@ -296,25 +516,56 @@ NumPy索引为`[行, 列]`。因此，我们需要在索引的第一个位置使
 
 实验结果以文本和图形表示（SVG文件）的形式报告和保存。我们首先打印以下一般性能统计数据：
 
-[PRE24]
+```py
+    print("\nBest ever fitness: %f, genome ID: %d" 
+          % (best_ever_goal_fitness, best_id))
+    print("\nTrial elapsed time: %.3f sec" % (elapsed_time))
+    print("Random seed:", seed)
+```
 
 前述代码的前三行将所有进化代数中获得的最佳适应度分数打印到控制台。之后，我们打印实验的已用时间和使用的随机种子值。
 
 如果我们请求保存或显示可视化，将调用相应的函数：
 
-[PRE25]
+```py
+    # Visualize the experiment results
+    show_results = not silent
+    if save_results or show_results:
+        net = NEAT.NeuralNetwork()
+        best_genome.BuildPhenotype(net)
+        visualize.draw_net(net, view=show_results, node_names=None, 
+                           directory=trial_out_dir, fmt='svg')
+```
 
 前述代码绘制了CPPN的网络图，并打印了图的统计数据。
 
 接下来，我们转向判别器ANN输出的可视化：
 
-[PRE26]
+```py
+
+        # Visualize activations from the best genome
+        net = NEAT.NeuralNetwork()
+        best_genome.BuildHyperNEATPhenotype(net, substrate)
+        # select random visual field
+        index = random.randint(0, len(vd_environment.data_set) - 1)
+        vf = vd_environment.data_set[index]
+        # draw activations
+        outputs, x, y = vd_environment.evaluate_net_vf(net, vf)
+        visualize.draw_activations(outputs, found_object=(x, y), vf=vf,
+                  dimns=num_dimensions, view=show_results, 
+                  filename=os.path.join(trial_out_dir, 
+                                        "best_activations.svg"))
+```
 
 在前述代码中，我们使用在进化过程中找到的最佳CPPN基因组创建判别器ANN。之后，我们绘制通过在测试环境中评估判别器ANN获得的激活输出。我们使用从实验数据集中随机选择的视野。
 
 最后，我们渲染实验期间收集的一般统计数据：
 
-[PRE27]
+```py
+        # Visualize statistics
+        visualize.plot_stats(stats, ylog=False, view=show_results, 
+                  filename=os.path.join(trial_out_dir, 'avg_fitness.svg'))
+```
 
 统计图包括在进化代数中绘制的最佳适应度分数和平均误差距离。
 
@@ -326,11 +577,30 @@ HyperNEAT 方法建立在底层概念的基础上，该底层定义了判别器 
 
 +   底层构建函数 `create_substrate` 如下创建底层对象：
 
-[PRE28]
+```py
+def create_substrate(dim):
+    # Building sheet configurations of inputs and outputs
+    inputs = create_sheet_space(-1, 1, dim, -1)
+    outputs = create_sheet_space(-1, 1, dim, 0)
+    substrate = NEAT.Substrate( inputs, [], # hidden outputs)
+    substrate.m_allow_input_output_links = True
+    ...
+    substrate.m_hidden_nodes_activation = \
+                  NEAT.ActivationFunction.SIGNED_SIGMOID
+    substrate.m_output_nodes_activation = \
+                  NEAT.ActivationFunction.UNSIGNED_SIGMOID
+    substrate.m_with_distance = True
+    substrate.m_max_weight_and_bias = 3.0
+    return substrate
+```
 
 前面的函数首先创建了两个基于网格的笛卡尔纸张，分别代表底层配置的输入（视觉场）和输出（目标场）。记住，对于这个实验，我们选择了状态空间三明治底层配置。之后，使用创建的字段配置初始化了底层实例：
 
-[PRE29]
+```py
+    inputs = create_sheet_space(-1, 1, dim, -1)
+    outputs = create_sheet_space(-1, 1, dim, 0)
+    substrate = NEAT.Substrate( inputs, [], # hidden outputs)
+```
 
 请注意，底层不使用任何隐藏节点；我们提供空列表代替隐藏节点。
 
@@ -338,15 +608,31 @@ HyperNEAT 方法建立在底层概念的基础上，该底层定义了判别器 
 
 +   由底层构建函数调用的 `create_sheet_space` 函数定义如下：
 
-[PRE30]
+```py
+def create_sheet_space(start, stop, dim, z):
+    lin_sp = np.linspace(start, stop, num=dim)
+    space = []
+    for x in range(dim):
+        for y in range(dim):
+            space.append((lin_sp[x], lin_sp[y], z))
+
+    return space
+```
 
 `create_sheet_space` 函数接收一个维度内网格的起始和结束坐标以及网格维度的数量。同时，提供纸张的 *z* 坐标。使用指定的参数，前面的代码创建了一个以 `[start, stop]` 范围开始，步长为 `dim` 的均匀线性空间：
 
-[PRE31]
+```py
+    lin_sp = np.linspace(start, stop, num=dim)
+```
 
 之后，我们使用这个线性空间如下填充二维数组，其中包含网格节点的坐标：
 
-[PRE32]
+```py
+    space = []
+    for x in range(dim):
+        for y in range(dim):
+            space.append((lin_sp[x], lin_sp[y], z))
+```
 
 `create_sheet_space` 函数以二维数组的形式返回网格配置。
 
@@ -356,21 +642,59 @@ HyperNEAT 方法建立在底层概念的基础上，该底层定义了判别器 
 
 +   `eval_genomes` 函数评估种群中的所有基因组：
 
-[PRE33]
+```py
+def eval_genomes(genomes, substrate, vd_environment, generation):
+    best_genome = None
+    max_fitness = 0
+    distances = []
+    for genome in genomes:
+        fitness, dist = eval_individual(genome, substrate, 
+                                        vd_environment)
+        genome.SetFitness(fitness)
+        distances.append(dist)
+
+        if fitness > max_fitness:
+            max_fitness = fitness
+            best_genome = genome
+
+    return best_genome, max_fitness, distances
+```
 
 `eval_genomes` 函数接受一个基因组列表、判别器 ANN 底层配置、初始化的测试环境和当前代的 ID 作为参数。函数的前几行创建了一些中间变量，用于存储评估结果：
 
-[PRE34]
+```py
+    best_genome = None
+    max_fitness = 0
+    distances = []
+```
 
 之后，我们遍历种群中的所有基因组并收集适当的统计数据：
 
-[PRE35]
+```py
+    for genome in genomes:
+        fitness, dist = eval_individual(genome, substrate, 
+                                        vd_environment)
+        genome.SetFitness(fitness)
+        distances.append(dist)
+
+        if fitness > max_fitness:
+            max_fitness = fitness
+            best_genome = genome
+```
 
 最后，`eval_genomes` 函数以元组的形式返回收集到的统计数据，`(best_genome, max_fitness, distances)`。
 
 +   `eval_individual` 函数允许我们如下评估单个基因组的适应性：
 
-[PRE36]
+```py
+def eval_individual(genome, substrate, vd_environment):
+    # Create ANN from provided CPPN genome and substrate
+    net = NEAT.NeuralNetwork()
+    genome.BuildHyperNEATPhenotype(net, substrate)
+
+    fitness, dist = vd_environment.evaluate_net(net)
+    return fitness, dist
+```
 
 在开始时，前面的源代码使用提供的 CPPN 基因创建判别器 ANN 表型。之后，判别器 ANN 表型在测试环境中进行评估。
 
@@ -400,23 +724,40 @@ MultiNEAT 库使用 `Parameters` Python 类来保存所有必需的超参数。�
 
 1.  `create_hyperparameters` 函数首先创建一个 `Parameters` 对象来保存 HyperNEAT 参数：
 
-[PRE37]
+```py
+    params = NEAT.Parameters()
+```
 
 1.  我们决定从一个中等大小的基因组群体开始，以保持计算快速。同时，我们希望在群体中保持足够多的生物体以维持进化多样性。群体大小如下定义：
 
-[PRE38]
+```py
+    params.PopulationSize = 150
+```
 
 1.  我们对产生尽可能少的节点的紧凑型 CPPN 基因组感兴趣，以增加间接编码的有效性。因此，我们在进化过程中设置了极小的添加新节点的概率，并且保持创建新连接的概率相当低：
 
-[PRE39]
+```py
+    params.MutateAddLinkProb = 0.1
+    params.MutateAddNeuronProb = 0.03
+```
 
 1.  HyperNEAT 方法在隐藏节点和输出节点中产生具有不同激活函数的 CPPN 基因组。因此，我们定义了改变节点激活类型变异的概率。此外，在这个实验中，我们只对使用四种类型的激活函数感兴趣：符号高斯、符号 S 型、符号正弦和线性。我们将选择这四种激活类型中任何一种的概率设置为 `1.0`，这实际上使得选择每种类型的概率相等。我们如下定义了超参数：
 
-[PRE40]
+```py
+    params.MutateNeuronActivationTypeProb = 0.3
+    params.ActivationFunction_SignedGauss_Prob = 1.0
+    params.ActivationFunction_SignedSigmoid_Prob = 1.0
+    params.ActivationFunction_SignedSine_Prob = 1.0
+    params.ActivationFunction_Linear_Prob = 1.0
+```
 
 1.  最后，我们定义种群中要保留的物种数量在`[5,10]`范围内，并将物种停滞参数的值设置为`100`代。此配置保持了适度的物种多样性，但足以让物种长时间存在，以便它们可以进化并产生有用的CPPN基因组配置：
 
-[PRE41]
+```py
+    params.SpeciesMaxStagnation = 100
+    params.MinSpecies = 5
+    params.MaxSpecies = 10
+```
 
 这里展示的超参数选择展示了在进化过程中产生成功的CPPN基因组的效率之高。
 
@@ -424,7 +765,15 @@ MultiNEAT 库使用 `Parameters` Python 类来保存所有必需的超参数。�
 
 在这个实验中，我们使用MultiNEAT Python库，它提供了HyperNEAT算法的实现。因此，我们需要创建一个合适的Python环境，这包括MultiNEAT Python库和所有必要的依赖项。这可以通过在命令行中执行以下命令使用Anaconda来完成：
 
-[PRE42]
+```py
+$ conda create --name vd_multineat python=3.5
+$ conda activate vd_multineat
+$ conda install -c conda-forge multineat 
+$ conda install matplotlib
+$ conda install -c anaconda seaborn
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 这些命令创建并激活了一个`vd_multineat`虚拟环境，使用Python 3.5。之后，它们安装了MultiNEAT Python库的最新版本，以及我们代码用于结果可视化的依赖项。
 
@@ -432,7 +781,9 @@ MultiNEAT 库使用 `Parameters` Python 类来保存所有必需的超参数。�
 
 要开始实验，你需要进入包含`vd_experiment_multineat.py`脚本的本地目录，并执行以下命令：
 
-[PRE43]
+```py
+$ python vd_experiment_multineat.py
+```
 
 不要忘记使用以下命令激活适当的虚拟环境：
 
@@ -440,7 +791,30 @@ MultiNEAT 库使用 `Parameters` Python 类来保存所有必需的超参数。�
 
 在经过特定代数之后，成功解决方案将被找到，你将在控制台输出中看到类似以下内容的行：
 
-[PRE44]
+```py
+****** Generation: 16 ******
+
+Best fitness: 0.995286, genome ID: 2410
+Species count: 11
+Generation elapsed time: 3.328 sec
+Best fitness ever: 0.995286, genome ID: 2410
+
+****** Generation: 17 ******
+
+Solution found at generation: 17, best fitness: 1.000000, species count: 11
+
+Best ever fitness: 1.000000, genome ID: 2565
+
+Trial elapsed time: 57.753 sec
+Random seed: 1568629572
+
+CPPN nodes: 10, connections: 16
+
+Running test evaluation against random visual field: 41
+Substrate nodes: 242, connections: 14641
+found (5, 1)
+target (5, 1)
+```
 
 控制台输出表明解决方案在第`17`代找到。成功CPPN基因组的ID是`2565`，这个基因组有10个节点和它们之间的16个连接。你还可以看到由最佳CPPN基因组产生的判别器ANN对随机选择的视觉场的评估结果。
 

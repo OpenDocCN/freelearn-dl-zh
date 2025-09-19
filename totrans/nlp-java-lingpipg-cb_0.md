@@ -42,15 +42,35 @@ Java是一种相当糟糕的语言，不适合放入行宽限制为66个字符�
 
 代码块设置如下：
 
-[PRE0]
+```py
+public static List<String[]> filterJaccard(List<String[]> texts, TokenizerFactory tokFactory, double cutoff) {
+  JaccardDistance jaccardD = new JaccardDistance(tokFactory);
+```
 
 当我们希望您注意代码块中的特定部分时，相关的行或项目将以粗体显示：
 
-[PRE1]
+```py
+public static void consoleInputBestCategory(
+BaseClassifier<CharSequence> classifier) throws IOException {
+  BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+  while (true) {
+    System.out.println("\nType a string to be classified. " + " Empty string to quit.");
+    String data = reader.readLine();
+    if (data.equals("")) {
+      return;
+    }
+    Classification classification = classifier.classify(data);
+ System.out.println("Best Category: " + classification.bestCategory());
+  }
+}
+```
 
 任何命令行输入或输出都如下所示：
 
-[PRE2]
+```py
+tar –xvzf lingpipeCookbook.tgz
+
+```
 
 **新术语**和**重要词汇**以粗体显示。屏幕上看到的单词，例如在菜单或对话框中，在文本中如下所示："点击**创建一个新应用程序**。"
 

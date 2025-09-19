@@ -96,7 +96,10 @@ LingPipe在NLP领域有很多竞争对手。以下是一些更受欢迎的、专
 
 您需要从[http://alias-i.com/book.html](http://alias-i.com/book.html)下载此食谱的源代码，以及支持模型和数据。使用以下命令解包和解压缩：
 
-[PRE0]
+```py
+tar –xvzf lingpipeCookbook.tgz
+
+```
 
 ### 小贴士
 
@@ -126,21 +129,44 @@ LingPipe的下载和安装说明可以在[http://alias-i.com/lingpipe/web/instal
 
 1.  前往书的`cookbook`目录并运行OSX、Unix和Linux的命令：
 
-    [PRE1]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.RunClassifierFromDisk
+
+    ```
 
     对于Windows调用（引用类路径并使用`;`代替`:`）：
 
-    [PRE2]
+    ```py
+    java -cp "lingpipe-cookbook.1.0.jar;lib\lingpipe-4.1.0.jar" com.lingpipe.cookbook.chapter1.RunClassifierFromDisk
+
+    ```
 
     我们将在本书中使用Unix风格的命令行。
 
 1.  程序报告正在加载模型和默认设置，并提示输入一个句子进行分类：
 
-    [PRE3]
+    ```py
+    Loading: models/3LangId.LMClassifier
+    Type a string to be classified. Empty string to quit.
+    The rain in Spain falls mainly on the plain.
+    english
+    Type a string to be classified. Empty string to quit.
+    la lluvia en España cae principalmente en el llano.
+    spanish
+    Type a string to be classified. Empty string to quit.
+    スペインの雨は主に平野に落ちる。
+    japanese
+
+    ```
 
 1.  该分类器是在英语、西班牙语和日语上训练的。我们已输入了每种语言的示例——要获取一些日语，请访问[http://ja.wikipedia.org/wiki/](http://ja.wikipedia.org/wiki/)。这些是它所知道的唯一语言，但它会对任何文本进行猜测。所以，让我们尝试一些阿拉伯语：
 
-    [PRE4]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    المطر في اسبانيا يقع أساسا على سهل.
+    japanese
+
+    ```
 
 1.  它认为它是日语，因为这种语言的字符比英语或西班牙语多。这反过来又导致该模型期望更多的未知字符。所有的阿拉伯文字符都是未知的。
 
@@ -150,17 +176,39 @@ LingPipe的下载和安装说明可以在[http://alias-i.com/lingpipe/web/instal
 
 jar文件中的代码位于`cookbook/src/com/lingpipe/cookbook/chapter1/RunClassifierFromDisk.java`。正在发生的事情是，一个用于语言识别的预构建模型被反序列化并可供使用。它已经在英语、日语和西班牙语上进行了训练。训练数据来自每种语言的维基百科页面。你可以在`data/3LangId.csv`中看到数据。本食谱的重点是向你展示如何反序列化分类器并运行它——训练在本章的“训练你自己的语言模型分类器”食谱中处理。`RunClassifierFromDisk.java`类的整个代码从包开始；然后它导入`RunClassifierFromDisk`类的开始和`main()`的开始：
 
-[PRE5]
+```py
+package com.lingpipe.cookbook.chapter1;
+import java.io.File;
+import java.io.IOException;
+
+import com.aliasi.classify.BaseClassifier;
+import com.aliasi.util.AbstractExternalizable;
+import com.lingpipe.cookbook.Util;
+public class RunClassifierFromDisk {
+  public static void main(String[] args) throws
+  IOException, ClassNotFoundException {
+```
 
 上述代码是一个非常标准的Java代码，我们在此不进行解释。接下来是大多数食谱中的一个特性，它为命令行中不包含的文件提供一个默认值。这允许你使用自己的数据（如果你有），否则它将从分发中的文件运行。在这种情况下，如果没有命令行参数，将提供一个默认分类器：
 
-[PRE6]
+```py
+String classifierPath = args.length > 0 ? args[0] :  "models/3LangId.LMClassifier";
+System.out.println("Loading: " + classifierPath);
+```
 
 接下来，我们将看到如何从磁盘反序列化一个分类器或另一个LingPipe对象：
 
-[PRE7]
+```py
+File serializedClassifier = new File(classifierPath);
+@SuppressWarnings("unchecked")
+BaseClassifier<String> classifier
+  = (BaseClassifier<String>)
+  AbstractExternalizable.readObject(serializedClassifier);
+```
 
-[PRE8]
+```py
+AbstractExternalizable.readObject method.
+```
 
 这个类在 LingPipe 中被用于执行类的编译，原因有两个。首先，它允许编译后的对象设置最终变量，这支持 LingPipe 对不可变性的广泛使用。其次，它避免了暴露外部化和反序列化所需的 I/O 方法所带来的混乱，特别是无参数构造函数。这个类被用作一个私有内部类的超类，该内部类执行实际的编译。这个私有内部类实现了所需的 `no-arg` 构造函数，并存储了 `readResolve()` 所需的对象。
 
@@ -172,11 +220,27 @@ jar文件中的代码位于`cookbook/src/com/lingpipe/cookbook/chapter1/RunClass
 
 最后一行调用了一个实用方法，我们将在本书中经常使用：
 
-[PRE9]
+```py
+Util.consoleInputBestCategory(classifier);
+```
 
 此方法处理与命令行的交互。代码位于 `src/com/lingpipe/cookbook/Util.java`：
 
-[PRE10]
+```py
+public static void consoleInputBestCategory(
+BaseClassifier<CharSequence> classifier) throws IOException {
+  BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+  while (true) {
+    System.out.println("\nType a string to be classified. " + " Empty string to quit.");
+    String data = reader.readLine();
+    if (data.equals("")) {
+      return;
+    }
+    Classification classification = classifier.classify(data);
+    System.out.println("Best Category: " + classification.bestCategory());
+  }
+}
+```
 
 一旦从控制台读取字符串，就会调用 `classifier.classify(input)`，它返回 `Classification`。然后，这会提供一个 `String` 标签并打印出来。就这样！你已经运行了一个分类器。
 
@@ -204,7 +268,9 @@ LingPipe 分类器基于它们提供的估计类型存在一个层次结构。�
 
 在之前的配方中，我们轻率地反序列化为`BaseClassifier<String>`，这隐藏了所有正在发生的事情的细节。实际上，情况比模糊的抽象类所暗示的要复杂得多。请注意，加载到磁盘上的文件被命名为`3LangId.LMClassifier`。按照惯例，我们用将要反序列化的对象类型来命名序列化模型，在这种情况下，是`LMClassifier`，它扩展了`BaseClassifier`。对于分类器的最具体类型是：
 
-[PRE11]
+```py
+LMClassifier<CompiledNGramBoundaryLM, MultivariateDistribution> classifier = (LMClassifier <CompiledNGramBoundaryLM, MultivariateDistribution>) AbstractExternalizable.readObject(new File(args[0]));
+```
 
 将`LMClassifier<CompiledNGramBoundaryLM, MultivariateDistribution>`转换为类型指定了分布类型为`MultivariateDistribution`。`com.aliasi.stats.MultivariateDistribution`的Javadoc非常明确且有助于描述这是什么。
 
@@ -230,7 +296,9 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 幸运的是，接口通过更美观的反序列化来拯救了这一天：
 
-[PRE12]
+```py
+JointClassifier<String> classifier = (JointClassifier<String>) AbstractExternalizable.readObject(new File(classifierPath));
+```
 
 界面很好地隐藏了实现的细节，这正是我们在示例程序中要采用的。
 
@@ -240,11 +308,22 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 1.  让你的魔法外壳精灵召唤一个带有 Java 解释器的命令提示符并输入：
 
-    [PRE13]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar: com.lingpipe.cookbook.chapter1.RunClassifierJoint 
+
+    ```
 
 1.  我们将输入与之前相同的数据：
 
-    [PRE14]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    The rain in Spain falls mainly on the plain.
+    Rank Categ Score   P(Category|Input) log2 P(Category,Input)
+    0=english -3.60092 0.9999999999         -165.64233893156052
+    1=spanish -4.50479 3.04549412621E-13    -207.2207276413206
+    2=japanese -14.369 7.6855682344E-150    -660.989401136873
+
+    ```
 
 如描述所述，`JointClassification` 在以 `Classification` 为根的层次结构中传递所有分类度量。以下所示分类的每一级都添加到其前面的分类器中：
 
@@ -264,11 +343,31 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 代码位于`src/com/lingpipe/cookbook/chapter1/RunClassifierJoint.java`中，并反序列化为`JointClassifier<CharSequence>`：
 
-[PRE15]
+```py
+public static void main(String[] args) throws IOException, ClassNotFoundException {
+  String classifierPath  = args.length > 0 ? args[0] : "models/3LangId.LMClassifier";
+  @SuppressWarnings("unchecked")
+    JointClassifier<CharSequence> classifier = (JointClassifier<CharSequence>) AbstractExternalizable.readObject(new File(classifierPath));
+  Util.consoleInputPrintClassification(classifier);
+}
+```
 
 它调用`Util.consoleInputPrintClassification(classifier)`，这与`Util.consoleInputBestCategory(classifier)`最小不同之处在于它使用分类的`toString()`方法来打印。代码如下：
 
-[PRE16]
+```py
+public static void consoleInputPrintClassification(BaseClassifier<CharSequence> classifier) throws IOException {
+  BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+  while (true) {
+    System.out.println("\nType a string to be classified." + Empty string to quit.");
+    String data = reader.readLine();
+    if (data.equals("")) {
+      return;
+    }
+    Classification classification = classifier.classify(data);
+    System.out.println(classification);
+  }
+}
+```
 
 我们得到了比预期的更丰富的输出，因为类型是`Classification`，但`toString()`方法将被应用于运行时类型`JointClassification`。
 
@@ -304,7 +403,13 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 1.  这些值应放入`twitter4j.properties`文件中的适当位置。属性如下：
 
-    [PRE17]
+    ```py
+    debug=false
+    oauth.consumerKey=ehUOExampleEwQLQpPQ
+    oauth.consumerSecret=aTHUGTBgExampleaW3yLvwdJYlhWY74
+    oauth.accessToken=1934528880-fiMQBJCBExamplegK6otBG3XXazLv
+    oauth.accessTokenSecret=y0XExampleGEHdhCQGcn46F8Vx2E
+    ```
 
 ## 如何操作...
 
@@ -312,15 +417,29 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 1.  进入本章目录并运行以下命令：
 
-    [PRE18]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/twitter4j-core-4.0.1.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.TwitterSearch
+
+    ```
 
 1.  代码显示输出文件（在这种情况下，默认值）。提供路径作为参数将写入此文件。然后，在提示符中输入您的查询：
 
-    [PRE19]
+    ```py
+    Writing output to data/twitterSearch.csv
+    Enter Twitter Query:disney
+
+    ```
 
 1.  代码随后查询Twitter，并报告每找到100条推文（输出被截断）：
 
-    [PRE20]
+    ```py
+    Tweets Accumulated: 100
+    Tweets Accumulated: 200
+    …
+    Tweets Accumulated: 1500
+    writing to disk 1500 tweets at data/twitterSearch.csv 
+
+    ```
 
 该程序使用搜索查询，搜索Twitter中的术语，并将输出（限制为1500条推文）写入您在命令行中指定的`.csv`文件名或使用默认值。
 
@@ -328,25 +447,64 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 代码使用`twitter4j`库实例化`TwitterFactory`，并使用用户输入的查询搜索Twitter。`src/com/lingpipe/cookbook/chapter1/TwitterSearch.java`中`main()`的开始部分如下：
 
-[PRE21]
+```py
+String outFilePath = args.length > 0 ? args[0] : "data/twitterSearch.csv";
+File outFile = new File(outFilePath);
+System.out.println("Writing output to " + outFile);
+BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+System.out.print("Enter Twitter Query:");
+String queryString = reader.readLine();
+```
 
 上述代码获取输出文件，如果没有提供则使用默认值，并从命令行获取查询。
 
 以下代码根据twitter4j开发者的愿景设置查询。有关此过程的更多信息，请阅读他们的Javadoc。然而，这应该是相当直接的。为了使我们的结果集更加独特，您会注意到，当我们创建查询字符串时，我们将使用`-filter:retweets`选项过滤掉重复推文。这仅是部分有效；请参阅本章后面的**使用Jaccard距离消除近似重复**配方以获得更完整的解决方案：
 
-[PRE22]
+```py
+Twitter twitter = new TwitterFactory().getInstance();
+Query query = new Query(queryString + " -filter:retweets"); query.setLang("en");//English
+query.setCount(TWEETS_PER_PAGE);
+query.setResultType(Query.RECENT);
+```
 
 我们将得到以下结果：
 
-[PRE23]
+```py
+List<String[]> csvRows = new ArrayList<String[]>();
+while(csvRows.size() < MAX_TWEETS) {
+  QueryResult result = twitter.search(query);
+  List<Status> resultTweets = result.getTweets();
+  for (Status tweetStatus : resultTweets) {
+    String row[] = new String[Util.ROW_LENGTH];
+    row[Util.TEXT_OFFSET] = tweetStatus.getText();
+    csvRows.add(row);
+  }
+  System.out.println("Tweets Accumulated: " + csvRows.size());
+  if ((query = result.nextQuery()) == null) {
+    break;
+  }
+}
+```
 
-[PRE24]
+```py
+query to handle paging through the search results—it returns null when no more pages are available. The current Twitter API allows a maximum of 100 results per page, so in order to get 1500 results, we need to rerun the search until there are no more results, or until we get 1500 tweets. The next step involves a bit of reporting and writing:
+```
 
-[PRE25]
+```py
+System.out.println("writing to disk " + csvRows.size() + " tweets at " + outFilePath);
+Util.writeCsvAddHeader(csvRows, outFile);
+```
 
 然后使用`Util.writeCsvAddHeader`方法将推文列表写入`.csv`文件：
 
-[PRE26]
+```py
+public static void writeCsvAddHeader(List<String[]> data, File file) throws IOException {
+  CSVWriter csvWriter = new CSVWriter(new OutputStreamWriter(new FileOutputStream(file),Strings.UTF8));
+  csvWriter.writeNext(ANNOTATION_HEADER_ROW);
+  csvWriter.writeAll(data);
+  csvWriter.close();
+}
+```
 
 我们将使用这个`.csv`文件在下一节中运行语言ID测试。
 
@@ -368,11 +526,20 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 1.  获取命令提示符并运行：
 
-    [PRE27]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/twitter4j-core-4.0.1.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter1.ReadClassifierRunOnCsv
+
+    ```
 
 1.  这将使用`data/disney.csv`分布的默认CSV文件，遍历CSV文件的每一行，并对其应用来自`models/ 3LangId.LMClassifier`的语言ID分类器：
 
-    [PRE28]
+    ```py
+    InputText: When all else fails #Disney
+    Best Classified Language: english
+    InputText: ES INSUPERABLE DISNEY !! QUIERO VOLVER:(
+    Best Classified Language: Spanish
+
+    ```
 
 1.  您也可以指定输入作为第一个参数，分类器作为第二个参数。
 
@@ -380,11 +547,39 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 我们将反序列化一个来自之前配方中描述的外部化模型的分类器。然后，我们将遍历`.csv`文件的每一行，并调用分类器的classify方法。`main()`中的代码如下：
 
-[PRE29]
+```py
+String inputPath = args.length > 0 ? args[0] : "data/disney.csv";
+String classifierPath = args.length > 1 ? args[1] : "models/3LangId.LMClassifier";
+@SuppressWarnings("unchecked") BaseClassifier<CharSequence> classifier = (BaseClassifier<CharSequence>) AbstractExternalizable.readObject(new File(classifierPath));
+List<String[]> lines = Util.readCsvRemoveHeader(new File(inputPath));
+for(String [] line: lines) {
+  String text = line[Util.TEXT_OFFSET];
+  Classification classified = classifier.classify(text);
+  System.out.println("InputText: " + text);
+  System.out.println("Best Classified Language: " + classified.bestCategory());
+}
+```
 
 之前的代码基于之前的配方，没有特别新的内容。以下所示的`Util.readCsvRemoveHeader`只是跳过了`.csv`文件的第一行，然后从磁盘读取并返回具有非空值和非空字符串的`TEXT_OFFSET`位置的行：
 
-[PRE30]
+```py
+public static List<String[]> readCsvRemoveHeader(File file) throws IOException {
+  FileInputStream fileIn = new FileInputStream(file);
+  InputStreamReader inputStreamReader = new InputStreamReader(fileIn,Strings.UTF8);
+  CSVReader csvReader = new CSVReader(inputStreamReader);
+  csvReader.readNext();  //skip headers
+  List<String[]> rows = new ArrayList<String[]>();
+  String[] row;
+  while ((row = csvReader.readNext()) != null) {
+    if (row[TEXT_OFFSET] == null || row[TEXT_OFFSET].equals("")) {
+      continue;
+    }
+    rows.add(row);
+  }
+  csvReader.close();
+  return rows;
+}
+```
 
 # 分类器的评估 – 混淆矩阵
 
@@ -410,11 +605,20 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 1.  在命令提示符中输入以下内容；这将运行默认分类器在默认黄金标准数据中的文本。然后，它将比较分类器的最佳类别与`TRUTH`列中标注的内容：
 
-    [PRE31]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.RunConfusionMatrix
+
+    ```
 
 1.  此类将生成混淆矩阵：
 
-    [PRE32]
+    ```py
+    reference\response
+     \e,n,
+     e 11,0,
+     n 1,9,
+
+    ```
 
 混淆矩阵的命名非常恰当，因为它最初几乎会让人困惑，但毫无疑问，它是分类器输出的最佳表示，因为它很难用它来隐藏糟糕的分类器性能。换句话说，它是一个出色的BS检测器。它明确地展示了分类器正确识别的内容、错误识别的内容以及它认为正确的答案。
 
@@ -426,27 +630,55 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 接下来，将加载语言模型和`.csv`数据。与`Util.CsvRemoveHeader`解释略有不同，因为它只接受`TRUTH`列中有值的行——如果这还不清楚，请参阅`src/com/lingpipe/cookbook/Util.java`：
 
-[PRE33]
+```py
+@SuppressWarnings("unchecked")
+BaseClassifier<CharSequence> classifier = (BaseClassifier<CharSequence>) AbstractExternalizable.readObject(new File(classifierPath));
+
+List<String[]> rows = Util.readAnnotatedCsvRemoveHeader(new File(inputPath));
+```
 
 接下来，将找到类别：
 
-[PRE34]
+```py
+String[] categories = Util.getCategories(rows);
+```
 
 该方法将累积来自 `TRUTH` 列的所有类别标签。代码很简单，如下所示：
 
-[PRE35]
+```py
+public static String[] getCategories(List<String[]> data) {
+  Set<String> categories = new HashSet<String>();
+  for (String[] csvData : data) {
+    if (!csvData[ANNOTATION_OFFSET].equals("")) {
+      categories.add(csvData[ANNOTATION_OFFSET]);
+    }
+  }
+  return categories.toArray(new String[0]);
+}
+```
 
 当我们运行任意数据，其中标签在编译时未知时，此代码将很有用。
 
 然后，我们将设置 `BaseClassfierEvaluator`。这需要评估分类器。还将设置类别和一个 `boolean` 值，该值控制是否在分类器中存储输入以进行构建：
 
-[PRE36]
+```py
+boolean storeInputs = false;
+BaseClassifierEvaluator<CharSequence> evaluator = new BaseClassifierEvaluator<CharSequence>(classifier, categories, storeInputs);
+```
 
 注意，分类器可以是空的，并且可以在稍后指定；类别必须与注释和分类器产生的类别完全匹配。我们不会麻烦配置评估器来存储输入，因为我们在这个配方中不会使用这个功能。有关输入存储和访问的示例，请参阅*查看错误类别 - 假阳性*配方。
 
 接下来，我们将进行实际的评估。循环将遍历 `.csv` 文件中的每一行信息，构建一个 `Classified<CharSequence>`，并将其传递给评估器的 `handle()` 方法：
 
-[PRE37]
+```py
+for (String[] row : rows) {
+  String truth = row[Util.ANNOTATION_OFFSET];
+  String text = row[Util.TEXT_OFFSET];
+  Classification classification = new Classification(truth);
+  Classified<CharSequence> classified = new Classified<CharSequence>(text,classification);
+  evaluator.handle(classified);
+}
+```
 
 第四行将创建一个分类对象，其值来自真实注释——在本例中是 *e* 或 *n*。这与 `BaseClassifier<E>` 为 `bestCategory()` 方法返回的类型相同。没有为真实注释设置特殊类型。下一行添加了分类所应用的文本，我们得到一个 `Classified<CharSequence>` 对象。
 
@@ -454,7 +686,9 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 在循环外部，我们将使用 `Util.createConfusionMatrix()` 打印出混淆矩阵：
 
-[PRE38]
+```py
+System.out.println(Util.confusionMatrixToString(evaluator.confusionMatrix()));
+```
 
 检查此代码留给了读者。就是这样；我们已经评估了我们的分类器并打印出了混淆矩阵。
 
@@ -486,35 +720,70 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 1.  启动一个终端并输入以下内容：
 
-    [PRE39]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.TrainAndRunLMClassifier
+
+    ```
 
 1.  然后，在命令提示符中输入一些英文，比如，库尔特·冯内古特的引言，以查看生成的 `JointClassification`。请参阅 *从分类器获取置信度估计* 的配方，以了解以下输出的解释：
 
-    [PRE40]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    So it goes.
+    Rank Categ Score  P(Category|Input)  log2 P(Category,Input)
+    0=e -4.24592987919 0.9999933712053  -55.19708842949149
+    1=n -5.56922173547 6.62884502334E-6 -72.39988256112824
+
+    ```
 
 1.  输入一些非英文，例如，博尔赫斯的《分叉之路》的西班牙语标题：
 
-    [PRE41]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    El Jardín de senderos que se bifurcan 
+    Rank Categ Score  P(Category|Input)  log2 P(Category,Input)
+    0=n -5.6612148689 0.999989087229795 -226.44859475801326
+    1=e -6.0733050528 1.091277041753E-5 -242.93220211249715
+
+    ```
 
 ## 它是如何工作的...
 
 程序位于 `src/com/lingpipe/cookbook/chapter1/TrainAndRunLMClassifier.java`；`main()` 方法的内文开始如下：
 
-[PRE42]
+```py
+String dataPath = args.length > 0 ? args[0] : "data/disney_e_n.csv";
+List<String[]> annotatedData = Util.readAnnotatedCsvRemoveHeader(new File(dataPath));
+String[] categories = Util.getCategories(annotatedData);
+```
 
 上述代码获取 `.csv` 文件的内容，然后提取标注的类别列表；这些类别将是标注列中的所有非空字符串。
 
 下面的 `DynamicLMClassifier` 是通过一个静态方法创建的，该方法需要类别数组以及 `int` 类型的语言模型顺序。当顺序为 3 时，语言模型将在所有 1 到 3 个字符序列的文本训练数据上训练。因此，“I luv Disney”将产生“ I”，“ I ”，“ I l”，“ l”，“ lu”，“ u”，“ uv”，“ luv”等训练实例。`createNGramBoundary` 方法将一个特殊标记添加到每个文本序列的开始和结束处；如果序列的开始或结束对分类有信息性，这个标记可能会有所帮助。大多数文本数据对开始/结束都很敏感，因此我们将选择这个模型：
 
-[PRE43]
+```py
+int maxCharNGram = 3;
+DynamicLMClassifier<NGramBoundaryLM> classifier = DynamicLMClassifier.createNGramBoundary(categories,maxCharNGram);
+```
 
 以下代码遍历训练数据的行，并创建 `Classified<CharSequence>`，就像在 *分类器的评估——混淆矩阵* 配方中展示的评估方式一样。然而，它不是将 `Classified` 对象传递给评估处理程序，而是用于训练分类器。
 
-[PRE44]
+```py
+for (String[] row: annotatedData) {
+  String truth = row[Util.ANNOTATION_OFFSET];
+  String text = row[Util.TEXT_OFFSET];
+  Classification classification 
+    = new Classification(truth);
+  Classified<CharSequence> classified = new Classified<CharSequence>(text,classification);
+  classifier.handle(classified);
+}
+```
 
 不需要进一步的操作，分类器已经准备好供控制台使用：
 
-[PRE45]
+```py
+Util.consoleInputPrintClassification(classifier);
+```
 
 ## 更多...
 
@@ -522,11 +791,18 @@ Javadoc对`MultivariateDistribution`进行了大量的详细说明，但基本�
 
 存在另一种训练分类器的方法，它让你能更多地控制训练过程。以下是这个方法的代码片段：
 
-[PRE46]
+```py
+Classification classification = new Classification(truth);
+Classified<CharSequence> classified = new Classified<CharSequence>(text,classification);
+classifier.handle(classified);
+```
 
 或者，我们可以用以下方法达到相同的效果：
 
-[PRE47]
+```py
+int count = 1;
+classifier.train(truth,text,count);
+```
 
 `train()`方法允许在训练过程中有额外的控制，因为它允许显式设置计数。当我们探索LingPipe分类器时，我们经常会看到一种允许进行一些额外控制的替代训练方法，这超出了`handle()`方法提供的控制范围。
 
@@ -578,11 +854,28 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 1.  打开命令提示符并输入：
 
-    [PRE48]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.RunXValidate
+
+    ```
 
 1.  结果将是：
 
-    [PRE49]
+    ```py
+    Training data is: data/disney_e_n.csv
+    Training on fold 0
+    Testing on fold 0
+    Training on fold 1
+    Testing on fold 1
+    Training on fold 2
+    Testing on fold 2
+    Training on fold 3
+    Testing on fold 3
+    reference\response
+        \e,n,
+        e 10,1,
+        n 6,4,
+    ```
 
     上述输出将在下一节中更有意义。
 
@@ -590,15 +883,32 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 本配方介绍了一个用于管理交叉验证的`XValidatingObjectCorpus`对象。它在训练分类器时被大量使用。其他所有内容都应该与之前的配方熟悉。`main()`方法从以下内容开始：
 
-[PRE50]
+```py
+String inputPath = args.length > 0 ? args[0] : "data/disney_e_n.csv";
+System.out.println("Training data is: " + inputPath);
+List<String[]> truthData = Util.readAnnotatedCsvRemoveHeader(new File(inputPath));
+```
 
 上述代码从默认文件或用户输入的文件中获取数据。接下来的两行介绍了`XValidatingObjectCorpus`——本配方的明星：
 
-[PRE51]
+```py
+int numFolds = 4;
+XValidatingObjectCorpus<Classified<CharSequence>> corpus = Util.loadXValCorpus(truthData, numFolds);
+```
 
 `numFolds`变量控制刚刚加载的数据如何分区——在这种情况下，它将分为四个分区。现在，我们将查看`Util.loadXValCorpus(truthData, numfolds)`子程序：
 
-[PRE52]
+```py
+public static XValidatingObjectCorpus<Classified<CharSequence>> loadXValCorpus(List<String[]> rows, int numFolds) throws IOException {
+  XValidatingObjectCorpus<Classified<CharSequence>> corpus = new XValidatingObjectCorpus<Classified<CharSequence>>(numFolds);
+  for (String[] row : rows) {
+    Classification classification = new Classification(row[ANNOTATION_OFFSET]);
+    Classified<CharSequence> classified = new Classified<CharSequence>(row[TEXT_OFFSET],classification);
+    corpus.handle(classified);
+  }
+  return corpus;
+}
+```
 
 构造的`XValidatingObjectCorpus<E>`将包含所有以`Objects E`形式存在的真实数据。在这种情况下，我们正在用本章之前配方中用于训练和评估的相同对象填充语料库—`Classified<CharSequence>`。这将很有用，因为我们将使用这些对象来训练和测试我们的分类器。`numFolds`参数指定要创建多少个数据分区。它可以在以后更改。
 
@@ -606,31 +916,73 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 返回到`main()`函数的主体，我们将对语料库进行排列以混合数据，获取类别，并在之前配方中提供分类器的地方设置`BaseClassifierEvaluator<CharSequence>`为null值：
 
-[PRE53]
+```py
+corpus.permuteCorpus(new Random(123413));
+String[] categories = Util.getCategories(truthData);
+boolean storeInputs = false;
+BaseClassifierEvaluator<CharSequence> evaluator = new BaseClassifierEvaluator<CharSequence>(null, categories, storeInputs);
+```
 
 现在，我们已准备好进行交叉验证：
 
-[PRE54]
+```py
+int maxCharNGram = 3;
+for (int i = 0; i < numFolds; ++i) {
+  corpus.setFold(i);
+  DynamicLMClassifier<NGramBoundaryLM> classifier = DynamicLMClassifier.createNGramBoundary(categories, maxCharNGram);
+  System.out.println("Training on fold " + i);
+  corpus.visitTrain(classifier);
+  evaluator.setClassifier(classifier);
+  System.out.println("Testing on fold " + i);
+  corpus.visitTest(evaluator);
+}
+```
 
 在`for`循环的每次迭代中，我们将设置正在使用的折数，这反过来将选择训练和测试分区。然后，我们将构建`DynamicLMClassifier`并通过向`corpus.visitTrain(classifier)`提供分类器来对其进行训练。接下来，我们将评估器的分类器设置为刚刚训练的那个。评估器被传递到`corpus.visitTest(evaluator)`方法中，其中包含的分类器应用于它未训练过的测试数据。有四个折，在任何给定迭代中，25%的数据将是测试数据，75%的数据将是训练数据。数据将在测试分区中恰好一次，在训练中三次。除非数据中有重复，否则训练和测试分区永远不会包含相同的数据。
 
 一旦循环完成所有迭代，我们将打印一个在 *分类器的评估——混淆矩阵* 配方中讨论的混淆矩阵：
 
-[PRE55]
+```py
+System.out.println(
+  Util.confusionMatrixToString(evaluator.confusionMatrix()));
+```
 
 ## 还有更多...
 
 这个配方引入了许多移动部件，即交叉验证和支撑它的语料库对象。`ObjectHandler<E>` 接口也被大量使用；这对于不熟悉该模式的开发者来说可能会令人困惑。它用于训练和测试分类器。它还可以用于打印语料库的内容。将 `for` 循环的内容更改为 `visitTrain` 并使用 `Util.corpusPrinter`：
 
-[PRE56]
+```py
+System.out.println("Training on fold " + i);
+corpus.visitTrain(Util.corpusPrinter());
+corpus.visitTrain(classifier);
+evaluator.setClassifier(classifier);
+System.out.println("Testing on fold " + i);
+corpus.visitTest(Util.corpusPrinter());
+```
 
 现在，你将得到一个看起来像这样的输出：
 
-[PRE57]
+```py
+Training on fold 0
+Malis?mos los nuevos dibujitos de disney, nickelodeon, cartoon, etc, no me gustannn:n
+@meeelp mas que venha um filhinho mais fofo que o pr?prio pai, com covinha e amando a Disney kkkkkkkkkkkkkkkkk:n
+@HedyHAMIDI au quartier pas a Disney moi:n
+I fully love the Disney Channel I do not care ?:e
+
+```
 
 文本后面跟着 `:` 和类别。打印训练/测试折是检查语料库是否正确填充的良好合理性检查。这也是了解 `ObjectHandler<E>` 接口工作方式的一个很好的视角——这里，源代码来自 `com/lingpipe/cookbook/Util.java`：
 
-[PRE58]
+```py
+public static ObjectHandler<Classified<CharSequence>> corpusPrinter () {
+  return new ObjectHandler<Classified<CharSequence>>() {
+    @Override
+    public void handle(Classified<CharSequence> e) {
+      System.out.println(e.toString());
+    }
+  };
+}
+```
 
 返回的类别没有多少内容。有一个单一的 `handle()` 方法，它只是打印 `Classified<CharSequence>` 的 `toString()` 方法。在这个配方中，分类器会调用文本和分类的 `train()` 方法，评估器将文本传递给分类器，并将结果与真实情况进行比较。
 
@@ -650,11 +1002,30 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 1.  这个食谱通过访问更多评估类提供的内容扩展了之前的*如何使用交叉验证进行训练和评估*食谱。获取命令提示符并输入：
 
-    [PRE59]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.ReportFalsePositivesOverXValidation
+
+    ```
 
 1.  这将导致：
 
-    [PRE60]
+    ```py
+    Training data is: data/disney_e_n.csv
+    reference\response
+     \e,n,
+     e 10,1,
+     n 6,4,
+    False Positives for e
+    Malisímos los nuevos dibujitos de disney, nickelodeon, cartoon, etc, no me gustannn : n
+    @meeelp mas que venha um filhinho mais fofo que o próprio pai, com covinha e amando a Disney kkkkkkkkkkkkkkkkk : n
+    @HedyHAMIDI au quartier pas a Disney moi : n
+    @greenath_ t'as de la chance d'aller a Disney putain j'y ai jamais été moi. : n
+    Prefiro gastar uma baba de dinheiro pra ir pra cancun doq pra Disney por exemplo : n
+    ES INSUPERABLE DISNEY !! QUIERO VOLVER:( : n
+    False Positives for n
+    request now "let's get tricky" by @bellathorne and @ROSHON on @radiodisney!!! just call 1-877-870-5678 or at http://t.co/cbne5yRKhQ!! <3 : e
+
+    ```
 
 1.  输出从混淆矩阵开始。然后，我们将看到来自混淆矩阵左下角单元格的实际六个假阳性实例，该单元格标记了分类器猜测的类别。然后，我们将看到`n`的假阳性，这是一个单独的示例。真实类别后面附加了`:`，这对于具有两个以上类别的分类器很有帮助。
 
@@ -662,19 +1033,44 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 这个食谱基于之前的食谱，但其源代码位于`com/lingpipe/cookbook/chapter1/ReportFalsePositivesOverXValidation.java`。有两个不同之处。首先，对于评估器，`storeInputs`被设置为`true`：
 
-[PRE61]
+```py
+boolean storeInputs = true;
+BaseClassifierEvaluator<CharSequence> evaluator = new BaseClassifierEvaluator<CharSequence>(null, categories, storeInputs);
+```
 
 其次，添加了一个`Util`方法来打印假阳性：
 
-[PRE62]
+```py
+for (String category : categories) {
+  Util.printFalsePositives(category, evaluator, corpus);
+}
+```
 
 前面的代码通过识别一个关注的类别——`e`或英文推文——并从分类器评估器中提取所有假阳性来实现。对于这个类别，假阳性是真实上非英文的推文，但分类器认为它们是英文的。引用的`Util`方法如下：
 
-[PRE63]
+```py
+public static <E> void printFalsePositives(String category, BaseClassifierEvaluator<E> evaluator, Corpus<ObjectHandler<Classified<E>>> corpus) throws IOException {
+  final Map<E,Classification> truthMap = new HashMap<E,Classification>();
+  corpus.visitCorpus(new ObjectHandler<Classified<E>>() {
+    @Override
+    public void handle(Classified<E> data) {
+      truthMap.put(data.getObject(),data.getClassification());
+    }
+  });
+```
 
 前面的代码取包含所有真实数据的语料库，并填充`Map<E,Classification>`以允许根据输入查找真实注释。如果相同的输入存在于两个类别中，那么这个方法将不会很稳健，但会记录最后看到的示例：
 
-[PRE64]
+```py
+List<Classified<E>> falsePositives = evaluator.falsePositives(category);
+System.out.println("False Positives for " + category);
+for (Classified<E> classified : falsePositives) {
+  E data = classified.getObject();
+  Classification truthClassification = truthMap.get(data);
+  System.out.println(data + " : " + truthClassification.bestCategory());
+  }
+}
+```
 
 代码从评估器获取假阳性，然后遍历所有这些，通过前一段代码中构建的`truthMap`进行查找，并打印出相关信息。`evaluator`中也有获取假阴性、真阳性和真阴性的方法。
 
@@ -738,19 +1134,34 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 1.  前往命令提示符并传达：
 
-    [PRE65]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.TrainAndWriteClassifierToDisk
+
+    ```
 
 1.  程序将以默认的输入/输出文件值响应：
 
-    [PRE66]
+    ```py
+    Training on data/disney_e_n.csv
+    Wrote model to models/my_disney_e_n.LMClassifier
+
+    ```
 
 1.  通过在调用*反序列化和运行分类器*食谱时指定要读取的分类器文件来测试模型是否工作：
 
-    [PRE67]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.LoadClassifierRunOnCommandLine models/my_disney_e_n.LMClassifier
+
+    ```
 
 1.  常规交互方式如下：
 
-    [PRE68]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    The rain in Spain
+    Best Category: e 
+
+    ```
 
 ## 它是如何工作的...
 
@@ -758,7 +1169,9 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 本食谱的新内容发生在我们调用`DynamicLMClassifier`上的`AbtractExternalizable.compileTo()`方法时，该方法编译模型并将其写入文件。此方法的使用方式类似于Java的`Externalizable`接口中的`writeExternal`方法：
 
-[PRE69]
+```py
+AbstractExternalizable.compileTo(classifier,outFile);
+```
 
 这就是大家需要知道的所有内容，以便将分类器写入磁盘。
 
@@ -766,11 +1179,20 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 存在一种替代的序列化方法，它适用于更多基于`File`类之外的序列化数据源变体。编写分类器的另一种方法是：
 
-[PRE70]
+```py
+FileOutputStream fos = new FileOutputStream(outFile);
+ObjectOutputStream oos = new ObjectOutputStream(fos);
+classifier.compileTo(oos);
+oos.close();
+fos.close();
+```
 
 此外，`DynamicLM`可以通过使用静态的`AbstractExternalizable.compile()`方法编译，而不涉及磁盘。它将以以下方式使用：
 
-[PRE71]
+```py
+@SuppressWarnings("unchecked")
+LMClassifier<LanguageModel, MultivariateDistribution> compiledLM = (LMClassifier<LanguageModel, MultivariateDistribution>) AbstractExternalizable.compile(classifier);
+```
 
 编译版本要快得多，但不再允许进一步训练实例。
 
@@ -790,11 +1212,22 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 1.  在命令提示符中输入：
 
-    [PRE72]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/opencsv-2.4.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter1.DeduplicateCsvData
+
+    ```
 
 1.  你将被大量的文本淹没：
 
-    [PRE73]
+    ```py
+    Tweets too close, proximity 1.00
+     @britneyspears do you ever miss the Disney days? and iilysm   please follow me. kiss from Turkey #AskBritneyJean ??
+     @britneyspears do you ever miss the Disney days? and iilysm please follow me. kiss from Turkey #AskBritneyJean ??? 
+    Tweets too close, proximity 0.50
+     Sooo, I want to have a Disney Princess movie night....
+     I just want to be a Disney Princess
+
+    ```
 
 1.  两个示例输出被展示出来——第一个是一个几乎完全相同的副本，只有最后的 `?` 有所不同。它的邻近度为 `1.0`；下一个示例的邻近度为 `0.50`，推文不同，但有很多单词重叠。请注意，第二种情况没有共享前缀。
 
@@ -804,27 +1237,69 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 `main()` 的源代码如下：
 
-[PRE74]
+```py
+String inputPath = args.length > 0 ? args[0] : "data/disney.csv";
+String outputPath = args.length > 1 ? args[1] : "data/disneyDeduped.csv";  
+List<String[]> data = Util.readCsvRemoveHeader(new File(inputPath));
+System.out.println(data.size());
+```
 
-[PRE75]
+```py
+TokenizerFactory:
+```
 
-[PRE76]
+```py
+TokenizerFactory tokenizerFactory = new RegExTokenizerFactory("\\w+");
+```
 
 简而言之，分词器将文本分解成由正则表达式 `\w+`（前一个代码中的第一个反斜杠转义了第二个反斜杠——这是Java的一个特性）定义的文本序列。它匹配连续的单词字符。字符串 "Hi, you here??" 产生标记 "Hi"、"you" 和 "here"。标点符号被忽略。
 
 接下来，`Util.filterJaccard` 被调用，截止值为 `.5`，这大致消除了与一半单词重叠的推文。然后，过滤器数据被写入磁盘：
 
-[PRE77]
+```py
+double cutoff = .5;
+List<String[]> dedupedData = Util.filterJaccard(data, tokenizerFactory, cutoff);
+System.out.println(dedupedData.size());
+Util.writeCsvAddHeader(dedupedData, new File(outputPath));
+}
+```
 
 `Util.filterJaccard()` 方法的源代码如下：
 
-[PRE78]
+```py
+public static List<String[]> filterJaccard(List<String[]> texts, TokenizerFactory tokFactory, double cutoff) {
+  JaccardDistance jaccardD = new JaccardDistance(tokFactory);
+```
 
-[PRE79]
+```py
+JaccardDistance class is constructed with a tokenizer factory. The Jaccard distance divides the intersection of tokens from the two strings over the union of tokens from both strings. Look at the Javadoc for more information.
+```
 
 下面的例子中的嵌套 `for` 循环探索每一行与每一行其他行，直到找到更高的阈值邻近度或直到查看完所有数据。不要用于大型数据集，因为这个算法是 O(n²)。如果没有行超过邻近度，则该行被添加到 `filteredTexts`：
 
-[PRE80]
+```py
+List<String[]> filteredTexts = new ArrayList<String[]>();
+for (int i = 0; i < texts.size(); ++i) {
+  String targetText = texts.get(i)[TEXT_OFFSET];
+  boolean addText = true;
+  for (int j = i + 1; j < texts.size(); ++j ) {
+    String comparisionText = texts.get(j)[TEXT_OFFSET];
+    double proximity = jaccardD.proximity(targetText,comparisionText);
+    if (proximity >= cutoff) {
+      addText = false;
+      System.out.printf(" Tweets too close, proximity %.2f\n", proximity);
+      System.out.println("\t" + targetText);
+      System.out.println("\t" + comparisionText);
+      break;
+    }
+  }
+  if (addText) {
+    filteredTexts.add(texts.get(i));
+  }
+}
+return filteredTexts;
+}
+```
 
 有许多更有效的方法来过滤文本，但代价是额外的复杂性——一个简单的反向单词查找索引来计算初始覆盖集将大大提高效率——搜索具有 O(n) 到 O(n log(n)) 方法的 shingling 文本查找。
 
@@ -860,11 +1335,29 @@ LingPipe分类器的Javadoc对驱动该技术的底层数学进行了相当广�
 
 1.  运行之前的交叉验证配方，提供标注文件的名称：
 
-    [PRE81]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter1.RunXValidate data/disneyDedupedSentiment.csv
+
+    ```
 
 1.  系统将随后运行四折交叉验证并打印出混淆矩阵。如果您需要进一步的解释，请查看 *如何使用交叉验证进行训练和评估* 配方：
 
-    [PRE82]
+    ```py
+    Training on fold 0
+    Testing on fold 0
+    Training on fold 1
+    Testing on fold 1
+    Training on fold 2
+    Testing on fold 2
+    Training on fold 3
+    Testing on fold 3
+    reference\response
+     \p,n,o,
+     p 14,0,10,
+     n 6,0,4,
+     o 7,1,37,
+
+    ```
 
 就这样！分类器完全依赖于训练数据来进行分类。更复杂的技术将比字符n-gram带来更丰富的特征，但最终，训练数据施加的标签是传递给分类器的知识。根据您的观点，底层技术要么神奇，要么令人惊讶地简单。
 

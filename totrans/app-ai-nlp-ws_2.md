@@ -202,33 +202,58 @@ Jupyter笔记本的源代码可通过GitHub在以下存储库中获取：[https:
 
 1.  在我们开始之前，必须安装 `boto3` 库。在一个新的 Jupyter Notebook 单元格中，输入以下命令来安装它：
 
-    [PRE0]
+    ```py
+    !pip install boto3  
+    ```
 
 1.  现在，让我们继续导入 Boto3。Boto3 仅仅是 AWS SDK for Python。[https://boto3.amazonaws.com/v1/documentation/api/latest/index.html](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html)）：
 
-    [PRE1]
+    ```py
+    import boto3
+    ```
 
 1.  然后，导入 JSON 模块以序列化 JSON（[https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html)）：
 
-    [PRE2]
+    ```py
+    import json
+    ```
 
 1.  实例化一个新的 Comprehend 客户端：
 
-    [PRE3]
+    ```py
+    comprehend = boto3.client(service_name='comprehend')
+    ```
 
 1.  接下来，我们将英语和西班牙语字符串分配给 Comprehend 进行分析：
 
-    [PRE4]
+    ```py
+    english_string = 'Machine Learning is fascinating.'
+    spanish_string = 'El aprendizaje automático es fascinante.'
+    ```
 
 1.  接下来，我们打印一个字符串来指示我们的脚本即将执行的相应变量：
 
-    [PRE5]
+    ```py
+    print('Calling DetectDominantLanguage')
+    print('english_string result:')
+    ```
 
 1.  最后，使用 `english_string` 和 `spanish_string` 变量调用 Comprehend 的 `detect_dominant_language` 方法（[https://docs.aws.amazon.com/comprehend/latest/dg/API_DetectDominantLanguage.html](https://docs.aws.amazon.com/comprehend/latest/dg/API_DetectDominantLanguage.html)）。
 
     `json.dumps()` 将 JSON 数据写入终端中的 Python 字符串：
 
-    [PRE6]
+    ```py
+    print('\n English string result:')
+    print(json.dumps(comprehend.detect_dominant_language\
+                    (Text = english_string), sort_keys=True, \
+                    indent=4))
+    print('\n spanish_string result:')
+    print(json.dumps(comprehend.detect_dominant_language\
+                    (Text = spanish_string), sort_keys=True, \
+                    indent=4))
+    print('End of DetectDominantLanguage\n')
+    \ ) to split the logic across multiple lines. When the code is executed, Python will ignore the backslash, and treat the code on the next line as a direct continuation of the current line.
+    ```
 
 1.  保存笔记本。
 
@@ -254,23 +279,47 @@ Jupyter笔记本的源代码可通过GitHub在以下存储库中获取：[https:
 
 1.  在一个全新的空单元格中，导入 AWS SDK for Python（boto3：[https://boto3.amazonaws.com/v1/documentation/api/latest/index.html](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html)）：
 
-    [PRE7]
+    ```py
+    import boto3
+    ```
 
 1.  然后，再次导入 JSON 模块以序列化 JSON（[https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html)）：
 
-    [PRE8]
+    ```py
+    import json
+    ```
 
 1.  实例化一个新的 Comprehend 客户端：
 
-    [PRE9]
+    ```py
+    comprehend = boto3.client(service_name='comprehend')
+    ```
 
 1.  接下来，将一组英语和西班牙语字符串分配给 Comprehend 进行分析：
 
-    [PRE10]
+    ```py
+    english_string_list = \
+    ['Machine Learning is fascinating.', \
+     'Studying Artificial Intelligence is my passion.']
+    spanish_string_list = \
+    ['El aprendizaje automático es fascinante.', \
+     'Estudiar Inteligencia Artificial es mi pasión.']
+    ```
 
 1.  最后，我们使用`english_string_list`和`spanish_string_list`变量调用Comprehend的`batch_detect_dominant_language`方法（[https://docs.aws.amazon.com/comprehend/latest/dg/API_DetectDominantLanguage.html](https://docs.aws.amazon.com/comprehend/latest/dg/API_DetectDominantLanguage.html)）。然后，`json.dumps()`将JSON数据写入Python字符串到终端：
 
-    [PRE11]
+    ```py
+    print('Calling BatchDetectDominantLanguage')
+    print('english_string_list results:')
+    print(json.dumps(comprehend.batch_detect_dominant_language\
+                    (TextList=english_string_list), \
+                    sort_keys=True, indent=4))
+    print('\nspanish_string_list results:')
+    print(json.dumps(comprehend.batch_detect_dominant_language\
+                    (TextList=spanish_string_list), \
+                    sort_keys=True, indent=4))
+    print('End of BatchDetectDominantLanguage\n')
+    ```
 
 1.  保存笔记本。
 
@@ -330,23 +379,38 @@ Jupyter笔记本的源代码可通过GitHub在以下存储库中获取：[https:
 
 1.  使用以下命令导入 AWS SDK for Python (boto3: [https://boto3.amazonaws.com/v1/documentation/api/latest/index.html](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html))：
 
-    [PRE12]
+    ```py
+    import boto3
+    ```
 
 1.  现在，导入 `JSON` 模块以使用以下命令序列化来自 [https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html) 的 `JSON`：
 
-    [PRE13]
+    ```py
+    import json
+    ```
 
 1.  现在，实例化一个新的 Comprehend 客户端：
 
-    [PRE14]
+    ```py
+    comprehend = boto3.client(service_name='comprehend')
+    ```
 
 1.  现在，在实例化一个新的 Comprehend 客户端后，提供要分析的分析文本：
 
-    [PRE15]
+    ```py
+    english_string = "I study Machine Learning in "\
+                     "Seattle on Thursday."
+    print('Calling DetectEntities')
+    ```
 
 1.  现在，`json.dumps()` 将 JSON 数据写入 Python 字符串：
 
-    [PRE16]
+    ```py
+    print(json.dumps(comprehend.detect_entities\
+                    (Text = english_string, LanguageCode='en'), \
+                    sort_keys=True, indent=4))
+    print('End of DetectEntities\n')
+    ```
 
 1.  按 *Shift* + *Enter* 运行两个笔记本单元。前面代码的输出如下所示：![图 2.11：AWS Comprehend DetectEntities 输出
 
@@ -374,31 +438,55 @@ Jupyter笔记本的源代码可通过GitHub在以下存储库中获取：[https:
 
 1.  使用以下命令导入 AWS SDK for Python (boto3: [https://boto3.amazonaws.com/v1/documentation/api/latest/index.html](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html))：
 
-    [PRE17]
+    ```py
+    import boto3
+    ```
 
 1.  现在，导入 `JSON` 模块以使用以下命令序列化来自 [https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html) 的 `JSON`：
 
-    [PRE18]
+    ```py
+    import json
+    ```
 
 1.  我们还需要进行一些文件操作来遍历文档。导入 `glob` 模块，使用以下命令从 [https://docs.python.org/3.6/library/glob.html](https://docs.python.org/3.6/library/glob.html) 查找以 `.txt` 结尾的文本文件：
 
-    [PRE19]
+    ```py
+    import glob
+    ```
 
 1.  我们还需要 `os` 库。使用以下命令从 [https://docs.python.org/3.6/library/os.html](https://docs.python.org/3.6/library/os.html) 导入 `os` 模块：
 
-    [PRE20]
+    ```py
+    import os
+    ```
 
 1.  现在，实例化一个新的 Comprehend 客户端：
 
-    [PRE21]
+    ```py
+    comprehend = boto3.client(service_name='comprehend')
+    ```
 
     让我们获取所有文档的列表（假设在 Jupyter 笔记本中您已导航到 `Chapter02/Exercise02.04/` 目录并打开了 `Exercise2.04.ipynb` 笔记本）：
 
-    [PRE22]
+    ```py
+    data_dir = 'review_pos directory. Depending on where you have downloaded and stored the .txt files on your system, the highlighted path must be modified in the code. 
+    ```
 
 1.  现在，我们可以遍历文档并检测文档中的实体。我们将对每个文档调用 `detect_entities`。和之前一样，我们也将使用 `json.dumps()` 将 JSON 数据写入 Python 字符串：
 
-    [PRE23]
+    ```py
+    for file in file_list:
+      with open(file, 'r', encoding="utf-8") as f:
+        file_as_str = f.read()
+        # python string formatting to print the text file name
+        print('Calling detect_entities_from_documents.py on file: %s' \
+              % file[-15:])
+        # json.dumps() writes JSON data to a Python string
+        print(json.dumps(comprehend.detect_entities\
+                        (Text = file_as_str, LanguageCode='en'), \
+                        sort_keys=True, indent=4))
+        print('End of detect_entities\n')
+    ```
 
 1.  按 *Shift* + *Enter* 运行两个笔记本单元。前面代码的输出如下所示。这是一个长输出——我们只显示了单个文件的输出。您将看到 `/reviews__pos/*.txt` 子目录中所有文件的实体列表：![图 2.13：DetectEntities 输出
 
@@ -424,19 +512,37 @@ AWS 的关键短语与名词短语类似，代表一个实际事物。在英语�
 
 1.  使用以下命令导入 AWS SDK for Python (boto3: [http://boto3.readthedocs.io/en/latest/](http://boto3.readthedocs.io/en/latest/))：
 
-    [PRE24]
+    ```py
+    import boto3
+    ```
 
 1.  现在，导入 JSON 模块以序列化来自 [https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html) 的 JSON，使用以下命令：
 
-    [PRE25]
+    ```py
+    import json
+    ```
 
 1.  现在，使用以下代码实例化一个新的 Comprehend 客户端：
 
-    [PRE26]
+    ```py
+    comprehend = boto3.client(service_name='comprehend')
+    ```
 
 1.  现在，提供以下代码以分析使用的 `English` 文本：
 
-    [PRE27]
+    ```py
+    english_string = 'robert redfords a river runs through '\
+                     'is not a film i watch often. it is a '\
+                     'masterpiece, one of the better films of '\
+                     'recent years. The acting and direction is '\
+                     'top-notch never sappy , always touching.'
+    print('Calling DetectKeyPhrases')
+    # json.dumps() writes JSON data to a Python string
+    print(json.dumps(comprehend.detect_key_phrases\
+         (Text = english_string, LanguageCode='en'), \
+         sort_keys=True, indent=4))
+    print('End of DetectKeyPhrases\n')
+    ```
 
 1.  通过执行带有 *Shift* + *Enter* 的单元格来运行代码。您将看到以下输出：![图 2.14：AWS Comprehend DetectKeyPhrase 输出
 
@@ -460,19 +566,34 @@ Amazon Comprehend 有检测情感的能力，通常用于社交媒体帖子、�
 
 1.  使用以下命令从 [http://boto3.readthedocs.io/en/latest/](http://boto3.readthedocs.io/en/latest/) 导入 Python 的 `AWS SDK` (boto3)：
 
-    [PRE28]
+    ```py
+    import boto3
+    ```
 
 1.  现在，使用以下命令导入 `JSON` 模块以序列化 JSON，来自 [https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html)：
 
-    [PRE29]
+    ```py
+    import json
+    ```
 
 1.  现在，使用以下代码创建一个新的 Comprehend 客户端：
 
-    [PRE30]
+    ```py
+    comprehend = boto3.client(service_name='comprehend')
+    ```
 
 1.  然后，提供要分析的文字字符串，使用以下代码：
 
-    [PRE31]
+    ```py
+    english_string = 'Today is my birthday, I am so happy.'
+    print('Calling DetectSentiment')
+    # json.dumps() #writes JSON data to a Python string
+    print('english_string results:')
+    print(json.dumps(comprehend.detect_sentiment\
+         (Text = english_string, LanguageCode='en'), \
+         sort_keys=True, indent=4))
+    print('End of DetectSentiment\n')
+    ```
 
 1.  通过按 *Shift* + *Enter* 执行单元格来运行代码。输出如下：![图 2.15：AWS Comprehend—DetectSentiment 输出
 
@@ -686,53 +807,91 @@ AWS Lambda提供了两种实现Python代码的选项。首先，你可以上传�
 
 1.  首先，我们导入Python的**AWS SDK**（boto3: [http://boto3.readthedocs.io/en/latest/](http://boto3.readthedocs.io/en/latest/))）：
 
-    [PRE32]
+    ```py
+    import boto3
+    ```
 
 1.  然后，导入JSON模块以序列化JSON ([https://docs.python.org/3.6/library/json.html](https://docs.python.org/3.6/library/json.html))：
 
-    [PRE33]
+    ```py
+    import json
+    ```
 
 1.  接下来，创建一个接受两个参数——`event`和`context`的函数：
 
-    [PRE34]
+    ```py
+    def Lambda_handler(event, context):
+    ```
 
 1.  接下来，创建`s3`客户端对象：
 
-    [PRE35]
+    ```py
+    s3 = boto3.client("s3")
+    ```
 
 1.  添加一个`if`事件来检查是否发生事件。
 
 1.  接下来，将`<输入存储桶名称>`替换为你创建的存储桶（在我们的例子中是`aws-ml-s3-trigger-202001181023`）：
 
-    [PRE36]
+    ```py
+    bucket = "<input Bucket name>"
+    ```
 
 1.  接下来，访问`Records`事件的第一个索引以获取文本文件对象：
 
-    [PRE37]
+    ```py
+    text_file_obj = event["Records"][0]
+    ```
 
 1.  接下来，将`filename`文本分配给一个变量并打印文件名：
 
-    [PRE38]
+    ```py
+    filename = str(text_file_obj['s3']['object']['key'])
+    print("filename: ", filename)
+    ```
 
 1.  接下来，通过获取存储桶和键来创建文件对象：
 
-    [PRE39]
+    ```py
+    file_obj = s3.get_object(Bucket = Bucket, Key = filename)
+    ```
 
 1.  将文本分配给`body_str_obj`变量：
 
-    [PRE40]
+    ```py
+    body_str_obj = str(file_obj['Body'].read())
+    ```
 
 1.  创建`comprehend`变量：
 
-    [PRE41]
+    ```py
+    comprehend = boto3.client(service_name="comprehend")
+    ```
 
 1.  下三条代码调用相应的Comprehend函数，从文本文档中检测情感、实体和关键短语。然后，输出将打印到控制台：
 
-    [PRE42]
+    ```py
+    sentiment_response = comprehend.detect_sentiment\
+                         (Text = body_str_obj, \
+                         LanguageCode = "en")
+    print(«sentiment_response: \n», sentiment_response)
+    entity_response = comprehend.detect_entities\
+                      (Text = body_str_obj, LanguageCode = "en")
+    print("\n\nentity_response: \n", entity_response)
+    key_phases_response = comprehend.detect_key_phrases\
+                          (Text = body_str_obj, \
+                          LanguageCode = "en") 
+    print("\n\nkey_phases_response: \n", key_phases_response)
+    ```
 
 1.  最后一条语句返回`'Hello from Lambda'`字符串，如下所示：
 
-    [PRE43]
+    ```py
+    return {
+          'statusCode' :200,
+          'body' : json.dumps('Hello from Lambda')
+        }
+    ```
 
 1.  现在，点击`保存`按钮：![图2.39：AWS Lambda – 保存屏幕
 
@@ -824,19 +983,36 @@ AWS Lambda提供了两种实现Python代码的选项。首先，你可以上传�
 
     `Sentiment_response`：
 
-    [PRE44]
+    ```py
+    {'Sentiment': 'POSITIVE',
+    'SentimentScore':{'Positive': 0.6005121469497681,
+                      'Negative': 0.029164031147956848, 
+                      'Neutral': 0.3588017225265503, 
+                      'Mixed': 0.01152205839753151}, 
+    ```
 
     `entity_response` -> 被分类为 70.5% 可能是数量
 
     `entity_response`：
 
-    [PRE45]
+    ```py
+    {Entities':[{'Score':0.7053232192993164, 
+                 'Type': 'QUANTITY','Text': '3 trigger', 
+                 'BeginOffset': 35, 'EndOffset': 44}], 
+    ```
 
     `key_phases_response` -> 被归类为89.9%可能“测试文件”和98.5%可能“s3触发”的关键短语：
 
     `key_phases_response`：
 
-    [PRE46]
+    ```py
+    {'KeyPhrases': [{'Score': 0.8986637592315674, 
+                     'Text': 'a test file', 
+                     'BeginOffset': 8, 'EndOffset': 19}, 
+                    {'Score': 0.9852105975151062, 
+                     'Text': 'the s3 trigger', 'BeginOffset': 30, 
+                     'EndOffset': 44}],
+    ```
 
     注意
 

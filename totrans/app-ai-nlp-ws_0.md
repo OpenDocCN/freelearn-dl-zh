@@ -32,7 +32,10 @@
 
 代码块设置如下：
 
-[PRE0]
+```py
+filename = str(text_file_obj['s3']['object']['key'])
+print("filename: ", filename)
+```
 
 您在屏幕上看到的单词，例如在菜单或对话框中，也以这种方式出现在文本中：“从屏幕左侧的菜单面板中选择`路由`菜单。”
 
@@ -44,15 +47,30 @@
 
 例如：
 
-[PRE1]
+```py
+history = model.fit(X, y, epochs=100, batch_size=5, verbose=1, \
+                    validation_split=0.2, shuffle=False)
+```
 
 为了帮助解释特定的逻辑部分，代码中添加了注释。单行注释使用`#`符号表示，如下所示：
 
-[PRE2]
+```py
+# Print the sizes of the dataset
+print("Number of Examples in the Dataset = ", X.shape[0])
+print("Number of Features for each example = ", X.shape[1])
+```
 
 多行注释由三个引号包围，如下所示：
 
-[PRE3]
+```py
+"""
+Define a seed for the random number generator to ensure the 
+result will be reproducible
+"""
+seed = 1
+np.random.seed(seed)
+random.set_seed(seed)
+```
 
 ## 设置您的环境
 
@@ -144,7 +162,10 @@ AWS CLI 文档清楚地描述了配置和凭证文件设置。更多信息，请
 
 1.  要安装Python 3，请运行以下命令：
 
-    [PRE4]
+    ```py
+    sudo apt-get update
+    sudo apt-get install python3.7
+    ```
 
 1.  如果您遇到问题，网上有众多资源可以帮助您解决问题。
 

@@ -372,7 +372,12 @@ CLI是一个基于Python（Boto）AWS SDK构建的开源工具，用于执行设
 
 1.  您将提示输入四个输入变量。输入您的信息，然后在每个输入后按 *Enter*：
 
-    [PRE0]
+    ```py
+    AWS Access Key ID
+    AWS Secret Access Key 
+    Default region 
+    Default output format (json)
+    ```
 
 1.  名称是在您的控制台中获得的（这里显示为 `Oregon`，但您的名称由您独特的位置决定）：![图 1.29：位置搜索
 
@@ -418,7 +423,9 @@ CLI是一个基于Python（Boto）AWS SDK构建的开源工具，用于执行设
 
 执行递归 CLI 命令需要向 API 传递一个参数。这听起来很复杂，但实际上非常简单。首先，参数只是一个传递给程序以影响接收程序操作的名字或选项。在我们的例子中，参数是 **递归**，执行递归命令的整个命令如下：
 
-[PRE1]
+```py
+aws s3 cp s3://myBucket . --recursive
+```
 
 使用此命令，将存储桶中的所有 S3 对象复制到指定的目录：
 

@@ -76,11 +76,15 @@ OpenAI的网站提供了这些常见操作的指导，你将能够快速设置�
 
 1.  我们首先安装所需的 Python 库。特别是，为了与 LLM API 进行通信，我们需要安装必要的 Python 库：
 
-    [PRE0]
+    ```py
+    !pip install --upgrade openai
+    ```
 
 1.  **定义 OpenAI 的 API 密钥**：在向 LLM API 发送请求之前，我们必须将我们的个人 API 密钥嵌入到库的配置中。当你注册 OpenAI 时，API 密钥会在 OpenAI 的网站上提供给你。这可以通过将密钥的字符串明确粘贴到我们的代码中以硬编码，或者从包含该字符串的文件中读取它来完成。请注意，前者是展示 API 的最简单方式，因为它不需要设置额外的文件，但在共享开发环境中工作时可能不是最佳选择：
 
-    [PRE1]
+    ```py
+    openai.api_key = "<your key>"
+    ```
 
 1.  **设置 – 设置模型的配置**。在这里，我们设置控制模型行为的各种参数。
 
@@ -102,15 +106,34 @@ OpenAI的网站提供了这些常见操作的指导，你将能够快速设置�
 
     例如，观察以下启动代码：
 
-    [PRE2]\nimport pandas as pd\n[PRE3]
+    ```py
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+               {"role": "system",
+                   "content": "You are a helpful assistant. You provide short answers and you format them in Markdown syntax"},
+                  {"role": "user",
+                   "content": "How do I import the Python library pandas?"},
+                  {"role": "assistant",
+                   "content": "This is how you would import pandas:  \n```\nimport pandas as pd\n```py"},
+                  {"role": "user",
+                   "content": "How do I import the python library numpy?"}
+            ])
+    text = response.choices[0].message.content.strip()
+    print(text)
+    )
+    ```
 
     这是输出：
 
-    [PRE4]python
+    ```py
+    To import numpy, you can use the following syntax: 
+    ```python
 
     import numpy as np
 
-    [PRE5]
+    ```py
+    ```
 
 您可以看到我们启动模型以提供Markdown格式的简洁答案。用于教导模型的示例是问题和答案的形式。问题是通过用户提示，而我们告诉模型潜在答案的方式是通过助手提示。然后我们向模型提供另一个用户提示；这是我们要模型为我们处理的实际提示，如输出所示，它回答正确。
 
@@ -130,17 +153,38 @@ OpenAI的网站提供了这些常见操作的指导，你将能够快速设置�
 
 +   **解析和处理模型返回的输出**：我们以连贯的方式结构化输出响应，以便用户阅读：
 
-    [PRE6]
+    ```py
+    print(f"Prompt: {user_prompt_oai}\n\n{openai_model}'s Response: \n{response_oai}")
+    ```
 
 +   **错误处理**：我们设计代码允许在接受API使用失败之前进行多次尝试：
 
-    [PRE7]
+    ```py
+    except Exception as output:
+        attempts += 1
+        if attempts >= max_attempts:
+            […]
+    ```
 
 +   **速率限制和成本缓解**：我们在这里没有实施此类限制，但在实验设置中，也许在生产环境中，同时拥有这两者将是理想的。
 
     以下代码的结果展示如下：
 
-    [PRE8]
+    ```py
+    Prompt: If neuroscience could extract the last thoughts a person had before they dyed, how would the world be different?
+    gpt-3.5-turbo's Response:
+    If neuroscience could extract the last thoughts a person had before they died, it would have profound implications for various aspects of society.
+    This ability could potentially revolutionize fields such as psychology, criminology, and end-of-life care.
+    Understanding a person's final thoughts could provide valuable insights into their state of mind, emotional well-being, and potentially help unravel mysteries surrounding their death.
+    It could also offer comfort to loved ones by providing a glimpse into the innermost thoughts of the deceased.
+    However, such technology would raise significant ethical concerns regarding privacy, consent, and the potential misuse of this information.
+    Overall, the world would be both fascinated and apprehensive about the implications of this groundbreaking capability.
+    Typos in the prompt:
+    1\. "dyed" should be "died"
+    2\. "diferent" should be "different"
+    Corrections:
+    If neuroscience could extract the last thoughts a person had before they died, how would the world be different?
+    ```
 
 模型为我们提供了一个合法、简洁的响应。然后它通知我们有关错别字，这与我们提供给它的系统提示完全一致。
 
@@ -186,7 +230,9 @@ OpenAI的网站提供了这些常见操作的指导，你将能够快速设置�
 
 1.  在终端上使用`pip`，我们将运行以下命令：
 
-    [PRE9]
+    ```py
+    pip install –upgrade transformers
+    ```
 
     如果直接从Jupyter笔记本运行，请在命令的开头添加`!`。
 
@@ -194,7 +240,12 @@ OpenAI的网站提供了这些常见操作的指导，你将能够快速设置�
 
 1.  在笔记本中的**设置**代码部分，我们将定义此代码的参数并导入模型及其分词器：
 
-    [PRE10]
+    ```py
+    hf_model = "microsoft/DialoGPT-medium"
+    max_length = 1000
+    tokenizer = AutoTokenizer.from_pretrained(hf_model)
+    model = AutoModelForCausalLM.from_pretrained(hf_model)
+    ```
 
     注意，此代码需要访问互联网。即使模型是本地部署的，也需要互联网连接来导入它。再次提醒，如果你愿意，你可以从Hugging Face克隆模型的repo，然后不再需要访问互联网。
 
@@ -204,7 +255,10 @@ OpenAI的网站提供了这些常见操作的指导，你将能够快速设置�
 
 1.  **结果**：生成的提示是，**如果恐龙今天还活着，它们会对人类构成威胁吗**？
 
-    [PRE11]
+    ```py
+    microsoft/DialoGPT-medium's Response:
+    I think they would be more afraid of the humans
+    ```
 
 本节确立了LLMs可以带来的巨大价值主张。我们现在有了学习和探索高效LLM应用开发新前沿的必要背景——使用LangChain等工具构建管道。让我们深入了解这种方法。
 
@@ -244,15 +298,23 @@ LangChain最显著的优点之一是能够将任意LLM连接到定义好的数�
 
 你的提示如下：
 
-[PRE12]
+```py
+Which filings mention that the company gave dividends in the year 2023?
+```
 
 流水线随后将这个问题嵌入其中，寻找具有相似上下文的文本块（例如，讨论派息的）。它识别了许多这样的块，如下所示：
 
-[PRE13]
+```py
+"Dividend Policy. Dividends are paid at the discretion of the Board of Directors. In fiscal 2023, we paid aggregate quarterly cash dividends of $8.79 per share […]"
+```
 
 LangChain流水线随后形成一个新的提示，其中包含已识别块的文字。在这个例子中，我们假设被提示的LLM是OpenAI的GPT。LangChain将信息嵌入到发送给OpenAI GPT模型的系统提示中：
 
-[PRE14]
+```py
+"prompts": [
+    "System: Use the following pieces of context to answer the user's question. \nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n Dividend Policy. Dividends are paid at the […]"
+]
+```
 
 如我们所见，系统提示用于指导模型如何行动，并提供上下文。
 
@@ -298,15 +360,32 @@ LangChain内部的原子构建块被称为组件。典型的组件可能包括�
 
 1.  首先，安装以下包：
 
-    [PRE15]
+    ```py
+    !pip install openai
+    !pip install wikipedia
+    !pip install langchain
+    !pip install langchain-openai
+    ```
 
 1.  然后，运行以下代码：
 
-    [PRE16]
+    ```py
+    from langchain.agents import load_tools, initialize_agent
+    from langchain_openai import OpenAI
+    import os
+    os.environ["OPENAI_API_KEY"] = "<your API key>"
+    llm = OpenAI(model_name='gpt-3.5-turbo-instruct')
+    tools = load_tools(["wikipedia", "llm-math"], llm=llm)
+    agent = initialize_agent(tools, llm=llm, agent="zero-shot-react-description", verbose=True)
+    agent.run("Figure out how many pages are there in the book Animal Farm. Then calculate how many minutes would it take me to read it if it takes me two minutes to read one page.")
+    ```
 
     输出结果如下所示：
 
-    [PRE17]
+    ```py
+    > Finished chain.
+    'It would take me approximately 224 minutes or 3 hours and 44 minutes to read Animal Farm.'
+    ```
 
 注意，我们没有应用任何方法来固定LLM以重现这个确切响应。再次运行此代码将产生略微不同的答案。
 

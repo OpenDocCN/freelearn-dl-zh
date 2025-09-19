@@ -252,11 +252,26 @@
 
 +   **Python代码** ( **main.py** )：这里包含两个基本函数 – **add()** 和 **subtract()** :
 
-    [PRE0]
+    ```py
+    def add(a, b):
+        return a + b
+    def subtract(a, b):
+        return a – b
+    ```
 
 +   **单元测试** ( **test_main.py** )：此测试使用Python的**unittest**框架对**add()**和**subtract()**函数进行测试：
 
-    [PRE1]
+    ```py
+    import unittest
+    from main import add, subtract
+    class TestMain(unittest.TestCase):
+        def test_add(self):
+            self.assertEqual(add(1, 2), 3)
+        def test_subtract(self):
+            self.assertEqual(subtract(2, 1), 1)
+    if __name__ == ‘__main__’:
+        unittest.main()
+    ```
 
 +   **CI配置** ( **ci.yml** )：请参阅[https://dev.to/rachit1313/streamlining-development-with-github-actions-a-ci-adventure-2l16](https://dev.to/rachit1313/streamlining-development-with-github-actions-a-ci-adventure-2l16)上的配置示例。这个简单的CI管道确保每次进行更改时都会自动测试您的代码，有助于在开发早期阶段捕捉到错误。
 

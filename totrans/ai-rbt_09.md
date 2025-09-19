@@ -322,7 +322,34 @@ ELIZA可能是最初的对话引擎软件程序。它是在1964年由麻省理�
 
 ELIZA是一个罗杰斯治疗师的模拟。什么是罗杰斯治疗师？根据《心理学今日》(https://www.psychologytoday.com/us/blog/what-doesnt-kill-us/201210/unconditional-positive-regard)，卡尔·罗杰斯（1902-1987）是>`提示符`的创始人。顺便说一句，我喜欢猫——这只是一个例子。请不要告诉我家的猫这个例子：
 
-[PRE0]
+```py
+ELIZA: How do you do. Please tell me your problem.
+> I hate cats.
+You say you hate cats?
+> Yes.
+You seem to be quite positive.
+> I hate cats.
+Can you elaborate on that?
+> I don't like cats because they smell bad.
+Don't you really like cats because they smell bad?
+> No. Don't like cats.
+Are you saying no just to be negative?
+> No.
+You are being a bit negative.
+> I am
+Is it because you are that you came to me?
+> No
+Why not?
+> I am afraid of cats
+How long have you been afraid of cats?
+> About a year
+I'm not sure I understand you fully.
+> 1 year
+Please go on.
+> I have been afraid of cats since the cat jumped on my head.
+Your head ?
+> yes
+```
 
 因此，你可以看到ELIZA会重复用户说的话，反映出用户在谈论的内容。当我说我“害怕猫”时，程序回复说，“你害怕猫有多久了？”
 
@@ -344,7 +371,13 @@ ELIZA在识别和回应句子时经过几个步骤。程序的大部分内容不
 
 这里是关于`I` `am`关键词的一个示例规则：
 
-[PRE1]
+```py
+decomp: * i am *
+reasmb: Is it because you are (2) that you came to me ?
+reasmb: How long have you been (2) ?
+reasmb: Do you believe it is normal to be (2) ?
+reasmb: Do you enjoy being (2) ?
+```
 
 程序从提供的四个短语中随机选择一个。如果我说是“我害怕猫”，那么这个规则就会被触发，并生成这四个短语中的一个。它可能会说，“你喜欢害怕猫吗？”或者“你害怕猫有多久了？”
 
@@ -354,7 +387,38 @@ ELIZA在识别和回应句子时经过几个步骤。程序的大部分内容不
 
 在这里，我们提供了一个关于AIML外观的示例（[http://www.digitalanywhere.com/projects/dany/index.html](http://www.digitalanywhere.com/projects/dany/index.html)）。你会看到包含语句类别的块，然后是那个类别的外观模式。下一个标签`<template>`描述了当触发这个类别时机器人将做出的响应。例如，第一个类别是关于演奏乐器的。如果你对机器人说“我会弹吉他”，那么响应将是，“吉他是一种游戏还是一种乐器？”我们可以用这种方式创建我们的简单句子模式：
 
-[PRE2]
+```py
+<category>
+<pattern>I PLAY *</pattern>
+<template>Is <set_it><person/></set_it> a game or a musical instrument?</template>
+</category>
+<category>
+<pattern>I PLAY THE *</pattern>
+<template>I wish I played an instrument. My parents could not afford the lessons.
+<think><set_it><set_does><settopic>play the
+<person/></settopic></set_does></set_it></think></template>
+</category>
+<category>
+<pattern>I PRIDE MYSELF *</pattern>
+<template>It seems you have good self esteem.</template>
+</category>
+<category>
+<pattern>I QUIT MY JOB *</pattern>
+<template>Where did you work and why did you quit?</template>
+</category>
+<category>
+<pattern>I READ *</pattern>
+<template>I don't think I've read that. Can you give me a reference?
+<think><set_it><set_does><settopic>read
+<person/></settopic></set_does></set_it></think></template>
+</category>
+<category>
+<pattern>I READ * BOOKS</pattern>
+<template>Name some books in that genre.
+<think><set_it><set_does><settopic>read <person/> books</settopic></set_does></set_it></think>
+<think><set_personality>critical</set_personality></think></template>
+</category>
+```
 
 ALICE是**开源软件**（**OSS**），在GNU公共许可证下发布。
 
@@ -398,21 +462,52 @@ ELIZA最严重的缺点是完全缺乏记忆。ELIZA只记得之前的陈述。�
 
 1.  机器人用`initial`短语回答，如冒号前的标签所示。我们还有我们的结束语。实际上，你可以放任意多的短语，计算机将随机选择一个。这些规则被放入我命名为`AlbertPersonality.txt`的文件中，这个文件最初是ELIZA附带的原始`doctor.txt`脚本文件的副本：
 
-    [PRE3]
+    ```py
+    initial: Hello. My name is Albert the Robot.
+    initial: Hello. I am Albert the Robot, but you can call me Albert.
+    initial: Hello. Nice to meet you. Call me Albert.
+    final: Goodbye. Thank you for talking to me.
+    final: Goodbye. It was nice to talk to you.
+    final: Goodbye. I need to get back to my tasks.
+    quit: bye
+    quit: goodbye
+    ```
 
 1.  我添加了一些单词替换，以防用户用名字而不是*you*来称呼机器人。这只是为了将*you*替换为用户可能用来称呼机器人的任何词。我还为机器人的各种版本设置了同义词，所以你可以称呼它为*robot*或*bot*，以及*Albert*、*Bert*或甚至*Bertie*。
 
     前面带有`pre:`的规则在所有其他处理之前被替换。从第一条规则开始，如果句子中出现单词*robot*，例如“Robot, how old are you?”，程序将移除*robot*并将其替换为*you*，以使解析保持一致。我们还将所有大写字母转换为小写，因此在规则中没有大写字母。`synon:`（同义词）规则将列表中的任何单词替换为第一个给出的单词：
 
-    [PRE4]
+    ```py
+    pre: robot you
+    pre: albert you
+    …
+    synon: you robot albert bert bertie bot
+    synon: belief feel think believe wish
+    ```
 
 1.  接下来我们需要创建机器人需要提问以获取信息的问题。程序将自动从我们定义的任何关键词中提取这些数据。以下是关于提问规则的定义：
 
-    [PRE5]
+    ```py
+    questions:
+    reasmb: What is your name? <assert name>
+    reasmb: What can I call you? <assert name>
+    reasmb: How old are you? <assert old>
+    reasmb: How are you feeling today <assert feeling>
+    ```
 
 1.  我们为脚本文件中的问题创建了一个新的标志。每一行代表一个问题，但我们可以用不同的方式或形式来提问。程序将随机选择一个版本，并根据我们为问题设置的相对优先级来决定提问哪个问题。我添加了带有`<>`符号的`assert`关键字作为另一个新标志，以提示上下文记忆，即我们已经创建了一个提问上下文，接下来的语句可能是答案：
 
-    [PRE6]
+    ```py
+    datum: name
+    decomp * my name is * decomp I am *
+    decomp call me *
+    decomp <name> * # we are in the name context reasmb: Hello (1). Nice to meet you
+    reasmb: Hi (1).
+    reasmb: Your name is (1), right?
+    reasmb: Thank you for telling me your name, (1) store: <name> (1)
+    decomp * my name is *
+    reasmb: Hello (2). Nice to meet you.[welcome][happy] store:<name> (2)
+    ```
 
 1.  我创建了一个新的数据结构，我称之为`datum`，它是*data*的单数形式。这代表我们希望机器人询问的一些信息。我们给datum一个标题——在这个例子中是`name`，因为我们希望机器人询问它正在与谁交谈的名字。`decomp`（分解）标签是用户可能说出他们名字的句子模式。`*`代表任何短语。所以，如果人类说“Hello. My name is Fred Rodgers”，那么机器人将从此以后称呼他们为Fred Rodgers。如果人类出于某种原因说“Call me Ishmael”，那么机器人将使用那个名字。我们必须使用`reasmb`（重新组装）规则来重新组装响应短语。`(1)`指的是第一个`*`短语。如果用户说“I am John”，那么当我们使用重新组装规则时，`(1)`将被替换为`John`。机器人将随机选择提供的短语之一，例如：“Your name is John, right?”
 
@@ -422,13 +517,37 @@ ELIZA最严重的缺点是完全缺乏记忆。ELIZA只记得之前的陈述。�
 
     这里是监听 `age` 问题答案的规则：
 
-    [PRE7]
+    ```py
+    datum: age
+    decomp <age> * I am * years old decomp <age> * I am % # integer
+    reasmb: You are (2) years old?
+    reasmb: (2) years old!
+    decomp <age> *
+    reasmb: You are (1) years old?
+    reasmb: (1) years old!
+    store: <age> (1)
+    ```
 
     在最后一行，`store:` 是告诉计算机这是问题的答案并将其存储在字典中提供的标题下的命令。
 
 1.  接下来，让我们用一个带有一些与之相关的情感交互的例子来展示，这样我们就可以看到我们将如何使用情感引擎来控制机器人说什么。当用户对机器人说“你感觉怎么样？”时，将执行这组规则：
 
-    [PRE8]
+    ```py
+    key: feeling
+    decomp: how are you feeling decomp: how are you
+    decomp: hows it hanging
+    decomp: how are you today
+    reasmb: <happy> I'm doing well. How are you? <assert feeling>
+    reasmb: <sad> I am feeling sad. How are you? <assert feeling>
+    reasmb: <curious> I am curious about my surroundings
+    reasmb: <friend> I am feeling friendly today
+    reasmb: <welcome> I am in a welcoming mood today, my friend
+    reasmb: <frust> I am a bit frustrated, to tell you the truth
+    reasmb: <frust> I am feeling a bit frustrated
+    reasmb: <strange> I am having relationship problems
+    reasmb: <distant> None of my friends have come to visit
+    reasmb: <tired>  My batteries are low.  Maybe I need a rest.
+    ```
 
 1.  我们将把机器人的情感放入上下文记忆中，以便脚本处理程序可以访问它。对于对话目的，我们将情感视为我们正在讨论的上下文的一部分，我认为这是处理情感的一种合理方法。每个情感在上下文记忆字典中都有一个标签或名称。如果机器人的主要情感是快乐，那么机器人将在上下文记忆中设置 `happy` 上下文。然后，规则库将使用上下文标签来确定回答“你感觉怎么样？”时使用哪个短语。我们也可以提出后续问题。看看 `<happy>` 的规则。机器人回答，“我过得很好。你呢？”然后设置 `feeling` 上下文，让引擎知道我们提出了关于感觉的问题。最后，最后一行与 `tired` 情感相关。如果机器人感到疲倦，那么我们将跳转到另一个单独的部分，让机器人谈论感到疲倦。我们将其作为一个单独的程序，因为我们需要从几个地方调用它，这说明了基于规则的方法在语音中的实用性。我不想想象需要多少行 C 或 C++ 源代码来为每一行对话创建所有这些规则。我们继续使用这些指南修改脚本，直到我们完成了所有问题，并为所有答案建立了模式。
 
@@ -444,11 +563,53 @@ ELIZA最严重的缺点是完全缺乏记忆。ELIZA只记得之前的陈述。�
 
 下面的代码块为情感引擎创建所需格式的数据条目，用于我们的对话引擎。我们正在创建一个基于规则的格式的Python接口，以便我们可以将其连接到机器人的其余部分：
 
-[PRE9]
+```py
+class RobotEmotionEngine():
+  def __in _(self):
+    self.emostate = [90,0]
+    self.emoText = "neutral 50"
+    self.emotions = {"happy" : 50, "sad": 50,"welcome" : 50, "distant":50,"friend" : 50,"strange" :50, "curious" : 50,"frustrated":50, "fresh" : 50, "tired",50}
+    self.bio = {"name":"Albert Albert", "lastname": "Albert", "age": "6 months","maker": "granddad", "color":"green","food","electricity","author":"Isaac Asimov, of course","school": "I do not go to school but I love to learn","hobby":"picking up toys", "job":"picking up toys"}
+    # list of happy emotions and sad emotions self.emotBalance={"happy": "sad", "welcome":"distant","friend": "strange", "curious": "frustrated","fresh": "tired"} self.emotionAxis{"happy":112, "welcome": 22,"friend":67,"curious":157,
+    "sad":292,"distant":202,"strange":247,"frustrated",337}
+    self.update()
+  def change(self,emot, val):
+    self.emotions[emot]=val
+    balance = 100 - val
+    otherEmotion = self.emotBalance[emot] 
+    self.emotions[otherEmotion]=balance
+```
 
 接下来是 `update` 函数；这个函数检查我们的情感状态是否发生了变化，如果是，我们就改变我们的当前情感：
 
-[PRE10]
+```py
+    def update(self):
+        rmin = 100
+        rmax = 0
+        thetamin =360
+        thetamax=0
+        for emote in self.emotions:
+            theta = self.emotionAxis[emote]
+            thetamax = min(theta,thetamax)
+            thetamin = max(theta,thetamin)
+            r = self.emotions[emote]
+            rmin = max(rmin, r)
+            rmax = max(rmax,r)
+        stateR = (rmax-rmin)/ 2
+        stateTheta = (thetamax-thetamin) / 2
+        for emo in self.emotionAxis:
+            thisAngle = self.emotionAxis[emo]
+            if stateTheta > thisAngle
+            myEmotion = emo
+            break
+
+        self.emostate = [stateTheta, stateR]
+        if stateR < 55 and stateR > 45: 
+            myEmotion = "neutral"
+        self.emoText = myEmotion + " "+ str(stateR)
+        print "Current Emotional State"  = myEmotion, stateR, stateTheta
+        return
+```
 
 机器人还需要一个模型来模拟它正在与之交谈的人类，以便它可以根据人类的互动方式做出不同的响应。在下一节中，我们将创建之前使用的情感模型的一个较小版本。
 
@@ -464,19 +625,53 @@ ELIZA最严重的缺点是完全缺乏记忆。ELIZA只记得之前的陈述。�
 
 1.  我们有两个轴：*快乐*/*悲伤*轴和*欢迎*/*疏远*轴。我们根据响应上下移动*快乐*/*悲伤*指数。如果我们认为一个响应表达了快乐的思绪（“你喜欢学校吗？” “是的”），程序就会将情感指数向上移动到*快乐*方向。我们使用这些交点来设置当前的情感指数。如果人类接近中心，我们将其标记为中性，我们的起点：
 
-    [PRE11]
+    ```py
+    class HumanEmotionEngine():
+      def _init_ (self):
+        self.emostate = [90,0]
+        self.emoText = "neutral 50"
+        self.emotions = {"happy" : 50, "sad": 50,"welcome" : 50, "distant":50}
+        # list of happy emotions and sad emotions
+        self.emotBalance={"happy": "sad", "welcome":"distant"}
+        self.emotionAxis = {'distant': 315, 'welcome': 135, 'sad': 225,'happy': 45}
+        self.update()
+    ```
 
 1.  让我们看看`change`函数。如果`happy`增加，`sad`减少，所以当情感变化时，我们会自动平衡这一点：
 
-    [PRE12]
+    ```py
+    def change(self,emot, val):
+        self.emotions[emot]=val balance = 100 – val
+        otherEmotion = self.emotBalance[emot] 
+        self.emotions[otherEmotion]=balance
+    ```
 
 1.  `update`函数获取人类模型的当前情感平衡：
 
-    [PRE13]
+    ```py
+    def update(self):
+        stateR = self.emotion["happy"]
+        stateS = self.emotion["welcome"]
+        self.emostate = [stateR, stateS]
+    ```
 
 1.  如果情感状态接近中间，我们称之为`neutral`：
 
-    [PRE14]
+    ```py
+    if stateR < 55 and stateR > 45 and stateS < 55 and stateS > 45: 
+     myEmotion = "neutral"
+    happySad = stateR-50 welcomDist = stateS-50
+    if abs(happySad) > abs(welcomDist):
+     myEmotion = "sad"
+    if happySad > 0:
+     myEmotion = "happy"
+    else:
+    myEmotion = "distant" if welcomDist> 0:
+    myEmotion = "welcome"
+    self.emoText = myEmotion + " "+ str(stateR)
+    print "Current Human Emotional State" = myEmotion, stateR, stateTheta
+    return
+    ```
 
 下一个部分将讨论我们将存储从人类收集的信息的地方。
 
@@ -486,7 +681,30 @@ ELIZA最严重的缺点是完全缺乏记忆。ELIZA只记得之前的陈述。�
 
 我们通过复制字典并替换数据字段为20到0的相对点值来按优先级顺序排列列表。`name`排在第一位，得20分，`age`排在第二位，得18分，以此类推。随着每个问题的回答，我们将这个点值设为零。例如，如果我们得到“你最喜欢的食物是什么？”的答案为“苹果”，我们将`self.info["food"] = apple`，并将`self.points["food"] = 0`。我还为孙子辈喜欢的事物添加了一些额外的问题，点值设置得非常低，以便使对话更加多样化。我会问关于公主、飞机、恐龙、唱歌和建造东西的问题：
 
-[PRE15]
+```py
+class HumanInformation():
+  def __init__(self):
+    self.info = {"name":"none"}
+    self.info["age"]=0
+    self.info["school"]="none"
+    self.info["feeling"]="none"
+    self.info["food"]="none"
+    self.info["book"]="none"
+    self.info["subject"]="none"
+    self.info["song"]="none"
+    self.info["teeth"]="none"
+    self.info["jokes"]="none"
+    # stuff is random information that we use to get more information and have the human answer questions
+    # these are aimed at 3-7 year olds
+    self.info["stuff"]="none"
+    self.stuff = ["the color pink", "singing", "dancing", "dinosaurs", "race cars", "building things",
+    "robots", "airplanes", "space ships", "unicorns", "princesses"] self.points = self.info
+    # setup points scoring scheme
+    points = 20
+    for item in self.points:
+      self.points[item]=points
+      points -= 2
+```
 
 现在，在下一节中，我们将为我们的机器人创建一个记忆，以便机器人可以记住它已经学到的内容。我们需要一个地方来存放我们收到的答案。
 
@@ -496,7 +714,32 @@ ELIZA最严重的缺点是完全缺乏记忆。ELIZA只记得之前的陈述。�
 
 这是我们让机器人记住它处于何种情绪状态的地方，以及软件感知的人类情绪状态，这样机器人就不会突然忘记它已经做出的决定。在下面的代码片段中，我们定义了`self.emotion`，这是机器人的内部状态，以及`humanEmotion`，这是我们正在与之互动的人。然后，我们使用这些结构创建一个写入磁盘的文件，这样即使关闭机器人，它的个性也能持续存在。我们使用`inContext`函数从上下文池中检索数据。如果没有可用数据，我们返回一个整数为`0`：
 
-[PRE16]
+```py
+class ContextMemory():
+    def __init__(self):
+        self.currentContext = "None"
+        self.currentHuman = None # pointer to the data file for the human we are currentl talking to
+        self.humanFile = []
+        self.emotion = "happy"
+        self.humanEmotion = "happy"
+        self.contextDict={}
+        self.contextDict['currentHuman'] = self.currentHuman
+        self.contextDict['robotEmotion'] = self.emotion
+        self.contextDict['humanEmotion'] = self.humanEmotion
+
+    def inContext(self, datum):
+        if datum in self.contextDict:
+            return self.contextDict[datum]
+        else:
+            return 0
+
+    def setHuman(self,human):
+        self.currentHuman = human
+        self.humanFile.append(human)  # add this person to the database of people we know
+
+    def addHuman(self,human):
+        self.humanFile.append(human)
+```
 
 在这些部分中，我们为机器人创建了一个存储它当前感受、机器人处于何种情绪状态以及它对所交谈的人类了解的信息的地方。我们还有一个结构，以便在我们遇到新人时将新人添加到我们的数据库中。
 

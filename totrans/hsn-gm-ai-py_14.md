@@ -62,7 +62,22 @@
 
 +   **简单RL**：这可能是一个RL框架所能达到的最简单形式。该项目旨在非常易于访问，并且可以在少于八行代码的情况下开发出具有多个代理的示例。实际上，它可能就像以下从示例文档中摘取的代码块那样简单：
 
-[PRE0]
+```py
+from simple_rl.agents import QLearningAgent, RandomAgent, RMaxAgent
+from simple_rl.tasks import GridWorldMDP
+from simple_rl.run_experiments import run_agents_on_mdp
+
+# Setup MDP.
+mdp = GridWorldMDP(width=4, height=3, init_loc=(1, 1), goal_locs=[(4, 3)], lava_locs=[(4, 2)], gamma=0.95, walls=[(2, 2)], slip_prob=0.05)
+
+# Setup Agents.
+ql_agent = QLearningAgent(actions=mdp.get_actions())
+rmax_agent = RMaxAgent(actions=mdp.get_actions())
+rand_agent = RandomAgent(actions=mdp.get_actions())
+
+# Run experiment and make plot.
+run_agents_on_mdp([ql_agent, rmax_agent, rand_agent], mdp, instances=5, episodes=50, steps=10)
+```
 
 由于有这么多框架可供选择，我们只有时间在本章中概述最受欢迎的框架。虽然框架因为编写得好并且倾向于在各种环境中表现良好而变得流行，但直到我们达到通用人工智能（AGI），你可能仍然需要探索各种框架，以找到适合你和你问题的算法/代理。
 
@@ -96,25 +111,78 @@ ML-Agents的流行归因于几个因素，其中之一是Unity公司AI和ML副�
 
 1.  我们首先需要安装几个支持训练的包。在 Colab 笔记本中，我们可以通过在命令前加上 `!` 来将任何命令传递给底层的 shell。在一个单元格中输入以下代码，然后运行该单元格：
 
-[PRE1]
+```py
+!pip install --upgrade --no-cache-dir dopamine-rl
+!pip install cmake
+!pip install atari_py
+!pip install gin-config
+```
 
 1.  然后，我们在新的单元格中进行一些导入并设置一些全局字符串：
 
-[PRE2]
+```py
+import numpy as np
+import os
+from dopamine.agents.dqn import dqn_agent
+from dopamine.discrete_domains import run_experiment
+from dopamine.colab import utils as colab_utils
+from absl import flags
+import gin.tf
+
+BASE_PATH = '/tmp/colab_dope_run'  # @param
+GAME = 'Asterix'  # @param
+```
 
 1.  `@param` 函数表示该值为参数，并在界面提供了一个有用的文本框，以便稍后更改此参数。这是一个很酷的笔记本功能：
 
-[PRE3]
+```py
+!gsutil -q -m cp -R gs://download-dopamine-rl/preprocessed-benchmarks/* /content/
+experimental_data = colab_utils.load_baselines('/content')
+```
 
 1.  然后，我们在另一个新的单元格中运行前面的命令和代码。这将加载我们将用于在代理上运行的数据：
 
-[PRE4]
+```py
+LOG_PATH = os.path.join(BASE_PATH, 'random_dqn', GAME)
+
+class MyRandomDQNAgent(dqn_agent.DQNAgent):
+  def __init__(self, sess, num_actions):
+    """This maintains all the DQN default argument values."""
+    super(MyRandomDQNAgent, self).__init__(sess, num_actions)
+
+  def step(self, reward, observation):
+    """Calls the step function of the parent class, but returns a random action.
+    """
+    _ = super(MyRandomDQNAgent, self).step(reward, observation)
+    return np.random.randint(self.num_actions)
+
+def create_random_dqn_agent(sess, environment, summary_writer=None):
+  """The Runner class will expect a function of this type to create an agent."""
+  return MyRandomDQNAgent(sess, num_actions=environment.action_space.n)
+
+random_dqn_config = """
+import dopamine.discrete_domains.atari_lib
+import dopamine.discrete_domains.run_experiment
+atari_lib.create_atari_environment.game_name = '{}'
+atari_lib.create_atari_environment.sticky_actions = True
+run_experiment.Runner.num_iterations = 200
+run_experiment.Runner.training_steps = 10
+run_experiment.Runner.max_steps_per_episode = 100
+""".format(GAME)
+gin.parse_config(random_dqn_config, skip_unknown=False)
+
+random_dqn_runner = run_experiment.TrainRunner(LOG_PATH, create_random_dqn_agent)
+```
 
 1.  创建一个新的单元格并输入前面的代码并运行它。这将创建一个用于在环境中进行盲探索的随机 DQN 代理。
 
 1.  接下来，我们想要通过创建一个新的单元格并输入以下代码来训练代理：
 
-[PRE5]
+```py
+print('Will train agent, please be patient, may be a while...')
+random_dqn_runner.run_experiment()
+print('Done training!')
+```
 
 1.  这可能需要一段时间，所以如果您已经启用了支付授权，您可以通过更改笔记本类型来在 GPU 实例上运行此示例。您可以通过选择 **Runtime** | **Change runtime type** 菜单来完成此操作。将弹出一个对话框；更改运行时类型并关闭对话框，如图所示：
 
@@ -138,11 +206,59 @@ Keras 是一个非常流行的深度学习框架，它本身就被那些想要�
 
 1.  要安装 Keras，您应该使用 Python 3.6 创建一个新的虚拟环境，并使用 `pip` 安装它以及 `keras-rl` 框架。在 Anaconda 上执行所有这些命令的命令如下所示：
 
-[PRE6]
+```py
+conda create -n kerasrl python=3.6
+conda activate kerasrl
+pip install tensorflow==1.7.1  #not TF 2.0 at time of writing
+pip install keras
+pip install keras-rl
+pip install gym
+```
 
 1.  在安装完所有包后，打开示例代码文件，`Chapter_12_Keras-RL.py`，如图所示：
 
-[PRE7]
+```py
+import numpy as np
+import gym
+
+from keras.models import Sequential
+from keras.layers import Dense, Activation, Flatten
+from keras.optimizers import Adam
+
+from rl.agents.dqn import DQNAgent
+from rl.policy import BoltzmannQPolicy
+from rl.memory import SequentialMemory
+
+ENV_NAME = 'CartPole-v0'
+
+env = gym.make(ENV_NAME)
+np.random.seed(123)
+env.seed(123)
+nb_actions = env.action_space.n
+
+model = Sequential()
+model.add(Flatten(input_shape=(1,) + env.observation_space.shape))
+model.add(Dense(16))
+model.add(Activation('relu'))
+model.add(Dense(16))
+model.add(Activation('relu'))
+model.add(Dense(16))
+model.add(Activation('relu'))
+model.add(Dense(nb_actions))
+model.add(Activation('linear'))
+print(model.summary())
+
+memory = SequentialMemory(limit=50000, window_length=1)
+policy = BoltzmannQPolicy()
+dqn = DQNAgent(model=model, nb_actions=nb_actions, memory=memory, nb_steps_warmup=10,
+               target_model_update=1e-2, policy=policy)
+dqn.compile(Adam(lr=1e-3), metrics=['mae'])
+dqn.fit(env, nb_steps=50000, visualize=True, verbose=2)
+
+dqn.save_weights('dqn_{}_weights.h5f'.format(ENV_NAME), overwrite=True)
+
+dqn.test(env, nb_episodes=5, visualize=True)
+```
 
 1.  我们还没有涵盖任何 Keras 代码，但希望代码的简单性使得它相当直观。如果有什么不同的话，代码应该感觉相当熟悉，尽管缺少训练循环。
 
@@ -150,17 +266,28 @@ Keras 是一个非常流行的深度学习框架，它本身就被那些想要�
 
 1.  接下来，我们将更详细地研究记忆、策略和智能体本身的构建。请参见以下代码：
 
-[PRE8]
+```py
+memory = SequentialMemory(limit=50000, window_length=1)
+policy = BoltzmannQPolicy()
+dqn = DQNAgent(model=model, nb_actions=nb_actions, memory=memory, nb_steps_warmup=10,
+               target_model_update=1e-2, policy=policy)
+```
 
 1.  这里值得注意的有趣之处在于我们如何在智能体外部构建网络模型，并将其作为输入与记忆和政策一起提供给智能体。这非常强大，并为一些有趣的扩展提供了可能。
 
 1.  在文件末尾，我们可以找到训练代码。使用名为 `fit` 的训练函数来迭代训练智能体。所有执行此操作的代码都封装在 `fit` 函数中，如下面的代码所示：
 
-[PRE9]
+```py
+dqn.fit(env, nb_steps=50000, visualize=True, verbose=2)
+```
 
 1.  代码的最后部分保存了模型，然后使用以下代码对智能体进行了测试：
 
-[PRE10]
+```py
+dqn.save_weights('dqn_{}_weights.h5f'.format(ENV_NAME), overwrite=True)
+
+dqn.test(env, nb_episodes=5, visualize=True)
+```
 
 1.  按照常规运行代码，并观察以下图中所示的视觉训练输出和测试：
 
@@ -178,19 +305,35 @@ RL Lib 基于 Ray 项目，本质上是一个基于 Python 作业的系统。RL 
 
 1.  使用 Colab 的好处是它运行和设置起来相当容易。创建一个新的 Python 3 笔记本并输入以下命令：
 
-[PRE11]
+```py
+!pip uninstall -y pyarrow
+!pip install tensorflow ray[rllib] > /dev/null 2>&1
+```
 
 1.  这些命令会在 Colab 实例上安装框架。安装完成后，您需要通过从菜单中选择来重启运行时：**运行时 | 重启运行时**。
 
 1.  在运行时重启后，创建一个新的单元格并输入以下代码：
 
-[PRE12]
+```py
+import ray
+from ray import tune
+
+ray.init()
+```
 
 1.  那段代码导入了框架和用于超参数调整的 tune 类。
 
 1.  创建一个新的单元格并输入以下代码：
 
-[PRE13]
+```py
+tune.run("DQN", stop={"episode_reward_mean": 100},
+    config={
+            "env": "CartPole-v0",
+            "num_gpus": 0,
+           "num_workers": 1,
+           "lr": tune.grid_search([0.01, 0.001, 0.0001]),
+           "monitor": False,    },)
+```
 
 1.  信不信由你，就是这样。这就是构建一个在 `CartPole` 环境中运行和训练的 DQN 代理的代码剩余部分。更不用说 `tune` 类被设置为使用 `tune.grid_search` 函数调整学习率超参数 `lr` (`alpha`)。
 
@@ -220,11 +363,30 @@ TF-Agents，虽然较新，但通常被认为更稳健和成熟。这是一个�
 
 1.  首先，我们希望修改初始 `pip install` 命令，通过更新第一个单元格中的命令来导入完整的 `gym` 包。
 
-[PRE14]
+```py
+!apt-get install xvfb
+!pip install gym[all]
+!pip install 'imageio==2.4.0'
+!pip install PILLOW
+!pip install 'pyglet==1.3.2'
+!pip install pyvirtualdisplay
+!pip install tf-agents-nightly
+try:
+  %%tensorflow_version 2.x
+except:
+  pass
+```
 
 1.  接下来，我们希望定位到两个提及 **CartPole** 环境的单元格。我们希望将所有提及 **CartPole** 的内容更改为 **LunarLander**，如下所示：
 
-[PRE15]
+```py
+env_name = 'LunarLander-v2'
+env = suite_gym.load(env_name)
+
+# -- and --
+
+example_environment = tf_py_environment.TFPyEnvironment(uite_gym.load('LunarLander-v2')) 
+```
 
 1.  这个示例使用的算法是一个简单的 DQN 模型。根据我们的经验，我们不能只是为 `LunarLander` 运行相同的超参数；因此，我们将它们更改为以下内容：
 
@@ -248,7 +410,13 @@ TF-Agents，虽然较新，但通常被认为更稳健和成熟。这是一个�
 
 1.  让我们继续调整网络大小。定位以下代码行，并按所示进行更改：
 
-[PRE16]
+```py
+fc_layer_params = (100,)
+
+# change to
+
+fc_layer_params = (256,)
+```
 
 1.  随意更改其他参数。如果你已经完成了作业，使用这个示例应该非常直接。TF-Agents 和 Google Colab 的一般优点之一是样本和训练输出的交互性。
 
@@ -290,7 +458,15 @@ TF-Agents是一个稳定且优秀的平台，它允许你轻松地在云端构�
 
 1.  修改RL Lib示例并更改一些超参数，例如`num`工作者和GPU数量，如下面的`tune`代码所示：
 
-[PRE17]
+```py
+tune.run("DQN", stop={"episode_reward_mean": 100},
+    config={
+            "env": "CartPole-v0",
+            "num_gpus": 0,
+           "num_workers": 1,
+           "lr": tune.grid_search([0.01, 0.001, 0.0001]),
+           "monitor": False,    },)
+```
 
 1.  修改RLLib示例并使用不同的代理类型。你可能需要检查RLLib的文档以查看支持的其他代理。
 

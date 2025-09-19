@@ -506,7 +506,9 @@
 
     将这些行添加到`KnockKnock`程序中：
 
-    [PRE0]
+    ```py
+    "play_wav_cmdline": "paplay %1 --stream-name=mycroft-voice",
+    ```
 
     你可以用这个来播放音频。你还可以给笑话文件添加一个标签，表示一个`WAV`文件`<groan.wav>`。然后，如果你看到这个标签，就调用上面的`play_wav_cmdline`函数。
 
@@ -810,25 +812,35 @@ ROS 2 在原始 ROS 的基础上引入了一些非常显著的改进。其中一
 
 +   SciPy:
 
-    [PRE1]
+    ```py
+    python -m pip install scipy
+    ```
 
 +   NumPy:
 
-    [PRE2]
+    ```py
+    pip install numpy
+    ```
 
 +   scikit-learn:
 
-    [PRE3]
+    ```py
+    pip3 install -U scikit-learn
+    ```
 
 +   OpenCV:
 
-    [PRE4]
+    ```py
+    sudo apt-get install python3-opencv
+    ```
 
     关于OpenCV的更多详细信息，你可以参考[https://docs.opencv.org/3.4/d6/d00/tutorial_py_root.html](https://docs.opencv.org/3.4/d6/d00/tutorial_py_root.html)
 
 +   PyTorch:
 
-    [PRE5]
+    ```py
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    ```
 
 现在我们来看看如何开始使用ROS 2。
 
@@ -838,23 +850,41 @@ ROS 2 在原始 ROS 的基础上引入了一些非常显著的改进。其中一
 
 1.  要在ROS 2中启动执行一个包，请使用以下命令：
 
-    [PRE6]
+    ```py
+    turtlesim_node from the turtlesim package in the background.
+    ```
 
 1.  为了检查这个节点是否正在运行，我们输入以下命令：
 
-    [PRE7]
+    ```py
+    ros2 node list
+    ```
 
     这将列出当前正在运行的节点列表：
 
-    [PRE8]
+    ```py
+    /turtlesim
+    ```
 
 1.  我们可以通过输入以下命令来获取更多关于节点的信息：
 
-    [PRE9]
+    ```py
+    ros2 node info /turtlesim
+    ```
 
     这将产生以下结果：
 
-    [PRE10]
+    ```py
+    /my_turtle
+     Subscribers:
+     /parameter_events: rcl_interfaces/msg/ParameterEvent
+     /turtle1/cmd_vel: geometry_msgs/msg/Twist
+     Publishers:
+     /parameter_events: rcl_interfaces/msg/ParameterEvent
+     /rosout: rcl_interfaces/msg/Log
+     /turtle1/color_sensor: turtlesim/msg/Color
+     /turtle1/pose: turtlesim/msg/Pose
+    ```
 
 在这里，我们可以注意以下关键点：
 
@@ -864,15 +894,29 @@ ROS 2 在原始 ROS 的基础上引入了一些非常显著的改进。其中一
 
 查看主题的命令如下：
 
-[PRE11]
+```py
+ros2 topic list
+```
 
 这显示了活动的主题。对于我们的 `turtlesim` 示例，我们得到以下输出：
 
-[PRE12]
+```py
+/parameter_events
+/rosout
+/turtle1/cmd_vel
+/turtle1/color_sensor
+/turtle1/pose
+```
 
 如果你在该命令末尾添加 `-t`，你还可以获得主题消息类型：
 
-[PRE13]
+```py
+/parameter_events [rcl_interfaces/msg/ParameterEvent]
+/rosout [rcl_interfaces/msg/Log]
+/turtle1/cmd_vel [geometry_msgs/msg/Twist]
+/turtle1/color_sensor [turtlesim/msg/Color]
+/turtle1/pose [turtlesim/msg/Pose]
+```
 
 你可以在 [https://ros2-industrial-workshop.readthedocs.io/en/latest/_source/navigation/ROS2-Turtlebot.html](https://ros2-industrial-workshop.readthedocs.io/en/latest/_source/navigation/ROS2-Turtlebot.html) 找到更多细节和完整教程。此外，我建议你参考ROS 2网站提供的教程中的主题列表：[https://docs.ros.org/en/foxy/Tutorials.html](https://docs.ros.org/en/foxy/Tutorials.html)。这将为你提供一个更全面的ROS 2介绍。本书中运行程序所需的其他内容将在文本中提供。
 

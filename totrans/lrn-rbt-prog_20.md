@@ -90,17 +90,43 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  在此文件中找到`mode_config`变量。我们可以通过以下代码片段扩展它，添加更多行为：
 
-    [PRE0]
+    ```py
+        mode_config = {
+            "avoid_behavior": "avoid_behavior.py",
+            "circle_head": "circle_pan_tilt_behavior.py",
+            "test_rainbow": "test_rainbow.py",
+            "test_leds": "leds_test.py",
+            "line_following": "line_follow_behavior.py",
+            "behavior_line": "straight_line_drive.py",
+            "drive_north": "drive_north.py"
+        }
+    ```
 
 1.  在`mode_config`变量之后，我们添加一个配置菜单的列表。顺序将与屏幕上的菜单项匹配。每个项目都有一个`mode_name`设置——与`mode_config`变量中的简短缩略名匹配，以及`text`——菜单选项的易读标签，如下面的代码片段所示：
 
-    [PRE1]
+    ```py
+        menu_config = [
+            {"mode_name": "avoid_behavior", "text": "Avoid Behavior"},
+            {"mode_name": "circle_head", "text": "Circle Head"},
+            {"mode_name": "test_leds", "text": "Test LEDs"},
+            {"mode_name": "test_rainbow", "text": "LED Rainbow"},
+            {"mode_name": "line_following", "text": "Line Following"},
+            {"mode_name": "behavior_line", "text": "Drive In A Line"},
+            {"mode_name": "drive_north", "text": "Drive North"}
+        ]
+    ```
 
     如果我们想在菜单中添加一个行为，我们必须将其添加到`menu_config`和`mode_config`变量中。
 
 1.  为了允许菜单用户在不按下`run`方法的情况下选择新的模式，我们可以通过停止任何现有进程来处理这个问题，如下所示：
 
-    [PRE2]
+    ```py
+        def run(self, mode_name):
+            while self.is_running():
+                self.stop()
+            script = self.mode_config[mode_name]
+            self.current_process = subprocess.Popen(["python3", script])
+    ```
 
     此文件将作为配置文件使用，你可以扩展它来运行其他代码。我们现在可以测试一下。
 
@@ -110,19 +136,25 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  正如我们在[*第15章*](B15660_15_Final_ASB_ePub.xhtml#_idTextAnchor344)，“使用Mycroft与机器人进行语音通信”中看到的，我们将使用`curl`命令来发送请求，如下所示：
 
-    [PRE3]
+    ```py
+    curl -X POST http//myrobot.local:5000/run/test_leds
+    ```
 
     这应该会启动机器人上的**发光二极管**（**LEDs**）闪烁。
 
 1.  让我们改变行为——这将停止当前行为并启动一个新的行为。运行以下代码：
 
-    [PRE4]
+    ```py
+    curl -X POST http//myrobot.local:5000/run/circle_head
+    ```
 
     LED应该停止闪烁，假设电机已经打开，头部应该开始移动。
 
 1.  让我们通过运行以下代码来停止机器人：
 
-    [PRE5]
+    ```py
+    curl -X POST http//myrobot.local:5000/stop
+    ```
 
 我们在`robot_modes.py`中添加了一些额外的模式和配置来描述这些模式，并进行了测试。让我们检查是否有任何问题。
 
@@ -148,15 +180,27 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  将 Flask 的导入扩展到包括 `render_template`，如下所示：
 
-    [PRE6]
+    ```py
+    from flask import Flask, render_template
+    from robot_modes import RobotModes
+    ```
 
 1.  由于我们将更改样式表，我们需要停止持有过时缓存的表单的设备。我们可以通过向所有响应添加标题来实现这一点，如下所示：
 
-    [PRE7]
+    ```py
+    @app.after_request
+    def add_header(response):
+        response.headers['Cache-Control'] = "no-cache, no-store, must-revalidate"
+        return response
+    ```
 
 1.  现在我们需要添加显示我们菜单的路由。我们将创建一个名为 `menu.html` 的模板，它使用 `menu_config` 变量来显示。我们的大部分模式都需要这个。让我们添加渲染模板的代码，如下所示：
 
-    [PRE8]
+    ```py
+    @app.route("/")
+    def index():
+        return render_template('menu.html', menu=mode_manager.menu_config)
+    ```
 
 现在我们已经有了渲染模板的代码，它是基于我们已有的处理 `run` 和 `stop` 请求的代码。然而，在我们能够运行此服务之前，我们需要提供模板，即 `menu.html`。
 
@@ -168,31 +212,52 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  我们的模板从设置页面标题的标题开始，并使用我们之前看到的相同的 jQuery 工具，如下面的代码片段所示：
 
-    [PRE9]
+    ```py
+    <html>
+    <head>
+        <script src="img/jquery-3.5.1.min.js"></script>
+        <title>My Robot Menu</title>
+    </head>
+    ```
 
 1.  我们模板的主体有 `My Robot Menu` 标题。你可以随意将其更改为你的机器人名称。代码如下所示：
 
-    [PRE10]
+    ```py
+    <body>
+      <h1>My Robot Menu</h1>
+    ```
 
 1.  接下来，有一个用于消息的空间；现在它是空的，正如你在这里可以看到的：
 
-    [PRE11]
+    ```py
+        <p id="message"></p>
+    ```
 
 1.  下一个部分是一个列表——即菜单本身。我们使用 `<ul>` 标签然后是一个 `for` 循环，它为每个菜单项创建一个带有链接的列表项。双大括号 `{{ }}` 用于包围一个占位符，当运行时将被替换。它使用 `mode_name` 设置和 `text` 来创建该链接，将 `/run` 与模式名称结合，如下面的代码片段所示：
 
-    [PRE12]
+    ```py
+    run action in some code.
+    ```
 
 1.  在关闭我们的列表之前，我们需要添加一个额外的菜单项——**停止**按钮，如下所示：
 
-    [PRE13]
+    ```py
+        <li><a href="#" onclick="run('/stop')">Stop</a></li>
+      </ul>
+    ```
 
 1.  我们在 JavaScript 代码中讨论了处理 `run` 动作。以下代码发送数据到 Web 服务器并从响应中更新消息的 POST 请求。我们需要将其放在 `<script>` 标签中，如下所示：
 
-    [PRE14]
+    ```py
+    run function calls the .post method with the => operator is JavaScript shorthand for defining a small function—in this case, one that has the response parameter. An important idea in JavaScript is that a function can be a bit of data. In JavaScript, passing a function in as a parameter to another function is a common way to do things. Because we often use this, functions used that way are not even given names; they are anonymous functions or lambdas.
+    ```
 
 1.  现在，我们可以像这样关闭我们的 HTML 文档：
 
-    [PRE15]
+    ```py
+    </body>
+    </html>
+    ```
 
 模板如这样的好处是，您可以在浏览器中预览此代码，而无需服务器，并理解它应该如何看起来。以下截图显示了它在预览模式下的样子：
 
@@ -208,7 +273,18 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 将 `robot_modes.py` 和 `control_server.py` 文件上传到机器人，然后是 `templates` 文件夹。在 Raspberry Pi 上，通过 SSH，您可以使用以下命令启动它：
 
-[PRE16]
+```py
+pi@myrobot:~ $ python3 control_server.py 
+ * Serving Flask app "control_server" (lazy loading)
+ * Environment: production
+   WARNING: This is a development server. Do not use it in a production deployment.
+   Use a production WSGI server instead.
+ * Debug mode: on
+ * Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 270-549-285
+```
 
 您现在可以将浏览器指向您的机器人（`http://myrobot.local:5000/`）以查看菜单。以下截图显示了它应该看起来是什么样子：
 
@@ -228,7 +304,19 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 注意以下代码片段中行为输出的 `print` 语句出现在 Web 服务器控制台中：
 
-[PRE17]
+```py
+192.168.1.149 - - [17/Oct/2020 22:42:57] "POST /run/test_leds HTTP/1.1" 200 -
+red
+blue
+red
+blue
+red
+Traceback (most recent call last):
+  File "leds_test.py", line 16, in <module>
+    sleep(0.5)
+KeyboardInterrupt
+192.168.1.149 - - [17/Oct/2020 22:43:41] "POST /stop HTTP/1.1" 200 -
+```
 
 您需要在 Pi 上按下 *Ctrl* + *C* 来退出此菜单服务器应用。
 
@@ -334,7 +422,12 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  在`image_app_core.py`文件中，我们还需要使用缓存文件来停止它，以便它重新加载我们的CSS和JavaScript文件，如下所示：
 
-    [PRE18]
+    ```py
+    @app.after_request
+    def add_header(response):
+        response.headers['Cache-Control'] = "no-cache, no-store, must-revalidate"
+        return response
+    ```
 
 应用核心现在有一个可以离线使用的jQuery静态副本，所以我们的手机不需要依赖良好的信号与机器人通信。
 
@@ -348,55 +441,106 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  以类似以下方式开始一个名为`manual_drive.py`的文件，导入摄像头和控制：
 
-    [PRE19]
+    ```py
+    import time
+    from robot import Robot
+    from image_app_core import start_server_process, get_control_instruction, put_output_image
+    import camera_stream
+    ```
 
 1.  我们可以声明我们想要的超时阈值是多少秒，如下面的代码片段所示：
 
-    [PRE20]
+    ```py
+    TIMEOUT_IN_SECONDS = 1
+    ```
 
 1.  我们将创建一个`ManualDriveBehavior`类。在这个类中，我们将存储一个`robot`对象并跟踪时间，如下面的代码片段所示：
 
-    [PRE21]
+    ```py
+    class ManualDriveBehavior(object):
+        def __init__(self, robot):
+            self.robot = robot
+            self.last_time = time.time()
+    ```
 
 1.  接下来，构建这个行为的控制部分。它为每个指令重置最后时间。代码可以在下面的代码片段中看到：
 
-    [PRE22]
+    ```py
+    self.handle_instruction.
+    ```
 
 1.  我们的代码在`handle_instruction`中处理指令。这个指令是一个字典，其中指令名称和参数是其成员。我们可以检查这个命令是否是`set_left`或`set_right`，如下面的代码片段所示：
 
-    [PRE23]
+    ```py
+    int to convert it into an integer number for our motors. 
+    ```
 
 1.  我们还需要处理`exit`命令，如下所示：
 
-    [PRE24]
+    ```py
+            elif command == "exit":
+                print("stopping")
+                exit()
+    ```
 
 1.  至少在测试时，知道我们是否有未知的指令会有用。让我们通过抛出异常来处理这种情况，如下所示：
 
-    [PRE25]
+    ```py
+            else:
+                raise ValueError(f"Unknown instruction: {instruction}")
+    ```
 
 1.  我们的应用程序还需要创建一个显示，将帧放在服务器图像队列中，如下所示：
 
-    [PRE26]
+    ```py
+        def make_display(self, frame):
+            encoded_bytes = camera_stream.get_encoded_bytes_for_frame(frame)
+            put_output_image(encoded_bytes)
+    ```
 
 1.  该行为有一个`run`方法来执行设置和主循环。我们首先将俯仰设置成直视前方，预热相机，并停止伺服电机，如下所示：
 
-    [PRE27]
+    ```py
+        def run(self):
+            self.robot.set_pan(0)
+            self.robot.set_tilt(0)
+            camera = camera_stream.setup_camera()
+            time.sleep(0.1)
+            self.robot.servos.stop_all()
+            print("Setup Complete")
+    ```
 
 1.  然后，我们遍历来自相机的帧并处理控制指令，如下所示：
 
-    [PRE28]
+    ```py
+            for frame in camera_stream.start_stream(camera):
+                self.make_display(frame)
+                self.process_control()
+    ```
 
 1.  最后，我们根据超时自动停止，如下所示：
 
-    [PRE29]
+    ```py
+                if time.time() > self.last_time + TIMEOUT_IN_SECONDS:
+                    self.robot.stop_motors()
+    ```
 
 1.  我们添加顶层代码来创建和启动组件，如下所示：
 
-    [PRE30]
+    ```py
+    print("Setting up")
+    behavior = ManualDriveBehavior(Robot())
+    process = start_server_process('manual_drive.html')
+    ```
 
 1.  我们仍然想确保在退出或遇到错误时停止服务器，所以我们运行以下代码：
 
-    [PRE31]
+    ```py
+    try:
+        behavior.run()
+    except:
+        process.terminate()
+    ```
 
 行为后端已完成，但需要一个模板来查看它，以及运行在手机上的样式和代码。
 
@@ -408,75 +552,121 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 1.  创建一个`templates/manual_drive.html`文件。从HTML前缀开始，如下所示：
 
-    [PRE32]
+    ```py
+    <html>
+        <head>
+    ```
 
 1.  我们希望显示适应手机屏幕，根据显示大小调整。我们也不希望用户的触摸交互意外地缩放显示。这一行代码告诉浏览器这是我们的意图：
 
-    [PRE33]
+    ```py
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    ```
 
 1.  我们希望对这个（以及可能的其他界面）进行样式设计。为此，我们使用一个`display.css`样式表，如下面的代码片段所示：
 
-    [PRE34]
+    ```py
+            <link rel="stylesheet" type="text/css" href="/static/display.css?">
+    ```
 
 1.  我们将使用jQuery库来使事物交互，并构建一个触摸滑块系统。这些是HTML的导入等效：
 
-    [PRE35]
+    ```py
+            <script src="img/jquery-3.5.1.min.js"></script>
+            <script src="img/touch-slider.js?"></script>
+    ```
 
     我们将在这个文件中放置一个非常具体的样式。其余的来自样式表。我们希望这个行为的视图占据整个屏幕，并且不滚动。代码如下所示：
 
-    [PRE36]
+    ```py
+            <style>html, body {margin: 0; height: 100%; overflow: hidden}</style>
+    ```
 
 1.  头部以一个标题结束，该标题将显示在标签页的顶部，如下所示：
 
-    [PRE37]
+    ```py
+            <title>Manually Drive The Robot</title>
+        </head>
+    ```
 
 1.  我们现在从第一个滑块开始构建主体；我们使用`svg`标签来定义它，我们将用它来制作滑块轨迹，如下面的代码片段所示：
 
-    [PRE38]
+    ```py
+    slider_track class lets us style both tracks—we use HTML classes to identify multiple objects. The left_slider ID will help us position and add touch events to it. IDs in HTML are usually used to reference one object uniquely.The `viewBox` attribute defines the dimensions of the drawing internal to `svg` as lower *x*, lower *y*, width, and height. View box coordinates make sense even if we scale the `svg` element for a different device. The height range is -100/100, equivalent to the motor speeds, and the width range is -10 to +10.
+    ```
 
 1.  在容器内部，我们将画一个圆。这个圆需要一个半径`r`，我们可以用视图框单位给出。中心在两个方向上都是0。这个代码如下所示：
 
-    [PRE39]
+    ```py
+                <circle r="18" class="slider_tick"/>
+    ```
 
     圆的颜色将来自样式表。
 
 1.  接下来，我们需要一个`退出`链接来完成行为。它有一个类和ID来定义其样式，如下面的代码片段所示：
 
-    [PRE40]
+    ```py
+    button class with fonts and colors, and we can use the style for other buttons (for example, to enhance the menu app). We'll use the exitbutton ID to position this in the place we designed before.
+    ```
 
 1.  接下来，我们有我们的视频块。视频的`img`标签包含在一个`div`标签内，以保持我们的视频在任何尺寸屏幕上的比例，同时允许它调整大小以适应空间，如下面的代码片段所示：
 
-    [PRE41]
+    ```py
+            <div id="video"><img src="img/{{ url_for('display') }}" /></div>
+    ```
 
 1.  右侧的滑块是左侧的重复，只是ID不同。你可以复制并粘贴左侧的代码，更改ID。代码可以在这里看到：
 
-    [PRE42]
+    ```py
+            <svg id="right_slider" class="slider_track" viewBox="-10 -100 20 200">
+                <circle r="18" class="slider_tick"/>
+            </svg>
+    ```
 
 1.  我们需要在我们的HTML中添加一些JavaScript代码来处理滑块。页面上的代码将滑块代码与我们的图形和电机链接起来。首先，我们声明JavaScript块，如下所示：
 
-    [PRE43]
+    ```py
+            <script type="text/javascript">
+    ```
 
 1.  添加一个函数来发送电机控制到机器人。它接受一个名称（左或右）和一个速度，如下面的代码片段所示：
 
-    [PRE44]
+    ```py
+                function set_motor(name, speed) {
+                    $.post('/control', {'command': 'set_' + name, 'speed': speed});
+                }
+    ```
 
     我们将这个控制指令POST到服务器。
 
 1.  下面的代码必须在页面完成加载后运行；我们想确保前面的JavaScript库已经完全加载。jQuery有一个特殊函数`$()`，当页面完成加载时，它会运行传递给它的任何函数，如下面的代码片段所示：
 
-    [PRE45]
+    ```py
+                $(() => {
+    ```
 
 1.  我们需要将退出按钮链接到一个POST请求，完成后将转发到菜单，如下面的代码片段所示：
 
-    [PRE46]
+    ```py
+                    $('#exitbutton').click(function() {
+                        $.post('/control', {'command': 'exit'});
+                        window.location.replace('//' + window.location.hostname + ":5000");
+                    });
+    ```
 
 1.  我们设置了滑块并将它们与它们的`svg`元素ID和`set_motor`链接起来，以便每次它们改变时都会更新，如下面的代码片段所示：
 
-    [PRE47]
+    ```py
+    makeSlider, which uses id for the ID of the object we are turning into a slider (a svg track), and a function to call when the slider has changed.
+    ```
 
 1.  现在，我们通过关闭所有标签来结束我们的页面，如下所示：
 
-    [PRE48]
+    ```py
+            </script>
+        </body>
+    </html>
+    ```
 
 这个页面没有样式；默认情况下，视频和滑块没有形状、大小或颜色——所以，如果你尝试加载这个，它将显示一个空白页面。我们还没有告诉浏览器我们想在页面上放置什么或使用什么颜色。我们还没有滑块的代码。
 
@@ -494,47 +684,100 @@ CSS的本质是在页面上选择元素并将样式属性与它们关联。CSS�
 
     我们可以将我们的滑块轨道设置为视口宽度的10%——即屏幕大小的10%。CSS有一个特殊的单位`vw`用于此，还有`vh`用于视口高度的百分比。在*进一步阅读*部分查看关于CSS单位的说明。此代码使用`.slider_track` CSS选择器，它适用于具有该类的所有对象。两个滑块都有这个类，所以这里的更改会影响它们两个。代码如下所示：
 
-    [PRE49]
+    ```py
+    .slider_track {
+        width: 10vw;
+        height: 90vh;
+    ```
 
 1.  我们将给滑块轨道添加一个实心蓝色边框和浅蓝色背景，以匹配我们的原型，如下所示：
 
-    [PRE50]
+    ```py
+        border: 1px solid blue;
+        background-color: lightblue;
+    }
+    ```
 
 1.  为了样式化勾选标记，即我们在滑块上看到的圆圈，我们可以添加一个淡粉色填充色，就像我们的原型一样，如下所示：
 
-    [PRE51]
+    ```py
+    .slider_tick {
+        fill: mistyrose;
+    }
+    ```
 
 1.  接下来，我们想要将滑块（通过它们的ID）定位在左侧和右侧。当制作一个与屏幕原型非常接近的显示时，我们可以使用**绝对定位**和视口百分比来确切地说明事物应该在哪里，如下所示：
 
-    [PRE52]
+    ```py
+    #left_slider {
+        position: absolute;
+        left: 5vw;
+        top: 5vh;
+    }
+    #right_slider {
+        position: absolute;
+        right: 5vw;
+        top: 5vh;
+    }
+    ```
 
 1.  你现在可以通过上传它，停止运行行为，再次启动，然后重新加载来尝试这个。滑块看起来更好，但退出按钮和视频位置不正确。
 
 1.  让我们使退出按钮更像一个按钮。`.button`下的样式将应用于具有相同类的所有按钮。我们将使其成为一个块——一个使用宽度和高度属性的元素。这个块是视口高度的10%。代码如下所示：
 
-    [PRE53]
+    ```py
+    .button {
+        display: block;
+        height: 10vh;
+    ```
 
 1.  然后，我们使用`line-height`和`text-align`将文本居中，然后使用`2em`表示正常文本大小的两倍，如下所示：
 
-    [PRE54]
+    ```py
+        text-align: center;
+        font-size: 2em;
+        line-height: 10vh;
+    ```
 
 1.  我们想要移除按钮文本的下划线，这通常是链接中出现的样式。我们还会给它添加一些颜色，一个蓝色背景和白色文本，如下所示：
 
-    [PRE55]
+    ```py
+        text-decoration: none;
+        background-color: blue;
+        color: white;
+    }
+    ```
 
 1.  我们使用退出按钮的ID来指定更多关于它的样式。我们将设置其宽度和顶部位置，但使用`auto`边距来居中它，如下所示：
 
-    [PRE56]
+    ```py
+    #exitbutton {
+        width: 40vh;
+        margin-top: 5vh;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    ```
 
     尝试这个，你现在应该能看到退出按钮在正确的位置。
 
 1.  接下来，我们样式化视频。我们希望将视频居中在屏幕上。外部视频元素可以为我们做到这一点，如下所示：
 
-    [PRE57]
+    ```py
+    .video {
+      text-align: center;
+    }
+    ```
 
 1.  然后，我们可以指定内部图像块的定位和大小。我们希望它从屏幕顶部20%的位置开始，使用`vh`单位。`vmin`单位是屏幕最小维度的百分比；它确保这个块永远不会太大，以至于会遮挡两个滑块条。我们使高度自动缩放。我们选择`#video img`来将此样式应用于`video`对象中包含的`img`对象，如下面的代码片段所示：
 
-    [PRE58]
+    ```py
+    #video img {
+        margin-top: 20vh;
+        width: 80vmin;
+        height: auto;
+    }
+    ```
 
 我们的页面已经完全样式化。你现在可以尝试一下，看看它看起来如何。将整个文件夹（包括模板）上传到机器人，然后运行`python3 manual_drive.py`。将桌面浏览器指向`http://myrobot.local:5001/`，用你的机器人的主机名或地址替换，以查看它。桌面浏览器非常适合发现HTML或JavaScript代码中的错误。在撰写本文时，Firefox和Chrome支持在浏览器中模拟移动设备和触摸事件。它应该看起来像以下截图所示的带有真实视频的模拟：
 
@@ -564,53 +807,93 @@ CSS的本质是在页面上选择元素并将样式属性与它们关联。CSS�
 
 1.  我们创建了一个`makeSlider`函数，这是一个工厂函数，用于创建滑块所需的一切，如下所示：
 
-    [PRE59]
+    ```py
+    function makeSlider(id, when_changed) {
+    ```
 
 1.  我们首先需要一些内部数据。代码需要知道我们是否在触摸滑块，这样它就不会在我们仍然触摸时尝试移动回去。我们需要知道触摸位置是否已改变，并跟踪其位置。最后，我们将通过其ID找到我们的滑块，并保留找到的对象以供使用，如下所示：
 
-    [PRE60]
+    ```py
+        let touched = false;
+        let changed = false;
+        let position = 0;
+        const slider = $('#' + id);
+    ```
 
 1.  然后，我们需要一些函数来处理滑块。我们将从一个更新位置的函数开始，确保刻度被更新，我们只使用整数（因为浏览器在这里不接受小数点），并且更新`changed`标志，如下面的代码片段所示：
 
-    [PRE61]
+    ```py
+        const set_position = function(new_position) {
+            position = Math.round(new_position);
+            slider.find('.slider_tick')[0].setAttribute('cy', position);
+            changed = true;
+        };
+    ```
 
 1.  下一步是处理触摸事件。事件处理器是在发生某些事情时被调用的函数（例如退出按钮处理器）。触摸事件有三个事件：`touchstart`——当有人开始触摸屏幕时，`touchmove`——当触摸移动到另一个区域时，和`touchend`——当触摸停止时。我们不会使用`touchstart`，所以我们将从一个匿名的`touchmove`函数开始，如下所示：
 
-    [PRE62]
+    ```py
+    touch variable from the event data. We get a list of touches, but we are only using the first one.
+    ```
 
 1.  然后，我们从这个触摸从滑块顶部的相对位置获取，如下所示：
 
-    [PRE63]
+    ```py
+            let from_top = touch.pageY - slider.offset().top;
+    ```
 
 1.  我们可以用这个高度将触摸位置转换为从-100到+100的数字，匹配SVG视图框坐标，如下所示：
 
-    [PRE64]
+    ```py
+            let relative_touch = (from_top / slider.height()) * 200;
+            set_position(relative_touch - 100);
+    ```
 
 1.  由于代码已经接收到触摸事件，我们应该将`touched`标志设置为`true`。我们还必须防止触摸事件产生任何其他效果，如下面的代码片段所示：
 
-    [PRE65]
+    ```py
+            touched = true;
+            event.preventDefault();
+        });
+    ```
 
 1.  由于我们设置了一个标志来表示触摸事件正在发生，因此当触摸事件结束时，我们也应该清除它（将其设置为`false`），如下所示：
 
-    [PRE66]
+    ```py
+        slider.on('touchend', event => touched = false);
+    ```
 
 1.  我们的系统是动态的，因此它需要一个更新周期来返回中间位置。更新应该只在没有触摸滑块时移动刻度，这样它就会停留在你放置拇指的位置。当触摸停止且它仍然不在零位置时，我们应该更新位置，如下所示：
 
-    [PRE67]
+    ```py
+        const update = function() {
+            if(!touched && Math.abs(position) > 0) {
+    ```
 
 1.  下一个部分看起来有点像**比例-积分-微分**（**PID**）控制器的代码，因为这里有一个乘以比例组件的错误。我们将错误乘以0.3，并额外加/减0.5以使其接近1%的最小值。每次更新时，它都会将滑块移动到中间位置。代码可以在以下位置查看：
 
-    [PRE68]
+    ```py
+                let error = 0 - position;
+                let change = (0.3 * error) + (Math.sign(error) * 0.5);
+                set_position(position + change);
+                // console.log(id + ": " + position);
+            }
+        };
+    ```
 
     这段代码也是一个很好的记录位置的地方——当它出错时我们可以使用。
 
 1.  为了频繁运行这个`update`函数，我们可以使用`setInterval`内置函数，它在每个间隔内重复运行一个函数。这个显示更新应该很短，以保持其响应性。时间以毫秒为单位。代码可以在以下位置查看：
 
-    [PRE69]
+    ```py
+        setInterval(update, 50);
+    ```
 
 1.  除了更新图像外，我们还需要调用`when_changed`函数。我们只想在发生变化时这样做，然后重置`changed`标志，这样我们就不在空闲时调用它。我们将调用这个`update_when_changed`。它检查变化，并且比显示更新运行得更频繁，因此不会淹没`when_changed`处理器和机器人上的队列。代码可以在以下位置查看：
 
-    [PRE70]
+    ```py
+    makeSlider function. 
+    ```
 
 现在，你应该准备好运行整个系统了。
 
@@ -632,7 +915,9 @@ CSS的本质是在页面上选择元素并将样式属性与它们关联。CSS�
 
 1.  要在手机上使用，你需要使用你的机器人的IP地址，因为主要的智能手机品牌不支持`.local`地址。你可以通过桌面上的`ping myrobot.local`找到它，如下面的代码片段所示：
 
-    [PRE71]
+    ```py
+    192.168.1.107. Your address will be different; note that down, and put that in the phone browser with the port. An example for my robot is http://192.168.1.107:5000.
+    ```
 
 1.  使用手机，你应该能够用你的拇指来驾驶机器人。
 
@@ -672,7 +957,9 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 1.  通过运行以下代码从 `app.run` 行中移除 `debug=True`：
 
-    [PRE72]
+    ```py
+    app.run(host="0.0.0.0")
+    ```
 
 现在，您可以向控制服务器添加手动驾驶、颜色跟踪和面部跟踪行为，并且它们将正常启动。
 
@@ -688,57 +975,97 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 1.  在 `mode_config` 中，我们将用字典替换简单的脚本命名文本（例如 `"avoid_behavior.py"`），允许简单的案例（`{"script": "avoid_behavior.py"}`）或更复杂的案例（`{"script": "manual_drive.py", "server": True}`）。您需要在整个 `mode_config` 中的所有条目上更改这一点。代码如下面的代码片段所示：
 
-    [PRE73]
+    ```py
+        mode_config = {
+            "avoid_behavior": {"script": "avoid_behavior.py"},
+            "circle_head": {"script": "circle_pan_tilt_behavior.py"},
+            ...
+    ```
 
 1.  然后，我们需要使用更复杂的案例更新 `mode_config` 变量中的服务器类型脚本，如下所示：
 
-    [PRE74]
+    ```py
+            manual_drive configuration here, you need to add this to menu_config variable too so that it shows up on the menu.
+    ```
 
 1.  我们需要修改 `run` 方法以从这种更改后的结构中选择脚本，如下所示：
 
-    [PRE75]
+    ```py
+        def run(self, mode_name):
+            while self.is_running():
+                self.stop()
+            script = self.mode_config[mode_name]['script']
+            self.current_process = subprocess.Popen(["python", script])
+    ```
 
 1.  接下来，我们需要检查如果模式是服务器并且当前进程处于活动状态，我们是否应该进行重定向。我在以下代码片段中添加了明确的 `is True`，以使其更清晰，表明该值是一个 `True`/`False` 标志。
 
-    [PRE76]
+    ```py
+        def should_redirect(self, mode_name):
+            return self.mode_config[mode_name].get('server') is True and self.is_running()
+    ```
 
 我们已经准备了`robot_modes.py`。`control_server.py`文件向网页发送响应。让我们使用与`mode_config`相同的技巧，返回一个包含数据的字典而不是只是一个字符串，如下所示：
 
 1.  我们将使用`control_server.py`并在Flask导入中添加`jsonify`，如下面的代码片段所示：
 
-    [PRE77]
+    ```py
+    from flask import Flask, render_template, jsonify
+    ```
 
 1.  接下来，我们替换`run`方法，使其创建`response`字典，如下所示：
 
-    [PRE78]
+    ```py
+    @app.route("/run/<mode_name>", methods=['POST'])
+    def run(mode_name):
+        mode_manager.run(mode_name)
+        response = {'message': f'{mode_name} running'}
+    ```
 
     这个响应是基本消息。
 
 1.  如果我们打算重定向，我们应该在我们的响应中发送`redirect`设置，如下所示：
 
-    [PRE79]
+    ```py
+        if mode_manager.should_redirect(mode_name):
+            response['redirect'] = True
+    ```
 
 1.  我们需要发送编码为JSON的响应。JSON是将数据从Python发送到JavaScript的一种简单方式——它与字典数据特别好。运行以下代码：
 
-    [PRE80]
+    ```py
+        return jsonify(response)
+    ```
 
 1.  由于我们在`stop`命令中也发送了消息，我们应该以相同的方式将其包装起来，如下所示：
 
-    [PRE81]
+    ```py
+    @app.route("/stop", methods=['POST'])
+    def stop():
+        mode_manager.stop()
+        return jsonify({'message': "Stopped"})
+    ```
 
 控制服务器能够发送`response`字典，并在需要时进行重定向。现在，接收JSON对象的那一侧，需要在页面脚本中进行更改以处理新的响应。按照以下步骤进行：
 
 1.  打开`templates/menu.html`，找到`run`函数，如下面的代码片段所示：
 
-    [PRE82]
+    ```py
+        function run(url) {
+    ```
 
 1.  这里消息处理需要更改。我们需要使用响应中的消息元素设置消息元素的HTML，如下所示：
 
-    [PRE83]
+    ```py
+          $.post(url, '', response => {
+               $('#message').html(response.message);
+    ```
 
 1.  然而，我们也可以检查是否需要重定向。如果是这样，我们使用与之前*模板*部分中手动驾驶行为中的退出按钮相同的技巧，但在超时中进行，如下所示：
 
-    [PRE84]
+    ```py
+    setTimeout function calls a function after a specified time. We give it 3,000 milliseconds (3 seconds), which gives a video behavior time to warm up first.
+    ```
 
 如果你上传这个并运行`python3 control_server.py`，你会看到菜单现在功能更强大，但看起来相当简单。你应该能够点击跟踪或驾驶行为，3秒后重定向到它们的页面。点击退出按钮应该会带你回到菜单。
 
@@ -754,25 +1081,61 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 1.  打开`templates/menu.html`。我们将添加一个链接到样式表。我们还可以添加一个`charset`定义，如下所示：
 
-    [PRE85]
+    ```py
+    <head>
+        <script src="img/jquery-3.5.1.min.js"></script>
+        <title>My Robot Menu</title>
+        <meta charset="UTF-8">
+        <link rel="stylesheet" type="text/css" href="/static/display.css">
+    </head>
+    ```
 
 1.  菜单模板使用一个项目列表。给这个列表添加一个`menu`类，给链接添加一个`button`类，这样我们就可以使用它们现有的样式，如下面的代码片段所示：
 
-    [PRE86]
+    ```py
+        <ul class="menu">
+          {% for item in menu %}
+            <li>
+                <a class="button" href="#" onclick="run('/run/{{ item.mode_name }}')">
+                    {{ item.text }}
+                </a>
+            </li>
+          {% endfor %}
+        <li><a class="button" href="#" onclick="run('/stop')">Stop</a></li>
+    ```
 
 1.  现在，打开`static/display.css`，我们将在这里定义`menu`类的样式，如下所示：
 
-    [PRE87]
+    ```py
+    .menu {
+        width: 100%;
+        margin-top: 0;
+        margin-bottom: 0;
+        padding: 0;
+    }
+    ```
 
     我们使列表容器填充屏幕宽度，没有任何额外的边距（项目外部的空间）或填充（项目内部和其子列表项之间的空间）。
 
 1.  菜单由列表项组成。默认情况下，这些项会带有一个点：一个项目符号。我们希望将其设置为`none`（无形状）以移除项目符号。我们可以使用CSS的`list-style`属性来更改它。这里的选择器适用于`.menu`类对象的子列表项（`li`）。代码可以在下面的代码片段中看到：
 
-    [PRE88]
+    ```py
+    .menu li {
+        list-style-type: none;
+        list-style-position: initial;
+    }
+    ```
 
 1.  为了使其触控友好，我们使按钮宽度相同。`60vw`（视口宽度的60%）应该足够宽。我们使用`auto`边距技巧来居中。我们还可以在它们上添加一个1像素的浅蓝色边框，如下面的代码片段所示：
 
-    [PRE89]
+    ```py
+    .menu .button {
+        margin-left: auto;
+        margin-right: auto;
+        width: 60vw;
+        border: 1px solid lightblue;
+    }
+    ```
 
 上传整个目录并使用`python3 control_server.py`启动菜单服务器。现在这个菜单应该看起来更符合手机。
 
@@ -798,15 +1161,31 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 1.  打开`control_server.py`文件并导入LED，如下所示：
 
-    [PRE90]
+    ```py
+    from robot_modes import RobotModes
+    from leds_led_shim import Leds
+    ```
 
 1.  我们需要设置我们的LED并运行以下代码来使一个LED变绿：
 
-    [PRE91]
+    ```py
+    mode_manager = RobotModes()
+    leds = Leds()
+    leds.set_one(1, [0, 255, 0])
+    leds.show()
+    ```
 
 1.  当我们运行某些内容时，我们知道有人使用了菜单。在我们的`run`方法中，我们可以清除LED。由于我们只想做一次，我们可以将全局LED设置为`None`，然后在下次检查。注意以下代码片段中我们正在将高亮代码插入到现有的`run`函数中：
 
-    [PRE92]
+    ```py
+    def run(mode_name):
+        global leds
+        if leds:
+            leds.clear()
+            leds.show()
+            leds = None
+    ...
+    ```
 
 你可以通过上传菜单服务器代码并重新运行它来测试这一点。LED应该在启动时亮起，然后当你选择另一个行为时，它会熄灭。它应该能够正确地从菜单移动到LED测试行为。
 
@@ -818,41 +1197,64 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 1.  创建一个 `menu_server.service` 文件。用描述来启动它，并告诉 `systemd` 在我们的 Raspberry Pi 上建立网络后启动我们的服务，如下面的代码片段所示：
 
-    [PRE93]
+    ```py
+    [Unit]
+    Description=Robot Menu Web Service
+    After=network.target
+    ```
 
 1.  现在，我们告诉 `systemd` 我们希望在 Pi 准备好用户登录时启动它，如下面的代码片段所示：
 
-    [PRE94]
+    ```py
+    [Install]
+    WantedBy=multi-user.target
+    ```
 
 1.  以下代码片段中显示的 `Service` 部分配置了如何运行我们的代码：
 
-    [PRE95]
+    ```py
+    [Service]
+    ```
 
 1.  工作目录是你将机器人文件复制到的位置——例如，`/home/pi`。我们还可以设置我们一直在使用的 `pi` 用户。工作目录是代码找到其其他组件的方式。请查看以下代码片段：
 
-    [PRE96]
+    ```py
+    WorkingDirectory=/home/pi
+    User=pi
+    ```
 
 1.  `ExecStart` 语句告诉 `systemd` 运行服务的命令。然而，它并不像 shell 那样假设路径，所以请在 `python3` 命令前加上 `/usr/bin/env`，如下所示：
 
-    [PRE97]
+    ```py
+    ExecStart=/usr/bin/env python3 control_server.py
+    ```
 
 1.  你现在需要在 Raspberry Pi 上设置这个。将此文件上传到你的 Raspberry Pi 主目录。
 
 1.  你需要 `sudo` 权限将其复制到系统配置中。请在 Pi 上通过 SSH 输入此命令。注意，如果你遗漏了 `sudo` 命令，你会看到权限错误。代码可以在以下位置查看：
 
-    [PRE98]
+    ```py
+    $ sudo cp menu_server.service /etc/systemd/system/
+    ```
 
 1.  我们现在应该要求 `systemd` 加载我们的配置，然后启用我们的服务，如下所示：
 
-    [PRE99]
+    ```py
+    $ sudo systemctl daemon-reload
+    $ sudo systemctl enable menu_server
+    ```
 
 1.  系统将确认你已经启用它，如下所示的消息：
 
-    [PRE100]
+    ```py
+    Created symlink /etc/systemd/system/multi-user.target.wants/menu_server.service → /etc/systemd/system/menu_server.service.
+    ```
 
 1.  然后，你可以使用以下命令尝试启动你的服务：
 
-    [PRE101]
+    ```py
+    $ sudo systemctl start menu_server
+    ```
 
 如果启动此服务器成功，你会看到一个绿灯亮起，表示它已准备好。然后你将能够将浏览器指向机器人并控制它。
 
@@ -866,15 +1268,32 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 1.  如果你想要看到服务器正在做什么的更多信息，你可以使用以下命令：
 
-    [PRE102]
+    ```py
+    $ systemctl status menu_server
+    ```
 
     Pi 将会响应如下：
 
-    [PRE103]
+    ```py
+    ● menu_server.service - Robot Menu Web Service
+      Loaded: loaded (/etc/systemd/system/menu_server.service; enabled; vendor preset: enabled)
+       Active: active (running) since Wed 2020-10-21 23:41:55 BST; 2s ago
+     Main PID: 1187 (python3)
+        Tasks: 1 (limit: 860)
+       Memory: 10.0M
+       CGroup: /system.slice/menu_server.service
+               └─1187 python3 control_server.py
+    Oct 21 23:41:55 myrobot systemd[1]: Started Robot Menu Web Service.
+    Oct 21 23:41:56 myrobot env[1187]:  * Serving Flask app "control_server" (lazy loading)
+    Oct 21 23:41:56 myrobot env[1187]:  * Environment: production
+    Oct 21 23:41:56 myrobot env[1187]:    WARNING: This is a development server. Do not use it in a production deployment.
+    ```
 
 1.  `systemctl` 可以显示一些最近的活动，但你可能想跟踪运行中的行为输出。为此，你需要使用 `journalctl` 命令。使用 `-u` 来指定我们创建的服务，然后使用 `-f` 来跟踪日志，如下面的代码片段所示：
 
-    [PRE104]
+    ```py
+    $ journalctl -u menu_server -f
+    ```
 
     我们将能够看到服务器在运行时的状态——这可能不是调试中最方便的，但对于启动服务来说很方便。使用 *Ctrl* + *C* 来停止查看日志。
 
@@ -882,7 +1301,9 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
 
 如果你上传了新的代码，你需要重新启动服务。你可以使用以下命令来这样做：
 
-[PRE105]
+```py
+$ sudo systemctl restart menu_server
+```
 
 恭喜——你的机器人现在真正无头了！它甚至不需要 PC 或笔记本电脑来开始做事。
 

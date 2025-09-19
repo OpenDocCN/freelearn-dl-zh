@@ -66,7 +66,22 @@ FrozenLake环境的模型
 
 1.  以下是为参考而列出的整个代码列表：
 
-[PRE0]
+```py
+from random import *
+from math import sqrt
+
+ins = 0
+n = 100000
+
+for i in range(0, n):
+   x = (random()-.5) * 2
+    y = (random()-.5) * 2
+    if sqrt(x*x+y*y)<=1:
+        ins+=1
+
+pi = 4 * ins / n
+print(pi)
+```
 
 这段代码使用蒙特卡洛方法求解 ![](img/812e1640-0feb-46c5-a7eb-d34729e14040.png)，当你考虑到代码的简单性时，这相当令人印象深刻。让我们逐一分析代码的每个部分。
 
@@ -76,7 +91,13 @@ FrozenLake环境的模型
 
 1.  接下来，我们使用以下代码随机投掷飞镖：
 
-[PRE1]
+```py
+for i in range(0, n):
+  x = (random()-.5) * 2
+  y = (random()-.5) * 2
+  if sqrt(x*x+y*y)<=1:
+   ins+=1
+```
 
 1.  所有这些代码所做的只是随机在 `-1` 到 `1` 的范围内采样 `x` 和 `y` 的值，然后确定它们是否在半径为 `1` 的圆内，这是由平方根函数中的计算给出的。
 
@@ -94,11 +115,44 @@ FrozenLake环境的模型
 
 1.  在开始这个练习之前，我们将安装 `matplotlib` 库。使用以下命令使用 `pip` 安装库：
 
-[PRE2]
+```py
+pip install matplotlib
+```
 
 1.  安装完成后，打开这里显示的 `Chapter_3_2.py` 代码示例：
 
-[PRE3]
+```py
+import matplotlib.pyplot as plt
+from random import random
+
+ins = 0
+n = 1000
+
+x_ins = []
+y_ins = []
+x_outs = []
+y_outs = []
+
+for _ in range(n):
+    x = (random()-.5) * 2
+    y = (random()-.5) * 2 
+    if (x**2+y**2) <= 1:
+        ins += 1
+        x_ins.append(x)
+ y_ins.append(y)
+    else:
+        x_outs.append(x)
+ y_outs.append(y)
+
+pi = 4 * ins/n
+print(pi)
+
+fig, ax = plt.subplots()
+ax.set_aspect('equal')
+ax.scatter(x_ins, y_ins, color='g', marker='s')
+ax.scatter(x_outs, y_outs, color='r', marker='s')
+plt.show()
+```
 
 1.  代码与上一个练习非常相似，应该相当容易理解。我们只需关注前面突出显示的重要代码部分。
 
@@ -136,29 +190,59 @@ FrozenLake环境的模型
 
 1.  滚动到样本的底部并查看以下行：
 
-[PRE4]
+```py
+env = gym.make('FrozenLake8x8-v0')
+policy = monte_carlo_e_soft(env,episodes=50000)print(test_policy(policy, env))
+```
 
 1.  在第一行，我们构建了环境。然后，我们使用名为`monte_carlo_e_soft`的函数创建`policy`。我们通过打印出`test_policy`函数的结果来完成这一步。
 
 1.  滚动到`monte_carlo_e_soft`函数。我们稍后会解释这个名字，但现在，显示的是顶部几行：
 
-[PRE5]
+```py
+if not policy:
+  policy = create_random_policy(env)
+Q = create_state_action_dictionary(env, policy)
+returns = {}
+```
 
 1.  这些行创建了一个策略，如果没有的话。这显示了随机策略是如何创建的：
 
-[PRE6]
+```py
+def create_random_policy(env):
+  policy = {}
+  for key in range(0, env.observation_space.n):
+    p = {}
+    for action in range(0, env.action_space.n):
+      p[action] = 1 / env.action_space.n
+      policy[key] = p
+  return policy
+```
 
 1.  之后，我们创建一个字典来存储状态和动作值，如下所示：
 
-[PRE7]
+```py
+def create_state_action_dictionary(env, policy):
+  Q = {}
+  for key in policy.keys():
+    Q[key] = {a: 0.0 for a in range(0, env.action_space.n)}
+  return Q
+```
 
 1.  然后，我们从一个`for`循环开始，遍历所有剧集的数量，如下所示：
 
-[PRE8]
+```py
+for e in range(episodes): 
+  G = 0 
+  episode = play_game(env=env, policy=policy, display=False)
+  evaluate_policy_check(env, e, policy, test_policy_freq)
+```
 
 1.  将前面高亮的`display=False`改为`display=True`，如下所示：
 
-[PRE9]
+```py
+episode = play_game(env=env, policy=policy, display=True)
+```
 
 1.  现在，在我们走得太远之前，看看代理是如何玩游戏可能会有所帮助。运行代码示例并观察输出。不要运行到完成——只需几秒钟或一分钟即可。确保在保存之前撤销你的代码更改：
 
@@ -176,21 +260,70 @@ FrozenLake环境的模型
 
 1.  对于本节，我们只需要关注代理如何玩游戏。滚动到`play_game`函数，如下所示：
 
-[PRE10]
+```py
+def play_game(env, policy, display=True):
+  env.reset()
+  episode = []
+  finished = False
+  while not finished:
+    s = env.env.s
+    if display:
+      clear_output(True)
+      env.render()
+      sleep(1)
+    timestep = []
+    timestep.append(s)
+    n = random.uniform(0, sum(policy[s].values()))
+    top_range = 0
+    action = 0
+    for prob in policy[s].items():
+      top_range += prob[1]            
+      if n < top_range:
+        action = prob[0]
+        break 
+    state, reward, finished, info = env.step(action)
+
+    timestep.append(action)
+    timestep.append(reward)
+    episode.append(timestep)
+ if display:
+   clear_output(True)
+   env.render()
+   sleep(1)
+ return episode
+```
 
 1.  我们可以看到这个函数接受`env`和`policy`环境作为输入。然后，在内部，它使用`reset`重置环境并初始化变量。`while`循环的开始是代理开始玩游戏的地方：
 
-[PRE11]
+```py
+while not finished:
+```
 
 1.  对于这个环境，我们让代理无限期地玩游戏。也就是说，我们不会限制代理可能采取的步骤数量。然而，对于这个环境来说，这并不是问题，因为它很可能代理会掉入洞中。但这种情况并不总是如此，我们经常需要限制代理在环境中的步骤数量。在许多情况下，这个限制被设置为`100`，例如。
 
 1.  在`while`循环内部，我们更新代理的状态`s`，然后显示环境`display=True`。之后，我们设置一个`timestep`列表来保存那个`state`、`action`和`value`。然后，我们添加状态`s`：
 
-[PRE12]
+```py
+s = env.env.s
+if display:
+ clear_output(True)
+ env.render()
+ sleep(1)
+timestep = []
+timestep.append(s)
+```
 
 1.  接下来，我们查看基于`policy`值进行随机采样动作的代码，如下所示：
 
-[PRE13]
+```py
+n = random.uniform(0, sum(policy[s].values())) top_range = 0
+action = 0
+for prob in policy[s].items():
+  top_range += prob[1] 
+  if n < top_range:
+    action = prob[0]
+    break 
+```
 
 1.  这实际上是代理使用`random.uniform`对策略进行均匀采样的地方，这是蒙特卡洛方法。均匀意味着采样在值之间是均匀的，并且如果是从正态或高斯方法中来的话，不会偏斜。之后，在`for`循环中根据策略中随机选择的项选择一个动作。记住，在开始时，所有动作可能具有相等的`0.25`概率，但后来，随着代理学习策略项，它也会相应地学习分布。
 
@@ -198,7 +331,11 @@ FrozenLake环境的模型
 
 1.  然后，在选择一个随机动作后，代理采取一步并记录它。它已经记录了`state`，现在它添加`action`和`reward`。然后，它将`timestep`列表添加到`episode`列表中，如下所示：
 
-[PRE14]
+```py
+state, reward, finished, info = env.step(action) timestep.append(action)
+timestep.append(reward)
+episode.append(timestep)
+```
 
 1.  最后，当代理`完成`后，通过找到目标或掉入洞中，它返回`episode`中的步骤列表。
 
@@ -210,23 +347,52 @@ FrozenLake环境的模型
 
 1.  我们将从我们离开的地方开始，回顾最后几行包括`play_game`函数：
 
-[PRE15]
+```py
+episode = play_game(env=env, policy=policy, display=False)
+evaluate_policy_check(env, e, policy, test_policy_freq)
+```
 
 1.  在`evaluate_policy_check`内部，我们测试是否达到了`test_policy_freq`数字。如果是，我们输出代理的当前进度。实际上，我们正在评估当前策略将如何运行代理。`evaluate_policy_check`函数调用`test_policy`来评估当前策略。`test_policy`函数如下所示：
 
-[PRE16]
+```py
+def test_policy(policy, env):
+  wins = 0
+  r = 100
+  for i in range(r):
+    w = play_game(env, policy, display=False)[-1][-1]
+    if w == 1:
+      wins += 1
+  return wins / r
+```
 
 1.  `test_policy`通过运行`play_game`函数并设置由`r = 100`确定的几个游戏来评估当前策略。这提供了一个`wins`百分比，该百分比输出以显示代理的进度。
 
 1.  回到主函数，我们进入一个`for`循环，以相反的顺序遍历最后一轮游戏，如下所示：
 
-[PRE17]
+```py
+for i in reversed(range(0, len(episode))):
+  s_t, a_t, r_t = episode[i] 
+  state_action = (s_t, a_t)
+  G += r_t
+```
 
 1.  以相反的顺序遍历场景允许我们使用最后一个奖励并将其反向应用。因此，如果代理收到了负奖励，所有动作都会受到负面影响。对于正奖励也是如此。我们使用`G`变量跟踪总奖励。
 
 1.  在最后一个循环内部，我们检查状态是否已经为这个场景评估过；如果没有，我们找到回报列表并计算它们的平均值。然后，我们可以从平均值中确定最佳动作`A_star`。这显示在代码块中：
 
-[PRE18]
+```py
+if not state_action in [(x[0], x[1]) for x in episode[0:i]]:
+  if returns.get(state_action):
+    returns[state_action].append(G)
+  else:
+    returns[state_action] = [G] 
+
+  Q[s_t][a_t] = sum(returns[state_action]) / len(returns[state_action]) 
+  Q_list = list(map(lambda x: x[1], Q[s_t].items())) 
+  indices = [i for i, x in enumerate(Q_list) if x == max(Q_list)]
+  max_Q = random.choice(indices) 
+A_star = max_Q
+```
 
 1.  这段代码块中有很多事情在进行，所以如果你需要的话，要慢慢工作。关键要点是我们在这里所做的只是平均回报或状态，然后根据蒙特卡洛在该状态内确定最可能的最佳动作。
 
@@ -266,15 +432,25 @@ Chapter_3_3.py的示例输出
 
 1.  滚动到以下代码部分：
 
-[PRE19]
+```py
+for a in policy[s_t].items(): 
+  if a[0] == A_star:
+    policy[s_t][a[0]] = 1 - epsilon + (epsilon / abs(sum(policy[s_t].values())))
+  else:
+    policy[s_t][a[0]] = (epsilong / abs(sum(policy[s_t].values())))
+```
 
 1.  正是在这段代码的最后部分，我们逐步更新策略到最佳值，如下所示：
 
-[PRE20]
+```py
+policy[s_t][a[0]] = 1 - alpha + (alpha / abs(sum(policy[s_t].values())))
+```
 
 1.  或者我们给它一个基值，如下所示：
 
-[PRE21]
+```py
+policy[s_t][a[0]] = (alpha / abs(sum(policy[s_t].values())))
+```
 
 1.  从这里，我们可以再次运行示例并享受输出。
 

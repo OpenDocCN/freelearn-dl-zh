@@ -180,7 +180,9 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  Mycroft 现在将询问您的音频输出设备：
 
-    [PRE0]
+    ```py
+    3, to select USB speakers, which sets some basic defaults.
+    ```
 
 1.  按 *Ctrl* + *C* 退出引导设置并返回到 `$` 提示符。
 
@@ -190,7 +192,11 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  使用以下命令安装 ReSpeaker 2-Mics Pi HAT 的音频驱动程序：
 
-    [PRE1]
+    ```py
+    $ git clone https://github.com/waveshare/WM8960-Audio-HAT.git
+    $ cd WM8960-Audio-HAT
+    $ sudo ./install.sh
+    ```
 
     Git 克隆可能需要一分钟左右。该板使用 WM8960 音频芯片。安装脚本将花费 20-30 分钟完成。
 
@@ -200,7 +206,9 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  输入 `aplay -l` 以列出播放设备。在输出中，您应该看到以下内容：
 
-    [PRE2]
+    ```py
+    card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm8960-hifi-0 [bcm2835-i2s-wm8960-hifi wm8960-hifi-0]
+    ```
 
     这表明它已经找到了我们的卡。
 
@@ -210,7 +218,9 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  然后，我们可以使用 `arecord -l` 命令检查录音设备。在以下输出中，我们可以看到 `arecord` 已经找到了这张卡：
 
-[PRE3]
+```py
+card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm8960-hifi-0 [bcm2835-i2s-wm8960-hifi wm8960-hifi-0]
+```
 
 该卡现在已准备好使用。接下来，我们需要向 Mycroft 系统展示如何选择这张卡进行使用。
 
@@ -242,11 +252,16 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  文件中有描述Mycroft各个方面的行。然而，我们只对其中两行感兴趣：
 
-    [PRE4]
+    ```py
+    aplay command on device hardware 0,0 (the Pi headphone jack) – written as hw:0,0. This will be the wrong device. The second specifies it will play mp3 files using the mpg123 command and on the same incorrect device. Using a direct hardware device may make assumptions about the format of the sound being played, so it needs to go through the mixer device. Let's fix these.
+    ```
 
 1.  将两个`hw:0,0`的出现更改为术语`playback`。这两行应该看起来像这样：
 
-    [PRE5]
+    ```py
+       "play_wav_cmdline": "aplay -Dplayback %1",
+       "play_mp3_cmdline": "mpg123 -a playback %1",
+    ```
 
 1.  按*Ctrl* + *X*来保存并退出。当被询问是否保存文件时，输入*Y*表示是。
 
@@ -384,29 +399,50 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  文件以一些导入和一些类定义的顶部开始：
 
-    [PRE6]
+    ```py
+    import subprocess
+    class RobotModes(object):
+    ```
 
 1.  接下来，我们创建一些模式映射，将模式名称映射到文件名：
 
-    [PRE7]
+    ```py
+        mode_config = {
+            "avoid_behavior": "avoid_with_rainbows.py",
+            "circle_head": "circle_pan_tilt_behavior.py",
+            "test_rainbow": "test_rainbow.py"
+        }
+    ```
 
     模式名称是一个简短名称，也称为 *slug*，是可读性和机器可读性之间的折衷方案 – 它们通常仅限于小写和下划线字符，并且比完整的英文描述要短。我们的文件名已经相对接近 slug 名称。
 
 1.  在固定配置之外，这个类还在管理作为进程的运行行为。它一次只能运行一个。因此，我们需要一个成员变量来跟踪当前进程并检查它是否正在运行：
 
-    [PRE8]
+    ```py
+        def __init__(self):
+            self.current_process = None
+    ```
 
 1.  我们应该能够检查是否有东西已经在运行或已完成：
 
-    [PRE9]
+    ```py
+    subprocess is a way of running other processes and apps from within Python. We check whether we have a current process, and if so, whether it is still running. Processes have a return code, usually to say whether they completed or failed. However, if they are still running, it will be None. We can use this to determine that the robot is currently running a process.
+    ```
 
 1.  下一个函数是运行一个进程。函数参数包括一个模式名称。该函数检查进程是否正在运行，如果不是，则启动一个进程：
 
-    [PRE10]
+    ```py
+    self.mode_config to map mode_name to a script name. We then use subprocess to start this script with Python. Popen creates a process, and the code stores a handle for it in self.current_process. This method returns True if we started it, and False if one was already running.
+    ```
 
 1.  该类需要一种方法来请求它停止一个进程。请注意，当进程未运行时，它不会尝试停止进程。当我们停止脚本时，我们可以使用 Unix 信号，这允许我们以允许它们运行 `atexit` 代码的方式请求它们停止。它发送 `SIGINT` 信号，这是 *Ctrl* + *C* 键盘组合的等效信号：
 
-    [PRE11]
+    ```py
+        def stop(self):
+            if self.is_running():
+                self.current_process.send_signal( subprocess.signal.SIGINT)
+                self.current_process = None
+    ```
 
 在我们发出信号后，我们将当前进程设置为 `None` – 丢弃句柄。
 
@@ -422,31 +458,57 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 1.  创建一个名为 `control_server.py` 的脚本。我们可以从导入 Flask 和我们的机器人模式开始：
 
-    [PRE12]
+    ```py
+    from flask import Flask
+    from robot_modes import RobotModes
+    ```
 
 1.  现在，我们创建一个 Flask 应用程序来包含路由和之前创建的 `RobotModes` 类的实例：
 
-    [PRE13]
+    ```py
+    app = Flask(__name__)
+    mode_manager = RobotModes()
+    ```
 
 1.  接下来，我们需要一个路由，或 API 端点，来运行应用程序。它将模式名称作为路由的一部分：
 
-    [PRE14]
+    ```py
+    @app.route("/run/<mode_name>", methods=['POST'])
+    def run(mode_name):
+        mode_manager.run(mode_name)
+        return "%s running"
+    ```
 
     我们返回一个运行确认。
 
 1.  我们还需要另一个 API 端点来停止正在运行的过程：
 
-    [PRE15]
+    ```py
+    @app.route("/stop", methods=['POST'])
+    def stop():
+        mode_manager.stop()
+        return "stopped"
+    ```
 
 1.  最后，我们需要启动服务器：
 
-    [PRE16]
+    ```py
+    http for a web (hypertext) service. This is followed by a colon (:) and then two slashes // with a hostname or host address—the network address of the Raspberry Pi the resource will be on. As a host can have many services running, we can then have a port number, with a colon as a separator—in our case, :5000. After this, you could add a slash / then select a specific resource in the service.We can test this now:
+    ```
 
 1.  启动机器人并复制 `control_server.py` 和 `robot_modes.py` 文件到其中。
 
 1.  通过 SSH 连接到机器人，并使用 `python3 control_server.py` 启动控制服务器。你应该看到以下内容：
 
-    [PRE17]
+    ```py
+    $ python3 control_server.py
+     * Serving Flask app "control_server" (lazy loading)
+     * Environment: production
+       WARNING: Do not use the development server in a production environment.
+       Use a production WSGI server instead.
+     * Debug mode: on
+     * Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
+    ```
 
 1.  现在创建另一个 `ssh` 窗口进入 Mycroft Raspberry Pi – 我们可以测试它是否与另一个窗口通信。在 `pi@picroft.local` 中按一次 *Ctrl* + *C* 以进入 Linux 命令行（`$` 提示符）。
 
@@ -454,7 +516,9 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
     我们打算发送一个 `post` 请求。输入以下命令：
 
-    [PRE18]
+    ```py
+    curl -X POST http://myrobot.local:5000/run/test_rainbow
+    ```
 
     这应该会启动彩虹灯的开关，使用来自[*第9章*](B15660_09_Final_ASB_ePub.xhtml#_idTextAnchor171)，*在Python中编程RGB灯带*的代码。`curl`命令指定我们使用`POST`方法发送请求，然后是一个包含端口号、机器人主机名、指令`run`和模式名称的URL。
 
@@ -504,31 +568,46 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 1.  主要意图文件将是此文件夹中的 `__init__.py` 文件。此文件名意味着 Python 将将整个文件夹视为一个 Python 库，称为 `my-robot-skill/__init__.py`：
 
-    [PRE19]
+    ```py
+    IntentBuilder to build and define intents around vocabulary. MycroftSkill is a base class to plug our code into Mycroft. intent_handler marks which parts of our code are intents, associating the code with IntentBuilder. We import LOG to write information out to the Mycroft console and see problems there.The last import, `requests`, is a tool to talk to our control server in Python remotely.
+    ```
 
 1.  接下来，我们将从 `MycroftSkill` 基类定义我们的技能。它需要设置其父类并准备设置：
 
-    [PRE20]
+    ```py
+    super calls a method from a class we've made our base; in this case, __init__ so we can let it set things up.The only setting we have is a `base_url` member for our control server on the robot. It is consulting a settings file, which we'll see later. It's usually a good idea to separate the configuration from the code.
+    ```
 
 1.  下一步我们需要定义一个意图。我们通过一个 `handle_test_rainbow` 方法来实现，但你需要使用 `@intent_handler` 装饰器。在 Python 中，装饰器会将方法包装在进一步的处理中——在这种情况下，使其适合 Mycroft：
 
-    [PRE21]
+    ```py
+    intent_handler decorator takes some parameters to configure the vocabulary we will use. We will define vocabulary in files later. We require a vocabulary matching *robot* first, then another part matching *TestRainbow* – which could match a few phrases.
+    ```
 
 1.  下一步，这个技能应该使用 `requests.post` 向机器人发送请求：
 
-    [PRE22]
+    ```py
+    base_url variable, plus the run instruction and the test_rainbow mode.
+    ```
 
 1.  我们需要 Mycroft 说出一些话，表明它已经告诉机器人在这里做些什么：
 
-    [PRE23]
+    ```py
+    speak_dialog method tells Mycroft to pick something to say from dialog files, which allows it to have variations on things to say.
+    ```
 
 1.  此请求可能因几个原因而失败，因此在代码片段的最后之前有 `try`。我们需要一个 `except` 来处理这种情况，并为用户说话一个对话框。我们还将 `LOG` 一个异常到 Mycroft 控制台：
 
-    [PRE24]
+    ```py
+    Unable to reach the robot, while not inspecting the result code from the server other than if the voice skill contacted the robot.
+    ```
 
 1.  此文件需要提供一个 `create_skill` 函数，该函数位于类外部，Mycroft 预期在技能文件中找到：
 
-    [PRE25]
+    ```py
+    def create_skill():
+        return MyRobot()
+    ```
 
 代码是这个系统的一部分，但在使用它之前我们需要配置它。
 
@@ -538,7 +617,25 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 如果你的机器人树莓派的域名/地址不同，请使用该域名/地址。此文件对于这个设置来说有点长，但意味着你可以稍后配置 URL：
 
-[PRE26]
+```py
+{
+    "skillMetadata": {
+        "sections": [
+            {
+                "name": "Robot",
+                "fields": [
+                    {
+                        "name": "base_url",
+                        "type": "text",
+                        "label": "Base URL for the robot control server",
+                        "value": "http://myrobot.local:5000"
+                    }
+                ]
+            }
+        ]
+    } 
+}
+```
 
 我们已经设置了要使用的基准 URL，但我们需要配置 Mycroft 以加载我们的技能。
 
@@ -546,7 +643,9 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 我们的技能使用 `requests` 库。当 Mycroft 遇到我们的技能时，我们应该告诉它期待这个。在 Python 中，要求文件是这样做的一种标准方式。将以下内容放入 `my-robot-skill/requirements.txt`：
 
-[PRE27]
+```py
+requests
+```
 
 此文件并非仅限于 Mycroft，它还与许多 Python 系统一起使用，以安装应用程序所需的库。
 
@@ -566,11 +665,18 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 1.  添加一些用于*请求机器人做某事*的短语：
 
-    [PRE28]
+    ```py
+    robot in the intent handler.
+    ```
 
 1.  让我们创建用于测试彩虹的词汇。将其放入`my-robot-skill/vocab/en-us/TestRainbow.voc`：
 
-    [PRE29]
+    ```py
+    test rainbow
+    test the leds
+    deploy rainbows
+    turn on the lights
+    ```
 
     重要提示
 
@@ -586,15 +692,28 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 1.  在该文件夹中创建路径为`my-robot-skill/dialog/en-us/Robot.dialog`的文件。我们可以在其中添加一些短语：
 
-    [PRE30]
+    ```py
+    The Robot
+    Robot
+    ```
 
 1.  下一个对话我们需要的是同一文件夹中的`TestRainbow.dialog`：
 
-    [PRE31]
+    ```py
+    is testing rainbows.
+    is deploying rainbows.
+    is starting rainbows.
+    is lighting up.
+    ```
 
 1.  由于我们有一个错误处理器，我们也应该创建`UnableToReach.dialog`：
 
-    [PRE32]
+    ```py
+    Sorry I cannot reach the robot.
+    The robot is unreachable.
+    Have you turned the robot on?
+    Is the control server running on the robot?
+    ```
 
 通过定义多个可能的对话，Mycroft会随机选择一个，使其不那么重复。我们已经看到了如何制作词汇短语和对话短语。让我们简要回顾一下我们应该有什么。
 
@@ -654,11 +773,19 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 1.  我们需要创建 `stop` 词汇；我们可以将其放在 `my-robot-skill/vocab/en-us/stop.voc` 中：
 
-    [PRE33]
+    ```py
+    stop
+    cease
+    turn off
+    stand down
+    ```
 
 1.  我们需要为 Mycroft 创建一个对话文件，以便在 `my-robot-skill/dialog/en-us/stopping.dialog` 中告诉机器人它正在停止：
 
-    [PRE34]
+    ```py
+    is stopping.
+    will stop.
+    ```
 
 这些就足够了，但如果你想到了更多的同义词，也可以添加。
 
@@ -668,15 +795,30 @@ Mycroft会将这些与你在该地区使用的词汇文件进行匹配，并将�
 
 1.  我们将此放入 `my-robot-skill/__init__.py` 中的 `MyRobot` 类：
 
-    [PRE35]
+    ```py
+    stop vocabulary, the handler name (which could be anything – but must not be the same as another handler), and the URL endpoint. Identical code like that is ripe for refactoring. Refactoring is changing the appearance of code without affecting what it does. This is useful for dealing with common/repeating code sections or improving how readable code is. Both the intents have the same try/catch and similar dialog with some small differences. 
+    ```
 
 1.  在同一文件中，添加以下内容：
 
-    [PRE36]
+    ```py
+    end_point as a parameter and uses that in its request. It takes a dialog_verb parameter to say after the Robot bit. All of the other dialog and error handling we saw before is here. 
+    ```
 
 1.  这两个意图现在变得更为简单。将它们更改为以下内容：
 
-    [PRE37]
+    ```py
+        @intent_handler(IntentBuilder("")
+                        .require("Robot")
+                        .require("TestRainbow"))
+        def handle_test_rainbow(self, message):
+            self.handle_control('/run/test_rainbow', 'TestingRainbow')
+        @intent_handler(IntentBuilder("")
+                        .require("Robot")
+                        .require("stop"))
+        def handle_stop(self, message):
+            self.handle_control('/stop', 'stopping')
+    ```
 
 添加新的意图现在更容易，因为我们能够重用 `handle_control`。
 

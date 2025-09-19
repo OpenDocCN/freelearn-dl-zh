@@ -92,7 +92,12 @@
 
 重新使用上一章中（可在GitHub仓库[https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python](https://github.com/PacktPublishing/Generative-AI-Foundations-in-Python)找到）的先前实现，该实现将RAG应用于回答特定产品相关的问题，我们可以评估模型对超出预期范围的问题的响应。回想一下，RAG只是一个向量搜索引擎与LLM结合，以产生由特定数据源上下文化的连贯且更精确的响应。我们将直接重用该实现和相同的产品数据以简化流程，但这次，我们将输入一个完全不相关的查询而不是询问产品：
 
-[PRE0]
+```py
+# random query
+response = query_engine.query("describe a giraffe")
+print(response) 
+=> A giraffe is a tall mammal with a long neck, distinctive spotted coat, and long legs. They are known for their unique appearance and are the tallest land animals in the world.
+```
 
 如我们所见，该模型没有尝试将其答案限制在搜索索引的内容之内。它基于其庞大的训练数据返回了一个答案。这正是我们想要避免的行为。想象一下，一个恶意行为者诱导模型生成显式内容或某些其他不希望产生的输出。此外，考虑一个复杂的攻击者，可能诱导模型泄露训练数据或在训练过程中意外记住的敏感信息（Carlini等，2018；胡等，2022）。在任何情况下，StyleSprint都可能面临重大的风险和暴露。
 
@@ -108,11 +113,53 @@
 
 让我们看看这个功能是如何实现的。
 
-[PRE1]
+```py
+from llama_index.core import get_response_synthesizer
+from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+# Configure retriever
+retriever = VectorIndexRetriever(index=index,similarity_top_k=1)
+# Configure response synthesizer
+response_synthesizer = get_response_synthesizer(
+    structured_answer_filtering=True,
+    response_mode="refine"
+)
+# Assemble query engine
+safe_query_engine = RetrieverQueryEngine(
+    retriever=retriever,
+    response_synthesizer=response_synthesizer
+)
+# Execute query and evaluate response
+print(safe_query_engine.query("describe a summer dress with price"))
+# => A lightweight summer dress with a vibrant floral print, perfect for sunny days, priced at 59.99.
+print(safe_query_engine.query("describe a horse"))
+# => Empty Response
+```
 
 使用这种方法，模型对标准问题返回了响应，但对不相关的问题没有返回响应。实际上，我们可以进一步将这种过滤与提示模板中的额外指令相结合。例如，如果我们修订`response_synthesizer`，我们可以从LLM促进更严格的响应：
 
-[PRE2]
+```py
+QA_PROMPT_TMPL = (
+    "Context information is below.\n"
+    "---------------------\n"
+    "{context_str}\n"
+    "---------------------\n"
+    "Given only the context information and no prior knowledge, "
+    "answer the query.\n"
+    "Query: {query_str}\n"
+    "Answer: "
+    "Otherwise, state: I cannot answer."
+)
+STRICT_QA_PROMPT = PromptTemplate(
+    QA_PROMPT_TMPL, prompt_type=PromptType.QUESTION_ANSWER
+)
+# Configure response synthesizer
+response_synthesizer = get_response_synthesizer(
+    structured_answer_filtering=True,
+    response_mode="refine",
+    text_qa_template=STRICT_QA_PROMPT
+)
+```
 
 这次，模型明确地响应了，“我无法回答”。使用提示模板，StyleSprint可以返回它认为适当的消息，以响应与搜索索引无关的输入，并且作为副作用，忽略不符合其政策的查询。虽然这并不是一个完美的解决方案，但将RAG与更严格的答案过滤相结合可以帮助阻止或防御有害指令或对抗性提示。此外，如第7章[*](B21773_07.xhtml#_idTextAnchor225)所探讨的，我们可以应用RAG特定的评估技术，如RAGAS，以衡量事实一致性和答案的相关性。
 

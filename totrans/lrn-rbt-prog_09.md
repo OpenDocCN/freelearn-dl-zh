@@ -40,11 +40,20 @@
 
 我们使用树莓派上的Git从GitHub上的一个项目下载此代码。因此，我们需要在Pi上安装Git；我们还需要I2C（`i2c-tools`和`python3-smbus`）和`pip`来将东西安装到Python中。输入以下命令：
 
-[PRE0]
+```py
+pi@myrobot:~ $ sudo apt-get install -y git python3-pip python3-smbus i2c-tools
+```
 
 为了获取电机板库`Raspi_MotorHAT`，我们使用Git从GitHub下载它，并使用以下命令将其安装以供任何脚本使用：
 
-[PRE1]
+```py
+pi@myrobot:~ $ pip3 install git+https://github.com/orionrobots/Raspi_MotorHAT
+Collecting git+https://github.com/orionrobots/Raspi_MotorHAT
+  Cloning https://github.com/orionrobots/Raspi_MotorHAT to /tmp/pip-c3sFoy-build
+Installing collected packages: Raspi-MotorHAT
+  Running setup.py install for Raspi-MotorHAT ... done
+Successfully installed Raspi-MotorHAT-0.0.2
+```
 
 现在我们已经准备好了启动机器人的库。`Raspi_MotorHAT`库的文档很少，但可以在[https://github.com/orionrobots/Raspi_MotorHAT](https://github.com/orionrobots/Raspi_MotorHAT)找到，以及使用它的示例。
 
@@ -52,7 +61,9 @@
 
 树莓派使用I2C连接到这个电机板。`raspi-config`再次。我们在这里还启用了**串行外设接口**（**SPI**）。我们可能需要它来连接其他板和传感器。输入以下命令：
 
-[PRE2]
+```py
+$ sudo raspi-config
+```
 
 现在，我们使用此处的接口设置。*图7.1*显示了如何进行，如下所示：
 
@@ -80,7 +91,18 @@
 
 我们应该检查树莓派是否可以通过以下代码使用`sudo i2cdetect -y 1`看到电机HAT：
 
-[PRE3]
+```py
+pi@myrobot:~ $ sudo i2cdetect -y 1
+     0 1 2 3 4 5 6 7 8 9 a b c d e f
+00: -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 6f
+70: 70 -- -- -- -- -- -- --
+```
 
 这扫描I2C总线`1`上连接到我们的树莓派的设备。如果找到，会在地址上显示数字。地址`6f`和`70`上的设备是我们的电机控制器。如果您看不到这个，请关闭树莓派的电源，并仔细检查电机HAT是否已正确插入，然后再次尝试。
 
@@ -94,7 +116,23 @@
 
 1.  创建以下文件，命名为`test_motors.py`：
 
-    [PRE4]
+    ```py
+    from Raspi_MotorHAT import Raspi_MotorHAT
+    import time
+    import atexit
+    mh = Raspi_MotorHAT(addr=0x6f)
+    lm = mh.getMotor(1)
+    rm = mh.getMotor(2)
+    def turn_off_motors():
+      lm.run(Raspi_MotorHAT.RELEASE)
+      rm.run(Raspi_MotorHAT.RELEASE)
+    atexit.register(turn_off_motors)
+    lm.setSpeed(150)
+    rm.setSpeed(150)
+    lm.run(Raspi_MotorHAT.FORWARD)
+    rm.run(Raspi_MotorHAT.FORWARD)
+    time.sleep(1)
+    ```
 
 1.  使用在[*第5章*](B15660_05_Final_ASB_ePub.xhtml#_idTextAnchor081)中找到的方法将此文件上传到您的树莓派，*使用Git和SD卡副本备份代码*。
 
@@ -104,7 +142,9 @@
 
 1.  要运行此代码，通过Pi上的PuTTY，键入以下内容：
 
-    [PRE5]
+    ```py
+    pi@myrobot:~ $ python3 test_motors.py
+    ```
 
 您的机器人现在应该大致向前行驶。它可能稍微向一侧移动，但它不应该转弯或后退，并且两个电机都应该在移动。
 
@@ -122,13 +162,21 @@
 
 这里代码的前几行是导入：
 
-[PRE6]
+```py
+from Raspi_MotorHAT import Raspi_MotorHAT
+import time
+import atexit
+```
 
 导入是Python代码如何*拉入*其他代码库以供使用的方式。`Raspi_MotorHAT`库是我们为了与电机交互而安装的库。`time`库允许我们处理时间；在这种情况下，我们用它来在启动和停止电机之间设置延迟。`atexit`库允许我们在文件退出时运行代码。
 
 在以下几行中，我们将库连接到电机帽和我们所连接的两个电机：
 
-[PRE7]
+```py
+mh = Raspi_MotorHAT(addr=0x6f)
+lm = mh.getMotor(1)
+rm = mh.getMotor(2)
+```
 
 这里的第一行创建了一个带有I2C地址`0x6f`的`Raspi_MotorHAT`对象，这个地址我们在扫描中看到了。我们将返回的对象称为`mh`，作为连接的`Raspi_MotorHAT`的简称。
 
@@ -136,17 +184,29 @@
 
 我们现在定义一个函数，`turn_off_motors`，它在这个板上的每个电机上运行`Raspi_MotorHAT.RELEASE`——这是一个使电机停止的指令，如下面的代码片段所示：
 
-[PRE8]
+```py
+def turn_off_motors():
+  lm.run(Raspi_MotorHAT.RELEASE)
+  rm.run(Raspi_MotorHAT.RELEASE)
+atexit.register(turn_off_motors)
+```
 
 我们将这个传递给`atexit.register(turn_off_motors)`，这是一个在文件结束时运行（当Python退出时）的命令。`atexit`即使在出现错误时也会运行。如果没有这个，代码可能会以一种有趣的方式崩溃，机器人会继续驱动。没有这种保护的机器人有从桌子上开走并撞到墙的习惯。如果它们在电机卡住时继续尝试驱动，可能会损坏电机、电机控制器和电池，所以最好是停止。
 
 这个控制器/库的电机速度范围从`0`到`255`。我们的代码将每个电机的速度设置为略高于一半的速度，然后运行`Raspi_MotorHAT.FORWARD`模式，这使得每个电机向前驱动，如下面的代码片段所示：
 
-[PRE9]
+```py
+lm.setSpeed(150)
+rm.setSpeed(150)
+lm.run(Raspi_MotorHAT.FORWARD)
+rm.run(Raspi_MotorHAT.FORWARD)
+```
 
 最后，我们让代码等待1秒钟，如下所示：
 
-[PRE10]
+```py
+time.sleep(1)
+```
 
 `sleep`允许电机以正向驱动模式运行1秒钟。然后程序退出。由于我们告诉它在代码退出时停止电机，所以电机停止。
 
@@ -248,17 +308,26 @@
 
 1.  在 `test_motors.py` 文件中找到以下行：
 
-    [PRE11]
+    ```py
+    lm.run(Raspi_MotorHAT.FORWARD)
+    rm.run(Raspi_MotorHAT.FORWARD)
+    ```
 
 1.  按照以下方式修改，以便一个电机向`BACKWARD`方向行驶：
 
-    [PRE12]
+    ```py
+    lm.run(Raspi_MotorHAT.FORWARD)
+    rm.run(Raspi_MotorHAT.BACKWARD)
+    ```
 
 1.  使用`python3 turn_motors.py`在Pi上运行此代码，现在你的机器人会向右旋转。交换它们，使左（`lm`）为`BACKWARD`，右（`rm`）为`FORWARD`，它会向相反方向旋转。
 
 1.  关于不那么剧烈的转向，在前面的代码中，在方向行之前，我们也设置了每个电机的速度，如下所示：
 
-    [PRE13]
+    ```py
+    lm and rm modes to FORWARD, and then making one of the speeds smaller than the other, like this:
+
+    ```
 
     lm.setSpeed(100)
 
@@ -268,7 +337,10 @@
 
     rm.run(Raspi_MotorHAT.FORWARD)
 
-    [PRE14]
+    ```py
+
+    This code makes the robot drive forward and turn gently to the left.
+    ```
 
 你现在已经看到了几种控制机器人的方法。基于我们机器人的设计，你已经将其中之一付诸实践，使机器人原地旋转，并且也能向前行驶和转向。在下一节中，我们将将其转化为不同行为可以使用机器人的层。
 
@@ -322,7 +394,22 @@
 
 我们将其放入一个名为 `robot.py` 的文件中，如下所示：
 
-[PRE15]
+```py
+from Raspi_MotorHAT import Raspi_MotorHAT
+import atexit
+class Robot:
+    def __init__(self, motorhat_addr=0x6f):
+        # Setup the motorhat with the passed in address
+        self._mh = Raspi_MotorHAT(addr=motorhat_addr)
+        # get local variable for each motor
+        self.left_motor = self._mh.getMotor(1)
+        self.right_motor  = self._mh.getMotor(2)
+        # ensure the motors get stopped when the code exits
+        atexit.register(self.stop_motors)
+    def stop_motors(self):
+        self.left_motor.run(Raspi_MotorHAT.RELEASE)
+        self.right_motor.run(Raspi_MotorHAT.RELEASE)
+```
 
 这个 `class` 有一个 `__init__` 方法，这是一个特殊的方法，用于设置这一层。`__init__` 方法将 `Raspi_MotorHat` 库中 `getMotor` 方法的输出存储在 `left_motor` 和 `right_motor` 成员中。此方法还注册了一个停止系统。我添加了一些注释来说明代码片段的功能。
 
@@ -330,13 +417,37 @@
 
 我们可以在另一个名为 `behavior_line.py` 的文件中测试这一点，如下代码片段所示：
 
-[PRE16]
+```py
+import robot
+from Raspi_MotorHAT import Raspi_MotorHAT
+from time import sleep
+r = robot.Robot()
+r.left_motor.setSpeed(150)
+r.right_motor.setSpeed(150)
+r.left_motor.run(Raspi_MotorHAT.FORWARD)
+r.right_motor.run(Raspi_MotorHAT.FORWARD)
+sleep(1)
+```
 
 这首先通过导入我们刚刚创建的 `robot.py` 文件开始。它向前移动 1 秒然后停止。使用 `python3 behavior_line.py` 运行。
 
 我们仍然必须设置特定于该板的特定速度（不是 100）。让我们在 `robot.py` 中修复这个问题（新代码用粗体表示），如下所示：
 
-[PRE17]
+```py
+from Raspi_MotorHAT import Raspi_MotorHAT
+import atexit
+class Robot(object):
+    def __init__(self, motorhat_addr=0x6f):
+        self._mh = Raspi_MotorHAT(addr=motorhat_addr)
+        self.left_motor = self._mh.getMotor(1)
+        self.right_motor  = self._mh.getMotor(2)
+        atexit.register(self.stop_motors)
+    def convert_speed(self, speed):
+        return (speed * 255) // 100
+    def stop_motors(self):
+        self.left_motor.run(Raspi_MotorHAT.RELEASE)
+        self.right_motor.run(Raspi_MotorHAT.RELEASE)
+```
 
 我们现在可以使用 `convert_speed` 来使用 0 到 100 的速度。这对于这个 Motor HAT 返回 0 到 255 的速度。对于其他电机板，它返回其他值。
 
@@ -344,7 +455,17 @@
 
 尽管如此，这段代码仍然难以处理——要使用它，我们需要在`behavior_line.py`中包含以下内容：
 
-[PRE18]
+```py
+import robot
+from Raspi_MotorHAT import Raspi_MotorHAT
+from time import sleep
+r = robot.Robot()
+r.left_motor.setSpeed(r.convert_speed(80))
+r.right_motor.setSpeed(r.convert_speed(80))
+r.left_motor.run(Raspi_MotorHAT.FORWARD)
+r.right_motor.run(Raspi_MotorHAT.FORWARD)
+sleep(1)
+```
 
 这仍然使用了`Raspi_MotorHAT`库的`run`和`setSpeed`方法，这些方法仅适用于这块控制板。其他板子的工作方式不同。我们还可以稍微简化一下繁琐的转换。
 
@@ -360,7 +481,18 @@
 
 我们可以使用简单的`if`语句来获取正确的`mode`。让我们将类中的`convert_speed`方法替换为返回模式和正值。我已经使用注释来显示这个函数的两个部分。在`robot.py`中修改如下：
 
-[PRE19]
+```py
+def convert_speed(self, speed):
+        # Choose the running mode
+        mode = Raspi_MotorHAT.RELEASE
+        if speed > 0:
+            mode = Raspi_MotorHAT.FORWARD
+        elif speed < 0:
+            mode = Raspi_MotorHAT.BACKWARD
+        # Scale the speed
+        output_speed = (abs(speed) * 255) // 100
+        return mode, int(output_speed)
+```
 
 我们在速度计算中添加了一个额外的操作：`abs(speed)`。这个操作返回绝对值，从数字中移除了符号。例如，-80和80都会得到80，这意味着该方法始终有一个正输出。
 
@@ -368,17 +500,67 @@
 
 然后我们需要更改我们的电机移动方法，以使用这种速度转换，如下所示：
 
-[PRE20]
+```py
+    def set_left(self, speed):
+        mode, output_speed = self.convert_speed(speed)
+        self.left_motor.setSpeed(output_speed)
+        self.left_motor.run(mode)
+    def set_right(self, speed):
+        mode, output_speed = self.convert_speed(speed)
+        self.right_motor.setSpeed(output_speed)
+        self.right_motor.run(mode)
+```
 
 因此，对于每个电机，我们从传入的速度中获取模式和输出速度，然后调用`setSpeed`和`run`。
 
 现在的整个`robot.py`应该看起来如下：
 
-[PRE21]
+```py
+from Raspi_MotorHAT import Raspi_MotorHAT
+import atexit
+class Robot:
+    def __init__(self, motorhat_addr=0x6f):
+        # Setup the motorhat with the passed in address
+        self._mh = Raspi_MotorHAT(addr=motorhat_addr)
+        # get local variable for each motor
+        self.left_motor = self._mh.getMotor(1)
+        self.right_motor = self._mh.getMotor(2)
+        # ensure the motors get stopped when the code exits
+        atexit.register(self.stop_motors)
+    def convert_speed(self, speed):
+        # Choose the running mode
+        mode = Raspi_MotorHAT.RELEASE
+        if speed > 0:
+            mode = Raspi_MotorHAT.FORWARD
+        elif speed < 0:
+            mode = Raspi_MotorHAT.BACKWARD
+        # Scale the speed
+        output_speed = (abs(speed) * 255) // 100
+        return mode, int(output_speed)
+    def set_left(self, speed):
+        mode, output_speed = self.convert_speed(speed)
+        self.left_motor.setSpeed(output_speed)
+        self.left_motor.run(mode)
+    def set_right(self, speed):
+        mode, output_speed = self.convert_speed(speed)
+        self.right_motor.setSpeed(output_speed)
+        self.right_motor.run(mode)
+
+    def stop_motors(self):
+        self.left_motor.run(Raspi_MotorHAT.RELEASE)
+        self.right_motor.run(Raspi_MotorHAT.RELEASE)
+```
 
 我们在`behavior_line.py`中的简单行为现在只有几行，如下面的代码片段所示：
 
-[PRE22]
+```py
+import robot
+from time import sleep
+r = robot.Robot()
+r.set_left(80)
+r.set_right(80)
+sleep(1)
+```
 
 这种简化意味着我们可以在此基础上构建更多行为。我有一个通用接口，以及为我的其他机器人创建的`Robot`对象版本。一个令人兴奋的结果是，我可以在ArmBot（见[*第1章*](B15660_01_Final_ASB_ePub.xhtml#_idTextAnchor019)，*机器人简介*)或我的其他Raspberry Pi机器人上运行这个`behavior_lines.py`代码。它们都以80%的电机速度向前行驶1秒。
 
@@ -398,27 +580,73 @@
 
 让我们编写这段代码。首先，我们需要导入 `sleep` 和 `robot`。但在我们做任何事情之前，让我们为这种行为创建一些辅助函数。我把我的文件命名为 `behavior_path.py`，代码如下所示：
 
-[PRE23]
+```py
+import robot
+from time import sleep
+def straight(bot, seconds):
+    bot.set_left(80)
+    bot.set_right(80)
+    sleep(seconds)
+def turn_left(bot, seconds):
+    bot.set_left(20)
+    bot.set_right(80)
+    sleep(seconds)
+def turn_right(bot, seconds):
+    bot.set_left(80)
+    bot.set_right(20)
+    sleep(seconds)
+def spin_left(bot, seconds):
+    bot.set_left(-80)
+    bot.set_right(80)
+    sleep(seconds)
+```
 
 辅助器使用我们用来描述行为的相同语言。我们有 `straight`、`turn_left`、`turn_right` 和 `spin_left`。这些不是在 `Robot` 对象中，因为其他行为可能需要比这更连续的行为。我现在把 `Robot` 对象称为 `bot`，因为当代码量增加时，像 `r` 这样的单字母变量名变得不那么容易找到、阅读或推理。
 
 这些辅助器分别设置电机速度，然后睡眠一定数量的秒数。然后我们可以创建 `Robot` 对象，并通过向 `behavior_path.py` 添加以下代码来对它们进行排序：
 
-[PRE24]
+```py
+bot = robot.Robot()
+straight(bot, 1)
+turn_right(bot, 1)
+straight(bot, 1)
+turn_left(bot, 1)
+straight(bot, 1)
+turn_left(bot, 1)
+straight(bot, 1)
+spin_left(bot, 1)
+```
 
 现在，我们可以将其上传到 Raspberry Pi，并通过 PuTTY 运行，如下所示：
 
-[PRE25]
+```py
+$ python3 behavior_path.py
+```
 
 现在，如果你的机器人像我的一样，你看到它行驶并转弯，但转弯以某种方式超出了范围，机器人可能向一侧偏航。我们可以通过减少转弯步骤中的时间来解决这个问题，如下所示：
 
-[PRE26]
+```py
+bot = robot.Robot()
+straight(bot, 1)
+turn_right(bot, 0.6)
+straight(bot, 1)
+turn_left(bot, 0.6)
+straight(bot, 1)
+turn_left(bot, 0.6)
+straight(bot, 1)
+spin_left(bot, 1)
+```
 
 你需要调整这些值以接近 90 度的转弯。这种调整需要耐心：更改它们并上传。在代码中调整值是一种粗略的校准形式，以匹配我们机器人的特性。如果你在表面之间移动（例如，从木地板到地毯），那么时间将发生变化。
 
 你可能能够通过调整一个电机在 `straight` 函数中的速度（根据你自己的机器人偏航进行调整）来解释一些偏航，如下所示：
 
-[PRE27]
+```py
+def straight(bot, seconds):
+    bot.set_left(80)
+    bot.set_right(70)
+    sleep(seconds)
+```
 
 这段代码可以维持一段时间，但可能难以微调。为什么我们会得到这种偏航？
 

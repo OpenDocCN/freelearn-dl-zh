@@ -88,11 +88,16 @@
 
 代码块设置如下：
 
-[PRE0]
+```py
+if indices is None:
+            indices = np.arange(self.batch_size)
+```
 
 任何命令行输入或输出都如下所示：
 
-[PRE1]
+```py
+$ conda create -n deep_ne python=3.5
+```
 
 **粗体**：表示新术语、重要单词或您在屏幕上看到的单词。例如，菜单或对话框中的单词在文本中如下所示。以下是一个示例：“从管理面板中选择系统信息。”
 

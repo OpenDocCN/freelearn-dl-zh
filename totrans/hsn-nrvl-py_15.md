@@ -38,7 +38,20 @@
 
 你可以使用 Scikit-learn Python 库对你的输入数据样本应用标准缩放。以下源代码是这一点的示例：
 
-[PRE0]
+```py
+>>> from sklearn.preprocessing import StandardScaler
+>>> data = [[0, 0], [0, 0], [1, 1], [1, 1]]
+>>> scaler = StandardScaler()
+>>> print(scaler.fit(data))
+StandardScaler(copy=True, with_mean=True, with_std=True)
+>>> print(scaler.mean_)
+[0.5 0.5]
+>>> print(scaler.transform(data))
+[[-1\. -1.]
+ [-1\. -1.]
+ [ 1\. 1.]
+ [ 1\. 1.]]
+```
 
 在代码中，我们首先创建输入数据样本。之后，使用 `StandardScaler` 对输入样本进行居中和缩放。数据转换的结果显示在代码的最后几行。
 
@@ -48,7 +61,19 @@
 
 将输入缩放到适应特定范围是数据预处理的另一种方法。这种方法是标准化的替代方案。范围缩放产生位于最小值和最大值之间给定范围内的数据样本。通常，这种方法用于将输入数据缩放到零和一之间的范围。你可以使用 Scikit-learn Python 库中的 `MinMaxScaler` 来缩放数据，如下例所示：
 
-[PRE1]
+```py
+>>> import sklearn.preprocessing
+>>> X_train = np.array([[ 1., -1., 2.],
+... [ 2., 0., 0.],
+... [ 0., 1., -1.]])
+...
+>>> min_max_scaler = preprocessing.MinMaxScaler()
+>>> X_train_minmax = min_max_scaler.fit_transform(X_train)
+>>> X_train_minmax
+array([[0.5 , 0\. , 1\. ],
+       [1\. , 0.5 , 0.33333333],
+       [0\. , 1\. , 0\. ]])
+```
 
 代码从创建一个样本数据集开始，并使用 `MinMaxScaler` 类对其进行转换。在最终输出中，你可以看到范围缩放转换的结果。
 
@@ -62,7 +87,17 @@
 
 统计学中有不同类型的归一化。我们已提到两种方法：数据标准化和数据范围缩放。此外，Scikit-learn 提供了一个专门的转换器来执行数据归一化，它将单个样本缩放到所谓的单位范数。以下代码演示了如何使用它：
 
-[PRE2]
+```py
+>>> import sklearn.preprocessing
+>>> X = [[ 1., -1., 2.],
+... [ 2., 0., 0.],
+... [ 0., 1., -1.]]
+>>> X_normalized = preprocessing.normalize(X, norm='l2')
+>>> X_normalized 
+array([[ 0.40..., -0.40..., 0.81...],
+       [ 1\. ..., 0\. ..., 0\. ...],
+       [ 0\. ..., 0.70..., -0.70...]])
+```
 
 代码创建测试数据样本，并使用`l2`范数对其进行归一化，然后输出结果。
 
@@ -274,11 +309,16 @@ FP代表假正例，FN代表假负例。
 
 在每个实验中始终为你的实验创建一个新的虚拟Python环境。之后，如果依赖项出现问题，你将能够通过一条命令清理一切并从头开始。可以使用以下方式使用Anaconda Distribution创建新的Python环境：
 
-[PRE3]
+```py
+$ conda create --name <name>
+$ conda activate <name>
+```
 
 在创建新环境时，始终指定你计划在其中使用的确切Python版本。提供确切版本将帮助你避免由不兼容性引起的大量意外。可以按以下方式为新环境定义Python版本：
 
-[PRE4]
+```py
+$ conda create --name <name> python=3.5
+```
 
 如果你需要在项目中使用新的依赖项，首先检查Anaconda Cloud中是否存在适当的安装包。通过使用Anaconda Cloud中的库，你可以避免间接依赖安装的问题。此外，一些框架，如TensorFlow，需要安装额外的系统驱动程序和头文件。这项任务可能非常繁琐，并需要额外的专业知识。
 

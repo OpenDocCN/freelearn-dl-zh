@@ -171,11 +171,15 @@ YOLOv8通过结合两个神经网络采取不同的方法——一个检测它�
 
 YOLOv8在一系列物体类别（大约80个）上进行了预训练，但我们仍然可以检查它是否已经能够检测我们想要检测的玩具。让我们测试YOLOv8检测我们玩具的能力。我们可以在PC上使用以下简单命令安装YOLOv8：
 
-[PRE0]
+```py
+pip install ultralytics
+```
 
 现在，为了测试我们在游戏室玩具照片上的检测，我们将使用YOLOv8检测模型中最小（就模型大小而言）的模型——`yolov8n.pt`）。这是Ultralytics与YOLOv8一起提供的预训练神经网络：
 
-[PRE1]
+```py
+yolo task=detect mode=predict model=yolov8n.pt source="test.png"
+```
 
 如以下图所示，现成的YOLOv8目标模型仅检测到一个颠倒的火柴盒车，并将其错误地标记为滑板：
 
@@ -239,19 +243,42 @@ YOLOv8在一系列物体类别（大约80个）上进行了预训练，但我们
 
 要从RoboFlow下载我们的数据集，我们必须在计算机上安装RoboFlow的界面。它是一个Python包：
 
-[PRE2]
+```py
+pip install roboflow
+```
 
 然后，我们必须创建一个名为`downloadDataset.py`的简短Python程序。当你构建你的数据集时，RoboFlow将提供一个唯一的`api_key`值；这将是授权访问你账户的密码。它如下所示，我在这里放置了星号：
 
-[PRE3]
+```py
+from roboflow import Roboflow
+rf = Roboflow(api_key="*****************")
+project = rf.workspace("toys").project("toydetector")
+dataset = project.version(1).download("yolov8")
+```
 
 在下一节中，我们将使用以下命令重新训练网络：
 
-[PRE4]
+```py
+yolo task=detect mode=train model=yolov8n.pt data=datasets/data.yaml epochs=100 imgsz=640
+```
 
 一旦我们完成这些，程序将产生大量的输出，如下所示：
 
-[PRE5]
+```py
+(p310) E:\BOOK\YOLO>yolo task=detect mode = val model=runs\detect\train3\weights\best.pt data=ToyDetector-1\data.yaml
+Ultralytics YOLOv8.0.78 Python-3.10.10 torch-2.0.0 CUDA:0 (NVIDIA GeForce RTX 2070, 8192MiB)
+Model summary (fused): 168 layers, 3005843 parameters, 0 gradients, 8.1 GFLOPs
+..................
+AMP: checks passed
+optimizer: SGD(lr=0.01) with parameter groups 57 weight(decay=0.0), 64 weight(decay=0.0005), 63 bias
+train: Scanning E:\BOOK\YOLO\datasets\ToyDetector-1\train\labels.cache… 99 images, 0 backgrounds, 0 corrupt: 100%|███
+val: Scanning E:\BOOK\YOLO\datasets\ToyDetector-1\valid\labels.cache… 9 images, 0 backgrounds, 0 corrupt: 100%|██████
+Plotting labels to runs\detect\train5\labels.jpg…
+Image sizes 640 train, 640 val
+Using 8 dataloader workers
+Logging results to runs\detect\train5
+Starting training for 100 epochs…
+```
 
 训练我们模型的一个关键部分是**训练优化器**。我们将使用**随机梯度下降（SGD**）来完成这项工作。SGD是那些有华丽名字的简单概念之一。随机只是意味着*随机*。我们想要做的是调整神经元的权重，以给出比第一次更好的答案——这就是我们通过调整权重来训练的内容。我们想要改变权重的一小部分——但朝哪个方向？我们想要改变权重的方向，以改善答案——它使预测更接近我们想要的样子。
 
@@ -285,11 +312,16 @@ YOLOv8在一系列物体类别（大约80个）上进行了预训练，但我们
 
 我们可以使用以下命令来测试我们的结果：
 
-[PRE6]
+```py
+yolo task=detect mode=predict model=last.pt source=toy1.jpg imgsz=640
+```
 
 程序产生了以下输出。我们可以在 `./runs/detect/predict` 目录中找到带有标记检测的图像，目录中附加的数字取决于我们运行检测的次数：
 
-[PRE7]
+```py
+Speed: 4.0ms preprocess, 44.7ms inference, 82.6ms postprocess per image at shape (1, 3, 640, 640)
+Results saved to runs\detect\predict4
+```
 
 我们预测的结果显示在下面的图中：
 
@@ -299,7 +331,17 @@ YOLOv8在一系列物体类别（大约80个）上进行了预训练，但我们
 
 通过这种方式，我们已成功使用神经网络创建了一个玩具检测器。检测器的输出，我们将在 [*第 5 章*](B19846_05.xhtml#_idTextAnchor159) 中使用它来指导机器人和机械臂驶向玩具并抓取它，看起来是这样的：
 
-[PRE8]
+```py
+"predictions": [
+ {
+ "x": 287.5,
+ "y": 722.5,
+ "width": 207,
+ "height": 131,
+ "confidence": 0.602,
+ "class": "toy"
+ },
+```
 
 对于每个检测，神经网络将提供一些信息。我们得到边界框中心的 `x` 和 `y` 位置，然后是那个框的高度和宽度。然后，我们得到一个置信度数字，表示网络对这个决策是检测的确定性。最后，我们得到物体的类别（是什么类型的物体），当然是一个玩具。
 
@@ -325,7 +367,9 @@ YOLOv8在一系列物体类别（大约80个）上进行了预训练，但我们
 
 在这种情况下，置信度为 0.21 时，检测率为 0.87。这意味着我们得到了最佳的真实检测与误检测的比率。然而，这个最佳比率 – 87% – 发生在 0.21 的置信度 – 这是一个相当低的数字。在这个低置信度水平上的检测很难区分，可能是由于测量中的噪声引起的。可能更希望我们的峰值出现在更高的置信度水平。我尝试了几个方法来解决这个问题。我运行了 200 个 epoch 而不是 100，并将峰值 F1 置信度水平移动到 51%，但检测水平略有下降到 85%。然后，我将梯度下降技术从 SDM 更改为 **Adam**，这是一种自适应梯度下降技术，当接近我们的目标时，它会降低学习率。这可以通过以下代码实现：
 
-[PRE9]
+```py
+yolo task=detect mode=train model=yolov8n.pt data=datasets/data.yaml epochs=100 optimizer='adamW' imgsz=640
+```
 
 这产生了 88% 的真实检测率在 49% 置信度下的更令人满意的结果，我认为这将更好地为我们的小玩具检测器工作。在回顾我的检测时，有几个误报（家具和其他被检测为玩具的物体），所以我认为这个版本将是我们的玩具检测器神经网络。尽管我使用了一个相当小的数据集，但拥有更多不同角度的图片来工作也不会有害。在结束这一章之前，让我们简要总结一下到目前为止我们已经学到的内容。
 

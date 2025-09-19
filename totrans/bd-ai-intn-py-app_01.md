@@ -128,7 +128,9 @@ MongoDB将你的数据嵌入与数据本身一起存储。将嵌入存储在一�
 
 当被要求列出GenAI应用最重要的功能时，ChatGPT——可以说是目前最流行的GenAI应用，提出了以下观点：
 
-[PRE0]
+```py
+Content Creation: Generative AI can craft text, images, music, and even videos. It can pen articles, generate realistic images from textual descriptions, compose music, and create video content, opening endless possibilities for creative industries.
+```
 
 该响应生成耗时1.5秒，大多数人都会同意这一点。GenAI应用可以以闪电般的速度为你和你的用户创建内容。无论是文本、视频、图像、艺术品，甚至是Java代码，GenAI都能够轻松起草基础内容，然后由专业人士进行编辑。
 

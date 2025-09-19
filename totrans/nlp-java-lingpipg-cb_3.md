@@ -44,15 +44,27 @@
 
 1.  在命令行中输入以下内容：
 
-    [PRE0]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.OverfittingClassifier
+
+    ```
 
 1.  常见的贫血提示出现，伴随着一些用户输入：
 
-    [PRE1]
+    ```py
+    Training
+    Type a string to be classified. Empty string to quit.
+    When all else fails #Disney
+    Category is: e
+    ```
 
 1.  它正确地识别出语言为`e`或英语。然而，其他所有事情都将失败。接下来，我们将使用以下代码：
 
-    [PRE2]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    When all else fails #Disne
+    Category is: n
+    ```
 
     我们刚刚在`#Disney`上省略了最后的`y`，结果我们得到了一个很大的混淆分类器。发生了什么？
 
@@ -64,15 +76,43 @@
 
 从`main()`方法开始，我们将进入您从[第1章](part0014_split_000.html#page "第1章。简单分类器")中熟悉的常规代码编写：
 
-[PRE3]
+```py
+String dataPath = args.length > 0 ? args[0] : "data/disney_e_n.csv";
+List<String[]> annotatedData = Util.readAnnotatedCsvRemoveHeader(new File(dataPath));
+
+OverfittingClassifier classifier = new OverfittingClassifier();
+System.out.println("Training");
+for (String[] row: annotatedData) {
+  String truth = row[Util.ANNOTATION_OFFSET];
+  String text = row[Util.TEXT_OFFSET];
+  classifier.handle(text,new Classification(truth));
+}
+Util.consoleInputBestCategory(classifier);
+```
 
 这里没有发生任何新颖的事情——我们只是在训练一个分类器，正如[第1章](part0014_split_000.html#page "第1章。简单分类器")中所示，*简单分类器*，然后将分类器提供给`Util.consoleInputBestCategory()`方法。查看类代码可以揭示发生了什么：
 
-[PRE4]
+```py
+public class OverfittingClassifier implements BaseClassifier<CharSequence> {
+
+  Map<String,Classification> mMap 
+         = new HashMap<String,Classification>();  
+
+   public void handle(String text, Classification classification) {mMap.put(text, classification);
+  }
+```
 
 因此，`handle()`方法接受`text`和`classification`对，并将它们放入`HashMap`中。分类器不会从数据中学习其他任何事情，因此训练相当于数据的记忆：
 
-[PRE5]
+```py
+@Override
+public Classification classify(CharSequence text) {
+  if (mMap.containsKey(text)) {
+    return mMap.get(text);
+  }
+  return new Classification("n");
+}
+```
 
 `classify()`方法只是在`Map`中进行查找，如果存在则返回值，否则，我们将得到类别`n`作为返回分类。
 
@@ -106,15 +146,23 @@
 
 1.  以下代码的异常与[第1章](part0014_split_000.html#page "第1章。简单分类器")中“训练自己的语言模型分类器”食谱中找到的相同，*简单分类器*。`DynamicLMClassifier`类提供了一个用于创建分词语言模型分类器的静态方法。需要一些设置。`maxTokenNgram`变量设置了分类器中使用的最大标记序列大小——较小的数据集通常从低阶（标记数量）ngram中受益。接下来，我们将设置一个`tokenizerFactory`方法，选择来自[第2章](part0027_split_000.html#page "第2章。查找和使用单词")的“查找和使用单词”中的工作马分类器。最后，我们将指定分类器使用的类别：
 
-    [PRE6]
+    ```py
+    int maxTokenNGram = 2;
+    TokenizerFactory tokenizerFactory = IndoEuropeanTokenizerFactory.INSTANCE;
+    String[] categories = Util.getCategories(annotatedData);
+    ```
 
 1.  接下来，构建分类器：
 
-    [PRE7]
+    ```py
+    DynamicLMClassifier<TokenizedLM> classifier = DynamicLMClassifier.createTokenized(categories,tokenizerFactory,maxTokenNGram);
+    ```
 
 1.  通过命令行或您的IDE运行代码：
 
-    [PRE8]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.TrainAndRunTokenizedLMClassifier
+    ```
 
 ## 还有更多...
 
@@ -142,19 +190,28 @@
 
 让我们列出基本公式来计算给定文本输入的类别概率。基于标记的朴素贝叶斯分类器计算联合标记计数和类别概率如下：
 
-[PRE9]
+```py
+p(tokens,cat) = p(tokens|cat) * p(cat)
+```
 
 1.  条件概率是通过应用贝叶斯定理来反转概率计算得到的：
 
-    [PRE10]
+    ```py
+    p(cat|tokens) = p(tokens,cat) / p(tokens)
+                   = p(tokens|cat) * p(cat) / p(tokens)
+    ```
 
 1.  现在，我们将扩展所有这些术语。如果我们看`p(tokens|cat)`，这就是朴素假设发挥作用的地方。我们假设每个标记是独立的，因此所有标记的概率是每个标记概率的乘积：
 
-    [PRE11]
+    ```py
+    p(tokens|cat) = p(tokens[0]|cat) * p(tokens[1]|cat) * . . . * p(tokens[n]|cat)
+    ```
 
     标记本身的概率，即`p(tokens)`，是前面方程中的分母。这仅仅是它们在每个类别中的概率之和，并按该类别的概率本身进行加权：
 
-    [PRE12]
+    ```py
+    p(tokens) = p(tokens|cat1) * p(cat1) + p(tokens|cat2) * p(cat2) + . . . + p(tokens|catN) * p(catN)
+    ```
 
     ### 注意
 
@@ -164,11 +221,15 @@
 
     一个类别的概率是通过计算该类别在训练实例中出现的次数除以训练实例的总数来计算的。正如我们所知，朴素贝叶斯分类器具有穷尽性和互斥性类别，因此每个类别的频率之和必须等于训练实例的总数：
 
-    [PRE13]
+    ```py
+    p(cat) = frequency(cat) / (frequency(cat1) + frequency(cat2) + . . . + frequency(catN))
+    ```
 
     一个类别中标记的概率是通过计算该标记在类别中出现的次数除以所有其他标记在该类别中出现的次数来计算的：
 
-    [PRE14]
+    ```py
+    p(token|cat) = frequency(token,cat)/(frequency(token1,cat) + frequency(token2,cat) + . . . + frequency(tokenN,cat)
+    ```
 
     这些概率被计算出来以提供所谓的**最大似然估计**的模型。不幸的是，这些估计为在训练期间未看到的标记提供了零概率。你可以在计算未看到标记的概率中非常容易地看到这一点。由于它没有被看到，它将有一个频率计数为0，并且我们原始方程中的分子将变为0。
 
@@ -176,17 +237,28 @@
 
     这显然改变了`p(cat)`和`p(token|cat)`的值。让我们称添加到类别计数中的`alpha`先验和添加到标记计数中的`beta`先验为`alpha`。当我们调用`alpha`先验时，我们的先前计算将变为：
 
-    [PRE15]
+    ```py
+    p(cat) = frequency(cat) + alpha / [(frequency(cat1) + alpha) + (frequency(cat2)+alpha) + . . . + (frequency(catN) + alpha)]
+    ```
 
     当我们调用`beta`先验时，计算将变为：
 
-    [PRE16]
+    ```py
+    p(token|cat) = (frequency(token,cat)+beta) / [(frequency(token1,cat)+beta) + frequency(token2,cat)+beta) + . . . + (frequency(tokenN,cat) + beta)]
+    ```
 
 1.  现在我们已经建立了方程，让我们看看一个具体的例子。
 
     我们将构建一个分类器，根据一组短语来分类预报是热天还是冷天：
 
-    [PRE17]
+    ```py
+    hot : super steamy today
+    hot : boiling out
+    hot : steamy out
+
+    cold : freezing out
+    cold : icy
+    ```
 
     这五个训练项中总共有七个标记：
 
@@ -208,39 +280,96 @@
 
 1.  因此，我们将计算`p(hot|super)`和`p(cold|super)`的概率：
 
-    [PRE18]
+    ```py
+    p(hot|super) = p(super|hot) * p(hot)/ p(super)
+
+    p(super|hot) = (freq(super,hot) + beta) / [(freq(super|hot)+beta) + (freq(steamy|hot) + beta) + . . . + (freq(freezing|hot)+beta)
+    ```
 
     我们将考虑所有标记，包括在`hot`类别中尚未见过的标记：
 
-    [PRE19]
+    ```py
+    freq(super|hot) + beta = 1 + 1 = 2
+    freq(steamy|hot) + beta = 2 + 1 = 3
+    freq(today|hot) + beta = 1 + 1 = 2
+    freq(boiling|hot) + beta = 1 + 1 = 2
+    freq(out|hot) + beta = 1 + 1 = 2
+    freq(freezing|hot) + beta = 0 + 1 = 1
+    freq(icy|hot) + beta = 0 + 1 = 1
+    ```
 
     这将给我们一个等于这些输入之和的分母：
 
-    [PRE20]
+    ```py
+    2+3+2+2+2+1+1 = 13
+    ```
 
 1.  现在，`p(super|hot) = 2/13`是方程的一部分。我们还需要计算`p(hot)`和`p(super)`：
 
-    [PRE21]
+    ```py
+    p(hot) = (freq(hot) + alpha) / 
+                        ((freq(hot) + alpha) + freq(cold)+alpha)) 
+    ```
 
     对于`hot`类别，我们有三个文档或案例，而对于`cold`类别，我们在训练数据中有两个文档。因此，`freq(hot) = 3`和`freq(cold) = 2`：
 
-    [PRE22]
+    ```py
+    p(hot) = (3 + 1) / (3 + 1) + (2 +1) = 4/7
+    Similarly p(cold) = (2 + 1) / (3 + 1) + (2 +1) = 3/7
+    Please note that p(hot) = 1 – p(cold)
+
+    p(super) = p(super|hot) * p(hot) + p(super|cold) + p(cold)
+    ```
 
     要计算`p(super|cold)`，我们需要重复相同的步骤：
 
-    [PRE23]
+    ```py
+    p(super|cold) = (freq(super,cold) + beta) / [(freq(super|cold)+beta) + (freq(steamy|cold) + beta) + . . . + (freq(freezing|cold)+beta)
+
+    freq(super|cold) + beta = 0 + 1 = 1
+    freq(steamy|cold) + beta = 0 + 1 = 1
+    freq(today|cold) + beta = 0 + 1 = 1
+    freq(boiling|cold) + beta = 0 + 1 = 1
+    freq(out|cold) + beta = 1 + 1 = 2
+    freq(freezing|cold) + beta = 1 + 1 = 2
+    freq(icy|cold) + beta = 1 + 1 = 2
+
+    p(super|cold) = freq(super|cold)+beta/sum of all terms above
+
+                  = 0 + 1 / (1+1+1+1+2+2+2) = 1/10
+    ```
 
     这给我们带来了标记`super`的概率：
 
-    [PRE24]
+    ```py
+    P(super) = p(super|hot) * p(hot) + p(super|cold) * p(cold)
+             = 2/13 * 4/7 + 1/10 * 3/7
+    ```
 
     现在我们已经拥有了计算`p(hot|super)`和`p(cold|super)`的所有部分：
 
-    [PRE25]
+    ```py
+    p(hot|super) = p(super|hot) * p(hot) / p(super)
+                 = (2/13 * 4/7) / (2/13 * 4/7 + 1/10 * 3/7)
+
+                 = 0.6722
+    p(cold|super) = p(super|cold) * p(cold) /p(super)
+                 = (1/10 * 3/7) / (2/13 * 4/7 + 1/10 * 3/7)
+                 = 0.3277
+
+    Obviously, p(hot|super) = 1 – p(cold|super)
+    ```
 
     如果我们想要对输入流`super super`重复此操作，可以使用以下计算：
 
-    [PRE26]
+    ```py
+    p(hot|super super) = p(super super|hot) * p(hot) / p(super super)
+                 = (2/13 * 2/13 * 4/7) / (2/13 * 2/13 * 4/7 + 1/10 * 1/10 * 3/7)
+                 = 0.7593
+    p(cold|super super) = p(super super|cold) * p(cold) /p(super super)
+                 = (1/10 * 1/10 * 3/7) / (2/13 * 2/13 * 4/7 + 1/10 * 1/10 * 3/7)
+                 = 0.2406
+    ```
 
     记住我们的朴素假设：标记的概率是概率的乘积，因为我们假设它们彼此独立。
 
@@ -252,21 +381,41 @@
 
 1.  在你的IDE中，运行本章代码包中的`TrainAndRunNaiveBayesClassifier`类，或者使用命令行，输入以下命令：
 
-    [PRE27]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.TrainAndRunNaiveBayesClassifier
+
+    ```
 
 1.  在提示中，让我们使用我们的第一个例子，`super`：
 
-    [PRE28]
+    ```py
+    Type a string to be classified
+    super
+    h 0.67   
+    c 0.33   
+    ```
 
 1.  如我们所见，我们的计算是正确的。对于在训练中不存在的单词`hello`的情况，我们将回退到由类别先验计数修改的类别的普遍性：
 
-    [PRE29]
+    ```py
+    Type a string to be classified
+    hello
+    h 0.57   
+    c 0.43
+    ```
 
 1.  再次，对于`super super`的情况，我们的计算是正确的。
 
-    [PRE30]
+    ```py
+    Type a string to be classified
+    super super
 
-    [PRE31]
+    ```
+
+    ```py
+    h 0.76   
+    c 0.24    
+    ```
 
 1.  生成前面输出的源代码在`src/com/lingpipe/chapter3/TrainAndRunNaiveBays.java`。代码应该是直截了当的，所以我们不会在这个配方中涵盖它。
 
@@ -286,19 +435,42 @@
 
 1.  启动您的IDE或输入命令行：
 
-    [PRE32]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar com.lingpipe.cookbook.chapter3.SimpleFeatureExtractor
+
+    ```
 
 1.  在我们的标准I/O循环中输入一个字符串：
 
-    [PRE33]
+    ```py
+    Type a string to see its features
+    My first feature extraction!
+    ```
 
 1.  然后产生特征：
 
-    [PRE34]
+    ```py
+    !=1
+    My=1
+    extraction=1
+    feature=1
+    first=1
+    ```
 
 1.  注意，这里没有顺序信息。它是否保持计数？
 
-    [PRE35]
+    ```py
+    Type a string to see its features
+    My my my what a nice feature extractor.
+    my=2
+    .=1
+    My=1
+    a=1
+    extractor=1
+    feature=1
+    nice=1
+    what=1
+    ```
 
 1.  特征提取器使用`my=2`进行计数，并且它不规范化大小写（`My`与`my`不同）。请参考本章后面的配方，了解如何修改特征提取器——它们非常灵活。
 
@@ -306,13 +478,29 @@
 
 LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的代码在`src/com/lingipe/chapter3/SimpleFeatureExtractor.java`：
 
-[PRE36]
+```py
+public static void main(String[] args) throws IOException {
+  TokenizerFactory tokFact 
+    = IndoEuropeanTokenizerFactory.INSTANCE;
+  FeatureExtractor<CharSequence> tokenFeatureExtractor 
+    = new TokenFeatureExtractor(tokFact);
+```
 
 上述代码使用`TokenizerFactory`构建了`TokenFeatureExtractor`。它是LingPipe提供的13个`FeatureExtractor`实现之一。
 
 接下来，我们将应用I/O循环并打印出特征，它是`Map<String, ? extends Number>`。`String`元素是特征名称。在这种情况下，实际的标记是名称。映射的第二个元素是一个扩展`Number`的值，在这种情况下，是标记在文本中出现的次数。
 
-[PRE37]
+```py
+BufferedReader reader 
+  = new BufferedReader(new   InputStreamReader(System.in));
+while (true) {
+  System.out.println("\nType a string to see its features");
+  String text = reader.readLine();
+  Map<String, ? extends Number > features 
+    = tokenFeatureExtractor.features(text);
+  System.out.println(features);
+}
+```
 
 特征名称只需要是一个唯一的名称——我们可以在每个特征名称前加上`SimpleFeatExt_`以跟踪特征来源，这在复杂的特征提取场景中很有帮助。
 
@@ -330,7 +518,25 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 以下是我们为21条标注为英语`e`和非英语`n`的推文训练的某些特征。由于我们的先验将特征权重推到`0.0`，因此特征相对较少，一旦权重为`0.0`，则删除该特征。请注意，一个类别`n`被设置为`0.0`，对于`n-1`类别的所有特征——这是逻辑回归过程的一个属性，一旦将类别特征固定为`0.0`，就调整所有其他类别特征相对于该值：
 
-[PRE38]
+```py
+FEATURE    e          n
+I :   0.37    0.0
+! :   0.30    0.0
+Disney :   0.15    0.0
+" :   0.08    0.0
+to :   0.07    0.0
+anymore : 0.06    0.0
+isn :   0.06    0.0
+' :   0.06    0.0
+t :   0.04    0.0
+for :   0.03    0.0
+que :   -0.01    0.0
+moi :   -0.01    0.0
+_ :   -0.02    0.0
+, :   -0.08    0.0
+pra :   -0.09    0.0
+? :   -0.09    0.0
+```
 
 以字符串“`I luv Disney`”为例，它将只有两个非零特征：`I=0.37`和`Disney=0.15`对于`e`，而`n`为0。由于没有与`luv`匹配的特征，它被忽略。推文是英语的概率分解如下：
 
@@ -354,21 +560,42 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 `main()` 方法从应该熟悉的类和方法开始——如果它们不熟悉，请查看 *如何使用交叉验证进行训练和评估* 和 *介绍到介绍分词器工厂——在字符流中查找单词*，这些是从 [第1章](part0014_split_000.html#page "第1章。简单分类器")，*简单分类器* 和 [第2章](part0027_split_000.html#page "第2章。查找和使用单词*)，*查找和使用单词* 中摘录的食谱：
 
-[PRE39]
+```py
+public static void main(String[] args) throws IOException {
+  String trainingFile = args.length > 0 ? args[0] 
+           : "data/disney_e_n.csv";
+  List<String[]> training 
+    = Util.readAnnotatedCsvRemoveHeader(new File(trainingFile));
+
+  int numFolds = 0;
+  XValidatingObjectCorpus<Classified<CharSequence>> corpus 
+    = Util.loadXValCorpus(training,numFolds);
+
+  TokenizerFactory tokenizerFactory 
+    = IndoEuropeanTokenizerFactory.INSTANCE;
+```
 
 注意，当我们可以使用更简单的实现，如 `ListCorpus` 时，我们正在使用 `XValidatingObjectCorpus`。我们不会利用其交叉验证的任何功能，因为 `numFolds` 参数设置为 `0` 将导致训练访问整个语料库。我们试图将新类别的数量保持在最低，而且我们通常在实际工作中总是使用这种实现。
 
 现在，我们将开始为我们的分类器构建配置。`FeatureExtractor<E>` 接口提供了从数据到特征的映射；这将被用于训练和运行分类器。在这种情况下，我们使用 `TokenFeatureExtractor()` 方法，该方法基于在构建时提供的分词器找到的标记创建特征。这类似于朴素贝叶斯推理。前面的食谱更详细地介绍了特征提取器正在做什么，如果这还不清楚的话：
 
-[PRE40]
+```py
+FeatureExtractor<CharSequence> featureExtractor
+  = new TokenFeatureExtractor(tokenizerFactory);
+```
 
 `minFeatureCount` 项目通常设置为一个大于1的数字，但在小型训练集中，这是获得任何性能所必需的。过滤特征计数的想法是，逻辑回归倾向于过度拟合低计数的特征，这些特征只是偶然存在于训练数据的一个类别中。随着训练数据的增长，`minFeatureCount` 值通常通过关注交叉验证性能来调整：
 
-[PRE41]
+```py
+int minFeatureCount = 1;
+```
 
 `addInterceptFeature` 布尔值控制是否存在一个类别特征，该特征用于建模训练中该类别的普遍性。截距特征的默认名称是 `*&^INTERCEPT%$^&**`，如果正在使用它，你将在权重向量输出中看到它。按照惯例，对于所有输入，截距特征被设置为 `1.0`。其想法是，如果一个类别非常普遍或非常罕见，应该有一个特征来捕捉这一事实，而与其他可能分布不干净的其它特征无关。这种方式在朴素贝叶斯中某种意义上建模了类别概率，但逻辑回归算法将决定它作为所有其他特征一样有用：
 
-[PRE42]
+```py
+boolean addInterceptFeature = true;
+boolean noninformativeIntercept = true;
+```
 
 这些布尔值控制如果使用截距特征时会发生什么。在下面的代码中，先验通常不应用于截距特征；这是如果此参数为真的结果。将布尔值设置为 `false`，先验将应用于截距。
 
@@ -376,17 +603,33 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 在 `RegressionPrior` 实例的另一个维度中是特征的预期方差。低方差会更有力地将系数推向零。静态 `laplace()` 方法返回的先验通常对 NLP 问题很有用。有关这里发生情况的更多信息，请参阅相关的 Javadoc 和食谱开头引用的逻辑回归教程——这里有很多事情发生，但无需深入的理论理解就可以管理。此外，请参阅本章中的“逻辑回归中的参数调整”食谱。
 
-[PRE43]
+```py
+double priorVariance = 2;
+RegressionPrior prior 
+  = RegressionPrior.laplace(priorVariance,
+          noninformativeIntercept);
+```
 
 接下来，我们将控制算法搜索答案的方式。
 
-[PRE44]
+```py
+AnnealingSchedule annealingSchedule
+  = AnnealingSchedule.exponential(0.00025,0.999);
+double minImprovement = 0.000000001;
+int minEpochs = 100;
+int maxEpochs = 2000;
+```
 
 通过查阅 Javadoc 可以更好地理解 `AnnealingSchedule`，但它所做的就是改变在拟合模型时允许系数变化的程度。`minImprovement` 参数设置模型拟合必须改进的量，以避免终止搜索，因为算法已经收敛。`minEpochs` 参数设置最小迭代次数，而 `maxEpochs` 设置搜索没有根据 `minImprovement` 确定的收敛时上限。
 
 接下来是一段允许进行基本报告/记录的代码。`LogLevel.INFO` 将报告分类器在尝试收敛过程中的大量信息：
 
-[PRE45]
+```py
+PrintWriter progressWriter = new PrintWriter(System.out,true);
+progressWriter.println("Reading data.");
+Reporter reporter = Reporters.writer(progressWriter);
+reporter.setLevel(LogLevel.INFO);  
+```
 
 这是我们最复杂的课程之一“准备”部分的结束——接下来，我们将训练并运行分类器。
 
@@ -396,33 +639,84 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 1.  注意，还有一个更复杂的 14 参数的 `train` 方法以及扩展可配置性的一个方法。这是 10 参数版本：
 
-    [PRE46]
+    ```py
+    LogisticRegressionClassifier<CharSequence> classifier
+        = LogisticRegressionClassifier.
+            <CharSequence>train(corpus,
+            featureExtractor,
+            minFeatureCount,
+            addInterceptFeature,
+            prior,
+            annealingSchedule,
+            minImprovement,
+            minEpochs,
+            maxEpochs,
+            reporter);
+    ```
 
 1.  根据 `LogLevel` 常量，`train()` 方法将根据 `LogLevel.NONE` 从无到 `LogLevel.ALL` 的巨大输出产生。
 
 1.  虽然我们不会使用它，但我们展示了如何将训练好的模型序列化到磁盘。[第 1 章](part0014_split_000.html#page "第 1 章。简单分类器")，“如何序列化 LingPipe 对象 – 分类器示例”食谱解释了这里发生的情况：
 
-    [PRE47]
+    ```py
+    AbstractExternalizable.compileTo(classifier,
+      new File("models/myModel.LogisticRegression"));
+    ```
 
 1.  训练完成后，我们将使用以下标准分类循环应用：
 
-    [PRE48]
+    ```py
+    Util.consoleInputPrintClassification(classifier);
+    ```
 
 1.  在您选择的 IDE 中运行前面的代码或使用命令行命令：
 
-    [PRE49]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.TrainAndRunLogReg
+
+    ```
 
 1.  结果是关于训练的大量信息：
 
-    [PRE50]
+    ```py
+    Reading data.
+    :00 Feature Extractor class=class com.aliasi.tokenizer.TokenFeatureExtractor
+    :00 min feature count=1
+    :00 Extracting Training Data
+    :00 Cold start
+    :00 Regression callback handler=null
+    :00 Logistic Regression Estimation
+    :00 Monitoring convergence=true
+    :00 Number of dimensions=233
+    :00 Number of Outcomes=2
+    :00 Number of Parameters=233
+    :00 Number of Training Instances=21
+    :00 Prior=LaplaceRegressionPrior(Variance=2.0, noninformativeIntercept=true)
+    :00 Annealing Schedule=Exponential(initialLearningRate=2.5E-4, base=0.999)
+    :00 Minimum Epochs=100
+    :00 Maximum Epochs=2000
+    :00 Minimum Improvement Per Period=1.0E-9
+    :00 Has Informative Prior=true
+    :00 epoch=    0 lr=0.000250000 ll=   -20.9648 lp= -232.0139 llp=  -252.9787 llp*=  -252.9787
+    :00 epoch=    1 lr=0.000249750 ll=   -20.9406 lp= -232.0195 llp=  -252.9602 llp*=  -252.9602
+    ```
 
 1.  `epoch` 报告会持续进行，直到达到指定的 epoch 数量或搜索收敛。在以下情况下，达到了 epoch 数量：
 
-    [PRE51]
+    ```py
+    :00 epoch= 1998 lr=0.000033868 ll=   -15.4568 lp=  -233.8125 llp=  -249.2693 llp*=  -249.2693
+    :00 epoch= 1999 lr=0.000033834 ll=   -15.4565 lp=  -233.8127 llp=  -249.2692 llp*=  -249.2692
+    ```
 
 1.  现在，我们可以稍微玩一下这个分类器：
 
-    [PRE52]
+    ```py
+    Type a string to be classified. Empty string to quit.
+    I luv Disney
+    Rank  Category  Score  P(Category|Input)
+    0=e 0.626898085027528 0.626898085027528
+    1=n 0.373101914972472 0.373101914972472
+    ```
 
 1.  这看起来很熟悉；这正是菜谱开头的工作示例的结果。
 
@@ -438,11 +732,30 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 1.  启动你的 IDE 或在命令行中输入命令：
 
-    [PRE53]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.TuneLogRegParams
+
+    ```
 
 1.  系统随后会响应以下输出（你可能需要滚动到窗口顶部）：
 
-    [PRE54]
+    ```py
+    Reading data.
+    RUNNING thread Fold 5 (1 of 10)
+    RUNNING thread Fold 9 (2 of 10)
+    RUNNING thread Fold 3 (3 of 10)
+    RUNNING thread Fold 4 (4 of 10)
+    RUNNING thread Fold 0 (5 of 10)
+    RUNNING thread Fold 2 (6 of 10)
+    RUNNING thread Fold 8 (7 of 10)
+    RUNNING thread Fold 6 (8 of 10)
+    RUNNING thread Fold 7 (9 of 10)
+    RUNNING thread Fold 1 (10 of 10)
+    reference\response
+              \e,n,
+             e 11,0,
+             n 6,4,
+    ```
 
 1.  默认的训练数据是 21 条标注为英语 `e` 和非英语 `n` 的推文。在前面的输出中，我们看到了作为线程运行的每个折叠的报告和结果混淆矩阵。就是这样！我们刚刚完成了多线程交叉验证。让我们看看它是如何工作的。
 
@@ -450,51 +763,139 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 所有操作都在 `Util.xvalLogRegMultiThread()` 方法中发生，我们从 `src/com/lingpipe/cookbook/chapter3/TuneLogRegParams.java` 调用此方法。`TuneLogRegParams` 的细节将在下一个菜谱中介绍。这个菜谱将专注于 `Util` 方法：
 
-[PRE55]
+```py
+int numThreads = 2;
+int numFolds = 10;
+Util.xvalLogRegMultiThread(corpus,
+        featureExtractor,
+        minFeatureCount,
+        addInterceptFeature,
+        prior,
+        annealingSchedule,
+        minImprovement,
+        minEpochs,
+        maxEpochs,
+        reporter,
+        numFolds,
+        numThreads,
+        categories);
+```
 
 用于配置逻辑回归的所有 10 个参数都是可控制的（你可以参考前面的菜谱进行解释），包括 `numFolds`，它控制将有多少个折叠，`numThreads`，它控制可以同时运行多少个线程，以及最后的 `categories`。
 
 如果我们查看 `src/com/lingpipe/cookbook/Util.java` 中的相关方法，我们会看到：
 
-[PRE56]
+```py
+public static <E> ConditionalClassifierEvaluator<E> xvalLogRegMultiThread(
+    final XValidatingObjectCorpus<Classified<E>> corpus,
+    final FeatureExtractor<E> featureExtractor,
+    final int minFeatureCount, 
+    final boolean addInterceptFeature,
+    final RegressionPrior prior, 
+    final AnnealingSchedule annealingSchedule,
+    final double minImprovement, 
+    final int minEpochs, final int maxEpochs,
+    final Reporter reporter, 
+    final int numFolds, 
+    final int numThreads, 
+    final String[] categories) {
+```
 
 1.  方法从为逻辑回归配置信息匹配的参数开始，运行交叉验证。由于交叉验证最常用于系统调优，所有相关部分都暴露出来以供修改。一切都是最终的，因为我们使用匿名内部类来创建线程。
 
 1.  接下来，我们将设置 `crossFoldEvaluator`，它将收集每个线程的结果：
 
-    [PRE57]
+    ```py
+    corpus.setNumFolds(numFolds);
+    corpus.permuteCorpus(new Random(11211));
+    final boolean storeInputs = true;
+    final ConditionalClassifierEvaluator<E> crossFoldEvaluator
+      = new ConditionalClassifierEvaluator<E>(null, categories, storeInputs);
+    ```
 
 1.  现在，我们将着手为每个折叠创建线程，`i`：
 
-    [PRE58]
+    ```py
+    List<Thread> threads = new ArrayList<Thread>();
+    for (int i = 0; i < numFolds; ++i) {
+      final XValidatingObjectCorpus<Classified<E>> fold 
+        = corpus.itemView();
+      fold.setFold(i);
+    ```
 
     `XValidatingObjectCorpus` 类通过创建用于读取的线程安全版本的数据集，通过 `itemView()` 方法设置为多线程访问。此方法返回一个可以设置折叠的数据集，但不能添加数据。
 
     每个线程都是一个 `runnable` 对象，其中折叠的训练和评估的实际工作在 `run()` 方法中处理：
 
-    [PRE59]
+    ```py
+    Runnable runnable 
+      = new Runnable() {
+        @Override
+        public void run() {
+        try {
+          LogisticRegressionClassifier<E> classifier
+            = LogisticRegressionClassifier.<E>train(fold,
+                    featureExtractor,
+                    minFeatureCount,
+                    addInterceptFeature,
+                    prior,
+                    annealingSchedule,
+                    minImprovement,
+                    minEpochs,
+                    maxEpochs,
+                    reporter);
+    ```
 
     在此代码中，我们首先训练分类器，这反过来又需要一个 `try/catch` 语句来处理 `LogisticRegressionClassifier.train()` 方法抛出的 `IOException`。接下来，我们将创建 `withinFoldEvaluator`，它将在线程中填充，而不会出现同步问题：
 
-    [PRE60]
+    ```py
+    ConditionalClassifierEvaluator<E> withinFoldEvaluator 
+      = new ConditionalClassifierEvaluator<E>(classifier, categories, storeInputs);
+    fold.visitTest(withinFoldEvaluator);
+    ```
 
     确保 `storeInputs` 为 `true` 非常重要，这样可以将折叠结果添加到 `crossFoldEvaluator`：
 
-    [PRE61]
+    ```py
+    addToEvaluator(withinFoldEvaluator,crossFoldEvaluator);
+    ```
 
     此方法，同样在 `Util` 中，遍历每个类别的所有真实正例和假负例，并将它们添加到 `crossFoldEvaluator`。请注意，这是同步的：这意味着一次只有一个线程可以访问该方法，但由于分类已经完成，这不应该成为瓶颈：
 
-    [PRE62]
+    ```py
+    public synchronized static <E> void addToEvaluator(BaseClassifierEvaluator<E> foldEval, ScoredClassifierEvaluator<E> crossFoldEval) {
+      for (String category : foldEval.categories()) {
+       for (Classified<E> classified : foldEval.truePositives(category)) {
+        crossFoldEval.addClassification(category,classified.getClassification(),classified.getObject());
+       }
+       for (Classified<E> classified : foldEval.falseNegatives(category)) {
+        crossFoldEval.addClassification(category,classified.getClassification(),classified.getObject());
+       }
+      }
+     }
+    ```
 
     该方法将每个类别的真实正例和假负例添加到 `crossFoldEval` 评估器中。这些基本上是复制操作，计算起来不费时。
 
 1.  返回到 `xvalLogRegMultiThread`，我们将处理异常并将完成的 `Runnable` 添加到我们的 `Thread` 列表中：
 
-    [PRE63]
+    ```py
+        catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    };
+    threads.add(new Thread(runnable,"Fold " + i));
+    ```
 
 1.  在设置好所有线程后，我们将调用 `runThreads()` 并打印出由此产生的混淆矩阵。我们不会深入探讨 `runThreads()` 的来源，因为它只是简单的 Java 线程管理，而 `printConfusionMatrix` 在 [第 1 章](part0014_split_000.html#page "Chapter 1. Simple Classifiers")，*简单分类器* 中已经介绍过：
 
-    [PRE64]
+    ```py
+
+      runThreads(threads,numThreads); 
+      printConfusionMatrix(crossFoldEvaluator.confusionMatrix());
+    }
+    ```
 
 这就是加快多核机器上交叉验证速度的全部内容。在调整系统时，这可以产生很大的影响。
 
@@ -508,23 +909,53 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 1.  启动你的 IDE 或在命令行中输入以下内容：
 
-    [PRE65]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.TuneLogRegParams
+
+    ```
 
 1.  系统随后会响应默认数据 `data/disney_e_n.csv` 的交叉验证输出混淆矩阵：
 
-    [PRE66]
+    ```py
+    reference\response
+              \e,n,
+             e 11,0,
+             n 6,4,
+    ```
 
 1.  接下来，我们将报告每个类别的假正例——这将涵盖所有错误：
 
-    [PRE67]
+    ```py
+    False Positives for e
+    ES INSUPERABLE DISNEY !! QUIERO VOLVER:( : n
+    @greenath_ t'as de la chance d'aller a Disney putain : n 
+    jamais été moi. : n
+    @HedyHAMIDI au quartier pas a Disney moi: n
+    …
+    ```
 
 1.  此输出之后是特征、它们的系数和计数——记住，我们将看到 `n-1` 个类别，因为其中一个类别的特征被设置为所有特征的 `0.0`：
 
-    [PRE68]
+    ```py
+    Feature coefficients for category e
+    I : 0.36688604
+    ! : 0.29588525
+    Disney : 0.14954419
+    " : 0.07897427
+    to : 0.07378086
+    …
+    Got feature count: 113
+    ```
 
 1.  最后，我们有我们的标准输入/输出，允许测试示例：
 
-    [PRE69]
+    ```py
+    Type a string to be classified
+    I luv disney
+    Rank  Category  Score  P(Category|Input)
+    0=e 0.5907060507161321 0.5907060507161321
+    1=n 0.40929394928386786 0.40929394928386786
+    ```
 
 1.  这是我们将要工作的基本结构。在接下来的章节中，我们将更深入地探讨参数变化的影响。
 
@@ -532,59 +963,131 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 本菜谱假设你已经熟悉从两个菜谱之前的逻辑回归训练和配置以及交叉验证，这是之前的菜谱。代码的整体结构以提纲形式呈现，保留了调整参数。将讨论如何修改每个参数将在菜谱的后面部分——下面我们开始从`main()`方法开始，忽略一些由`...`指示的代码，并显示用于分词和特征提取的可调整代码：
 
-[PRE70]
+```py
+public static void main(String[] args) throws IOException {
+    …
+  TokenizerFactory tokenizerFactory 
+     = IndoEuropeanTokenizerFactory.INSTANCE;
+  FeatureExtractor<CharSequence> featureExtractor
+     = new TokenFeatureExtractor(tokenizerFactory);
+  int minFeatureCount = 1;
+  boolean addInterceptFeature = false;
+```
 
 接下来设置先验概率：
 
-[PRE71]
+```py
+  boolean noninformativeIntercept = true;
+  double priorVariance = 2 ;
+  RegressionPrior prior 
+    = RegressionPrior.laplace(priorVariance,
+            noninformativeIntercept);
+```
 
 先验概率对行为系数分配有强烈的影响：
 
-[PRE72]
+```py
+  AnnealingSchedule annealingSchedule
+    = AnnealingSchedule.exponential(0.00025,0.999);
+  double minImprovement = 0.000000001;
+  int minEpochs = 10;
+  int maxEpochs = 20;
+```
 
 之前的代码控制着逻辑回归的搜索空间：
 
-[PRE73]
+```py
+Util.xvalLogRegMultiThread(corpus,…);
+```
 
 之前的代码运行交叉验证以查看系统表现如何——注意省略的参数使用`...`表示。
 
 在以下代码中，我们将折数设置为`0`，这将使训练方法访问整个语料库：
 
-[PRE74]
+```py
+corpus.setNumFolds(0);
+LogisticRegressionClassifier<CharSequence> classifier
+  = LogisticRegressionClassifier.<CharSequence>train(corpus,…
+```
 
 然后，对于每个类别，我们将打印出刚刚训练好的分类器的特征及其系数：
 
-[PRE75]
+```py
+int featureCount = 0;
+for (String category : categories) {
+  ObjectToDoubleMap<String> featureCoeff 
+    = classifier.featureValues(category);
+  System.out.println("Feature coefficients for category " 
+        + category);
+  for (String feature : featureCoeff.keysOrderedByValueList()) {
+    System.out.print(feature);
+    System.out.printf(" :%.8f\n",featureCoeff.getValue(feature));
+    ++featureCount;
+  }
+}
+System.out.println("Got feature count: " + featureCount);
+```
 
 最后，我们将有常规的控制台分类器输入/输出：
 
-[PRE76]
+```py
+Util.consoleInputPrintClassification(classifier);    
+```
 
 ### 调整特征提取
 
 输入到逻辑回归中的特征对系统的性能有巨大影响。我们将在后面的菜谱中更详细地介绍特征提取，但在这里我们将使用一种非常实用且有些反直觉的方法，因为它非常容易执行——使用字符n-gram而不是单词/标记。让我们看一个例子：
 
-[PRE77]
+```py
+Type a string to be classified. Empty string to quit.
+The rain in Spain
+Rank  Category  Score  P(Category|Input)
+0=e 0.5 0.5
+1=n 0.5 0.5
+```
 
 此输出表明，分类器在`e`英语和`n`非英语之间做出决策。通过滚动回查看特征，我们将看到输入中的任何单词都没有匹配项。在英语方面有一些子串匹配。`The`对于特征词`the`有子串`he`。对于语言识别，考虑子串是有意义的，但根据经验，它对于情感和其他问题也可能有很大的帮助。
 
 将分词器修改为两到四个字符的n-gram如下：
 
-[PRE78]
+```py
+int min = 2;
+int max = 4;
+TokenizerFactory tokenizerFactory 
+  = new NGramTokenizerFactory(min,max);
+```
 
 这导致了适当的区分：
 
-[PRE79]
+```py
+Type a string to be classified. Empty string to quit.
+The rain in Spain
+Rank  Category  Score  P(Category|Input)
+0=e 0.5113903651380305 0.5113903651380305
+1=n 0.4886096348619695 0.4886096348619695
+```
 
 在交叉验证中的整体性能略有下降。对于非常小的训练集，例如21条推文，这是预料之中的。通常，通过查看错误的样子以及查看假阳性，交叉验证的性能将有助于指导这个过程。
 
 在查看假阳性时，很明显`Disney`是问题之源，因为特征上的系数表明它是英语的证据。一些假阳性如下：
 
-[PRE80]
+```py
+False Positives for e
+@greenath_ t'as de la chance d'aller a Disney putain j'y ai jamais été moi. : n
+@HedyHAMIDI au quartier pas a Disney moi : n
+Prefiro gastar uma baba de dinheiro pra ir pra cancun doq pra Disney por exemplo : n
+```
 
 以下是为`e`的特征：
 
-[PRE81]
+```py
+Feature coefficients for category e
+I : 0.36688604
+! : 0.29588525
+Disney : 0.14954419
+" : 0.07897427
+to : 0.07378086
+```
 
 在没有更多训练数据的情况下，应该删除特征`!`、`Disney`和`"`以帮助此分类器表现更好，因为这些特征都不是语言特定的，而`I`和`to`是，尽管它们不是英语特有的。这可以通过过滤数据或创建适当的分词器工厂来完成，但最好的办法可能是获取更多数据。
 
@@ -592,7 +1095,11 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 将`addInterceptFeature`参数设置为`true`将添加一个始终触发的特征。这将允许逻辑回归具有对每个类别的示例数量敏感的特征。这并不是类别的边缘似然，因为逻辑回归会像任何其他特征一样调整权重——但是以下先验展示了如何进一步调整：
 
-[PRE82]
+```py
+de : -0.08864114
+( : -0.10818647
+*&^INTERCEPT%$^&** : -0.17089337
+```
 
 最终，截距是`n`的最强特征，在这种情况下，整体交叉验证性能有所下降。
 
@@ -600,27 +1107,52 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 先验的作用是限制逻辑回归完美拟合训练数据的倾向。我们使用的那些先验在程度上试图将系数推向零。我们将从`nonInformativeIntercept`先验开始，它控制截距特征是否受到先验的归一化影响——如果为真，则截距不受先验影响，这在先前的例子中就是这样。将其设置为`false`使其从`-0.17`移动到接近零：
 
-[PRE83]
+```py
+*&^INTERCEPT%$^&** : -0.03874782
+```
 
 接下来，我们将调整先验的方差。这为权重设定了一个预期的变化。低方差意味着系数预计不会从零变化很大。在先前的代码中，方差被设置为`2`。这是将其设置为`.01`的结果：
 
-[PRE84]
+```py
+Feature coefficients for category e
+' : -0.00003809
+Feature coefficients for category n
+```
 
 这是从方差为`2`的104个特征下降到方差为`.01`的一个特征，因为一旦一个特征下降到`0`，它就会被移除。
 
 增加方差将使我们的前`e`个特征从`2`增加到`4`：
 
-[PRE85]
+```py
+Feature coefficients for category e
+I : 0.36688604
+! : 0.29588525
+Disney : 0.14954419
+
+I : 0.40189501
+! : 0.31387376
+Disney : 0.18255271
+```
 
 这总共是119个特征。
 
 考虑一个方差为`2`和`gaussian`先验：
 
-[PRE86]
+```py
+boolean noninformativeIntercept = false;
+double priorVariance = 2;
+RegressionPrior prior 
+  = RegressionPrior.gaussian(priorVariance,
+    noninformativeIntercept);
+```
 
 我们将得到以下输出：
 
-[PRE87]
+```py
+I : 0.38866670
+! : 0.27367013
+Disney : 0.22699340
+```
 
 奇怪的是，我们花很少的时间担心使用哪个先验，但方差在性能中起着重要作用，因为它可以快速减少特征空间。拉普拉斯是NLP应用中普遍接受的先验。
 
@@ -630,7 +1162,13 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 随着逻辑回归收敛，退火计划控制着搜索空间的探索和终止方式：
 
-[PRE88]
+```py
+AnnealingSchedule annealingSchedule
+    = AnnealingSchedule.exponential(0.00025,0.999);
+  double minImprovement = 0.000000001;
+  int minEpochs = 10;
+  int maxEpochs = 20;
+```
 
 在调整时，如果搜索过程耗时过长，我们将按数量级（`.0025,.025,...`）增加退火计划的第一参数——通常，我们可以增加训练速度而不会影响交叉验证性能。此外，`minImprovement`值可以增加，以便收敛结束得更快，这既可以增加训练速度，又可以防止模型过拟合——这被称为**提前停止**。再次强调，在这种情况下，你的指导方针是查看在做出更改时的交叉验证性能。
 
@@ -658,19 +1196,41 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 1.  特征提取器很容易构建。以下是一个返回带有权重`1`的`CONTAINS_NUMBER`特征的提取器：
 
-    [PRE89]
+    ```py
+    public class ContainsNumberFeatureExtractor implements FeatureExtractor<CharSequence> {
+      @Override
+      public Map<String,Counter> features(CharSequence text) {
+             ObjectToCounterMap<String> featureMap 
+             = new ObjectToCounterMap<String>();
+        if (text.toString().matches(".*\\d.*")) {
+          featureMap.set("CONTAINS_NUMBER", 1);
+        }
+        return featureMap;  }
+    ```
 
 1.  通过添加`main()`方法，我们可以测试特征提取器：
 
-    [PRE90]
+    ```py
+    public static void main(String[] args) {
+      FeatureExtractor<CharSequence> featureExtractor 
+             = new ContainsNumberFeatureExtractor();
+      System.out.println(featureExtractor.features("I have a number 1"));
+    }
+    ```
 
 1.  现在运行以下命令：
 
-    [PRE91]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.ContainsNumberFeatureExtractor
+
+    ```
 
 1.  上述代码产生以下输出：
 
-    [PRE92]
+    ```py
+    CONTAINS_NUMBER=1
+
+    ```
 
 就这样。下一个菜谱将向您展示如何组合特征提取器。
 
@@ -692,27 +1252,53 @@ LingPipe为创建特征提取器提供了坚实的基础设施。这个配方的
 
 1.  我们将在 `src/com/lingpipe/cookbook/chapter3/CombinedFeatureExtractor.java` 中的 `main()` 方法开始，我们将使用它来运行特征提取器。以下行设置了使用 LingPipe 类 `TokenFeatureExtractor` 通过分词器生成的特征：
 
-    [PRE93]
+    ```py
+    public static void main(String[] args) {
+       int min = 2;
+      int max = 4;
+      TokenizerFactory tokenizerFactory 
+         = new NGramTokenizerFactory(min,max);
+      FeatureExtractor<CharSequence> tokenFeatures 
+    = new TokenFeatureExtractor(tokenizerFactory);
+    ```
 
 1.  然后，我们将从前一个食谱中构建特征提取器。
 
-    [PRE94]
+    ```py
+    FeatureExtractor<CharSequence> numberFeatures 
+    = new ContainsNumberFeatureExtractor();
+    ```
 
 1.  接下来，LingPipe 类 `AddFeatureExtractor` 将两个特征提取器合并为一个第三个：
 
-    [PRE95]
+    ```py
+    FeatureExtractor<CharSequence> joinedFeatureExtractors 
+      = new AddFeatureExtractor<CharSequence>(
+              tokenFeatures,numberFeatures);
+    ```
 
 1.  剩余的代码获取特征并打印出来：
 
-    [PRE96]
+    ```py
+    String input = "show me 1!";
+    Map<String,? extends Number> features 
+       = joinedFeatureExtractors.features(input);
+    System.out.println(features);
+    ```
 
 1.  运行以下命令
 
-    [PRE97]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.CombinedFeatureExtractor
+
+    ```
 
 1.  输出看起来像这样：
 
-    [PRE98]
+    ```py
+    {me =1.0,  m=1.0, me 1=1.0, e =1.0, show=1.0,  me =1.0, ho=1.0, ow =1.0, e 1!=1.0, sho=1.0,  1=1.0, me=1.0, how =1.0, CONTAINS_NUMBER=1.0, w me=1.0,  me=1.0, how=1.0,  1!=1.0, sh=1.0, ow=1.0, e 1=1.0, w m=1.0, ow m=1.0, w =1.0, 1!=1.0}
+
+    ```
 
 ## 还有更多...
 
@@ -764,7 +1350,32 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 我们从一组去重后的推文开始，这些推文是接下来这个食谱中将要遵循的“训练一点，学习一点——主动学习”食谱的结果。食谱的起点是以下代码：
 
-[PRE99]
+```py
+public static void main(String[] args) throws IOException {
+  String trainingFile = args.length > 0 ? args[0] 
+    : "data/activeLearningCompleted/"
+    + "disneySentimentDedupe.2.csv";
+  int numFolds = 10;
+  List<String[]> training 
+    = Util.readAnnotatedCsvRemoveHeader(new File(trainingFile));
+  String[] categories = Util.getCategories(training);
+  XValidatingObjectCorpus<Classified<CharSequence>> corpus 
+  = Util.loadXValCorpus(training,numFolds);
+TokenizerFactory tokenizerFactory 
+  = IndoEuropeanTokenizerFactory.INSTANCE;
+PrintWriter progressWriter = new PrintWriter(System.out,true);
+Reporter reporter = Reporters.writer(progressWriter);
+reporter.setLevel(LogLevel.WARN);
+boolean storeInputs = true;
+ConditionalClassifierEvaluator<CharSequence> evaluator 
+    = new ConditionalClassifierEvaluator<CharSequence>(null, categories, storeInputs);
+corpus.setNumFolds(0);
+LogisticRegressionClassifier<CharSequence> classifier = Util.trainLogReg(corpus, tokenizerFactory, progressWriter);
+evaluator.setClassifier(classifier);
+System.out.println("!!!Testing on training!!!");
+Util.printConfusionMatrix(evaluator.confusionMatrix());
+}
+```
 
 ### 理性检查 – 在训练数据上测试
 
@@ -772,11 +1383,21 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  我们留下了一条打印语句，宣传正在发生的事情：
 
-    [PRE100]
+    ```py
+    System.out.println("!!!Testing on training!!!");
+    corpus.visitTrain(evaluator);
+    ```
 
 1.  运行`ClassifierBuilder`将产生以下结果：
 
-    [PRE101]
+    ```py
+    !!!Testing on training!!!
+    reference\response
+              \p,n,o,
+             p 67,0,3,
+             n 0,30,2,
+             o 2,1,106,
+    ```
 
 1.  前面的混淆矩阵几乎是一个完美的系统输出，这验证了系统基本上是正常工作的。这是你将看到的最好的系统输出；永远不要让管理层看到它，否则他们会认为这种性能水平是可以做到的或者已经做到了。
 
@@ -786,27 +1407,57 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  如果你数据量小，那么将折数设置为`10`，这样就有90%的数据用于训练。如果你数据量大或者时间紧迫，那么将其设置为`2`：
 
-    [PRE102]
+    ```py
+    static int NUM_FOLDS = 10;
+    ```
 
 1.  取消注释或删除测试数据上的训练代码：
 
-    [PRE103]
+    ```py
+    //System.out.println("!!!Testing on training!!!");
+    //corpus.visitTrain(evaluator);
+    ```
 
 1.  插入一个交叉验证循环或者只是取消注释我们源代码中的循环：
 
-    [PRE104]
+    ```py
+    corpus.setNumFolds(numFolds);
+    for (int i = 0; i < numFolds; ++i) {
+     corpus.setFold(i);
+      LogisticRegressionClassifier<CharSequence> classifier 
+         = Util.trainLogReg(corpus, tokenizerFactory, progressWriter);
+      evaluator.setClassifier(classifier);
+     corpus.visitTest(evaluator);
+    }
+    ```
 
 1.  重新编译并运行代码将给出以下输出：
 
-    [PRE105]
+    ```py
+    reference\response
+              \p,n,o,
+             p 45,8,17,
+             n 16,13,3,
+             o 18,3,88,
+    ```
 
 1.  分类器的标签意味着`p=positiveSentiment`，`n=negativeSentiment`，和`o=other`，这涵盖了其他语言或中性情感。混淆矩阵的第一行表明，系统得到了`45`个真正的正例，`8`个它认为是`n`的假阴性，以及`17`个它认为是`o`的假阴性：
 
-    [PRE106]
+    ```py
+    reference\response
+          \p,n,o,
+        p 45,8,17,
+    ```
 
 1.  要获取`p`的假阳性，我们需要查看第一列。我们看到系统认为`16`个`n`注释是`p`，`18`个`o`注释是`p`：
 
-    [PRE107]
+    ```py
+    reference\response
+              \p,
+             p 45
+             n 16
+             o 18
+    ```
 
     ### 小贴士
 
@@ -840,21 +1491,95 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  在打印出混淆矩阵后，我们将使用`Util.printPrecRecall`方法报告所有类别的精确度/召回率：
 
-    [PRE108]
+    ```py
+    Util.printConfusionMatrix(evaluator.confusionMatrix());
+    Util.printPrecRecall(evaluator);
+
+    ```
 
 1.  输出现在将看起来像这样：
 
-    [PRE109]
+    ```py
+    reference\response
+              \p,n,o,
+             p 45,8,17,
+             n 16,13,3,
+             o 18,3,88,
+    Category p
+    Recall: 0.64
+    Prec  : 0.57
+    Category n
+    Recall: 0.41
+    Prec  : 0.54
+    Category o
+    Recall: 0.81
+    Prec  : 0.81
+    ```
 
 1.  `n`的精度超过了我们的目标`.5`——因为我们希望在`.5`处最大化召回率，我们可以在达到极限之前犯一些错误。你可以参考*阈值分类器*配方来了解如何做到这一点。
 
 1.  `p`的精度为57%，这对于我们的业务目标来说太低了。然而，逻辑回归分类器提供了一种条件概率，这可能允许我们仅通过关注概率来满足精度需求。添加以下代码行将允许我们按条件概率排序查看结果：
 
-    [PRE110]
+    ```py
+    Util.printPRcurve(evaluator);
+
+    ```
 
 1.  上一行代码首先从评估器中获取一个`ScoredPrecisionRecallEvaluation`值。从这个对象中获取一个双评分曲线（`[][])`，布尔插值设置为false，因为我们希望曲线保持纯净。你可以查看Javadoc了解具体发生了什么。然后，我们将使用同一类中的打印路由来打印出曲线。输出将看起来像这样：
 
-    [PRE111]
+    ```py
+    reference\response
+              \p,n,o,
+             p 45,8,17,
+             n 16,13,3,
+             o 18,3,88,
+    Category p
+    Recall: 0.64
+    Prec  : 0.57
+    Category n
+    Recall: 0.41
+    Prec  : 0.54
+    Category o
+    Recall: 0.81
+    Prec  : 0.81
+    PR Curve for Category: p
+      PRECI.   RECALL    SCORE
+    0.000000 0.000000 0.988542
+    0.500000 0.014286 0.979390
+    0.666667 0.028571 0.975054
+    0.750000 0.042857 0.967286
+    0.600000 0.042857 0.953539
+    0.666667 0.057143 0.942158
+    0.571429 0.057143 0.927563
+    0.625000 0.071429 0.922381
+    0.555556 0.071429 0.902579
+    0.600000 0.085714 0.901597
+    0.636364 0.100000 0.895898
+    0.666667 0.114286 0.891566
+    0.615385 0.114286 0.888831
+    0.642857 0.128571 0.884803
+    0.666667 0.142857 0.877658
+    0.687500 0.157143 0.874135
+    0.647059 0.157143 0.874016
+    0.611111 0.157143 0.871183
+    0.631579 0.171429 0.858999
+    0.650000 0.185714 0.849296
+    0.619048 0.185714 0.845691
+    0.636364 0.200000 0.810079
+    0.652174 0.214286 0.807661
+    0.666667 0.228571 0.807339
+    0.640000 0.228571 0.799474
+    0.653846 0.242857 0.753967
+    0.666667 0.257143 0.753169
+    0.678571 0.271429 0.751815
+    0.655172 0.271429 0.747515
+    0.633333 0.271429 0.745660
+    0.645161 0.285714 0.744455
+    0.656250 0.300000 0.738555
+    0.636364 0.300000 0.736310
+    0.647059 0.314286 0.705090
+    0.628571 0.314286 0.694125
+    ```
 
 1.  输出按分数排序，在第三列，在这种情况下，恰好是条件概率，所以最大值是1，最小值是0。注意，随着正确案例的发现（第二行），召回率会增长，并且它永远不会下降。然而，当出现错误，如第四行时，精度会下降到`.6`，因为到目前为止有3个案例是正确的。实际上，在找到最后一个值之前，精度实际上已经低于`.65`——在粗体中，分数为`.73`。
 
@@ -870,7 +1595,13 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 在这个处理阶段，我们要么通过验证在新鲜数据上的性能是否可接受来接受结果，要么通过本章其他配方中涵盖的技术来改进分类器。配方的最后一步是在所有训练数据上训练分类器并将其写入磁盘：
 
-[PRE112]
+```py
+corpus.setNumFolds(0);
+LogisticRegressionClassifier<CharSequence> classifier 
+  = Util.trainLogReg(corpus, tokenizerFactory, progressWriter);
+AbstractExternalizable.compileTo(classifier, 
+  new File("models/ClassifierBuilder.LogisticRegression"));
+```
 
 我们将在`Thresholding classifiers`配方中使用生成的模型。
 
@@ -886,11 +1617,52 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  在您的命令行或IDE等效环境中运行以下命令：
 
-    [PRE113]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.LinguisticTuning
+
+    ```
 
 1.  对于每个折，将打印出分类器的特征。每个类别的输出将如下所示（仅显示每个类别的几个特征）：
 
-    [PRE114]
+    ```py
+    Training on fold 0
+    ######################Printing features for category p NON_ZERO 
+    ?: 0.52
+    !: 0.41
+    love: 0.37
+    can: 0.36
+    my: 0.36
+    is: 0.34
+    in: 0.29
+    of: 0.28
+    I: 0.28
+    old: 0.26
+    me: 0.25
+    My: 0.25
+    ?: 0.25
+    wait: 0.24
+    ?: 0.23
+    an: 0.22
+    out: 0.22
+    movie: 0.22
+    ?: 0.21
+    movies: 0.21
+    shirt: 0.21
+    t: 0.20
+    again: 0.20
+    Princess: 0.19
+    i: 0.19 
+    …
+    ######################Printing features for category o NON_ZERO 
+    :: 0.69
+    /: 0.52
+    *&^INTERCEPT%$^&**: 0.48
+    @: 0.41
+    *: 0.36
+    (: 0.35
+    …
+    ######################Printing features for category n ZERO
+    ```
 
 1.  从`n`类别开始，请注意没有特征。这是逻辑回归的一个特性，即一个类别的所有特征都设置为`0.0`，而剩余的`n-1`个类别的特征相应地偏移。这无法控制，这有点令人烦恼，因为`n`或负类别可能会成为语言调优的焦点，考虑到它在示例中的表现非常糟糕。我们不会气馁，将继续前进。
 
@@ -898,37 +1670,97 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  在这些特性中，我们寻找几个要点。首先，显然有一些奇特的特性得到了高分——输出按类别从正到负排序。我们想要寻找的是特征权重中的某些信号——因此“爱”与积极的情感相关是有意义的。查看这类特性可能会非常令人惊讶且反直觉。大写字母`I`和小写字母`i`暗示文本应该转换为小写。我们将进行这一更改并看看是否有所帮助。我们当前的性能如下：
 
-    [PRE115]
+    ```py
+    Category p
+    Recall: 0.64
+    Prec  : 0.57
+    ```
 
 1.  代码更改是在当前的`IndoEuropeanTokenizerFactory`类中添加一个`LowerCaseTokenizerFactory`项：
 
-    [PRE116]
+    ```py
+    TokenizerFactory tokenizerFactory 
+      = IndoEuropeanTokenizerFactory.INSTANCE;
+    tokenizerFactory = new   LowerCaseTokenizerFactory(tokenizerFactory);
+    ```
 
 1.  运行代码，我们将提高一些精确度和召回率：
 
-    [PRE117]
+    ```py
+    Category p
+    Recall: 0.69
+    Prec  : 0.59
+    ```
 
 1.  特征如下：
 
-    [PRE118]
+    ```py
+    Training on fold 0
+    ######################Printing features for category p NON_ZERO 
+    ?: 0.53
+    my: 0.49
+    love: 0.43
+    can: 0.41
+    !: 0.39
+    i: 0.35
+    is: 0.31
+    of: 0.28
+    wait: 0.27
+    old: 0.25
+    ♥: 0.24
+    an: 0.22
+    ```
 
 1.  下一步是什么？`minFeature`计数非常低，为`1`。让我们将其提高到`2`并看看会发生什么：
 
-    [PRE119]
+    ```py
+    Category p
+    Recall: 0.67
+    Prec  : 0.58
+    ```
 
 1.  这导致性能下降几个案例，因此我们将返回到`1`。然而，经验表明，随着更多数据的发现，最小计数会上升以防止过拟合。
 
 1.  是时候加入秘密调料了——将分词器更改为`NGramTokenizer`；它通常比标准分词器效果更好——我们现在正在使用以下代码：
 
-    [PRE120]
+    ```py
+    TokenizerFactory tokenizerFactory 
+      = new NGramTokenizerFactory(2,4);
+    tokenizerFactory 
+    = new LowerCaseTokenizerFactory(tokenizerFactory);
+    ```
 
 1.  这有效了。我们将挑选一些更多的情况：
 
-    [PRE121]
+    ```py
+    Category p
+    Recall: 0.71
+    Prec  : 0.64
+    ```
 
 1.  然而，现在的特征非常难以扫描：
 
-    [PRE122]
+    ```py
+    #########Printing features for category p NON_ZERO 
+    ea: 0.20
+    !!: 0.20
+    ov: 0.17
+    n : 0.16
+    ne: 0.15
+     ?: 0.14
+    al: 0.13
+    rs: 0.13
+    ca: 0.13
+    ! : 0.13
+    ol: 0.13
+    lo: 0.13
+     m: 0.13
+    re : 0.12
+    so: 0.12
+    i : 0.12
+    f : 0.12
+     lov: 0.12 
+    ```
 
 1.  我们发现，随着时间的推移，字符n-gram是文本分类问题中首选的特征。它们似乎几乎总是有帮助，而且在这里也很有帮助。看看特征，你可以恢复出`love`仍然在以小块的方式贡献，例如`lov`、`ov`和`lo`。
 
@@ -936,17 +1768,39 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  现在是检查`n`类别性能的好时机；我们一直在调整模型，应该检查它：
 
-    [PRE123]
+    ```py
+    Category n
+    Recall: 0.41
+    Prec  : 0.72
+    ```
 
 1.  输出还报告了`p`和`n`的误报。我们真的不太关心`o`，除非它作为其他类别的误报出现：
 
-    [PRE124]
+    ```py
+    False Positives for p
+    *<category> is truth category
+
+    I was really excited for Disney next week until I just read that it's "New Jersey" week. #noooooooooo
+     p 0.8434727204351016
+     o 0.08488521562829848
+    *n 0.07164206393660003
+
+    "Why worry? If you've done the best you can, worrying won't make anything better." ~Walt Disney
+     p 0.4791823543407749
+    *o 0.3278392260935065
+     n 0.19297841956571868
+    ```
 
 1.  查看误报情况，我们可以建议对特征提取进行修改。识别来自`~华特·迪士尼`的引语可能有助于分类器使用`IS_DISNEY_QUOTE`。
 
 1.  此外，查看错误可以指出注释中的错误，有人可能会认为以下内容实际上是正面的：
 
-    [PRE125]
+    ```py
+    Cant sleep so im watching.. Beverley Hills Chihuahua.. Yep thats right, I'm watching a Disney film about talking dogs.. FML!!!
+     p 0.6045997587907997
+     o 0.3113342571409484
+    *n 0.08406598406825164
+    ```
 
     到目前为止，系统已经进行了某种程度的调整。应将配置保存在某个地方，并考虑下一步。它们包括以下内容：
 
@@ -958,11 +1812,41 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
     我们调整努力的成果是提高性能，从：
 
-    [PRE126]
+    ```py
+    reference\response
+              \p,n,o,
+             p 45,8,17,
+             n 16,13,3,
+             o 18,3,88,
+    Category p
+    Recall: 0.64
+    Prec  : 0.57
+    Category n
+    Recall: 0.41
+    Prec  : 0.54
+    Category o
+    Recall: 0.81
+    Prec  : 0.81
+    ```
 
     到以下：
 
-    [PRE127]
+    ```py
+    reference\response
+              \p,n,o,
+             p 50,3,17,
+             n 14,13,5,
+             o 14,2,93,
+    Category p
+    Recall: 0.71
+    Prec  : 0.64
+    Category n
+    Recall: 0.41
+    Prec  : 0.72
+    Category o
+    Recall: 0.85
+    Prec  : 0.81
+    ```
 
     这不是在查看一些数据和思考如何帮助分类器完成其工作的情况下，以换取性能提升的坏交易。
 
@@ -972,7 +1856,17 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 本食谱将考虑具有`p`、`n`和`o`标签的三分类情况，并使用本章前面提到的*分类器构建生命周期*食谱中产生的分类器。产生的交叉验证评估结果如下：
 
-[PRE128]
+```py
+Category p
+Recall: 0.64
+Prec  : 0.57
+Category n
+Recall: 0.41
+Prec  : 0.54
+Category o
+Recall: 0.81
+Prec  : 0.81
+```
 
 我们将运行新的数据来设置阈值。
 
@@ -988,7 +1882,13 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  在你的IDE中调用`RunClassifier`或运行以下命令：
 
-    [PRE129]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3/RunClassifier
+    Data is: data/freshDisney.csv model is: models/ClassifierBuilder.LogisticRegression
+    No annotations found, not evaluating
+    writing scored output to data/freshDisney.csv
+
+    ```
 
 1.  在你的最喜欢的电子表格中打开`.csv`文件。所有推文都应该有一个分数和一个猜测的类别，格式为标准注释格式。
 
@@ -1000,17 +1900,69 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  运行以下命令或你IDE中的等效命令（注意，我们提供了输入文件，而没有使用默认设置）：
 
-    [PRE130]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3/RunClassifier data/freshDisneyAnnotated.csv
+
+    ```
 
 1.  这个命令将产生以下输出：
 
-    [PRE131]
+    ```py
+    Data is: data/freshDisneyAnnotated.csv model is: models/ClassifierBuilder.LogisticRegression
+    reference\response
+     \p,n,o,
+     p 141,25,0,
+     n 39,37,0,
+     o 51,28,0,
+    Category p
+    Recall: 0.85
+    Prec  : 0.61
+    Category n
+    Recall: 0.49
+    Prec  : 0.41
+    Category o
+    Recall: 0.00
+    Prec  : NaN
+
+    ```
 
 1.  首先，这是一个令人惊讶的好系统性能，对于我们的最少训练分类器来说。`p`非常接近没有阈值时的目标精度`.65`，而且覆盖率也不错：在1500条推文中找到了141个真实正例。由于我们没有标注所有1500条推文，我们无法真正地说出分类器的召回率是多少，所以这个术语在常见用法中被过度使用。`n`类别表现不佳，但仍然相当不错。我们的标注没有对`o`类别进行标注，所以系统列都是零。
 
 1.  接下来，我们将查看用于阈值指导的精度/召回/得分曲线：
 
-    [PRE132]
+    ```py
+    PR Curve for Category: p
+      PRECI.   RECALL    SCORE
+    1.000000 0.006024 0.976872
+    1.000000 0.012048 0.965248
+    1.000000 0.018072 0.958461
+    1.000000 0.024096 0.947749
+    1.000000 0.030120 0.938152
+    1.000000 0.036145 0.930893
+    1.000000 0.042169 0.928653
+    …
+    0.829268 0.204819 0.781308
+    0.833333 0.210843 0.777209
+    0.837209 0.216867 0.776252
+    0.840909 0.222892 0.771287
+    0.822222 0.222892 0.766425
+    0.804348 0.222892 0.766132
+    0.808511 0.228916 0.764918
+    0.791667 0.228916 0.761848
+    0.795918 0.234940 0.758419
+    0.780000 0.234940 0.755753
+    0.784314 0.240964 0.755314
+    …
+    0.649746 0.771084 0.531612
+    0.651515 0.777108 0.529871
+    0.653266 0.783133 0.529396
+    0.650000 0.783133 0.528988
+    0.651741 0.789157 0.526603
+    0.648515 0.789157 0.526153
+    0.650246 0.795181 0.525740
+    0.651961 0.801205 0.525636
+    0.648780 0.801205 0.524874
+    ```
 
 1.  为了节省空间，前面的输出中省略了大多数值。我们注意到，分类器达到`.65`精度的点得分为`.525`。这意味着，如果我们以`.525`为阈值，我们可以期望达到65%的精度，但有一些注意事项：
 
@@ -1024,7 +1976,27 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  `n`的情况有一个看起来像这样的曲线：
 
-    [PRE133]
+    ```py
+    PR Curve for Category: n
+      PRECI.   RECALL    SCORE
+    1.000000 0.013158 0.981217
+    0.500000 0.013158 0.862016
+    0.666667 0.026316 0.844607
+    0.500000 0.026316 0.796797
+    0.600000 0.039474 0.775489
+    0.500000 0.039474 0.768295
+    …
+    0.468750 0.197368 0.571442
+    0.454545 0.197368 0.571117
+    0.470588 0.210526 0.567976
+    0.485714 0.223684 0.563354
+    0.500000 0.236842 0.552538
+    0.486486 0.236842 0.549950
+    0.500000 0.250000 0.549910
+    0.487179 0.250000 0.547843
+    0.475000 0.250000 0.540650
+    0.463415 0.250000 0.529589
+    ```
 
 1.  看起来阈值`.549`就能完成任务。接下来的食谱将展示如何设置阈值分类器，现在我们已经有了阈值。
 
@@ -1040,17 +2012,67 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 这个类的代码位于 `src/com/lingpipe/cookbook/chapter3/ThresholdedClassifier`。在顶层，我们有类、相关成员变量和构造函数：
 
-[PRE134]
+```py
+public class ThresholdedClassifier<E> implements  ScoredClassifier<E> {
+
+  ConditionalClassifier<E> mNonThresholdedClassifier;
+
+  public ThresholdedClassifier (ConditionalClassifier<E> classifier) {
+    mNonThresholdedClassifier = classifier;
+  }
+```
 
 接下来，我们将实现 `ScoredClassification` 所需的唯一方法，这就是魔法发生的地方：
 
-[PRE135]
+```py
+@Override
+public ScoredClassification classify(E input) {
+  ConditionalClassification classification 
+    = mNonThresholdedClassifier.classify(input);
+  List<ScoredObject<String>> scores 
+      = new ArrayList<ScoredObject<String>>();
+  for (int i = 0; i < classification.size(); ++i) {
+    String category = classification.category(i);     Double score = classification.score(i);
+     if (category.equals("p") && score < .76d) {
+       score = 0.0;
+     }
+    if (category.equals("n") && score < .549d) {
+       score = 0.0;
+     }
+     ScoredObject<String> scored 
+      = new ScoredObject<String>(category,score);
+    scores.add(scored);
+  }
+  ScoredClassification thresholded 
+    = ScoredClassification.create(scores);
+  return thresholded;
+}
+```
 
 关于评分分类的复杂之处在于，即使分数是 `0.0`，也必须将分数分配给所有类别。从条件分类（所有分数加起来为 `1.0`）到通用解决方案的映射并不适用，这就是为什么使用先前的临时实现的原因。
 
 此外，还有一个 `main()` 方法，它会加载 `ThresholdedClassifier` 相关的片段并应用它们：
 
-[PRE136]
+```py
+java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3/ThresholdedClassifier data/freshDisneyAnnotated.csv 
+Data is: data/freshDisneyAnnotated.csv model is: models/ClassifierBuilder.LogisticRegression
+
+reference\response
+ \p,n,o,
+ p 38,14,114,
+ n 5,19,52,
+ o 5,5,69,
+Category p
+Recall: 0.23
+Prec  : 0.79
+Category n
+Recall: 0.25
+Prec  : 0.50
+Category o
+Recall: 0.87
+Prec  : 0.29
+
+```
 
 阈值正在按设计执行；`p` 是 `.79` 精度，对于咨询来说足够接近，而 `n` 则非常准确。考虑到本章的上下文，`main()` 方法的来源应该是直截了当的。
 
@@ -1114,11 +2136,31 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  运行以下命令。在没有备份文件的情况下，不要在自己的标注数据上执行此操作。我们的I/O例程是为简单而编写的，而不是为了健壮性。我们已经警告过你：
 
-    [PRE137]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar: com.lingpipe.cookbook.chapter3.ActiveLearner 
+
+    ```
 
 1.  指向提供的标注数据，这将打印以下内容到控制台，并给出最终建议：
 
-    [PRE138]
+    ```py
+    reference\response
+              \p,n,o,
+             p 7,0,1,
+             n 1,0,3,
+             o 2,0,11,
+    Category p
+    Recall: 0.88
+    Prec  : 0.70
+    Category n
+    Recall: 0.00
+    Prec  : NaN
+    Category o
+    Recall: 0.85
+    Prec  : 0.73
+    Writing to file: data/activeLearning/disneySentimentDedupe.1.csv
+    Done, now go annotate and save with same file name
+    ```
 
 1.  这个配方将向你展示如何通过以更智能的方式使其更大来改进它。让我们看看我们目前的情况：
 
@@ -1164,15 +2206,55 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  我们将保存文件，不更改文件名，并运行我们之前所做的相同程序：
 
-    [PRE139]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar: com.lingpipe.cookbook.chapter3.ActiveLearner 
+
+    ```
 
 1.  输出将如下所示：
 
-    [PRE140]
+    ```py
+    First file: data/activeLearning2/disneySentimentDedupe.0.csv
+    Reading from file data/activeLearning2/disneySentimentDedupe.1.csv
+    reference\response
+              \p,n,o,
+             p 17,1,20,
+             n 9,1,5,
+             o 9,1,51,
+    Category p
+    Recall: 0.45
+    Prec  : 0.49
+    Category n
+    Recall: 0.07
+    Prec  : 0.33
+    Category o
+    Recall: 0.84
+    Prec  : 0.67
+    Corpus is: 114
+    Writing to file: data/activeLearning2/disneySentimentDedupe.2.csv
+    Done, now go annotate and save with same file name
+    ```
 
 1.  这是在注释过程中的一个相当典型的输出。正面`p`，一个简单的类别，以49%的准确率和45%的召回率缓慢前进。负面的`n`甚至更糟。尽管如此，我们将在输出文件上再进行一轮注释，重点关注`n`猜测，以帮助该类别提高性能。我们将保存并重新运行文件：
 
-    [PRE141]
+    ```py
+    First file:  data/activeLearning2/disneySentimentDedupe.0.csv
+    Reading from file data/activeLearning2/disneySentimentDedupe.2.csv
+    reference\response
+              \p,n,o,
+             p 45,8,17,
+             n 16,13,3,
+             o 18,3,88,
+    Category p
+    Recall: 0.64
+    Prec  : 0.57
+    Category n
+    Recall: 0.41
+    Prec  : 0.54
+    Category o
+    Recall: 0.81
+    Prec  : 0.81
+    ```
 
 1.  这最后一轮注释使我们达到了极限（如果你要完全复制这个配方，请记住将我们的注释从`activeLearningCompleted/disneySentimentDedupe.2.csv`复制过来）。我们从`p`和`n`中注释了高置信度示例，增加了近100个示例。`n`的第一个最佳注释的准确率超过50%，召回率为41%。我们假设将会有一个可调的阈值，以满足我们对`p`的80%要求，并在211步中宣布胜利，这比总共1,343个注释要少得多。
 
@@ -1186,53 +2268,128 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 这个配方由于同时评估和创建注释的排名输出而有一些微妙之处。代码从您应该熟悉的构造开始：
 
-[PRE142]
+```py
+public static void main(String[] args) throws IOException {
+  String fileName = args.length > 0 ? args[0] 
+    : "data/activeLearning/disneySentimentDedupe.0.csv"; 
+  System.out.println("First file:  " + fileName);
+  String latestFile = getLatestEpochFile(fileName);
+```
 
 `getLatestEpochFile`方法寻找以`csv`结尾的最高编号文件，与文件名共享根目录，并返回它。我们决不会用这个程序做任何严肃的事情。这个方法是标准的Java，所以我们将不会涉及它。
 
 一旦我们有了最新的文件，我们将进行一些报告，读取我们的标准`.csv`注释文件，并加载一个交叉验证语料库。所有这些程序在其他地方有详细说明，位置由`Util`源中指定的位置给出。最后，我们将得到在`.csv`注释文件中找到的类别：
 
-[PRE143]
+```py
+List<String[]> data 
+  = Util.readCsvRemoveHeader(new File(latestFile));
+int numFolds = 10;
+XValidatingObjectCorpus<Classified<CharSequence>> corpus 
+  = Util.loadXValCorpus(data,numFolds);
+String[] categories = Util.getCategoryArray(corpus);
+```
 
 接下来，我们将配置一些标准的逻辑回归训练参数，并创建用于交叉验证评估的评估器。请注意，`storeInputs`的布尔值为`true`，这将便于记录结果。《第1章》（`part0014_split_000.html#page "Chapter 1. Simple Classifiers"`）中关于`*How to train and evaluate with cross validation*`的配方有完整的解释：
 
-[PRE144]
+```py
+PrintWriter progressWriter = new PrintWriter(System.out,true);
+boolean storeInputs = true;
+ConditionalClassifierEvaluator<CharSequence> evaluator 
+  = new ConditionalClassifierEvaluator<CharSequence>(null, categories, storeInputs);
+TokenizerFactory tokFactory 
+  = IndoEuropeanTokenizerFactory.INSTANCE;
+```
 
 然后，我们将执行标准的交叉验证：
 
-[PRE145]
+```py
+for (int i = 0; i < numFolds; ++i) {
+  corpus.setFold(i);
+  final LogisticRegressionClassifier<CharSequence> classifier 
+    = Util.trainLogReg(corpus,tokFactory, progressWriter);
+  evaluator.setClassifier(classifier);
+  corpus.visitTest(evaluator);
+}
+```
 
 在交叉验证结束时，评估器在`visitTest()`中存储了所有的分类。接下来，我们将把这些数据转移到累加器中，它创建并存储将要放入输出电子表格的行，并冗余地存储分数；这个分数将用于排序以控制打印出的注释的顺序：
 
-[PRE146]
+```py
+final ObjectToDoubleMap<String[]> accumulator 
+  = new ObjectToDoubleMap<String[]>();
+```
 
 然后，我们将遍历每个类别，并为该类别创建一个包含假阴性和真阳性的列表——这些是真实类别与类别标签相同的案例：
 
-[PRE147]
+```py
+for (String category : categories) {
+List<Classified<CharSequence>> inCategory
+   = evaluator.truePositives(category);    
+inCategory.addAll(evaluator.falseNegatives(category));
+```
 
 接下来，所有属于类别的测试用例都用于为累加器创建行：
 
-[PRE148]
+```py
+for (Classified<CharSequence> testCase : inCategory) {
+   CharSequence text = testCase.getObject();
+  ConditionalClassification classification 
+    = (ConditionalClassification)                  testCase.getClassification();
+  double score = classification.conditionalProbability(0);
+  String[] xFoldRow = new String[Util.TEXT_OFFSET + 1];
+  xFoldRow[Util.SCORE] = String.valueOf(score);
+  xFoldRow[Util.GUESSED_CLASS] = classification.bestCategory();
+  xFoldRow[Util.ANNOTATION_OFFSET] = category;
+  xFoldRow[Util.TEXT_OFFSET] = text.toString();
+  accumulator.set(xFoldRow,score);
+}
+```
 
 接下来，代码将打印出一些标准的评估器输出：
 
-[PRE149]
+```py
+Util.printConfusionMatrix(evaluator.confusionMatrix());
+Util.printPrecRecall(evaluator);  
+```
 
 所述的所有步骤仅适用于注释数据。我们现在将转向获取`.csv`文件中所有未注释数据的最佳类别和分数。
 
 首先，我们将设置交叉验证语料库的折数数量为`0`，这意味着`vistTrain()`将访问整个注释语料库——未注释的数据不包含在语料库中。逻辑回归分类器以通常的方式进行训练：
 
-[PRE150]
+```py
+corpus.setNumFolds(0);
+final LogisticRegressionClassifier<CharSequence> classifier
+  = Util.trainLogReg(corpus,tokFactory,progressWriter);
+```
 
 带着分类器，代码逐行遍历所有的`data`项。第一步是检查注释。如果值不是空字符串，则数据位于上述语料库中，并用作训练数据，因此循环跳到下一行：
 
-[PRE151]
+```py
+for (String[] csvData : data) {
+   if (!csvData[Util.ANNOTATION_OFFSET].equals("")) {
+    continue;
+   }
+   ScoredClassification classification = classifier.classify(csvData[Util.TEXT_OFFSET]);
+   csvData[Util.GUESSED_CLASS] = classification.category(0);
+   double estimate = classification.score(0);
+   csvData[Util.SCORE] = String.valueOf(estimate);
+   accumulator.set(csvData,estimate);
+  }
+```
 
 如果行未标注，则在适当的位置添加分数和`bestCategory()`方法，并将行添加到累加器中，带有分数。
 
 代码的其余部分增加文件名索引并输出带有少量报告的累加器数据：
 
-[PRE152]
+```py
+String outfile = incrementFileName(latestFile);
+Util.writeCsvAddHeader(accumulator.keysOrderedByValueList(), 
+        new File(outfile));    
+System.out.println("Corpus size: " + corpus.size());
+System.out.println("Writing to file: " + outfile);
+System.out.println("Done, now go annotate and save with same" 
+          + " file name");
+```
 
 这就是它的工作方式。记住，这种方法可能引入的偏差会使得评估数字无效。始终在新鲜保留数据上运行以获得分类器性能的正确感觉。
 
@@ -1270,9 +2427,24 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 1.  招募至少两名注释员来注释数据。我们需要至少两名注释员的原因是，这项任务必须证明人类可以重复进行。如果人们无法可靠地完成任务，那么你不能期望计算机能够完成。这就是我们执行代码的地方。在命令行中输入以下命令或在你的IDE中调用你的注释员——这将使用我们的默认文件运行：
 
-    [PRE153]
+    ```py
+    java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.InterAnnotatorAgreement
 
-    [PRE154]
+    ```
+
+    ```py
+    data/disney_e_n.csv treated as truth 
+    data/disney1_e_n.csv treated as response
+    Disagreement: n x e for: When all else fails #Disney
+    Disagreement: e x n for: 昨日の幸せな気持ちのまま今日はLANDにいっ
+    reference\response
+     \e,n,
+     e 10,1,
+     n 1,9, 
+    Category: e Precision: 0.91, Recall: 0.91 
+    Category: n Precision: 0.90, Recall: 0.90
+
+    ```
 
 1.  代码报告分歧并打印出混淆矩阵。精确率和召回率也是有用的指标。
 
@@ -1280,11 +2452,18 @@ Javadoc 引用了广泛的功能提取器和组合器/过滤器，以帮助管�
 
 在`src/com/lingpipe/cookbook/chapter3/InterAnnotatorAgreement.java`中的代码几乎没有新数据。有一点细微的区别是，我们使用了`BaseClassifierEvaluator`来执行评估工作，而不需要指定任何分类器——创建方式如下：
 
-[PRE155]
+```py
+BaseClassifierEvaluator<CharSequence> evaluator 
+  = new BaseClassifierEvaluator<CharSequence>(null, 
+                categories, storeInputs);
+```
 
 评估者直接填充分类，而不是像书中其他地方所做的那样使用`Corpus.visitTest()`方法：
 
-[PRE156]
+```py
+evaluator.addClassification(truthCategory, 
+          responseClassification, text);
+```
 
 如果食谱需要进一步解释，请参考[第1章](part0014_split_000.html#page "第1章. 简单分类器")中的*分类器评估——混淆矩阵*食谱，*简单分类器*。
 

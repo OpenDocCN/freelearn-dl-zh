@@ -34,19 +34,31 @@ Unity 可以在任何主流桌面计算机（Windows、Mac 或 Linux）上运行
 
 1.  打开 Python/Anaconda 命令行，并确保使用以下命令激活您的虚拟环境：
 
-[PRE0]
+```py
+conda activate gameAI
+--- or ---
+activate gameAI
+```
 
 1.  使用以下命令安装 Unity Gym 包装器：
 
-[PRE1]
+```py
+pip install gym_unity 
+```
 
 1.  切换到根工作文件夹，最好是 `C:` 或 `/`，并使用以下命令创建一个目录以克隆 ML-Agents 工具包：
 
-[PRE2]
+```py
+cd /
+mkdir mlagents
+cd mlagents
+```
 
 1.  然后，假设您已安装 `git`，使用以下命令使用 `git` 拉取 ML-Agents 工具包：
 
-[PRE3]
+```py
+git clone https://github.com/Unity-Technologies/ml-agents.git
+```
 
 我们更喜欢根目录的原因是 ML-Agents 目录结构可能相当深，这可能在某些操作系统中导致文件名过长错误。
 
@@ -142,29 +154,55 @@ ML-Agents 工具包不仅提供了一个 DRL 训练框架，还提供了一种�
 
 1.  由于你可能会想要将我们之前的一些样本转换为运行 Unity 环境，我们将逐步介绍所需的变化，首先从新的导入开始，如下所示：
 
-[PRE4]
+```py
+from unityagents import UnityEnvironment
+```
 
 1.  这导入了`UnityEnvironment`类，这是一个Unity的Gym适配器。接下来，我们使用这个类来实例化`env`环境，如下所示；注意，我们为其他操作系统放置了注释行：
 
-[PRE5]
+```py
+env = UnityEnvironment(file_name="desktop/gameAI.exe") # Windows
+#env = UnityEnvironment(file_name="desktop/gameAI.app") # Mac
+#env = UnityEnvironment(file_name="desktop/gameAI.x86") # Linux x86
+#env = UnityEnvironment(file_name="desktop/gameAI.x86_64") # Linux x86_64
+```
 
 1.  接下来，我们从环境中获取`brain`和`brain_name`。Unity使用大脑的概念来控制智能体。我们将在后面的章节中探讨智能体大脑。现在，请记住我们只是用以下代码获取第一个可用的大脑：
 
-[PRE6]
+```py
+brain_name = env.brain_names[0]
+brain = env.brains[brain_name]
+```
 
 1.  然后，我们从大脑中提取动作大小（`action_size`）和状态大小（`state_size`），并使用这些作为输入来构建我们的`RainbowDQN`模型，如下所示：
 
-[PRE7]
+```py
+action_size = brain.vector_action_space_size
+state_size = brain.vector_observation_space_size
+
+current_model = RainbowDQN(state_size, action_size, num_atoms, Vmin, Vmax)
+target_model = RainbowDQN(state_size, action_size, num_atoms, Vmin, Vmax)
+```
 
 1.  我们需要关注的最后一部分是在训练代码中，与环境的重置方式有关。Unity允许多个智能体/大脑在并发环境中并发运行，这可以是A2C/A3C或其他机制的方式机制。因此，我们需要更加小心地确定我们想要重置的具体大脑和模式。以下代码展示了我们在训练Unity时如何重置环境：
 
-[PRE8]
+```py
+env_info = env.reset(train_mode=True)[brain_name]
+state = env_info.vector_observations[0]
+```
 
 1.  如前所述，这种稍微有些令人困惑的索引目的在于确定你想要从哪个大脑/智能体中提取状态。Unity可能拥有多个大脑在多个子环境中训练多个智能体，这些智能体要么协同工作，要么相互竞争。我们将在第14章中详细介绍多个智能体环境的训练，即从DRL到AGI。
 
 1.  我们还必须更改任何其他可能重置环境的情况，如下例所示，当算法检查是否完成一个回合时，使用以下代码：
 
-[PRE9]
+```py
+if done:
+        #state = env.reset()
+        env_info = env.reset(train_mode=True)[brain_name] 
+        state = env_info.vector_observations[0]
+        all_rewards.append(episode_reward)
+        episode_reward = 0
+```
 
 1.  运行代码并观察智能体训练过程。除非你在另一个shell中运行TensorBoard并完成所有步骤，否则你将看不到除了TensorBoard输出之外的任何视觉内容，现在你很可能可以自己做到这一点。
 
@@ -218,11 +256,21 @@ Unity提供了一个出色的界面用于原型设计和构建商业游戏。实
 
 1.  在文件顶部，你会注意到这个`BasicAgent`类是从`Agent`扩展的，而不是Unity默认的`MonoBehaviour`。`Agent`是Unity中的一个特殊类，正如你可能猜到的，它定义了一个能够探索环境的智能体。然而，在这种情况下，智能体更多地指的是异步或同步actor-critic中的工作者。这意味着单个大脑可以控制多个智能体，这通常是这种情况：
 
-[PRE10]
+```py
+using UnityEngine;
+using MLAgents;
+
+public class BasicAgent : Agent
+```
 
 1.  跳过字段，我们跳到以`CollectObservations`开始的方法定义，如下所示：
 
-[PRE11]
+```py
+public override void CollectObservations()
+{
+  AddVectorObs(m_Position, 20);
+}
+```
 
 1.  在这个方法内部，我们可以看到代理/大脑如何从环境中收集观察结果。在这种情况下，观察是通过 `AddVectorObs` 添加的，它将观察结果添加为所需大小的 one-hot 编码向量。在这种情况下，向量大小是 20，与大脑的状态大小相同。
 
@@ -230,17 +278,60 @@ One-hot 编码是一种方法，通过在向量内部使用二进制值来编码
 
 1.  主要的动作方法是 `AgentAction` 方法。这是代理在环境中执行动作的地方，无论是移动还是其他动作：
 
-[PRE12]
+```py
+ public override void AgentAction(float[] vectorAction, string textAction)
+ {
+  var movement = (int)vectorAction[0];
+  var direction = 0;
+  switch (movement)
+  {
+    case 1:
+      direction = -1;
+      break;
+    case 2:
+      direction = 1;
+      break;
+  }
+
+  m_Position += direction;
+  if (m_Position < m_MinPosition) { m_Position = m_MinPosition; }
+  if (m_Position > m_MaxPosition) { m_Position = m_MaxPosition; }
+
+  gameObject.transform.position = new Vector3(m_Position - 10f, 0f, 0f);
+
+  AddReward(-0.01f);
+
+  if (m_Position == m_SmallGoalPosition)
+  {
+    Done();
+    AddReward(0.1f);
+  }
+
+  if (m_Position == m_LargeGoalPosition)
+  {
+    Done();
+    AddReward(1f);
+  }
+}
+```
 
 1.  这段代码的第一部分只是根据代理所采取的动作确定其移动方式。您可以看到代码如何根据移动调整代理的位置。然后，我们看到以下代码行：
 
-[PRE13]
+```py
+AddReward(-0.01f);
+```
 
 1.  这行代码添加了一个步骤奖励，意味着它会在每一步都添加这个奖励。它这样做是为了限制代理的移动。因此，代理做出错误决策所需的时间越长，奖励就越少。我们有时会使用步骤奖励，但它也可能有负面影响，并且通常有理由完全消除步骤奖励。
 
 1.  在 `AgentAction` 方法的底部，我们可以看到当代理达到小目标或大目标时会发生什么。如果代理达到大目标，它会获得 1 的奖励，如果达到小目标，它会获得 0.1 的奖励。有了这些，我们还可以看到，当它达到目标时，通过调用 `Done()` 来终止游戏：
 
-[PRE14]
+```py
+Done();
+AddReward(0.1f);  //small goal
+// or
+Done();
+AddReward(1f);  //large goal
+```
 
 1.  将奖励的数字反转，保存代码，然后返回编辑器。将 **Academy** 设置为控制大脑，然后使用 ML-Agents 或我们之前开发的代码训练代理。您应该非常清楚地看到代理对较小目标的偏好。
 
@@ -280,13 +371,27 @@ ML-Agents 工具包，允许您训练深度强化学习（DRL）代理的部分�
 
 1.  这些参数现在需要在配置文件中进行配置，ML-Agents 工具包将使用该配置文件来训练使用课程的代理。该文件的 内容可以在 `config/curricula/wall-jump/` 中找到或创建，并包括以下内容：
 
-[PRE15]
+```py
+{
+    "measure" : "progress",
+    "thresholds" : [0.1, 0.3, 0.5],
+    "min_lesson_length" : 100,
+    "signal_smoothing" : true,
+    "parameters" :
+    {
+        "big_wall_min_height" : [0.0, 4.0, 6.0, 8.0],
+        "big_wall_max_height" : [4.0, 7.0, 8.0, 8.0]
+    }
+}
+```
 
 1.  通过参考 ML-Agents 文档可以最好地理解这些参数。基本上，这里的想法是这些参数控制着随时间增加的墙壁高度。因此，代理需要学会移动方块跳过墙壁，随着难度越来越大。
 
 1.  在 **Academy** 脑上设置 **Control** 标志，然后在 Python shell 中运行以下命令以启动 ML-Agents 会话：
 
-[PRE16]
+```py
+mlagents-learn config/trainer_config.yaml --curriculum=config/curricula/wall-jump/ --run-id=wall-jump-curriculum --train
+```
 
 1.  假设配置文件位于正确的位置，你将被提示运行编辑器并观察代理在环境中的训练。此示例的结果如下所示：
 
@@ -306,7 +411,12 @@ ML-Agents 工具包，允许您训练深度强化学习（DRL）代理的部分�
 
 +   **预训练**：这允许你使用预先录制的人类演示，并利用这些演示来启动智能体的学习。如果你使用预训练，你还需要在你的 ML-Agents 配置文件中提供一个配置部分，如下所示：
 
-[PRE17]
+```py
+pretraining:
+        demo_path: ./demos/Tennis.demo
+        strength: 0.5
+        steps: 10000
+```
 
 +   **行为克隆**（**BC**）：在这个训练中，设置直接在 Unity 编辑器中进行。这对于小演示可以帮助智能体增加学习的环境来说非常好。BC 在具有大观察状态空间的大型环境中效果不佳。
 
@@ -328,13 +438,28 @@ ML-Agents 工具包，允许您训练深度强化学习（DRL）代理的部分�
 
 1.  我们接下来要做的事情是自定义ML-Agents的超参数配置文件。我们通过为`StudentBrain`添加以下条目来自定义文件：
 
-[PRE18]
+```py
+StudentBrain:
+  trainer: imitation
+  max_steps: 10000
+  summary_freq: 1000
+  brain_to_imitate: TeacherBrain
+  batch_size: 16
+  batches_per_epoch: 5
+  num_layers: 4
+  hidden_units: 64
+  use_recurrent: false
+  sequence_length: 16
+  buffer_size: 128
+```
 
 1.  在前面的配置中，突出显示的元素显示了`trainer:`设置为`imitation`和`brain_to_imitate:`为`TeacherBrain`。有关设置ML-Agents配置的更多信息，可以在在线文档中找到。
 
 1.  接下来，您需要打开Python/Anaconda shell并切换到`mlagents`文件夹。之后，运行以下命令以开始训练：
 
-[PRE19]
+```py
+mlagents-learn config/trainer_config.yaml --run-id=tennis1 --train
+```
 
 1.  这将启动训练器，不久之后您将被提示以**播放**模式启动Unity编辑器。
 
@@ -384,25 +509,65 @@ CL 可以非常强大，内在奖励的整个概念在游戏中有一些有趣�
 
 1.  打开文件，将以下文本放入其中，然后保存：
 
-[PRE20]
+```py
+resampling-interval: 5000
+
+big_wall_min_height:
+    sampler-type: "uniform"
+    min_value: 5
+    max_value: 8
+
+big_wall_max_height:
+    sampler-type: "uniform"
+    min_value: 8
+    max_value: 10
+
+small_wall_height:
+    sampler-type: "uniform"
+    min_value: 2
+    max_value: 5
+
+no_wall_height:
+    sampler-type: "uniform"
+    min_value: 0
+    max_value: 3
+```
 
 1.  这设置了我们将如何采样值的采样分布。然后，可以使用以下代码对环境的值进行采样：
 
-[PRE21]
+```py
+SamplerFactory.register_sampler(*custom_sampler_string_key*, *custom_sampler_object*)
+```
 
 1.  我们还可以定义新的采样器类型或使用自定义采样器以自定义方式采样数据值，该采样器由我们在 ML-Agents 代码中的 `sample_class.py` 文件中的类放置。以下是一个自定义采样器的示例：
 
-[PRE22]
+```py
+class CustomSampler(Sampler):
+    def __init__(self, argA, argB, argC):
+        self.possible_vals = [argA, argB, argC]
+
+    def sample_all(self):
+        return np.random.choice(self.possible_vals)
+```
 
 1.  然后，您可以配置配置文件以运行此采样器，如下所示：
 
-[PRE23]
+```py
+height:
+    sampler-type: "custom-sampler"
+    argB: 1
+    argA: 2
+    argC: 3
+```
 
 1.  请记住，当代理重置时，您仍然需要采样值并修改环境的配置。这需要修改代码以使用适当的采样器采样输入。
 
 1.  您可以使用以下命令运行 Unity ML-Agents 训练器代码：
 
-[PRE24]
+```py
+mlagents-learn config/trainer_config.yaml --sampler=config/walljump_generalize.yaml
+--run-id=walljump-generalization --train
+```
 
 能够以这种方式训练代理可以使您的代理更加健壮，能够应对各种环境形态。如果您正在构建需要实用代理的游戏，您很可能会需要以通用方式训练您的代理。通用代理通常能够更好地适应环境中不可预见的变化，比其他方式训练的代理要好得多。
 

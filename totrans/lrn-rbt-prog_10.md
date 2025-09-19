@@ -292,7 +292,9 @@ HC-SR04有几个具有这种能力的替代部件。HC-SR04P、RCWL-1601和Adafr
 
 要与GPIO传感器和一些其他硬件一起工作，您需要一个Python库。让我们使用`GPIOZero`库，该库旨在帮助与这种硬件进行接口：
 
-[PRE0]
+```py
+$ pip3 install RPi.GPIO gpiozero
+```
 
 现在库已经安装，我们可以编写测试代码。
 
@@ -318,23 +320,36 @@ Figure 8.16 – 超声波距离传感器的脉冲时序和响应
 
 1.  首先，导入 `time` 和 `DistanceSensor` 库：
 
-    [PRE1]
+    ```py
+    import time
+    from gpiozero import DistanceSensor
+    ```
 
 1.  接下来，我们设置传感器。我使用了 `print` 语句来显示正在发生的事情。在这些行中，我们为每个距离传感器创建库对象，注册我们连接它们的引脚。确保这些与你的接线匹配：
 
-    [PRE2]
+    ```py
+    queue_len parameter. The GPIOZero library tries to collect 30 sensor readings before giving an output, which makes it smoother, but less responsive. And what we'll need for our robot is responsive, so we take it down to 2 readings. A tiny bit of smoothing, but totally responsive.
+    ```
 
 1.  这个测试将在我们取消它之前循环运行：
 
-    [PRE3]
+    ```py
+    while True:
+    ```
 
 1.  我们然后打印出传感器的距离。`.distance` 是一个属性，就像我们在书中早些时候在LED系统上的 `.count` 属性所看到的那样。传感器会持续更新它。我们将其乘以100，因为 `GPIOZero` 的距离是以米为单位的：
 
-    [PRE4]
+    ```py
+        print("Left: {l}, Right: {r}".format(
+    l=sensor_l.distance * 100, 
+            r=sensor_r.distance * 100))
+    ```
 
 1.  在循环中稍微休息一下可以防止输出过多，并防止紧密循环：
 
-    [PRE5]
+    ```py
+        time.sleep(0.1)
+    ```
 
 1.  现在，你可以打开你的Raspberry Pi并上传这段代码。
 
@@ -346,17 +361,29 @@ Figure 8.16 – 超声波距离传感器的脉冲时序和响应
 
 1.  使用 `python3 test_distance_sensors.py` 在Pi上启动代码。当你移动物体时，你的Pi应该开始输出距离：
 
-    [PRE6]
+    ```py
+    pi@myrobot:~ $ python3 test_distance_sensors.py 
+    Prepare GPIO Pins
+    Left: 6.565688483970461, Right: 10.483658125707734
+    Left: 5.200715097982538, Right: 11.58136928065528
+    ```
 
 1.  因为它在循环中，你需要按 *Ctrl* + *C* 来停止程序运行。
 
 1.  你会看到这里有很多小数位，这在这里并不太有帮助。首先，设备不太可能那么精确，其次，我们的机器人不需要亚厘米级的精度来做出决策。我们可以在循环中修改打印语句，使其更有帮助：
 
-    [PRE7]
+    ```py
+    :.2f changes the way text is output, to state that there are always two decimal places. Because debug output can be essential to see what is going on in the robot, knowing how to refine it is a valuable skill.
+    ```
 
 1.  使用这个更改运行代码会得到以下输出：
 
-[PRE8]
+```py
+pi@myrobot:~ $ python3 test_distance_sensors.py 
+Prepare GPIO Pins
+Left: 6.56, Right: 10.48
+Left: 5.20, Right: 11.58
+```
 
 你已经证明了距离传感器正在工作。除此之外，我们还探索了如何调整传感器的输出以进行调试，这在制作机器人时你会做得多得多。为了确保你走在正确的道路上，让我们排除任何出现的问题。
 
@@ -392,11 +419,27 @@ Figure 8.16 – 超声波距离传感器的脉冲时序和响应
 
 1.  要使用`DistanceSensor`对象，我们需要从`gpiozero`导入它；新的代码以粗体显示：
 
-    [PRE9]
+    ```py
+    from Raspi_MotorHAT import Raspi_MotorHAT
+    from gpiozero import DistanceSensor
+    ```
 
 1.  我们在机器人类中为每个侧面创建一个`DistanceSensor`对象的实例。我们需要在机器人的构造函数中设置这些。我们使用与测试中相同的引脚编号和队列长度：
 
-    [PRE10]
+    ```py
+    class Robot:
+        def __init__(self, motorhat_addr=0x6f):
+            # Setup the motorhat with the passed in address
+            self._mh = Raspi_MotorHAT(addr=motorhat_addr)
+            # get local variable for each motor
+            self.left_motor = self._mh.getMotor(1)
+            self.right_motor = self._mh.getMotor(2)
+            # Setup The Distance Sensors
+            self.left_distance_sensor = DistanceSensor(echo=17, trigger=27, queue_len=2)
+            self.right_distance_sensor = DistanceSensor(echo=5, trigger=6, queue_len=2)
+            # ensure the motors get stopped when the code exits
+            atexit.register(self.stop_all)
+    ```
 
 将此添加到我们的机器人层中，使其对行为可用。当我们创建我们的机器人时，传感器将测量距离。让我们创建一个使用它们的动作。
 
@@ -442,35 +485,85 @@ Figure 8.16 – 超声波距离传感器的脉冲时序和响应
 
 1.  首先导入机器人，并使用`sleep`进行计时：
 
-    [PRE11]
+    ```py
+    from robot import Robot
+    from time import sleep
+    ...
+    ```
 
 1.  以下类是我们行为的基础。在行为中存储了一个机器人对象。设置了一个速度，可以调整以使机器人行驶更快或更慢。太快，它反应的时间就会减少：
 
-    [PRE12]
+    ```py
+    ...
+    class ObstacleAvoidingBehavior:
+        """Simple obstacle avoiding"""
+        def __init__(self, the_robot):
+            self.robot = the_robot
+            self.speed = 60
+            ...
+    ```
 
 1.  现在以下方法根据传感器检测到的距离为每个电机选择速度。较近的传感器距离会避开障碍物：
 
-    [PRE13]
+    ```py
+        ...
+        def get_motor_speed(self, distance):
+            """This method chooses a speed for a motor based on the distance from a sensor"""
+            if distance < 0.2:
+                return -self.speed
+            else:
+                return self.speed
+        ...
+    ```
 
 1.  `run`方法是核心，因为它包含主循环。我们将俯仰和倾斜机构放在中间，以免遮挡传感器：
 
-    [PRE14]
+    ```py
+        ...
+        def run(self):
+            self.robot.set_pan(0)
+            self.robot.set_tilt(0)
+    ```
 
 1.  现在，我们开始主循环：
 
-    [PRE15]
+    ```py
+            while True:
+                # Get the sensor readings in meters
+                left_distance = self.robot.left_distance_sensor.distance
+                right_distance = self.robot.right_distance_sensor.distance
+                ...
+    ```
 
 1.  我们随后在控制台打印出我们的读数：
 
-    [PRE16]
+    ```py
+                ...
+                print("Left: {l:.2f}, Right: {r:.2f}".format(l=left_distance, r=right_distance))
+                ...
+    ```
 
 1.  现在，我们使用`get_motor_speed`方法中的距离，并将其发送到每个电机：
 
-    [PRE17]
+    ```py
+                ...
+                # Get speeds for motors from distances
+                left_speed = self.get_motor_speed(left_distance)
+                self.robot.set_left(left_speed)
+                right_speed = self.get_motor_speed(right_distance)
+                self.robot.set_right(right_speed)
+    ```
 
 1.  由于这是我们主要的循环，我们在再次循环之前会等待一小段时间。下面是设置和起始行为：
 
-    [PRE18]
+    ```py
+                ...
+                # Wait a little
+                sleep(0.05)
+    bot = Robot()
+    behavior = ObstacleAvoidingBehavior(bot)
+    behavior.run()
+    ```
 
 这个行为的代码现在已经完成，可以运行。是时候尝试一下了。为了测试，设置一个测试空间，宽度为几平方米。避免传感器无法检测到的障碍物，如软垫家具或细小的障碍物，如椅子腿。我使用了文件夹和塑料玩具箱来制作这些课程。
 
@@ -488,25 +581,79 @@ Figure 8.16 – 超声波距离传感器的脉冲时序和响应
 
 1.  我们将不再需要`get_motor_speed`，所以将其删除。我们用名为`get_speeds`的函数来替换它。这个函数接受一个参数，`nearest_distance`，它应该是读数较低的距离传感器：
 
-    [PRE19]
+    ```py
+    ...
+        def get_speeds(self, nearest_distance):
+            if nearest_distance >= 1.0:
+                nearest_speed = self.speed
+                furthest_speed = self.speed
+                delay = 100
+            elif nearest_distance > 0.5:
+                nearest_speed = self.speed
+                furthest_speed = self.speed * 0.8
+                delay = 100
+            elif nearest_distance > 0.2:
+                nearest_speed = self.speed
+                furthest_speed = self.speed * 0.6
+                delay = 100
+            elif nearest_distance > 0.1:
+                nearest_speed = -self.speed * 0.4
+                furthest_speed = -self.speed
+                delay = 100
+            else: # collison
+                nearest_speed = -self.speed
+                furthest_speed = -self.speed
+                delay = 250
+            return nearest_speed, furthest_speed, delay
+    ...
+    ```
 
     这些数字都是为了微调。关键因素是，根据距离，我们让远离障碍物的电机减速，如果我们太靠近，它会驶离。基于时间延迟，并且知道哪个电机是哪个，我们可以控制我们的机器人。
 
 1.  大部分剩余的代码保持不变。这是你之前已经见过的`run`函数：
 
-    [PRE20]
+    ```py
+        ...
+        def run(self):
+            # Drive forward
+            self.robot.set_pan(0)
+            self.robot.set_tilt(0)
+            while True:
+                # Get the sensor readings in meters
+                left_distance = self.robot.left_distance_sensor.distance
+                right_distance = self.robot.right_distance_sensor.distance            # Display this
+                self.display_state(left_distance, right_distance)
+                ...
+    ```
 
 1.  现在它使用`get_speeds`方法来确定最近和最远的距离。注意，我们取两个距离中的`min`，即最小值。我们得到两个电机的速度和一个延迟，然后打印出变量，这样我们就可以看到发生了什么：
 
-    [PRE21]
+    ```py
+    .format (which we used previously). Putting the letter prefix f in front of a string allows us to use local variables in curly brackets in the string. We are still able to use .2f to control the number of decimal places.
+    ```
 
 1.  现在，我们检查哪一侧更近，左边还是右边，并设置正确的电机：
 
-    [PRE22]
+    ```py
+                ...
+                # Send this to the motors
+                if left_distance < right_distance:
+                    self.robot.set_left(nearest_speed)
+                    self.robot.set_right(furthest_speed)
+                else:
+                    self.robot.set_right(nearest_speed)
+                    self.robot.set_left(furthest_speed)
+                ...
+    ```
 
 1.  我们不是固定睡眠一段时间，而是根据`delay`变量中的时间睡眠。延迟是以毫秒为单位的，所以我们需要将其乘以得到秒数：
 
-    [PRE23]
+    ```py
+                ...
+                # Wait our delay time
+                sleep(delay * 0.001)
+    ...
+    ```
 
 1.  代码的其他部分保持不变。你可以在[https://github.com/PacktPublishing/Learn-Robotics-Programming-Second-Edition/tree/master/chapter8](https://github.com/PacktPublishing/Learn-Robotics-Programming-Second-Edition/tree/master/chapter8)找到这个文件的完整代码。
 

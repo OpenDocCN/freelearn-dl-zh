@@ -70,7 +70,9 @@ SFTP使用SSH通过网络将文件从树莓派复制到其他设备。所以，�
 
 1.  在那个文件夹内，使用你的编辑器创建一个测试文件，该文件只会打印一些文本。将此代码放入名为`hello.py`的文件中：
 
-    [PRE0]
+    ```py
+    print("Raspberry Pi is alive")
+    ```
 
 1.  我们将把这个文件复制到机器人上并运行它。你可以使用来自[https://filezilla-project.org](https://filezilla-project.org)的SFTP工具FileZilla进行复制。下载此工具并按照安装说明操作：![](img/B15660_05_01.jpg)
 
@@ -98,7 +100,10 @@ SFTP使用SSH通过网络将文件从树莓派复制到其他设备。所以，�
 
 1.  要运行此代码，请使用PuTTY登录到Pi并尝试以下命令：
 
-    [PRE1]
+    ```py
+    pi@myrobot:~ $ python3 hello.py
+    Raspberry Pi is alive
+    ```
 
 这种策略是使代码更安全的一个很好的开始。通过在您的笔记本电脑/PC上工作并将代码复制到Pi上，您已经确保除了机器人上的代码外，始终还有另一份副本。您还可以在PC上使用您喜欢的任何代码编辑器，并在代码到达Raspberry Pi之前发现一些错误。现在我们有了副本，让我们看看我们如何跟踪代码的更改以及我们做了哪些更改。
 
@@ -116,25 +121,55 @@ SFTP使用SSH通过网络将文件从树莓派复制到其他设备。所以，�
 
 1.  Git要求您使用电脑上的命令行设置您的身份信息：
 
-    [PRE2]
+    ```py
+    > git config --global user.name "<Your Name>"
+    > git config --global user.email <your email address>
+    ```
 
 1.  为了将此项目置于源代码控制之下，我们需要初始化它并提交我们的第一行代码。请确保您已进入电脑上的命令行中您的代码文件夹（`my_robot_project`），并输入以下命令：
 
-    [PRE3]
+    ```py
+    git init . tells Git to make the folder into a Git repository. git add tells Git you want to store the hello.py file in Git. git commit stores this change for later, with -m <message> putting a message in the journal. Git responds to show you it succeeded.
+    ```
 
 1.  我们现在可以通过`git log`查看日志：
 
-    [PRE4]
+    ```py
+    > git log
+    commit 11cc8dc0b880b1dd8302ddda8adf63591bf340fe (HEAD -> master)
+    Author: Your Name <your@email.com>
+    Date: <todays date>
+    Adding the starter code
+    ```
 
 1.  现在修改`hello.py`中的代码，将其更改为以下内容：
 
-    [PRE5]
+    ```py
+    myrobot is alive! or whatever you set the hostname of your robot to be. However, we are interested in Git behavior. Note – more advanced Git usage could let you use Git to transfer code to the Raspberry Pi, but that is beyond the scope of this chapter. Let's see how this code is different from before: 
+
+    ```
 
     打印行，然后在其位置添加一个导入语句和一个打印行。我们可以将此添加到Git中，以创建一个新版本，然后再次使用git log来查看两个版本：
 
-    [PRE6]
+    ```py
+    > git add hello.py
+    > git commit -m "Show the robot hostname"
+    [master 912f4de] Show the robot hostname
+     1 file changed, 2 insertions(+), 1 deletion(-)
+    > git log
+    commit 912f4de3fa866ecc9d2141e855333514d9468151 (HEAD -> master)
+    Author: Your Name <your@email.com>
+    Date: <the time of the next commit>
+    Show the robot hostname
+    commit 11cc8dc0b880b1dd8302ddda8adf63591bf340fe (HEAD -> master)
+    Author: Your Name <your@email.com>
+    Date: <todays date>
+    Adding the starter code
+    ```
 
-    [PRE7]
+    ```py
+
+    ```
 
 使用这种方法，您可以回到以前的版本，或者只是比较版本，并保护自己免受可能后悔的更改。然而，我们刚刚只是触及了Git的强大功能。请参阅“进一步阅读”部分中的参考，了解如何创建分支、使用远程服务、回滚到以前的版本以及找到浏览Git历史中代码的工具。
 
@@ -230,15 +265,25 @@ MacOS X有一个内置的方法来创建SD卡和磁盘镜像。这是通过使�
 
 1.  插入卡并输入以下内容以找到设备的位置：
 
-    [PRE8]
+    ```py
+    $ dmesg
+    ```
 
 1.  此命令将输出很多内容，但您只对接近结尾的一行感兴趣，看起来如下所示：
 
-    [PRE9]
+    ```py
+    [sdb], which may be different on your computer. The SD card location will be /dev/<drive location>, for example, /dev/sdb. Important noteBe careful to get the locations right, as you could destroy the contents of an SD card or your computer hard drive. If you are at all unsure, **do not** use this method.
+    ```
 
 1.  一旦您有了SD位置（例如`/dev/sdb`或`/dev/disk1`），您就可以使用`dd`命令开始克隆。此命令将数据从驱动器中转储到另一个驱动器：
 
-    [PRE10]
+    ```py
+    $ sudo dd if=/dev/sdb of=~/myrobot.img bs=32M
+    Password:
+    474+2 records in
+    474+2 records out
+    15931539456 bytes (16 GB, 15 GiB) copied, 4132.13 s, 3.9 MB/s
+    ```
 
 `if`参数是`of`参数，是你将要克隆到卡中的`myrobot.img`文件。
 

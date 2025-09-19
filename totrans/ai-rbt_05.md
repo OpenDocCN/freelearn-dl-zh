@@ -150,7 +150,21 @@
 
 这里有一个Python函数，用于计算机器人手的位姿，假设每个手臂段长10厘米。你可以替换你机器人手臂段的长度。这个函数将代表手位姿的电机角度从度数转换为厘米的x-y坐标：
 
-[PRE0]
+```py
+def forward_kinematics(theta1, theta2, theta3, segment_length):
+ # Convert degrees to radians
+    theta1_rad = math.radians(theta1)
+    theta2_rad = math.radians(theta2)
+    theta3_rad = math.radians(theta3)
+    # Calculate positions of each joint
+    x1 = segment_length * math.cos(theta1_rad)
+    y1 = segment_length * math.sin(theta1_rad)
+    x2 = x1 + segment_length * math.cos(theta1_rad + theta2_rad)
+    y2 = y1 + segment_length * math.sin(theta1_rad + theta2_rad)
+    x3 = x2 + segment_length * math.cos(theta1_rad + theta2_rad + theta3_rad)
+    y3 = y2 + segment_length * math.sin(theta1_rad + theta2_rad + theta3_rad)
+return x3, y3
+```
 
 手臂的动作（可能的移动）构成了我们机器人手臂的动作空间，即所有可能动作的集合。在本章中，我们将探讨各种选择执行哪个动作以及何时执行的方法，以便完成我们的任务，并使用机器学习来实现这一点。
 
@@ -170,19 +184,33 @@
 
 1.  首先，在 ROS 2 中为机器人臂创建一个**包**。包是 ROS 2 中功能的一个可移植组织单元。由于我们为机器人臂有多个程序和多个功能，我们可以将它们捆绑在一起：
 
-    [PRE1]
+    ```py
+    cd ~/ros2_ws/src
+    ros2 pkg create –build-type ament-cmake ros_xarm
+    src directory where we will store all of the parts we need.
+    ```
 
 1.  我们需要安装 xArm 的驱动程序，以便我们可以在 Python 中使用它们：
 
-    [PRE2]
+    ```py
+    pip install xarm
+    ```
 
 1.  现在我们转到我们的新源目录：
 
-    [PRE3]
+    ```py
+    xarm_mgr.py, which is short for xarm manager.
+    ```
 
 1.  打开编辑器，让我们开始编码。首先，我们需要一些导入：
 
-    [PRE4]
+    ```py
+    import rclpy
+    import xarm
+    import time
+    from rlcpy.node import Node
+    from std_msgs.msg import String, Int32MultiArray, Int32
+    ```
 
     `rclpy` 是 ROS 2 的 Python 接口。`xarm` 是机器人臂的接口，而 `time` 当然是一个我们将用来设置计时器的时间模块。最后，我们使用一些标准的 ROS 消息格式来进行通信。
 
@@ -206,11 +234,23 @@
 
 让我们看看我们如何设置ROS接口。这些数字是伺服电机的位置（角度），单位从`0`（完全逆时针）到`1000`（完全顺时针）。`9999`代码表示在该位置不改变伺服电机，这样我们可以创建不改变手臂部分位置（如夹爪）的命令：
 
-[PRE5]
+```py
+HighCarry=[9999,500,195,858,618,9999]
+MidCarry=[9999, 500, 500, 807, 443, 9999]
+Grasp = [100,500,151,553,117,9999]
+GraspClose=[700,9999,9999,9999,9999,9999]
+Align=[500,500,500,500,500,500]
+```
 
 1.  现在我们可以开始定义我们的机器人手臂控制类了。我们将从类定义和初始化函数开始：
 
-    [PRE6]
+    ```py
+    class xarmControl(Node):
+        def __init__(self):
+            super().__init__('xarm_manager') # node name
+            self.publisher = self.create_publisher(Int32MultiArray, 'xarm_pos', 10)
+            self.armAngPub = self.create_publisher(Int32MultiArray, 'xarm_angle', 10)
+    ```
 
     在这里设置我们的机器人手臂的ROS接口有很多事情要做：
 
@@ -220,19 +260,40 @@
 
 1.  我们的输入，或者说订阅，为手臂提供了外部接口。我思考了如何使用手臂，并提出了我想要的接口。在我们的情况下，我们有一个非常简单的手臂，只需要几个命令。首先，我们有一个名为`RobotCmd`的字符串命令，它允许我们创建控制机器人模式或状态的命令。这将用于许多机器人的命令，而不仅仅是手臂。我创建了一些手臂模式命令，我们将在接下来的几段中介绍。`RobotCmd`的有用之处在于我们可以向这个输入发送任何字符串，并在接收端处理它。这是一个非常灵活且有用的接口。请注意，对于每个订阅者，我们都会创建一个函数调用到回调例程。当数据在接口上发布时，我们的程序（`xarm_mgr.py`）会自动调用回调例程：
 
-    [PRE7]
+    ```py
+    self.cmdSubscribe = self.create_subscription(String, 'RobotCmd', self.cmdCallback,10)
+    ```
 
 1.  接口的下一段允许我们在偏航方向上移动手臂的底部，并独立操作手和手腕。在本章中，我们开始仅训练夹爪，因此有一个独立的接口来旋转、打开和关闭夹爪是有帮助的。操作手部不会改变夹爪的坐标位置，因此这可以分开。同样，我们通过偏航方向（向右和向左）移动手部，以对齐要抓取的玩具。我们将从这个功能开始锁定，稍后添加偏航功能。这是由我们在上一章中设计的计算机视觉系统控制的，因此需要一个独立的接口。我们有`xarmWrist`命令来旋转手腕，`xarmEffector`来打开和关闭夹爪手指，以及`xarmBase`来将手臂的底部向右或向左移动：
 
-    [PRE8]
+    ```py
+            self.wristSubscribe = self.create_subscription(Int32, 'xarmWrist', self.wristCallback,10)
+            self.effSubscribe = self.create_subscription(Int32, 'xarmEffector', self.effCallback,10)
+            self.baseSubscribe = self.create_subscription(Int32, 'xarmBase', self.baseCallback,10)
+    ```
 
 1.  最后的命令接口使我们能够将手臂移动到我们指定的任何位置。通常，我们使用一组数字来命令手臂移动，如下所示：`[100,500,151,553,117,500]`。我在这个命令中增加了一个**秘密功能**。由于我们可能希望在不需要改变偏航角度（来自视觉系统）或手部位置（可能或可能不握有玩具）的情况下移动手臂，我们可以发送移动手臂但不影响某些伺服电机的命令，例如手部。我使用了值`9999`作为**不移动此伺服电机**的值。因此，如果手臂位置命令读取为`[9999, 9999, 500, 807, 443, 9999]`，则偏航位置（*电机6*）和手部位置（*电机0和1*）不会改变：
 
-    [PRE9]
+    ```py
+            self.baseSubscribe = self.create_subscription(
+    Int32MultiArray, 'newArmPos', self.moveArmCallback,10)
+    ```
 
 1.  现在我们已经定义了所有的发布和订阅接口，我们可以打开连接到机器人手臂的USB接口，看看它是否在响应。如果没有响应，我们将抛出一个错误信息：
 
-    [PRE10]
+    ```py
+            timer_period = 1.0 # seconds
+            self.timer = self.create_timer(timer_period, self.timer_callback)
+            self.i = 0 # counter
+            try:
+                self.arm = xarm.Controller('USB')
+                print("ARM OPEN")
+            except:
+                self.get_logger().error("xarm_manager init NO ARM DETECTED")
+                self.arm = None
+                print("ERROR init: NO ARM DETECTED")
+            return
+    ```
 
 注意
 
@@ -242,13 +303,26 @@
 
 1.  我们在源代码中的下一个函数是设置遥测定时器。我们希望定期发布机械臂的位置，以便机器人其他部分可以使用。我们将创建一个定时器回调，它以我们指定的速率定期执行。让我们从每秒一次开始。这是一个信息值，我们不会用它来控制——伺服控制器负责这一点。这是我们需要编写的代码：
 
-    [PRE11]
+    ```py
+            timer_period = 1.0 # seconds
+            self.timer = self.create_timer(timer_period, self.timer_callback)
+            self.i = 0 # counter
+    ```
 
     `timer_period` 是中断之间的间隔。`self.timer` 类变量是一个指向定时器函数的函数指针，我们将它指向另一个函数，`self.timer_callback`，我们将在下一个代码块中定义它。每秒钟，中断将会触发并调用 `timer_callback` 例程。
 
 1.  我们接下来的代码是硬件接口的一部分。由于我们正在初始化机械臂控制器，我们需要打开与机械臂的硬件连接，这是一个使用**人机界面设备**（**HID**）协议的USB端口：
 
-    [PRE12]
+    ```py
+            try:
+                self.arm = xarm.Controller('USB')
+                print("ARM OPEN")
+            except:
+                self.get_logger().error("xarm_manager init NO ARM DETECTED")
+                self.arm = None
+                print("ERROR init: NO ARM DETECTED")
+            return
+    ```
 
     我们首先创建一个 `try` 块，以便我们可以处理任何异常。机器人臂可能未开启电源，或者可能未连接，因此我们必须准备好处理这种情况。我们创建一个臂对象（`self.arm`），它将成为我们与硬件的接口。如果臂成功打开，则返回。如果不成功，我们运行 `except` 例程：
 
@@ -258,25 +332,90 @@
 
 1.  下一个代码块是我们的定时器回调，它发布有关机械臂的遥测信息。记住，我们定义了两个输出消息，机械臂位置和机械臂角度。我们可以在这里服务它们：
 
-    [PRE13]
+    ```py
+        def timer_callback(self):
+            msg = Int32MultiArray()
+            # call arm and get positions
+            armPos=[]
+            for i in range(1,7):
+                armPos.append(self.arm.getPosition(i))
+            msg.data = armPos
+            self.publisher.publish(msg)
+            # get arm positions in degrees
+            armPos=[]
+            for i in range(1,7):
+                armPos.append(int(self.arm.getPosition(i, True)))
+            msg.data = armPos
+            #print(armPos)
+            self.armAngPub.publish(msg)
+    ```
 
     我们使用 `Int32MultiArray` 数据类型，这样我们就可以将机械臂位置数据发布为一个整数数组。我们通过调用 `self.arm.getPosition(servoNumber)` 从机械臂收集数据。我们将输出追加到我们的数组中，完成后，调用 ROS 发布例程 `(self.<topic name>.publish(msg))`。对于机械臂角度，我们可以通过调用 `arm.getPosition(servoNumber, True)` 来获取，这将返回一个角度而不是伺服单元。
 
 1.  现在我们可以处理来自其他程序的命令。接下来，我们将为机器人创建一个控制面板，可以发送命令并设置机器人的模式：
 
-    [PRE14]
+    ```py
+        def cmdCallback(self, msg):
+            self.get_logger().info("xarm rec cmd %s" % msg.data)
+            robotCmd = msg.data
+            if robotCmd=="ARM HIGH_CARRY":
+                self.setArm(HighCarry)
+            if robotCmd=="ARM MID_CARRY":
+                self.setArm(MidCarry)
+            if robotCmd=="ARM GRASP_POS":
+                self.setArm(Grasp)
+            if robotCmd=="ARM GRASP_CLOSE":
+                self.setArm(GraspClose)
+            if robotCmd=="ARM ALIGN":
+                self.setArm(Align)
+    ```
 
     这个部分相当直接。我们接收一个包含命令的字符串消息，并解析消息以查看它是否是程序可以识别的内容。如果是，我们处理消息并执行适当的命令。如果我们收到 `ARM MID_CARRY` 命令，这是一个将机械臂定位到中间位置的命令，那么我们使用 `MidCarry` 全局变量发送一个 `setArm` 命令，该变量包含所有六个电机的伺服位置。
 
 1.  接下来，我们编写机器人接收并执行手腕伺服电机的代码，该命令旋转夹爪。这个命令发送到*电机2*：
 
-    [PRE15]
+    ```py
+        def wristCallback(self, msg):
+            try:
+                newArmPos = int(msg.data)
+            except ValueError:
+                self.get_logger().info("Invalid xarm wrist cmd %s" % msg.data)
+                print("invalid wrist cmd ", msg.data)
+                return
+            # set limits
+            newArmPos = float(min(90.0,newArmPos))
+            newArmPos = float(max(-90.0,newArmPos))
+            self.arm.setPosition(2,newArmPos, True)
+    ```
 
     当`xarmWrist`主题发布时，执行这个函数调用。这个命令只是移动手腕旋转，我们会用它来调整手的手指以对准我们正在抓取的物体。我为无效值添加了一些异常处理，并在输入范围内进行了限制检查，我认为这是外部输入的标准做法。我们不希望手臂对无效输入执行奇怪的操作，例如如果有人能够在`xarmWrist`主题上发送字符串而不是整数。我们还检查命令中数据的范围是否有效，在这种情况下是`0`到`1000`个伺服单位。如果我们得到越界错误，我们将使用`min`和`max`函数将命令限制在允许的范围内。
 
 1.  末端执行器命令和基础命令（控制整个手臂的左右旋转）的工作方式完全相同：
 
-    [PRE16]
+    ```py
+        def effCallback(self, msg):
+        # set just the end effector position
+            try:
+                newArmPos = int(msg.data)
+            except ValueError:
+                self.get_logger().info("Invalid xarm effector cmd %s" % msg.data)
+                return
+            # set limits
+            newArmPos = min(1000,newArmPos)
+            newArmPos = max(0,newArmPos)
+            self.arm.setPosition(1,newArmPos)
+        def baseCallback(self, msg):
+        # set just the base azimuth position
+            try:
+                newArmPos = int(msg.data)
+            except ValueError:
+                self.get_logger().info("Invalid xarm base cmd %s" % msg.data)
+                return
+            # set limits
+            newArmPos = min(1000,newArmPos)
+            newArmPos = max(0,newArmPos)
+            self.arm.setPosition(6,newArmPos)
+    ```
 
     `setArm`命令让我们可以发送一个命令来同时设置每个伺服电机的位置。我们发送一个包含六个整数的数组，这个程序将这个数组传递给伺服电机控制器。
 
@@ -286,7 +425,17 @@
 
 1.  我们可以用`MAIN`来完成我们的手臂控制代码——程序的执行部分：
 
-    [PRE17]
+    ```py
+    #######################MAIN####################################
+    rclpy.init()
+    print("Arm Control Active")
+    xarmCtr = xarmControl()
+    # spin ROS 2
+    rclpy.spin(xarmCtr)
+    # destroy node explicitly
+    xarmCtr.destroy_node()
+    rclpy.shutdown()
+    ```
 
     在这里，我们初始化`rclpy`（ROS 2 Python接口）以将我们的程序连接到ROS基础设施。然后我们创建我们创建的`xarm`控制类的实例。我们将它称为`xarmCtr`。然后我们只需告诉ROS 2执行。我们甚至不需要循环。程序将执行发布和订阅调用，我们的计时器发送遥测数据，这些都包含在我们的`xarmControl`对象中。当我们退出`spin`时，我们就完成了程序，所以我们将关闭ROS节点，然后程序结束。
 
@@ -336,13 +485,36 @@
 
 1.  首先，我们包含所需的导入 – 我们将需要实现训练代码的功能：
 
-    [PRE18]
+    ```py
+    import rclpy
+    import time
+    import random
+    from rclpy.node import Node
+    from std_msgs.msg import String, Int32MultiArray, Int32
+    from sensor_msgs.msg import Image
+    from vision_msgs.msg import Detection2D
+    from vision_msgs.msg import ObjectHypothesisWithPose
+    from vision_msgs.msg import Detection2DArray
+    import math
+    import pickle
+    ```
 
     `rclpy`是ROS 2的Python接口。我们使用`Detection2D`与上一章（YOLOV8）中的视觉系统通信。当我们到达那里时，我会解释`pickle`引用。
 
 1.  接下来，让我们定义一些我们稍后会使用的函数：
 
-    [PRE19]
+    ```py
+    global learningRate = 0.1 # learning rate
+    def round4(x):
+     return (math.round(x*4)/4)
+    # function to restrict a variable to a range. if x < minx, x=min x,etc.
+    def rangeMinMax(x,minx,maxx):
+     xx = max(minx,x)
+     xx = min(maxx,xx)
+     return xx
+    def sortByQ(listByAspect):
+     return(listByAspect[2])
+    ```
 
     学习率在强化学习中就像在其他机器学习算法中一样，用于调整系统根据输入做出改变的速度。我们将从`0.1`开始。如果这个值太大，我们的训练会有大的跳跃，这可能导致不稳定的输出。如果太小，我们可能需要进行很多次重复。`actionSpace`是我们正在教授的可能的手部动作列表。这些值是手腕的角度（以度为单位）。请注意，就抓取而言，`-90`和`+90`是相同的。
 
@@ -352,7 +524,20 @@
 
 1.  在这一步，我们将声明一个将教会机器人抓取物体的类。我们将把这个类命名为`LearningHand`，并将其作为ROS 2中的一个节点：
 
-    [PRE20]
+    ```py
+    class LearningHand(Node):
+        def __init__(self):
+            super().__init__('armQLearn') # node name
+            # we need to both publish and subscribe to the RobotCmd topic
+    self.armPosSub = self.create_subscription(Int32MultiArray, "xarm_pos", self.armPosCallback, 10)
+            self.cmdSubscribe = self.create_subscription(String, 'RobotCmd', self.cmdCallback,10)
+            self.cmdPub = self.create_publisher(String, 'RobotCmd', 10)
+     self.wristPub = self.create_publisher(Int32,'xarmWrist', 10)
+     # declare parameter for number of repetitions
+     self.declare_parameter('ArmLearningRepeats', rclpy.Parameter.Type.INTEGER)
+     # get the current value from configuration
+     self.repeats = self.get_parameter('ArmLearningRepeats').get_parameter_value().int_value
+    ```
 
     在这里，我们通过将`init`函数传递给父类（使用`super`）来初始化对象。我们给节点命名为`armQLearn`，这样机器人其他部分就能找到它。
 
@@ -360,55 +545,157 @@
 
 1.  下一个代码块完成了学习函数的设置：
 
-    [PRE21]
+    ```py
+     self.mode = "idle"
+     self.armInterface = ArmInterface()
+     # define the state space
+     self.stateActionPairs = []
+     # state space is the target aspect and the hand angle
+     # aspect is length / width length along x axis(front back) width on y axis)
+     aspects = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75]
+     handAngles = [90, -45, 0, 45] # note +90 and -90 are the same angle
+     for jj in range(0,len(aspects)):
+       for ii in range(0,4):
+         self.stateActionPairs.append([aspects[jj], handAngles[ii],0.0])
+    ```
 
     我们将学习系统模式设置为`idle`，这意味着“等待用户开始学习。”我们通过实例化我们导入的`ArmInterface`类对象来创建手臂接口。接下来，我们需要设置我们的学习矩阵，它存储可能的方面（我们可以看到的事物）和可能的行为（我们可以做的事情）。这里我们设置为0的最后一个元素是`Q`值，这是我们存储训练结果的地方。
 
 1.  以下函数集帮助我们控制手臂：
 
-    [PRE22]
+    ```py
+     def sndCmd(self,msgStr):
+         msg = String()
+         msg.data = msgStr
+         self.cmpPub.publish(msg)
+     def setHandAngle(self,ang):
+         msg = Int32()
+         msg.data = ang
+         self.wristPub.publish(msg)
+     def armPosCallback(self,msg):
+         self.currentArmPos = msg.data
+     def setActionPairs(self,pairs):
+         self.stateActionPairs = pairs
+    ```
 
     `sndCmd`（发送命令）在`RobotCmd`主题上发布并设置手臂模式。`SetHandAngle`，正如你所期望的，设置手腕伺服电机的角度。`armPosCallback`接收手臂的当前位置，这是由手臂控制程序发布的。`setActionPairs`允许我们创建新的动作对以进行学习。
 
 1.  现在我们准备进行手臂训练。这是一个结合了人和机器人活动的过程，真的非常有趣。我们将尝试20次相同的方面：
 
-    [PRE23]
+    ```py
+     def training(self, aspect):
+       # get the aspect from the vision system
+       #aspect = 1.0 # start here
+       stateActionPairs.sort(key=sortByQ) # sort by Q value
+       if len(stateActionPairs)<1:
+         #error - no aspects found!
+         #
+         self.get_logger().error("qLearningHand No Aspect for
+         Training")
+         return
+       else:
+         mySetup = stateActionPairs[0] # using the highest q value
+         handAngle = mySetup[1]
+         myOldQ = mySetup[2]
+    ```
 
     这在机械臂上启动了训练程序。我们首先基于方面进行训练。我们首先查看我们的`stateActionPairs`以按此方面的最高`Q`值进行排序。我们使用我们的自定义`SortbyQ`函数对`stateActionPairs`列表进行排序。我们将手角度设置为具有最高`Q`值或预期奖励的角度。
 
 1.  程序的这一部分是机器人手臂将要经历的物理运动：
 
-    [PRE24]
+    ```py
+         sndCmd("ARM MID_CARRY")
+         timer.pause(1.0)
+         sndCmd("ARM GRASP")
+         time.sleep(1.0)
+         setHandAngle(handAngle)
+         time.sleep(0.3)
+         # close the gripper
+         sndCmd("ARM GRASP_CLOSE")
+         time.sleep(0.5)
+         # now raise the arm
+         sndCmd("ARM MID_CARRY")
+         time.sleep(1.0)
+    ```
 
     我们首先告诉手臂移动到*Mid Carry*位置——中间位置。然后我们等待1秒钟，直到手臂完成其动作，然后我们将手臂移动到抓取位置。下一步将手腕移动到`Q`函数得到的角。然后我们使用`ARM GRASP_CLOSE`命令关闭夹爪。现在我们抬起手臂，看看夹爪是否能够举起玩具，使用`ARM MID_CARRY`指令。如果我们成功，机器人手臂现在将持有玩具。如果不成功，夹爪将是空的。
 
 1.  现在我们可以检查夹爪中是否有物体：
 
-    [PRE25]
+    ```py
+         #check to see if grip is OK
+         handPos = self.currentArmPos[0]
+         gripSuccess = False
+         if handPos > 650: ## fail
+               gripSuccess = -1 # reward value of not gripping
+         else: # success!
+               gripSuccess = +1 # reward value of gripping
+    ```
 
     如果机器人手的握持正确，玩具将阻止夹爪关闭。我们检查手的位置（手臂每秒发送两次）以查看位置。对于我的特定手臂，对应于650伺服单位或更大的位置是完全关闭的。你的手臂可能不同，所以检查手臂报告的完全关闭和空夹爪的位置。我们根据适当的情况设置`gripSuccess`变量。
 
 1.  现在我们进行机器学习部分。我们使用在*机器人臂的机器学习*部分中引入的特别修改后的Bellman方程来调整这个状态-动作对的Q值：
 
-    [PRE26]
+    ```py
+     # the Bellman Equation
+     ### Q(s, a) = Q(s, a) + α * [R + γ * max(Q(s', a')) - Q(s, a)]
+     newQ = myOldQ + (learningRate*(gripSuccess))
+     mySetup[2]=newQ
+    ```
 
     由于我们不是使用未来的奖励值（我们从这个关闭夹具和抬起手臂的动作中获得完整的奖励），我们不需要预期的未来奖励，只需要当前的奖励。我们将`gripSuccess`值（`+1`或`-1`）乘以学习率，并将其添加到旧的Q分数中，以获得新的Q分数。每次成功都会增加奖励，而任何失败都会导致减少。
 
 1.  为了完成我们的学习函数，我们将更新的Q值放回与测试的角度和手腕角度相匹配的学习表中：
 
-    [PRE27]
+    ```py
+     foundStateActionPair = False
+     # re insert back into q learning array
+     for i in range (0,len(stateActionPairs):
+         thisStateAction = stateActionPairs[i]
+         if thisStateAction[0] == mySetup[0] and 
+    thisStateAction[1] == mySetup[0]:
+             foundStateActionPair=True
+             stateActionPairs[2]=mySetup[2] # store the new q value in the table
+         if not foundStateActionPair:
+             # we don't have this in the table - let's add it
+             stateActionPairs.append(mySetup)
+     input("Reset and Press Enter") # wait for enter key to continue
+    ```
 
     如果这个状态-动作对不在表中（它应该在那里），我们就添加它。我这样做只是为了防止在给出奇怪的臂角度时程序出错。最后，我们暂停程序并等待用户按下*Enter*键以继续。
 
 1.  现在我们来看看程序的其余部分，这部分相当直接。我们必须做一些维护工作，处理一些调用，并构建我们的主要训练循环：
 
-    [PRE28]
+    ```py
+     def cmdCallBack(self,msg):
+       robotCmd = msg.data
+       if robotCmd == "GoLearnHand":
+         self.mode = "start"
+       if robotCmd == "StopLearnHand":
+         self.mode = "idle"
+    ```
 
     这个`cmdCallBack`接收来自`RobotCmd`主题的命令。在这个程序中，我们只处理两个命令：`GoLearnHand`，它启动学习过程，以及`StopLearnHand`，它允许你停止训练。
 
 1.  这个部分是我们的臂接口到机器人臂的接口，并设置了我们需要用来控制臂的发布/订阅接口：
 
-    [PRE29]
+    ```py
+    class ArmInterface():
+     init(self):
+       self.armPosSub = self.create_subscription(Int32MultiArray, 'xarm_pos',self.armPosCallback, 10)
+       self.armAngSub = self.create_subscription(Int32MultiArray, 'xarm_angle',self.armAngCallback, 10)
+       self.armPosPub = self.create_publisher(Int32MultiArray, 'xarm')
+     def armPosCallback(self,msg):
+       self.armPos = msg.data
+     def armAngCallback(self, msg):
+       self.armAngle = msg.data
+       # decoder ring: [grip, wrist angle, wrist pitch, elbow pitch, 
+      sholder pitch, sholder yaw]
+     def setArmPos(self,armPosArray):
+       msg = Int32MultiArray
+       msg.data = armPosArray
+       self.armPosPub.publish(msg)
+    ```
 
     我们订阅了`xarm_pos`（伺服单元中的臂位置）和`xarm_angle`（以度为单位的手臂位置）。我在`xarm`主题上添加了设置机器人臂位置的能力，但你可能不需要这个功能。
 
@@ -416,7 +703,22 @@
 
 1.  现在我们进入主程序。对于许多ROS程序，这个主要部分相当简短。我们需要在这里添加一个额外的例程。为了在训练后保存训练函数，我想出了这个解决方案——将状态-动作对*pickle*并放入一个文件中：
 
-    [PRE30]
+    ```py
+    ### MAIN ####
+    # persistent training file to opeate the arm
+    ArmTrainingFileName = "armTrainingFile.txt"
+    armIf = ArmInterface()
+    armTrainer = LearningHand()
+    #open and read the file after the appending:
+    try:
+     f = open(ArmTrainingFileName, "r")
+     savedActionPairs = pickle.load(f)
+     armTrainer.setActionPairs(savedActionPairs)
+     f.close()
+    except:
+     print("No Training file found")
+     self.get_logger().error("qLearningHand No Training File Found armTrainingFile.txt")
+    ```
 
     当我们运行这个程序时，我们需要加载这个文件并将我们的动作对表设置为这些保存的值。我设置了一个`try`/`except`块，当找不到这个训练文件时发送错误消息。这将在你第一次运行程序时发生，但我们将很快为下一次运行创建一个新的文件。
 
@@ -424,13 +726,26 @@
 
 1.  这是我们的训练循环的核心。我们设置了训练的方面和试验重复次数：
 
-    [PRE31]
+    ```py
+    aspectTest = [1.0, 0.5, 1.5,2]
+    trainingKnt = 20
+    for jj in aspectTest:
+     for ii in range(0,trainingKnt):
+       print("Starting Training on Aspect ", jj)
+       armTrainer.training(jj)
+    ```
 
     从玩具与机器人前方平行开始。进行20次拾取尝试，然后移动玩具45度向右进行下一部分。然后进行另外20次尝试。然后，将玩具移动到与机器人成90度角。运行20次试验。最后，将玩具设置为-45度（向左）进行最终设置，运行20次。欢迎来到机器学习！
 
 1.  你可能会猜到我们最后要做的事情是保存我们的训练数据，如下所示：
 
-    [PRE32]
+    ```py
+    f = open("ArmTrainingFileName", "w")
+    # open file in write mode
+    pickle.dump(armTrainer.stateActionPairs,f)
+    print("Arm Training File Written")
+    f.close()
+    ```
 
 这完成了我们的训练程序。重复进行这种训练，直到你对所有类型的玩具都进行了训练，你应该会得到一个能够以各种角度持续拾取玩具的机器人手臂。首先，选择你希望机器人拾取的玩具。将玩具的角度设置为机器人0度——比如说，这是玩具最长部分与机器人前方平行。然后我们向`RobotCmd`发送`GoLearnHand`以将机器人手臂置于学习模式。
 
@@ -488,51 +803,145 @@
 
 1.  我使用术语“等位基因”来表示整个路径中的一个单独步骤，我将其称为`chrom`，是染色体（chromosome）的简称：
 
-    [PRE33]
+    ```py
+    def computeFitness(population, goal, learningRate, initialPos): 
+      fitness = []
+      gamma = 0.6 
+      state=initialPos 
+      index = 0
+      for chrom in population:
+        value=0
+        for allele in chrom:
+          action = ACTIONMAT[allele]
+          indivFit, state =
+          predictReward(state,goal,action,learningRate) value += 
+          indivFit
+          if indivFit > 95:
+            # we are at the goal – snip the DNA here 
+            break
+        fitness.append([value,index]) 
+        index += 1
+      return fitness
+    ```
 
 1.  我们如何创建初始路径？`make_new_individual`函数使用随机数构建我们的初始染色体种群，或路径。每个染色体包含由0到26的数字组成的路径，这些数字代表所有有效的电机命令组合。我们将路径长度设置为10到60之间的随机数：
 
-    [PRE34]
+    ```py
+    def make_new_individual():
+      # individual length of steps 
+      lenInd = random.randint(10,60)
+      chrom = [] # chromosome description 
+      for ii in range(lenInd):
+        chrom.append(randint(26)) 
+      return chrom
+    ```
 
 1.  我们使用 `roulette` 函数选择我们种群的一部分继续进行。每一代，我们从得分最高的 50% 的个体中选择他们的 DNA 来创建下一代。我们希望路径或染色体的奖励值在选择过程中起到作用；奖励分数越高，成为后代的机会就越大。这是我们选择过程的一部分：
 
-    [PRE35]
+    ```py
+    # select an individual in proportion to its value
+    def roulette(items):
+     total_weight = sum(item[0] 
+     for item in items) 
+     weight_to_target = random.uniform(0, total_weight) 
+     for item in items:
+      weight_to_target -= item[0] 
+      if weight_to_target <= 0: 
+       return item
+    # main Program
+    INITIAL_POS = [127,127,127]
+    GOAL=[-107.39209423, -35.18324771]
+    robotArm=RobotArm() 
+    robotArm.setGoal(GOAL) 
+    population = 300
+    learningRate = 3
+    crossover_chance = .50
+    mutate_chance = .001 
+    pop = []
+    ```
 
 1.  我们首先用随机部分构建初始种群。它们的原始适应度将非常低：大约 13% 或更低。我们维持一个包含 300 个个体路径的池，我们称之为染色体：
 
-    [PRE36]
+    ```py
+    for i in range(population): pop.append(make_new_individual())
+      trainingData=[] epochs = 100
+    ```
 
 1.  在这里，我们设置循环以遍历 100 代的自然选择过程。我们首先计算每个个体的适应度，并将该分数添加到一个适应度列表中，该列表的索引指向染色体：
 
-    [PRE37]
+    ```py
+    for jj in range(epochs):
+      # evaluate the population
+      fitnessList = computeFitness(pop,GOAL,learningRate, INITIAL_POS)
+    ```
 
 1.  我们按逆序排序适应度以获得最佳个体。最大的数字应该排在第一位：
 
-    [PRE38]
+    ```py
+    fitnessList.sort(reverse=True)
+    ```
 
 1.  我们保留种群中排名前 50% 的个体，并丢弃排名后 50% 的个体。下半部分由于不适应而被排除在基因池之外：
 
-    [PRE39]
+    ```py
+    fitLen = 150
+    fitnessList = fitnessList[0:fitLen] # survival of the fittest...
+    ```
 
 1.  我们从整个列表中挑选出表现最好的个体，并将其放入 **名人堂**（**HOF**）。这将是我们的最终输出。同时，我们使用 HOF 或 **HOF 适应度**（**HOFF**）值作为这一代适应度的衡量标准：
 
-    [PRE40]
+    ```py
+     hoff = pop[fitnessList[0][1]]
+     print("HOF = ",fitnessList[0])
+    ```
 
 1.  我们将 HOFF 值存储在 `trainingData` 列表中，以便在程序结束时绘制结果图：
 
-    [PRE41]
+    ```py
+    trainingData.append(fitnessList[0][0])
+    newPop = []
+    for ddex in fitnessList: newPop.append(pop[ddex[1]])
+      print ("Survivors: ",len(newPop))
+    ```
 
 1.  在这个阶段，我们已经删除了种群中排名后 50% 的个体，移除了表现最差的个体。现在我们需要用这一代最佳表现者的后代来替换他们。我们将使用交叉作为配对技术。有几种遗传配对可以产生成功的后代。交叉很受欢迎，是一个好的起点，同时也很容易编码。我们所做的一切只是在基因组中挑选一个位置，从一位父母那里取前半部分，从另一位父母那里取后半部分。我们从剩余的种群中随机选择父母进行配对，按其适应度成比例加权。这被称为 **轮盘赌选择**。更好的个体被赋予更高的权重，更有可能被选中进行繁殖。我们为这一代创造了 140 个新的个体：
 
-    [PRE42]
+    ```py
+    # crossover
+    # pick to individuals at random # on the basis of fitness
+    numCross = population-len(newPop)-10 print ("New Pop Crossovers",numCross) # #
+    # add 5 new random individuals for kk in range(10):
+    newPop.append(make_new_individual()) 
+    for kk in range(int(numCross)):
+     p1 = roulette(fitnessList)[1] 
+     p2 = roulette(fitnessList)[1]
+     chrom1 = pop[p1]
+     chrom2 = pop[p2]
+     lenChrom = min(len(chrom1),len(chrom2)) xover = 
+     randint(lenChrom)
+     # xover is the point where the chromosomes cross over newChrom 
+     = chrom1[0:xover]+chrom2[xover:]
+    ```
 
 1.  我们的下一步是 **变异**。在真实自然选择中，DNA 有很小的机会会被宇宙射线、序列的错误复制或其他因素所损坏或改变。一些变异是有益的，而一些则不是。我们通过让新后代路径中的一个基因有很小的机会（大约 1/100）随机改变成其他值来创建我们这个过程的版本：
 
-    [PRE43]
+    ```py
+    # now we do mutation bitDex = 0
+    for kk in range(len(newChrom)-1): 
+      mutDraw = random.random()
+      if mutDraw < mutate_chance: # a mutation has occured! 
+       bit = randint(26) 
+       newChrom[kk]=bit
+       print ("mutation") 
+    newPop.append(newChrom)
+    ```
 
 1.  现在我们已经完成了所有的处理，我们将这条新的后代路径添加到我们的种群中，并为下一代评估做好准备。我们记录一些数据并返回到起点：
 
-    [PRE44]
+    ```py
+    # welcome the new baby from parent 1 (p1) and parent 2 (p2) print("Generation: ",jj,"New population = ",len(newPop)) pop=newPop
+    mp.plot(trainingData) mp.show()
+    ```
 
 那么，我们的疯狂遗传实验做得怎么样？以下输出图表自说自话：
 

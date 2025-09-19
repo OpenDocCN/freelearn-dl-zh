@@ -136,11 +136,42 @@
 
 1.  我们从定义描述车杆装置物理学的常量开始：
 
-[PRE0]
+```py
+ GRAVITY = 9.8 # m/s^2
+ MASSCART = 1.0 # kg
+ MASSPOLE = 0.5 # kg
+ TOTAL_MASS = (MASSPOLE + MASSCART)
+ # The distance from the center of mass of the pole to the pivot
+ # (actually half the pole's length)
+ LENGTH = 0.5 # m
+ POLEMASS_LENGTH = (MASSPOLE * LENGTH) # kg * m
+ FORCE_MAG = 10.0 # N
+ FOURTHIRDS = 4.0/3.0
+ # the number seconds between state updates 
+ TAU = 0.02 # sec
+```
 
 1.  然后，我们准备使用这些常量实现运动方程：
 
-[PRE1]
+```py
+    force = -FORCE_MAG if action <= 0 else FORCE_MAG
+    cos_theta = math.cos(theta)
+    sin_theta = math.sin(theta)
+    temp = (force + POLEMASS_LENGTH * theta_dot * theta_dot * \
+           sin_theta) / TOTAL_MASS
+    # The angular acceleration of the pole
+    theta_acc = (GRAVITY * sin_theta - cos_theta * temp) /\ 
+                  (LENGTH * (FOURTHIRDS - MASSPOLE * \
+                   cos_theta * cos_theta / TOTAL_MASS))
+    # The linear acceleration of the cart
+    x_acc = temp - POLEMASS_LENGTH * theta_acc * \
+            cos_theta / TOTAL_MASS
+    # Update the four state variables, using Euler's method.
+    x_ret = x + TAU * x_dot
+    x_dot_ret = x_dot + TAU * x_acc
+    theta_ret = theta + TAU * theta_dot
+    theta_dot_ret = theta_dot + TAU * theta_acc
+```
 
 有关此章节源代码中`do_step(action, x, x_dot, theta, theta_dot)`函数实现的详细信息，请参阅下一节。
 
@@ -156,7 +187,16 @@
 
 1.  首先，我们需要初始化初始状态变量，要么用零，要么用之前描述的约束范围内的随机值，并围绕零进行初始化。随机状态值可以创建如下：
 
-[PRE2]
+```py
+    # -1.4 < x < 1.4
+    x = (random.random() * 4.8 - 2.4) / 2.0
+    # -0.375 < x_dot < 0.375
+    x_dot = (random.random() * 3 - 1.5) / 4.0 
+    # -0.105 < theta < 0.105
+    theta = (random.random() * 0.42 - 0.21) / 2.0
+    # -0.5 < theta_dot < 0.5
+    theta_dot = (random.random() * 4 - 2) / 4.0
+```
 
 我们故意将所有值与相应的缩放约束范围相比进行了缩减，以确保算法不会从临界状态开始，即当稳定化不再可能时。
 
@@ -164,17 +204,37 @@
 
 1.  在将状态变量作为输入加载到控制器的ANN之前，需要将其缩放到`[0,1]`范围内。这个程序具有计算和进化的优势，如前所述。偏差值没有明确提供，因为NEAT-Python框架内部处理它，所以可以在源代码中定义ANN的输入如下：
 
-[PRE3]
+```py
+    input[0] = (x + 2.4) / 4.8
+    input[1] = (x_dot + 1.5) / 3
+    input[2] = (theta + 0.21) / .42
+    input[3] = (theta_dot + 2.0) / 4.0
+```
 
 1.  接下来，可以缩放输入来激活表型的ANN，并使用其输出产生动作的离散值：
 
-[PRE4]
+```py
+    # Activate the NET
+    output = net.activate(input)
+    # Make action values discrete
+    action = 0 if output[0] < 0.5 else 1
+```
 
 1.  使用产生的动作值和当前的状态变量值，可以运行小车-杆模拟的单步。在模拟步骤之后，返回的状态变量将测试是否在约束范围内，以检查系统状态是否仍然在边界内。
 
 在失败的情况下，返回当前的模拟步数，其值将用于评估表型的适应度：
 
-[PRE5]
+```py
+    # Apply action to the simulated cart-pole
+    x, x_dot, theta, theta_dot = do_step(action = action, 
+                      x = x, x_dot = x_dot, 
+                      theta = theta, theta_dot = theta_dot )
+
+    # Check for failure due constraints violation. 
+    # If so, return number of steps.
+    if x < -2.4 or x > 2.4 or theta < -0.21 or theta > 0.21:
+        return steps
+```
 
 如果控制器的ANN能够在整个模拟步骤中维持小车-杆装置平衡的稳定状态，则`run_cart_pole_simulation`函数将返回具有最大模拟步数的值。
 
@@ -184,11 +244,20 @@
 
 1.  首先，我们运行小车-杆模拟循环，它返回成功的模拟步数：
 
-[PRE6]
+```py
+    steps = run_cart_pole_simulation(net, max_bal_steps)
+```
 
 1.  之后，我们准备评估特定基因组的适应性分数，如前所述：
 
-[PRE7]
+```py
+    log_steps = math.log(steps)
+    log_max_steps = math.log(max_bal_steps)
+    # The loss value is in range [0, 1]
+    error = (log_max_steps - log_steps) / log_max_steps
+    # The fitness value is a complement of the loss value
+    fitness = 1.0 - error
+```
 
 请参阅`eval_fitness(net, max_bal_steps=500000)`函数以获取更多详细信息。
 
@@ -204,23 +273,51 @@
 
 `fitness_criterion`设置为`max`，这意味着当任何个体达到等于`fitness_threshold`值的适应性分数时，进化过程终止：
 
-[PRE8]
+```py
+[NEAT]
+fitness_criterion   = max
+fitness_threshold   = 1.0
+pop_size            = 150
+reset_on_extinction = False
+```
 
 此外，我们还显著降低了添加新节点的概率，以使进化过程偏向在控制器中使用最小数量的ANN节点来详细阐述连接模式。因此，我们的目标是减少进化控制器ANN的能量消耗和减少训练的计算成本。
 
 配置文件中相应的参数如下：
 
-[PRE9]
+```py
+# node add/remove rates
+node_add_prob    = 0.02
+node_delete_prob = 0.02
+```
 
 描述我们初始网络配置的参数，通过隐藏、输入和输出节点的数量给出如下：
 
-[PRE10]
+```py
+# network parameters
+num_hidden = 0
+num_inputs = 4
+num_outputs = 1
+```
 
 我们提高了物种的兼容性阈值，以使进化过程偏向产生更少的物种。同时，我们增加了最小物种大小，表示我们对具有更大机会保留有益突变的、高度密集的物种感兴趣。在此同时，我们降低了最大停滞年龄，通过提高停滞物种早期灭绝来加强进化过程，这些停滞物种没有显示出任何适应性改进。
 
 配置文件中的相关参数如下：
 
-[PRE11]
+```py
+[DefaultSpeciesSet]
+compatibility_threshold = 4.0
+
+[DefaultStagnation]
+species_fitness_func = max
+max_stagnation = 15
+species_elitism = 2
+
+[DefaultReproduction]
+elitism = 2
+survival_threshold = 0.2
+min_species_size = 8
+```
 
 请参阅`single_pole_config.ini`配置文件以获取完整详情。
 
@@ -230,7 +327,14 @@
 
 在您开始编写实验运行器的源代码之前，您必须设置一个虚拟Python环境并安装所有必要的依赖项。您可以通过在命令行中执行以下命令使用Anaconda来完成此操作：
 
-[PRE12]
+```py
+$ conda create --name single_pole_neat python=3.5
+$ conda activate single_pole_neat
+$ pip install neat-python==0.92 
+$ conda install matplotlib
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 首先，这些命令创建并激活一个Python 3.5的`single_pole_neat`虚拟环境。之后，安装了NEAT-Python库版本0.92，以及我们的可视化工具使用的其他依赖项。
 
@@ -244,17 +348,39 @@
 
 第一个函数评估种群中所有基因组的列表，并为每个基因组分配一个适应度分数。此函数通过引用传递给NEAT-Python库的神经进化运行器。此函数的源代码如下：
 
-[PRE13]
+```py
+def eval_genomes(genomes, config):
+    for genome_id, genome in genomes:
+        genome.fitness = 0.0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        fitness = cart.eval_fitness(net)
+        if fitness >= config.fitness_threshold:
+            # do additional steps of evaluation with random initial states
+            # to make sure that we found stable control strategy rather 
+            # than special case for particular initial state
+            success_runs = evaluate_best_net(net, config, 
+                                             additional_num_runs)
+            # adjust fitness
+            fitness = 1.0 - (additional_num_runs - success_runs) / \
+                      additional_num_runs
+
+        genome.fitness = fitness
+```
 
 注意，我们为获胜的基因组引入了额外的模拟运行，以确保其控制策略在从各种随机初始状态开始时是稳定的。这个额外的检查确保我们找到了真正的获胜者，而不是特定于特定初始状态的特殊情况。
 
 前一个函数接收种群中所有基因组的列表和NEAT配置参数。对于每个特定的基因组，它创建表型ANN并将其用作控制器来运行定义在以下代码片段中的cart-pole装置模拟：
 
-[PRE14]
+```py
+fitness = cart.eval_fitness(net)
+```
 
 返回的适应度分数然后与我们在配置参数中定义的适应度阈值值进行比较。如果它超过了阈值，我们可以假设找到了一个成功的控制器。为了进一步验证找到的控制器，它将在额外的模拟运行中进行测试，并计算最终的适应度分数（如以下代码片段所示）：
 
-[PRE15]
+```py
+success_runs = evaluate_best_net(net, config, additional_num_runs)
+fitness = 1.0 - (additional_num_runs - success_runs) / additional_num_runs
+```
 
 额外的模拟步骤将使用不同的随机数生成器种子来覆盖cart-pole装置的大多数可能的初始配置。
 
@@ -264,15 +390,48 @@
 
 1.  函数开始于从配置文件中加载超参数并使用加载的配置生成初始种群：
 
-[PRE16]
+```py
+    # Load configuration.
+    config = neat.Config(neat.DefaultGenome, 
+                         neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, 
+                         neat.DefaultStagnation,
+                         config_file)
+
+    # Create the population, which is the top-level object 
+    # for a NEAT run.
+    p = neat.Population(config)
+```
 
 1.  之后，它配置了统计报告器以收集有关进化过程执行的统计数据。同时添加了输出报告器，以便实时将执行结果输出到控制台。还配置了检查点收集器以保存执行的中途阶段，这在需要稍后恢复训练过程时可能很有用：
 
-[PRE17]
+```py
+    # Add a stdout reporter to show progress in the terminal.
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    p.add_reporter(neat.Checkpointer(5, 
+                 filename_prefix=‘out/spb-neat—checkpoint-'))
+```
 
 1.  最后，在指定的代数数上执行进化过程，并将结果保存在`output`目录中：
 
-[PRE18]
+```py
+    # Run for up to N generations.
+    best_genome = p.run(eval_genomes, n=n_generations)
+
+    # Display the best genome among generations.
+    print('\nBest genome:\n{!s}'.format(best_genome))
+
+    # Check if the best genome is a winning Single-Pole 
+    # balancing controller 
+    net = neat.nn.FeedForwardNetwork.create(best_genome, config)
+    best_genome_fitness = cart.eval_fitness(net)
+    if best_genome_fitness >= config.fitness_threshold:
+        print("\n\nSUCCESS: The Single-Pole balancing controller has been found!!!")
+    else:
+        print("\n\nFAILURE: Failed to find Single-Pole balancing controller!!!")
+```
 
 请参阅`run_experiment(config_file, n_generations=100)`函数以获取完整的实现细节。
 
@@ -282,7 +441,9 @@
 
 您需要进入包含`single_pole_experiment.py`文件的目录，并执行以下命令：
 
-[PRE19]
+```py
+$ python single_pole_experiment.py
+```
 
 不要忘记使用以下命令激活适当的虚拟环境：
 
@@ -290,13 +451,47 @@
 
 在执行Python脚本的过程中，控制台将为每一代的进化打印以下输出：
 
-[PRE20]
+```py
+ ****** Running generation 13 ****** 
+
+Population's average fitness: 0.26673 stdev: 0.12027
+Best fitness: 0.70923 - size: (1, 2) - species 1 - id 2003
+Average adjusted fitness: 0.161
+Mean genetic distance 1.233, standard deviation 0.518
+Population of 150 members in 1 species:
+ ID age size fitness adj fit stag
+ ==== === ==== ======= ======= ====
+ 1 13 150 0.7 0.161 7
+Total extinctions: 0
+Generation time: 4.635 sec (0.589 average)
+```
 
 在输出中，你可以看到在生成`14`时，种群的平均适应度较低，但表现最佳生物体的适应度（`0.70923`）已经接近我们在配置文件中设置的完成阈值值（`fitness_threshold = 1.0`）。冠军生物体编码的表型ANN由一个非线性节点（输出）和仅两个连接（`size: (1, 2)`）组成。此外，值得注意的是，种群中只存在一个物种。
 
 在找到获胜者后，控制台输出以下行：
 
-[PRE21]
+```py
+ ****** Running generation 14 ****** 
+
+Population's average fitness: 0.26776 stdev: 0.13359
+Best fitness: 1.00000 - size: (1, 3) - species 1 - id 2110
+
+Best individual in generation 14 meets fitness threshold - complexity: (1, 3)
+
+Best genome:
+Key: 2110
+Fitness: 1.0
+Nodes:
+ 0 DefaultNodeGene(key=0, bias=-3.328545880116371, response=1.0, activation=sigmoid, aggregation=sum)
+Connections:
+ DefaultConnectionGene(key=(-4, 0), weight=2.7587300138861037, enabled=True)
+ DefaultConnectionGene(key=(-3, 0), weight=2.951449584136504, enabled=True)
+ DefaultConnectionGene(key=(-1, 0), weight=0.9448711043565166, enabled=True)
+
+Evaluating the best genome in random runs
+Runs successful/expected: 100/100
+SUCCESS: The stable Single-Pole balancing controller has been found!!!
+```
 
 作为进化获胜者的最佳基因组编码了一个仅由一个非线性节点（输出）和从输入节点（`size: (1, 3)`）来的三个连接组成的表型ANN。值得注意的是，进化能够产生一个稳固的控制策略，完全忽略了滑车的线性速度，只使用了其他三个输入：`x`、`θ`和`θ`。这一事实是进化选择正确性的另一个标志，因为我们决定忽略滑车的摩擦，这实际上排除了滑车线性速度在运动方程中的作用。
 
@@ -387,11 +582,50 @@
 
 对应的Python代码将这些系统参数定义为常量：
 
-[PRE22]
+```py
+GRAVITY = -9.8 # m/s^2 - here negative as equations of motion for 2-pole system assume it to be negative
+MASS_CART = 1.0 # kg
+FORCE_MAG = 10.0 # N
+# The first pole
+MASS_POLE_1 = 1.0 # kg
+LENGTH_1 = 0.5 # m - actually half the first pole's length
+# The second pole
+MASS_POLE_2 = 0.1 # kg
+LENGTH_2 = 0.05 # m - actually half the second pole's length
+# The coefficient of friction of pivot of the pole
+MUP = 0.000002
+```
 
 在Python中实现运动方程如下：
 
-[PRE23]
+```py
+# Find the input force direction
+force = (action - 0.5) * FORCE_MAG * 2.0 # action has binary values
+# Calculate projections of forces for the poles
+cos_theta_1 = math.cos(theta1)
+sin_theta_1 = math.sin(theta1)
+g_sin_theta_1 = GRAVITY * sin_theta_1
+cos_theta_2 = math.cos(theta2)
+sin_theta_2 = math.sin(theta2)
+g_sin_theta_2 = GRAVITY * sin_theta_2
+# Calculate intermediate values
+ml_1 = LENGTH_1 * MASS_POLE_1
+ml_2 = LENGTH_2 * MASS_POLE_2
+temp_1 = MUP * theta1_dot / ml_1
+temp_2 = MUP * theta2_dot / ml_2
+fi_1 = (ml_1 * theta1_dot * theta1_dot * sin_theta_1) + \
+       (0.75 * MASS_POLE_1 * cos_theta_1 * (temp_1 + g_sin_theta_1))
+fi_2 = (ml_2 * theta2_dot * theta2_dot * sin_theta_2) + \
+       (0.75 * MASS_POLE_2 * cos_theta_2 * (temp_2 + g_sin_theta_2))
+mi_1 = MASS_POLE_1 * (1 - (0.75 * cos_theta_1 * cos_theta_1))
+mi_2 = MASS_POLE_2 * (1 - (0.75 * cos_theta_2 * cos_theta_2))
+# Calculate the results: cart acceleration and poles angular accelerations
+x_ddot = (force + fi_1 + fi_2) / (mi_1 + mi_2 + MASS_CART)
+theta_1_ddot = -0.75 * (x_ddot * cos_theta_1 + \
+                        g_sin_theta_1 + temp_1) / LENGTH_1
+theta_2_ddot = -0.75 * (x_ddot * cos_theta_2 + \
+                        g_sin_theta_2 + temp_2) / LENGTH_2
+```
 
 更多实现细节可在与`Chapter4`源代码文件相关的存储库中的`cart_two_pole.py`文件中找到。请参阅`calc_step(action, x, x_dot, theta1, theta1_dot, theta2, theta2_dot)`函数。
 
@@ -405,7 +639,11 @@
 
 Python中强化信号生成的实现如下：
 
-[PRE24]
+```py
+res = x < -2.4 or x > 2.4 or \
+    theta1 < -THIRTY_SIX_DEG_IN_RAD or theta1 > THIRTY_SIX_DEG_IN_RAD or \
+    theta2 < -THIRTY_SIX_DEG_IN_RAD or theta2 > THIRTY_SIX_DEG_IN_RAD
+```
 
 条件检查每个极的角度是否为 ![](img/7ec89f5d-74cb-4799-97d2-9e4dc2192645.png) 相对于垂直方向，以及小车位置是否为 ![](img/7d5bde15-10d8-4bd6-9e68-1aa3252ba5e2.png) 相对于轨道中心。
 
@@ -433,19 +671,59 @@ Python中Runge-Kutta四阶方法实现如下：
 
 1.  使用当前小车-极装置状态变量更新下一个半时间步的中间状态，并执行第一次模拟步骤：
 
-[PRE25]
+```py
+hh = tau / 2.0
+yt = [None] * 6
+
+# update intermediate state
+for i in range(6):
+    yt[i] = y[i] + hh * dydx[i]
+
+# do simulation step
+x_ddot, theta_1_ddot, theta_2_ddot = calc_step(action = f, yt[0], yt[1], yt[2], yt[3], yt[4], yt[5])
+
+# store derivatives
+dyt = [yt[1], x_ddot, yt[3], theta_1_ddot, yt[5], theta_2_ddot]
+```
 
 1.  使用第一次模拟步骤获得的导数更新中间状态，并执行第二次模拟步骤：
 
-[PRE26]
+```py
+# update intermediate state 
+for i in range(6):
+    yt[i] = y[i] + hh * dyt[i]
+
+# do one simulation step
+x_ddot, theta_1_ddot, theta_2_ddot = calc_step(action = f, yt[0], yt[1], yt[2], yt[3], yt[4], yt[5])
+
+# store derivatives
+dym = [yt[1], x_ddot, yt[3], theta_1_ddot, yt[5], theta_2_ddot]
+```
 
 1.  使用第一次和第二次模拟步骤的导数更新中间状态，并使用更新后的状态执行第三次极平衡模拟步骤：
 
-[PRE27]
+```py
+# update intermediate state
+for i in range(6):
+    yt[i] = y[i] + tau * dym[i]
+    dym[i] += dyt[i]
+
+# do one simulation step
+x_ddot, theta_1_ddot, theta_2_ddot = calc_step(action = f, yt[0], yt[1], yt[2], yt[3], yt[4], yt[5])
+
+# store derivatives
+dyt = [yt[1], x_ddot, yt[3], theta_1_ddot, yt[5], theta_2_ddot]
+```
 
 1.  最后，使用前三个模拟步骤的导数来近似用于进一步模拟的小车-杆装置的最终状态：
 
-[PRE28]
+```py
+# find system state after approximation
+yout = [None] * 6 # the approximated system state
+h6 = tau / 6.0
+for i in range(6):
+    yout[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i])
+```
 
 让我们检查前面方程的元素：
 
@@ -491,7 +769,14 @@ Python中Runge-Kutta四阶方法实现如下：
 
 输入缩放的相应源代码如下：
 
-[PRE29]
+```py
+input[0] = (state[0] + 2.4) / 4.8
+input[1] = (state[1] + 1.5) / 3.0
+input[2] = (state[2] + THIRTY_SIX_DEG_IN_RAD) / (THIRTY_SIX_DEG_IN_RAD * 2.0)
+input[3] = (state[3] + 2.0) / 4.0
+input[4] = (state[4] + THIRTY_SIX_DEG_IN_RAD) / (THIRTY_SIX_DEG_IN_RAD * 2.0)
+input[5] = (state[5] + 2.0) / 4.0
+```
 
 状态列表按照以下顺序保存当前状态变量： ![](img/a74878d2-4ef8-40a6-be7e-d27af13dadd7.png).
 
@@ -511,7 +796,25 @@ Python中Runge-Kutta四阶方法实现如下：
 
 Python源代码与单摆平衡实验中的目标函数定义相似，但它使用不同的模拟器调用以获取平衡步数：
 
-[PRE30]
+```py
+# First we run simulation loop returning number of successful
+# simulation steps
+steps = cart.run_markov_simulation(net, max_bal_steps)
+
+if steps == max_bal_steps:
+    # the maximal fitness
+    return 1.0
+elif steps == 0: # needed to avoid math error when taking log(0)
+    # the minimal fitness
+    return 0.0
+else:
+    log_steps = math.log(steps)
+    log_max_steps = math.log(max_bal_steps)
+    # The loss value is in range [0, 1]
+    error = (log_max_steps - log_steps) / log_max_steps
+    # The fitness value is a complement of the loss value
+    return 1.0 - error
+```
 
 我们在这里使用对数刻度，因为大多数运行在100步左右就失败了，但我们是在测试100,000步。
 
@@ -525,15 +828,36 @@ Python源代码与单摆平衡实验中的目标函数定义相似，但它使�
 
 适应度终止阈值与这里显示的相同：
 
-[PRE31]
+```py
+[NEAT]
+fitness_criterion = max
+fitness_threshold = 1.0
+pop_size = 1000
+reset_on_extinction = False
+```
 
 为了进一步增强进化多样性，我们增加了添加新节点和连接的概率，以及改变初始连接配置方案的概率。此外，`initial_connection`参数的值包含了连接创建的概率，这为连接图的生产过程引入了额外的非确定性：
 
-[PRE32]
+```py
+# connection add/remove rates
+conn_add_prob = 0.5
+conn_delete_prob = 0.2
+
+initial_connection = partial_direct 0.5
+
+# node add/remove rates
+node_add_prob = 0.2
+node_delete_prob = 0.2
+```
 
 最后，考虑到种群的大小和物种可能的大小，我们减少了允许繁殖的个体比例（`survival_threshold`）。这种调整通过仅允许最健壮的有机体参与重组过程来限制解决方案的搜索空间：
 
-[PRE33]
+```py
+[DefaultReproduction]
+elitism = 2
+survival_threshold = 0.1
+min_species_size = 2
+```
 
 最后的调整是有争议的，并且可能会降低进化过程的整体性能。但在大型种群中，通过减少可能的重组数量通常效果良好。因此，作为经验法则，对于小型种群使用较大的生存阈值，对于大型种群使用较小的值。
 
@@ -545,7 +869,11 @@ Python源代码与单摆平衡实验中的目标函数定义相似，但它使�
 
 随机种子值在`two_pole_markov_experiment.py`文件的大约第100行定义：
 
-[PRE34]
+```py
+# set random seed
+seed = 1559231616
+random.seed(seed)
+```
 
 对于双极平衡实验中使用的完整超参数列表，请参阅与此章节相关的源代码仓库中的`two_pole_markov_config.ini`文件。
 
@@ -555,7 +883,14 @@ Python源代码与单摆平衡实验中的目标函数定义相似，但它使�
 
 双极平衡实验的工作环境可以通过在您选择的终端应用程序中输入以下命令来设置：
 
-[PRE35]
+```py
+$ conda create --name double_pole_neat python=3.5
+$ conda activate double_pole_neat
+$ pip install neat-python==0.92 
+$ conda install matplotlib
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 这些命令创建并激活了一个Python 3.5版本的`double_pole_neat`虚拟环境。之后，安装了版本0.92的NEAT-Python库，以及我们的可视化工具所使用的其他依赖项。
 
@@ -565,7 +900,20 @@ Python源代码与单摆平衡实验中的目标函数定义相似，但它使�
 
 在这个实验中，我们引入了自适应学习，它将在进化过程中尝试找到正确的短杆长度。短杆的长度会改变系统的运动动力学。并非所有与特定长度的短杆结合的超参数组合都能产生成功的控制策略。因此，我们实现了一个顺序增加短杆长度的过程，直到找到解决方案：
 
-[PRE36]
+```py
+# Run the experiment
+pole_length = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+num_runs = len(pole_length)
+for i in range(num_runs):
+    cart.LENGTH_2 = pole_length[i] / 2.0
+    solved = run_experiment(config_path, n_generations=100, silent=False)
+    print("run: %d, solved: %s, length: %f" % 
+                                         (i + 1, solved, cart.LENGTH_2))
+    if solved:
+        print("Solution found in: %d run, short pole length: %f" % 
+                                                 (i + 1, cart.LENGTH_2))
+    break
+```
 
 请参考`two_pole_markov_experiment.py`文件以获取更多实现细节。
 
@@ -575,7 +923,9 @@ Python源代码与单摆平衡实验中的目标函数定义相似，但它使�
 
 在实现了双杆平衡模拟器、基因组适应度函数评估器和实验运行代码后，我们准备开始实验。进入包含`two_pole_markov_experiment.py`文件的目录，并执行以下命令：
 
-[PRE37]
+```py
+$ python two_pole_markov_experiment.py
+```
 
 不要忘记使用以下命令激活适当的虚拟环境：
 
@@ -585,7 +935,34 @@ Python源代码与单摆平衡实验中的目标函数定义相似，但它使�
 
 在`96`代之后，获胜的解决方案可以在第`97`代找到。最后一代的控制台输出类似于以下内容：
 
-[PRE38]
+```py
+ ****** Running generation 97 ****** 
+
+Population's average fitness: 0.27393 stdev: 0.10514
+Best fitness: 1.00000 - size: (1, 6) - species 26 - id 95605
+
+Best individual in generation 97 meets fitness threshold - complexity: (1, 6)
+
+Best genome:
+Key: 95605
+Fitness: 1.0
+Nodes:
+ 0 DefaultNodeGene(key=0, bias=7.879760594997953, response=1.0, activation=sigmoid, aggregation=sum)
+Connections:
+ DefaultConnectionGene(key=(-6, 0), weight=1.9934757746640883, enabled=True)
+ DefaultConnectionGene(key=(-5, 0), weight=3.703109977745863, enabled=True)
+ DefaultConnectionGene(key=(-4, 0), weight=-11.923951805881497, enabled=True)
+ DefaultConnectionGene(key=(-3, 0), weight=-4.152166115226511, enabled=True)
+ DefaultConnectionGene(key=(-2, 0), weight=-3.101569479910728, enabled=True)
+ DefaultConnectionGene(key=(-1, 0), weight=-1.379602358542496, enabled=True)
+
+Evaluating the best genome in random runs
+Runs successful/expected: 1/1
+SUCCESS: The stable Double-Pole-Markov balancing controller found!!!
+Random seed: 1559231616
+run: 1, solved: True, half-length: 0.050000
+Solution found in: 1 run, short pole length: 0.100000
+```
 
 在控制台输出中，我们可以看到获胜的基因组大小为`(1, 6)`，这意味着它只有一个非线性节点——输出节点，并且从六个输入节点到输出节点的连接是完整的。因此，我们可以假设控制器ANN的最小可能配置已被找到，因为它不包含任何隐藏节点，而是使用特定探索的连接权重来编码控制行为。此外，值得注意的是，在所有可能的短杆长度值列表中，找到了最小长度值的解决方案。
 

@@ -69,7 +69,20 @@ NEAT算法从初始种群开始，该种群编码了一个非常简单的表型�
 
 基于 NEAT-Python 库的相应 Python 源代码如下：
 
-[PRE0]
+```py
+# XOR inputs and expected output values
+xor_inputs = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+xor_outputs = [ (0.0,), (1.0,), (1.0,), (0.0,)]
+
+def eval_fitness(net):
+    error_sum = 0.0
+    for xi, xo in zip(xor_inputs, xor_outputs):
+        output = net.activate(xi)
+        error_sum += abs(output[0] - xo[0])
+    # Calculate amplified fitness
+    fitness = (4 - error_sum) ** 2
+    return fitness
+```
 
 注意，没有必要将适应度值归一化以适应 `[0,1]` 范围（如基于反向传播的方法那样），因为在训练过程中没有涉及反向梯度计算。生物体的适应度评分直接根据它们的绝对值进行比较。因此，值的范围无关紧要。
 
@@ -169,45 +182,104 @@ NEAT-Python 库中所有超参数的完整列表可以在 [https://neat-python.r
 
 XOR实验从一个非常简单的初始基因组配置开始，该配置只有两个输入节点、一个输出节点和一个特殊的输入——偏差节点。在初始基因组中不引入任何隐藏节点：
 
-[PRE1]
+```py
+[DefaultGenome]
+# The network parameters
+num_hidden = 0
+num_inputs = 2
+num_outputs = 1
+
+# node bias options
+bias_init_mean = 0.0
+bias_init_stdev = 1.0
+```
 
 所有网络节点的激活函数是S型，节点输入通过`sum`函数聚合：
 
-[PRE2]
+```py
+[DefaultGenome]
+# node activation options
+activation_default = sigmoid
+
+# node aggregation options
+aggregation_default = sum
+```
 
 编码网络的类型是前馈全连接：
 
-[PRE3]
+```py
+[DefaultGenome]
+feed_forward = True
+initial_connection = full_direct
+```
 
 在进化过程中，新的网络节点和连接以特定的概率被添加和/或删除：
 
-[PRE4]
+```py
+[DefaultGenome]
+# node add/remove rates
+node_add_prob = 0.2
+node_delete_prob = 0.2
+
+# connection add/remove rates
+conn_add_prob = 0.5
+conn_delete_prob = 0.5
+```
 
 所有连接默认启用，由于突变而变为禁用的概率非常低：
 
-[PRE5]
+```py
+[DefaultGenome]
+# connection enable options
+enabled_default = True
+enabled_mutate_rate = 0.01
+```
 
 基因组距离高度受父代基因组多余/不连接部分的影响，以促进物种的多样性：
 
-[PRE6]
+```py
+[DefaultGenome]
+# genome compatibility options
+compatibility_disjoint_coefficient = 1.0
+compatibility_weight_coefficient = 0.5
+```
 
 物种停滞延长到`20`代，并部分防止独特物种灭绝：
 
-[PRE7]
+```py
+[DefaultStagnation]
+species_fitness_func = max
+max_stagnation = 20
+species_elitism = 2
+```
 
 物种内生物的生存阈值被设置为低值，以缩小进化过程，只允许最适应的生物繁殖（按适应性排序的生物列表的前20%）。同时，也引入了精英主义，无条件地将每个物种中两个最适应的个体复制到下一代。最小物种大小也影响物种形成，我们将其保留为默认值：
 
-[PRE8]
+```py
+[DefaultReproduction]
+elitism = 2
+survival_threshold = 0.2
+min_species_size = 2
+```
 
 物种兼容性阈值控制种群中物种的多样性。此参数的较高值导致种群具有更高的多样性。物种多样性应保持平衡，以保持进化过程按预期方向进行，避免探索过多的搜索向量，同时允许探索创新：
 
-[PRE9]
+```py
+[DefaultSpeciesSet]
+compatibility_threshold = 3.0
+```
 
 种群大小设置为`150`，这相当适中，但对于如此简单的XOR问题来说已经足够了。终止标准（`fitness_threshold`）设置为`15.5`，以确保当找到的解决方案与目标（根据我们的`fitness`函数，最大适应度分数为`16.0`）最接近时，进化终止。
 
 在这个任务中，我们感兴趣的是找到能够解决XOR问题的进化冠军，因此我们的终止函数（`fitness_criterion`）是`max`函数，它从种群中的所有生物中选择最大适应度：
 
-[PRE10]
+```py
+[NEAT]
+fitness_criterion = max
+fitness_threshold = 15.5
+pop_size = 150
+reset_on_extinction = False
+```
 
 完整的配置文件`xor_config.ini`包含在本章相关源文件存储库的`Chapter3`目录中。
 
@@ -223,23 +295,33 @@ XOR实验从一个非常简单的初始基因组配置开始，该配置只有�
 
 1.  使用Anaconda Distribution中的`conda`命令创建一个用于XOR实验的Python 3.5虚拟环境，如下所示：
 
-[PRE11]
+```py
+$ conda create --name XOR_neat python=3.5
+```
 
 确保您的系统中已安装Anaconda Distribution，如[第2章](c673e180-4440-4eea-98f8-8800c77162c8.xhtml)中所述，*Python库和环境设置*。
 
 1.  要使用新创建的虚拟环境，您必须激活它：
 
-[PRE12]
+```py
+$ conda activate XOR_neat
+```
 
 1.  之后，可以使用以下命令将NEAT-Python库安装到活动环境中：
 
-[PRE13]
+```py
+$ pip install neat-python==0.92 
+```
 
 我们在这里使用NEAT-Python库的特定版本（`0.92`），这是撰写时的最新版本。
 
 1.  最后，我们需要安装可视化工具使用的可选依赖项。这可以通过以下`conda`命令完成：
 
-[PRE14]
+```py
+$ conda install matplotlib
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 现在，我们准备开始编写源代码。
 
@@ -247,7 +329,9 @@ XOR实验从一个非常简单的初始基因组配置开始，该配置只有�
 
 要开始实验，我们需要使用`mkdir`命令（适用于Linux和macOS）或`md`（适用于Windows）创建一个名为`Chapter3`的目录：
 
-[PRE15]
+```py
+$ mkdir Chapter3
+```
 
 此目录将保存本章所述实验的所有相关源文件。
 
@@ -261,37 +345,123 @@ Anaconda 分发安装包括 VS Code，这是一个免费的跨平台代码编辑
 
 1.  首先，我们需要定义稍后将要使用的导入：
 
-[PRE16]
+```py
+# The Python standard library import
+import os
+# The NEAT-Python library imports
+import neat
+# The helper used to visualize experiment results
+import visualize
+```
 
 1.  接下来，我们需要编写一些适应度评估代码，正如我们之前所描述的：
 
-[PRE17]
+```py
+# The XOR inputs and expected corresponding outputs for 
+# fitness evaluation
+xor_inputs = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+xor_outputs = [ (0.0,), (1.0,), (1.0,), (0.0,)]
+
+def eval_fitness(net):
+    """
+    Evaluates fitness of the genome that was used to generate 
+    provided net
+    Arguments:
+        net: The feed-forward neural network generated from genome
+    Returns:
+        The fitness score - the higher score the means 
+        the better fit organism. Maximal score: 16.0
+    """
+    error_sum = 0.0
+    for xi, xo in zip(xor_inputs, xor_outputs):
+        output = net.activate(xi)
+        error_sum += abs(xo[0] - output[0])
+    # Calculate amplified fitness
+    fitness = (4 - error_sum) ** 2
+    return fitness
+```
 
 永远不要错过在源代码中添加注释的机会，描述函数的目的、输入参数和执行结果。对源代码中一些有趣/棘手的部分进行注释也有利，以便为将来看到它的人（这可能是你！）提供更好的理解。
 
 1.  使用适应度评估函数，你可以编写一个函数来评估当前代的所有生物体，并相应地更新每个基因组的适应度：
 
-[PRE18]
+```py
+def eval_genomes(genomes, config):
+    """
+    The function to evaluate the fitness of each genome in 
+    the genomes list. 
+    The provided configuration is used to create feed-forward 
+    neural network from each genome and after that created
+    the neural network evaluated in its ability to solve
+    XOR problem. As a result of this function execution, the
+    fitness score of each genome updated to the newly
+    evaluated one.
+    Arguments:
+        genomes: The list of genomes from population in the 
+                current generation
+        config: The configuration settings with algorithm
+                hyper-parameters
+    """
+    for genome_id, genome in genomes:
+        genome.fitness = 4.0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        genome.fitness = eval_fitness(net)
+```
 
 1.  现在我们已经实现了评估单个基因组适应度的函数，并且目标函数已经被定义，是时候实现运行实验的函数了。`run_experiment`函数从配置文件中加载超参数配置并创建初始基因组种群：
 
-[PRE19]
+```py
+    # Load configuration.
+    config = neat.Config(neat.DefaultGenome, 
+           neat.DefaultReproduction, neat.DefaultSpeciesSet, 
+           neat.DefaultStagnation, config_file)
+
+    # Create the population, which is the top-level object 
+    # for a NEAT run.
+    p = neat.Population(config)
+```
 
 1.  我们对统计数据的积累感兴趣，以评估实验并实时观察过程。保存检查点也非常重要，这允许你在失败的情况下从给定的检查点恢复执行。因此，可以注册两种类型的报告器（标准输出和统计收集器）以及一个检查点收集器，如下所示：
 
-[PRE20]
+```py
+    # Add a stdout reporter to show progress in the terminal.
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    p.add_reporter(neat.Checkpointer(5, 
+                   filename_prefix='out/neat-checkpoint-'))
+```
 
 1.  然后，我们准备通过提供`eval_genome`函数来运行`300`代的神经进化，该函数用于评估每一代种群中每个基因组的适应度分数，直到找到解决方案或过程达到最大代数：
 
-[PRE21]
+```py
+    # Run for up to 300 generations.
+    best_genome = p.run(eval_genomes, 300)
+```
 
 1.  当 NEAT 算法的执行因成功或达到最大代数而停止时，将返回最健康的基因组。可以检查此基因组是否为赢家，即能否以给定的精度解决 XOR 问题：
 
-[PRE22]
+```py
+    # Check if the best genome is an adequate XOR solver
+    best_genome_fitness = eval_fitness(net)
+    if best_genome_fitness > config.fitness_threshold:
+        print("\n\nSUCCESS: The XOR problem solver found!!!")
+    else:
+        print("\n\nFAILURE: Failed to find XOR problem solver!!!")
+```
 
 1.  最后，可以可视化收集到的统计信息和最佳匹配基因组，以探索神经进化过程的结果，并查看其从零到最大代数的表现：
 
-[PRE23]
+```py
+    # Visualize the experiment results
+    node_names = {-1:'A', -2: 'B', 0:'A XOR B'}
+    visualize.draw_net(config, best_genome, True, 
+       node_names=node_names, directory=out_dir)
+    visualize.plot_stats(stats, ylog=False, view=True, 
+       filename=os.path.join(out_dir, 'avg_fitness.svg'))
+    visualize.plot_species(stats, view=True, 
+       filename=os.path.join(out_dir, 'speciation.svg'))
+```
 
 XOR 实验运行器的完整源代码可以在 [https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python/blob/master/Chapter3/xor_experiment.py](https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python/blob/master/Chapter3/xor_experiment.py) 文件中找到。
 
@@ -301,13 +471,32 @@ XOR 实验运行器的完整源代码可以在 [https://github.com/PacktPublishi
 
 要开始实验，应在 `Chapter3` 目录中发出以下命令：
 
-[PRE24]
+```py
+$ python xor_experiment.py
+```
 
 不要忘记使用 `$ conda activate XOR_neat` 激活 `XOR_neat` 虚拟环境。否则，将引发有关缺少 `neat` 包的错误。
 
 在您选择的终端应用程序中输入前面的命令后，NEAT 算法开始执行，终端窗口开始实时显示中间结果。对于每一代，输出如下：
 
-[PRE25]
+```py
+ ****** Running generation 43 ****** 
+
+Population's average fitness: 6.01675 stdev: 2.53269
+Best fitness: 14.54383 - size: (4, 7) - species 2 - id 5368
+Average adjusted fitness: 0.238
+Mean genetic distance 2.482, standard deviation 0.991
+Population of 151 members in 5 species:
+ ID age size fitness adj fit stag
+ ==== === ==== ======= ======= ====
+ 1  43   28     9.0   0.241    0
+ 2  33   42    14.5   0.274    7
+ 3  20   39     9.0   0.306    0
+ 4   4   34     9.0   0.221    0
+ 5   1    8     8.4   0.149    0
+Total extinctions: 0
+Generation time: 0.045 sec (0.038 average)
+```
 
 在第 43 代，种群的平均健康分数（`6.01675`）与配置文件中设置的完成标准（`fitness_threshold =15.5`）相比相当低。然而，看起来我们有一些有潜力的冠军物种（`ID: 2`），它们正在通过进化具有健康分数 `14.54383` 的冠军生物体来达到目标健康分数阈值，该分数编码了一个由四个节点和七个连接组成的 ANN 表型（大小为 `4,7`）。
 
@@ -327,19 +516,48 @@ XOR 实验运行器的完整源代码可以在 [https://github.com/PacktPublishi
 
 当 NEAT 算法找到适当的 XOR 求解器时，终端窗口将显示以下输出。它以关于最终基因组种群和赢家（成功的 XOR 求解器）的一般统计数据开始：
 
-[PRE26]
+```py
+ ****** Running generation 44 ****** 
+
+Population's average fitness: 6.04705 stdev: 2.67702
+Best fitness: 15.74620 - size: (3, 7) - species 2 - id 6531
+
+Best individual in generation 44 meets fitness threshold - complexity: (3, 7)
+```
 
 从前面的输出中，我们可以看到，在代 `44` 中，进化过程创建了一个基因组，该基因组编码了一个表型 ANN，可以以给定的精度解决 XOR 问题。这个基因组属于 `ID:2` 物种的生物，而这个物种在过去七代中已经主导了进化过程。代 `44` 的冠军生物（`ID:6531`）是来自上一代 `ID:2` 物种的一个个体（`ID:5368`）的变异，它失去了一个隐藏节点，现在有三个节点和七个连接（大小：`(3, 7)`）。
 
 然后是最佳基因组部分：
 
-[PRE27]
+```py
+Best genome:
+Key: 6531
+Fitness: 15.74619841601669
+Nodes:
+ 0 DefaultNodeGene(key=0, bias=-3.175506745721987, response=1.0, activation=sigmoid, aggregation=sum)
+ 224 DefaultNodeGene(key=224, bias=-2.5796785460461154, response=1.0, activation=sigmoid, aggregation=sum)
+ 612 DefaultNodeGene(key=612, bias=-1.626648521448398, response=1.0, activation=sigmoid, aggregation=sum)
+Connections:
+ DefaultConnectionGene(key=(-2, 224), weight=1.9454770276940339, enabled=True)
+ DefaultConnectionGene(key=(-2, 612), weight=2.1447044917213383, enabled=True)
+ DefaultConnectionGene(key=(-1, 0), weight=-2.048078253002224, enabled=True)
+ DefaultConnectionGene(key=(-1, 224), weight=3.6675667680178328, enabled=True)
+ DefaultConnectionGene(key=(224, 0), weight=6.1133731818187655, enabled=True)
+ DefaultConnectionGene(key=(612, 0), weight=-2.1334321035742474, enabled=True)
+ DefaultConnectionGene(key=(612, 224), weight=1.5435290073038443, enabled=True)
+```
 
 最佳基因组部分代表了种群冠军的性能统计信息，以及其基因组配置。输入节点具有 IDs `-1` 和 `-2`，并且没有显示，因为它们相对简单，为我们提供了将值输入到网络图中的手段。输出节点和两个隐藏节点分别具有 IDs `0`、`224` 和 `612`。此外，`DefaultNodeGene` 包含了偏置值、激活函数的名称以及用于在每个节点聚合输入的函数的名称。稍后将要介绍的连接基因（`DefaultConnectionGene`）提供了源节点和目标节点的 ID，以及相关的连接权重。
 
 最后，让我们看看 `Output` 部分：
 
-[PRE28]
+```py
+Output:
+input (0.0, 0.0), expected output (0.0,), got [1.268084297765355e-07]
+input (0.0, 1.0), expected output (1.0,), got [0.9855287279878023]
+input (1.0, 0.0), expected output (1.0,), got [0.9867962503269723]
+input (1.0, 1.0), expected output (0.0,), got [0.004176868376596405]
+```
 
 `Output` 部分表示当接收四个输入数据对时，种群冠军表型的 ANN 生成的输出值。正如我们所见，输出值在指定的精度范围内接近预期值。
 

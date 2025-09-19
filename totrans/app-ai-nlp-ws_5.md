@@ -284,7 +284,9 @@ Amazon Connect 的一些关键特性如下：
 
 1.  首先，单击 `Get customer input` 块上的属性图标，选择 `Text to speech (Ad hoc)` 选项，然后在其下点击 `Enter text`。在输入框中，输入以下问候语：
 
-    [PRE0]
+    ```py
+    Hi this is the Market Nanny chatbot. How may I help you today?
+    ```
 
     注意
 
@@ -326,7 +328,9 @@ Amazon Connect 的一些关键特性如下：
 
     +   从`Interact`部分选择`Play prompt`：在属性面板中将`Prompt`属性设置为`Text to speech (Ad hoc)`，并在`Enter text`下的文本框中输入如下文本：
 
-        [PRE1]
+        ```py
+        "Thanks for using MarketNanny" Feel free to ask me something else.
+        ```
 
     +   从`Terminate/Transfer`部分的`Disconnect/hang up`。不要设置任何属性。
 

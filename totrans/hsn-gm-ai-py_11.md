@@ -50,17 +50,35 @@
 
 1.  现在，你需要构建Mujoco包并设置`mujoco-py`脚本。这取决于安装方式。使用以下命令构建和安装Mujoco：
 
-[PRE0]
+```py
+pip3 install -U 'mujoco-py<2.1,>=2.0'  #use the version appropriate for you
+cd path/to/mujoco-py/folder
+python -c "import mujoco_py" #force compile mujoco_py
+python setup.py install 
+```
 
 1.  为了测试安装并检查依赖项，运行以下命令重新安装整个Gym：
 
-[PRE1]
+```py
+pip install gym[all]
+```
 
 如果你运行此命令仍然看到错误，你可能需要更多帮助。咨询在线资源，进行关于`mujoco install`的最新搜索，并尝试那些说明。再次强调，在撰写本文时，Windows不再受支持，你可能更适合使用其他平台。幸运的是，现在为这个设置虚拟机或云服务可以相当容易，并且你可能在那里有更多运气。
 
 1.  您可以通过运行`Chapter_9_Mujoco.py`来测试Mujoco的安装，并确保许可证已经全部设置好。列表如下所示：
 
-[PRE2]
+```py
+import gym 
+from gym import envs
+
+env = gym.make('FetchReach-v1')
+
+env.reset()
+for _ in range(1000):
+ env.render()
+ env.step(env.action_space.sample()) # take a random action
+env.close()
+```
 
 如果您已正确安装所有内容，那么您应该会看到以下类似图像，该图像是从Mujoco环境中获取的：
 
@@ -86,17 +104,60 @@ PPO算法只是对我们在第8章中介绍的**信任域策略优化**（**TRPO
 
 1.  这个列表的代码与其他我们已审查的列表非常相似。因此，我们将仅限于审查关键部分：
 
-[PRE3]
+```py
+for iteration in range(iterations):
+ s = env.reset()
+ done = False
+ while not done:
+   for t in range(T_horizon):
+     prob = model.pi(torch.from_numpy(s).float()) 
+     m = Categorical(prob)
+     a = m.sample().item()
+     s_prime, r, done, info = env.step(a)
+
+     model.put_data((s, a, r/100.0, s_prime, prob[a].item(),done))
+     s = s_prime
+
+     score += r
+     if done:
+       if score/print_interval > min_play_reward:
+         play_game()
+       break
+
+   model.train_net()
+ if iteration%print_interval==0 and iteration!=0:
+   print("# of episode :{}, avg score : {:.1f}".format(iteration,
+     score/print_interval))
+   score = 0.0
+
+env.close()
+```
 
 1.  滚动到最底部，我们可以看到训练代码几乎与前面章节中我们最近的一些示例相同。一个需要注意的关键点是引入了一个新的超参数`T_horizon`，我们将在稍后定义它：
 
-[PRE4]
+```py
+learning_rate = 0.0005
+gamma = 0.98
+lmbda = 0.95
+eps_clip = 0.1
+K_epoch = 3
+T_horizon = 20
+```
 
 1.  如果我们滚动回顶部，你会看到为`T_horizon`、`K_epoch`、`eps_clip`和`lambda`定义的新超参数。现在只需记住这些新变量——我们很快就会了解它们的目的。
 
 1.  让我们跳到一些其他的重要差异，例如网络定义，这可以在`PPO`类的`init`方法中看到如下：
 
-[PRE5]
+```py
+def __init__(self, input_shape, num_actions):
+ super(PPO, self).__init__()
+ self.data = []
+
+ self.fc1 = nn.Linear(input_shape,256)
+ self.fc_pi = nn.Linear(256,num_actions)
+ self.fc_v = nn.Linear(256,1)
+ self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+```
 
 1.  我们可以看到，网络由一个名为`fc1`的第一输入状态`Linear`层组成，该层包含256个神经元。然后，我们可以看到`fc_pi`或策略网络被定义为`Linear`，包含256个神经元，并输出`num_actions`或动作的数量。接下来是`fc_v`的定义，这是值层。同样，它也有256个神经元和一个输出，即期望值。
 
@@ -132,23 +193,69 @@ PPO和TRPO都以寻找更好的策略作为共同改进的方式。PPO通过理�
 
 1.  在查看主要代码的大部分内容后，我们只想关注这里的训练代码，特别是`PPO`类中的`train_net`函数，如下所示：
 
-[PRE6]
+```py
+def train_net(self):
+ s, a, r, s_prime, done_mask, prob_a = self.make_batch()
+
+for i in range(K_epoch):
+ td_target = r + gamma * self.v(s_prime) * done_mask
+ delta = td_target - self.v(s)
+ delta = delta.detach().numpy()
+
+ advantage_lst = []
+ advantage = 0.0
+ for delta_t in delta[::-1]:
+   advantage = gamma * lmbda * advantage + delta_t[0]
+   advantage_lst.append([advantage])
+ advantage_lst.reverse()
+ advantage = torch.tensor(advantage_lst, dtype=torch.float)
+
+ pi = self.pi(s, softmax_dim=1)
+ pi_a = pi.gather(1,a)
+ ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a)) 
+
+ surr1 = ratio * advantage
+ surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
+ loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , 
+   td_target.detach())
+
+ self.optimizer.zero_grad()
+ loss.mean().backward()
+ self.optimizer.step()
+```
 
 1.  在初始的`make_batch`函数调用之后，为了构建列表，我们进入由`K_epoch`控制的迭代循环。`K_epoch`是一个新的超参数，它控制我们用于优化优势收敛的迭代次数：
 
-[PRE7]
+```py
+td_target = r + gamma * self.v(s_prime) * done_mask
+delta = td_target - self.v(s)
+delta = delta.detach().numpy()
+```
 
 1.  `K_epoch`迭代内部的第一个代码块是使用奖励`r`计算`td_target`，加上折扣因子`gamma`乘以v或价值网络的输出和`done_mask`。然后，我们取`delta`或TD变化并将其转换为`numpy`张量：
 
-[PRE8]
+```py
+for delta_t in delta[::-1]:
+  advantage = gamma * lmbda * advantage + delta_t[0]
+  advantage_lst.append([advantage])
+```
 
 1.  接下来，使用delta，我们通过`advantage`函数构建一个优势列表，如下所示：
 
-[PRE9]
+```py
+pi = self.pi(s, softmax_dim=1)
+pi_a = pi.gather(1,a)
+ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a)) 
+```
 
 1.  然后，我们将状态**s**推入策略网络`pi`。接下来，我们沿着第一个维度收集轴，然后使用方程 ![](img/4c9bd681-0b83-473f-939e-9f9ec792ad3c.png)计算比率，该方程用于计算我们想要用于信任的剪切区域或区域的可能比率：
 
-[PRE10]
+```py
+surr1 = ratio * advantage
+surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
+loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , 
+   td_target.detach())
+```
 
 1.  我们使用`ratio`值来计算`surr1`值，它定义了表面或剪切区域。下一行通过夹紧这个比率并使用由`eps_clip`设置的剪切区域边界来定义区域，计算第二个版本的表面`surr2`。然后，它取两个表面中的最小面积，并使用该面积来计算损失。
 
@@ -156,7 +263,11 @@ PPO和TRPO都以寻找更好的策略作为共同改进的方式。PPO通过理�
 
 1.  代码的最后部分是我们的典型梯度下降优化，下面为了完整性而展示：
 
-[PRE11]
+```py
+self.optimizer.zero_grad()
+loss.mean().backward()
+self.optimizer.step()
+```
 
 1.  这里没有什么新的内容。继续运行样本或回顾之前练习的输出。以下是一个训练输出的示例：
 
@@ -182,23 +293,60 @@ PPO和TRPO都以寻找更好的策略作为共同改进的方式。PPO通过理�
 
 1.  跳转到 `PPO` 类定义，如下所示：
 
-[PRE12]
+```py
+class PPO(nn.Module):
+    def __init__(self, input_shape, num_actions):
+        super(PPO, self).__init__()
+        self.data = []
+
+        self.fc1 = nn.Linear(input_shape,64)
+        self.lstm = nn.LSTM(64,32)
+        self.fc_pi = nn.Linear(32,num_actions)
+        self.fc_v = nn.Linear(32,1)
+        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+```
 
 1.  这里唯一的新部分是定义了一个新的层，`lstm`，其类型为 `LSTM(64,32)`。注入到状态编码顶部的 LSTM 层允许网络学习动作或记忆中的上下文。现在，我们的智能体不是学习哪些状态-动作提供最佳轨迹，而是在学习哪些状态-动作集提供最佳结果。在游戏中，这可能类似于学习一个特殊动作可以解锁一系列动作以获得一些特殊奖励。
 
 1.  接下来，我们将向下移动到策略 pi 函数和值 v 函数的网络定义，并查看它们是如何被修改的：
 
-[PRE13]
+```py
+def pi(self, x, hidden):
+        x = F.relu(self.fc1(x))
+        x = x.view(-1, 1, 64)
+        x, lstm_hidden = self.lstm(x, hidden)
+        x = self.fc_pi(x)
+        prob = F.softmax(x, dim=2)
+        return prob, lstm_hidden
+
+def v(self, x, hidden):
+        x = F.relu(self.fc1(x))
+        x = x.view(-1, 1, 64)
+        x, lstm_hidden = self.lstm(x, hidden)
+        v = self.fc_v(x)
+        return v
+```
 
 1.  `pi` 和 `v` 函数接受一个隐藏层，但只有 `pi`，即策略函数，被用作隐藏层的输出。我们很快就会看到这些隐藏 LSTM 层是如何工作的。
 
 1.  然后，在 `train_net` 函数的顶部，我们可以看到层是从批处理过程中提取出来的，`make_batch`：
 
-[PRE14]
+```py
+def train_net(self):
+        s,a,r,s_prime,done_mask, prob_a, (h1_in, h2_in), (h1_out, h2_out) = self.make_batch()
+        first_hidden = (h1_in.detach(), h2_in.detach())
+        second_hidden = (h1_out.detach(), h2_out.detach())
+```
 
 1.  我们在 actor-critics 之间使用两个隐藏或中间 LSTM 层，其中 `second_hidden` 表示输出，`first_hidden` 表示输入。在下面的 `for` 循环中，我们可以看到使用 LSTM 输入和输出的 delta 计算过程：
 
-[PRE15]
+```py
+v_prime = self.v(s_prime, second_hidden).squeeze(1)
+td_target = r + gamma * v_prime * done_mask
+v_s = self.v(s, first_hidden).squeeze(1)
+delta = td_target - v_s
+delta = delta.detach().numpy()
+```
 
 1.  这里 delta 的计算是通过应用 LSTM 层应用前后的差异来完成的，这使得 delta 能够封装 LSTM 对值 `v` 计算的影响。
 
@@ -230,37 +378,160 @@ PPO和TRPO都以寻找更好的策略作为共同改进的方式。PPO通过理�
 
 让我们通过打开`Chapter_9_A2C.py`文件并查看其中的超参数来查看代码中的样子：
 
-[PRE16]
+```py
+n_train_processes = 3
+learning_rate = 0.0002
+update_interval = 5
+gamma = 0.98
+max_train_steps = 60000
+PRINT_INTERVAL = update_interval * 100
+environment = "LunarLander-v2"
+```
 
 保持样本打开并按照以下步骤继续这个练习：
 
 1.  这是一个大的代码示例，所以我们将限制我们在这里展示的部分。这里需要注意的是文件顶部的超参数列表。唯一需要注意的是`n_train_processes`，它设置了工作进程的数量：
 
-[PRE17]
+```py
+class ActorCritic(nn.Module):
+    def __init__(self, input_shape, num_actions):
+        super(ActorCritic, self).__init__()
+        self.fc1 = nn.Linear(input_shape, 256)
+        self.fc_pi = nn.Linear(256, num_actions)
+        self.fc_v = nn.Linear(256, 1)
+
+    def pi(self, x, softmax_dim=1):
+        x = F.relu(self.fc1(x))
+        x = self.fc_pi(x)
+        prob = F.softmax(x, dim=softmax_dim)
+        return prob
+
+    def v(self, x):
+        x = F.relu(self.fc1(x))
+        v = self.fc_v(x)
+        return v
+```
 
 1.  接下来是`ActorCritic`类，这是我们之前使用的同一个类：
 
-[PRE18]
+```py
+def worker(worker_id, master_end, worker_end):
+    master_end.close() 
+    env = gym.make(environment)
+    env.seed(worker_id)
+
+    while True:
+        cmd, data = worker_end.recv()
+        if cmd == 'step':
+            ob, reward, done, info = env.step(data)
+            if done:
+                ob = env.reset()
+            worker_end.send((ob, reward, done, info))
+        elif cmd == 'reset':
+            ob = env.reset()
+            worker_end.send(ob)
+        elif cmd == 'reset_task':
+            ob = env.reset_task()
+            worker_end.send(ob)
+        elif cmd == 'close':
+            worker_end.close()
+            break
+        elif cmd == 'get_spaces':
+            worker_end.send((env.observation_space, env.action_space))
+        else:
+            raise NotImplementedError
+```
 
 1.  然后是`worker`函数的定义。这个函数是工作节点的大脑在工作和主大脑之间发送消息的地方：
 
-[PRE19]
+```py
+class ParallelEnv:
+    def __init__(self, n_train_processes):
+        self.nenvs = n_train_processes
+        self.waiting = False
+        self.closed = False
+        self.workers = list()
+
+        master_ends, worker_ends = zip(*[mp.Pipe() for _ in range(self.nenvs)])
+        self.master_ends, self.worker_ends = master_ends, worker_ends
+
+        for worker_id, (master_end, worker_end) in enumerate(zip(master_ends, worker_ends)):
+          p = mp.Process(target=worker,
+                           args=(worker_id, master_end, worker_end))
+            p.daemon = True
+            p.start()
+            self.workers.append(p)
+
+        # Forbid master to use the worker end for messaging
+        for worker_end in worker_ends:
+            worker_end.close()
+```
 
 1.  在这些函数之后是大的`ParallelEnv`类。前面的代码只是展示了该类的`init`函数，因为它相当大。这个类仅仅协调主节点和工作节点之间的活动：
 
-[PRE20]
+```py
+def compute_target(v_final, r_lst, mask_lst):
+    G = v_final.reshape(-1)
+    td_target = list()
+
+    for r, mask in zip(r_lst[::-1], mask_lst[::-1]):
+        G = r + gamma * G * mask
+        td_target.append(G)
+
+    return torch.tensor(td_target[::-1]).float()
+```
 
 1.  滚动到`test`函数之后，或者在我们其他示例中的`play_game`函数之后，我们可以看到`compute_target`函数。这是TD损失的计算，这里的区别在于使用了`mask`变量。`mask`只是一个标志或过滤器，它会移除任何关于0回报的折现G的计算：
 
-[PRE21]
+```py
+if __name__ == '__main__':
+    envs = ParallelEnv(n_train_processes)
+    env = gym.make(environment)
+    state_size = env.observation_space.shape[0]
+    action_size = env.action_space.n
+    model = ActorCritic(state_size, action_size)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+```
 
 1.  之后，我们进入一个`if`函数，它确定当前过程是否为`'__main__'`。我们这样做是为了避免额外的工作进程尝试运行相同的代码块。之后，我们可以看到典型的环境和模型设置完成：
 
-[PRE22]
+```py
+for _ in range(update_interval):
+    prob = model.pi(torch.from_numpy(s).float())
+    a = Categorical(prob).sample().numpy()
+    s_prime, r, done, info = envs.step(a)
+
+    s_lst.append(s)
+    a_lst.append(a)
+    r_lst.append(r/100.0)
+    mask_lst.append(1 - done)
+
+    s = s_prime
+    step_idx += 1
+```
 
 1.  间隔训练循环的代码几乎与之前的示例相同，大部分应该已经很直观。需要注意的是`env.steps`函数调用。这代表所有工作环境中的同步步骤。记住，在A2C中工作代理是同步运行的：
 
-[PRE23]
+```py
+s_final = torch.from_numpy(s_prime).float()
+v_final = model.v(s_final).detach().clone().numpy()
+td_target = compute_target(v_final, r_lst, mask_lst)
+
+td_target_vec = td_target.reshape(-1)
+s_vec = torch.tensor(s_lst).float().reshape(-1, state_size) 
+a_vec = torch.tensor(a_lst).reshape(-1).unsqueeze(1)
+mod = model.v(s_vec)
+advantage = td_target_vec - mod.reshape(-1)
+
+pi = model.pi(s_vec, softmax_dim=1)
+pi_a = pi.gather(1, a_vec).reshape(-1)
+loss = -(torch.log(pi_a) * advantage.detach()).mean() +\
+            F.smooth_l1_loss(model.v(s_vec).reshape(-1), td_target_vec)
+
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
 
 1.  然后，我们来到外部的训练循环。在这个示例中，我们可以看到训练目标是如何从工人构建的列表中提取的，其中`s_lst`是状态，`a_lst`是动作，`r_lst`是奖励，`mask_lst`是完成。除了torch张量操作外，计算与PPO相同。
 
@@ -284,25 +555,128 @@ PPO和TRPO都以寻找更好的策略作为共同改进的方式。PPO通过理�
 
 1.  我们将从查看典型的超参数和设置代码开始，如下所示：
 
-[PRE24]
+```py
+n_train_processes = 6
+learning_rate = 0.0002
+update_interval = 6
+gamma = 0.98
+max_train_ep = 3000
+max_test_ep = 400
+environment = "LunarLander-v2"
+
+env = gym.make(environment)
+state_size = env.observation_space.shape[0]
+action_size = env.action_space.n
+```
 
 1.  在这里，我们可以看到包含两个新的超参数，`max_train_ep`和`max_test_ep`。第一个变量`max_train_ep`设置了最大训练剧集数，而第二个变量`max_test_ep`用于评估性能。
 
 1.  下一个部分是`ActorCritic`类，与我们之前的几个例子完全相同，所以在这里我们不需要回顾它。之后是`train`函数，如下所示：
 
-[PRE25]
+```py
+def train(global_model, rank):
+    local_model = ActorCritic(state_size, action_size)
+    local_model.load_state_dict(global_model.state_dict())
+
+    optimizer = optim.Adam(global_model.parameters(), lr=learning_rate)
+
+    env = gym.make(environment)
+
+    for n_epi in range(max_train_ep):
+        done = False
+        s = env.reset()
+        while not done:
+            s_lst, a_lst, r_lst = [], [], []
+            for t in range(update_interval):
+                prob = local_model.pi(torch.from_numpy(s).float())
+                m = Categorical(prob)
+                a = m.sample().item()
+                s_prime, r, done, info = env.step(a)
+
+                s_lst.append(s)
+                a_lst.append([a])
+                r_lst.append(r/100.0)
+
+                s = s_prime
+                if done:
+                    break
+
+            s_final = torch.tensor(s_prime, dtype=torch.float)
+            R = 0.0 if done else local_model.v(s_final).item()
+            td_target_lst = []
+            for reward in r_lst[::-1]:
+                R = gamma * R + reward
+                td_target_lst.append([R])
+            td_target_lst.reverse()
+
+            s_batch, a_batch, td_target = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
+                torch.tensor(td_target_lst)
+            advantage = td_target - local_model.v(s_batch)
+
+            pi = local_model.pi(s_batch, softmax_dim=1)
+            pi_a = pi.gather(1, a_batch)
+            loss = -torch.log(pi_a) * advantage.detach() + \
+                F.smooth_l1_loss(local_model.v(s_batch), td_target.detach())
+
+            optimizer.zero_grad()
+            loss.mean().backward()
+            for global_param, local_param in zip(global_model.parameters(), local_model.parameters()):
+                global_param._grad = local_param.grad
+            optimizer.step()
+            local_model.load_state_dict(global_model.state_dict())
+
+    env.close()
+    print("Training process {} reached maximum episode.".format(rank))
+```
 
 1.  `train`函数与我们之前的训练代码非常相似。然而，请注意我们传递了一个`global_model`输入。这个全局模型被用作本地模型的克隆，然后我们在工人代理学习到的经验上进行训练。关于这段代码的一个关键观察点是最后部分，这是我们使用独立训练的本地模型更新全局模型的地方。
 
 1.  接下来是测试函数。这是使用以下代码评估`global_model`的地方：
 
-[PRE26]
+```py
+def test(global_model):
+    env = gym.make(environment)
+    score = 0.0
+    print_interval = 20
+
+    for n_epi in range(max_test_ep):
+        done = False
+        s = env.reset()
+        while not done:
+            prob = global_model.pi(torch.from_numpy(s).float())
+            a = Categorical(prob).sample().item()
+            s_prime, r, done, info = env.step(a)
+            s = s_prime
+            score += r
+
+        if n_epi % print_interval == 0 and n_epi != 0:
+            print("# of episode :{}, avg score : {:.1f}".format(
+                n_epi, score/print_interval))
+            score = 0.0
+            time.sleep(1)
+    env.close()
+```
 
 1.  所有这些代码所做的只是通过使用它来玩游戏和评估分数来评估模型。这当然是在训练时渲染环境的绝佳位置。
 
 1.  最后，我们有主要的处理代码块。这个代码块通过以下`name`if语句被标识：
 
-[PRE27]
+```py
+if __name__ == '__main__': 
+    global_model = ActorCritic(state_size, action_size)
+    global_model.share_memory()
+
+    processes = []
+    for rank in range(n_train_processes + 1): # + 1 for test process
+        if rank == 0:
+            p = mp.Process(target=test, args=(global_model,))
+        else:
+            p = mp.Process(target=train, args=(global_model, rank,))
+        p.start()
+        processes.append(p)
+    for p in processes:
+        p.join()
+```
 
 1.  如我们所见，这是使用共享内存构建`global_model`模型的地方。然后，我们使用第一个或排名0的进程作为测试或评估进程来启动子进程。最后，我们可以看到代码在所有进程通过`p.join`重新连接时结束。
 
@@ -324,25 +698,77 @@ PPO和TRPO都以寻找更好的策略作为共同改进的方式。PPO通过理�
 
 1.  在这个示例中，你首先会注意到的是`ReplayBuffer`类，如下所示：
 
-[PRE28]
+```py
+class ReplayBuffer():
+    def __init__(self):
+        self.buffer = collections.deque(maxlen=buffer_limit)
+
+    def put(self, seq_data):
+        self.buffer.append(seq_data)
+
+    def sample(self, on_policy=False):
+        if on_policy:
+            mini_batch = [self.buffer[-1]]
+        else:
+            mini_batch = random.sample(self.buffer, batch_size)
+
+        s_lst, a_lst, r_lst, prob_lst, done_lst, is_first_lst = [], [], [], [], [], []
+        for seq in mini_batch:
+            is_first = True 
+            for transition in seq:
+                s, a, r, prob, done = transition
+
+                s_lst.append(s)
+                a_lst.append([a])
+                r_lst.append(r)
+                prob_lst.append(prob)
+                done_mask = 0.0 if done else 1.0
+                done_lst.append(done_mask)
+                is_first_lst.append(is_first)
+                is_first = False
+
+        s,a,r,prob,done_mask,is_first = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
+                                        r_lst, torch.tensor(prob_lst, dtype=torch.float), done_lst, \
+                                        is_first_lst
+        return s,a,r,prob,done_mask,is_first
+
+    def size(self):
+        return len(self.buffer)
+```
 
 1.  这是我们在前几章中看到的`ReplayBuffer`类的更新版本。
 
 1.  除了`train`函数中的新部分之外，大部分代码应该是自解释的，首先是代码的前几个块：
 
-[PRE29]
+```py
+q = model.q(s)
+q_a = q.gather(1,a)
+pi = model.pi(s, softmax_dim = 1)
+pi_a = pi.gather(1,a)
+v = (q * pi).sum(1).unsqueeze(1).detach()
+
+rho = pi.detach()/prob
+rho_a = rho.gather(1,a)
+rho_bar = rho_a.clamp(max=c)
+correction_coeff = (1-c/rho).clamp(min=0)
+```
 
 1.  新代码是从动作概率`prob`除以`pi`的比率来计算`rho`，然后代码将张量聚合成1，将其夹具，并计算一个称为`correction_coeff`的校正系数。
 
 1.  滚过一些其他熟悉的代码，我们来到了一个新部分，其中损失的计算已经更新为使用`rho_bar`和`correction_coeff`的值，如下所示：
 
-[PRE30]
+```py
+loss1 = -rho_bar * torch.log(pi_a) * (q_ret - v) 
+loss2 = -correction_coeff * pi.detach() * torch.log(pi) * (q.detach()-v) loss = loss1 + loss2.sum(1) + F.smooth_l1_loss(q_a, q_ret)
+```
 
 1.  在这里，我们可以看到`rho_bar`和`correction_coeff`的倒数都被用来偏斜损失的计算。`rho`是我们用来计算这些系数的原始值，它基于先前动作和预测动作之间的比率。应用这种偏差产生的效果是缩小沿着轨迹路径的搜索范围。当应用于连续控制任务时，这是一个非常好的效果。
 
 1.  最后，让我们跳到训练循环代码，看看数据是如何附加到`ReplayBuffer`的：
 
-[PRE31]
+```py
+seq_data.append((s, a, r/100.0, prob.detach().numpy(), done))
+```
 
 1.  在这里我们可以看到，动作概率`prob`是通过使用`detach()`从PyTorch张量中分离出来，然后将其转换为`numpy`张量来输入的。这个值是我们后来在`train_net`函数中用来计算`rho`的。
 

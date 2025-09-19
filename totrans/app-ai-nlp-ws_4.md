@@ -350,7 +350,9 @@ NLU能够处理非结构化输入并将它们转换成结构化、机器可理�
 
 1.  在机器人流程结束时，当所有需要的信息都已填写完毕，它将以之前相同的格式返回意图。然而，它随后又跟了一条包含槽位参数名称和值的行：
 
-    [PRE0]
+    ```py
+    ticker:GOOG
+    ```
 
 1.  这表明股票槽位已被填充为`GOOG`值。所以，太好了；我们的带槽位意图正在工作。
 
@@ -474,13 +476,29 @@ NLU展示了使用在大量对话句子上训练并形成大型推理模型的NL
 
 现在，让我们更仔细地看看传递给 `Lambda_handler` 函数的事件参数的结构。如果我们请求一个具有 `GOOG` 标记值的股票报价，参数中意图部分的 `JSON` 值将如下所示：
 
-[PRE1]
+```py
+{
+    …
+    "currentIntent": 
+    {
+        "name": "GetQuote", 
+        "slots": 
+        {
+            "ticker": "GOOG"
+        },
+    …
+    }
+}
+```
 
 我们在处理过程中感兴趣的相关值是 `name` 和 `currentIntent` 下的 `slots` 部分中的单个 `ticker` 值。
 
 由于我们的 `JSON` 输入被转换为 Python 字典，我们可以在 Lambda 函数中如下获取这些值：
 
-[PRE2]
+```py
+event['currentIntent']['name']
+event['currentIntent']['slots']['ticker']
+```
 
 ## 实现高级处理函数
 
@@ -490,7 +508,23 @@ NLU展示了使用在大量对话句子上训练并形成大型推理模型的NL
 
 实现我们处理器的第一步是识别意图名称并调用实现它的相应函数。这个伪代码看起来如下所示：
 
-[PRE3]
+```py
+import json
+def get_quote(request):
+    return "Quote handling logic goes here."
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+    intent = event['currentIntent']['name']
+    if intent == 'GetQuote':
+        return get_quote(event)
+    return {
+        'statusCode': 200,
+        'body': \
+        json.dumps("Sorry, I'm not sure what you have in mind. "\
+                   "Please try again.")
+    }
+```
 
 到目前为止，这已经足够完整，可以实际测试你的聊天机器人，如果你愿意的话，但让我们继续进行实现。
 
@@ -516,17 +550,43 @@ NLU展示了使用在大量对话句子上训练并形成大型推理模型的NL
 
 下一步将是实现 `get_quote` 函数，该函数负责获取市场报价信息并将其返回给调用处理函数：
 
-[PRE4]
+```py
+def get_quote(request):
+    Slots = request['currentIntent']['slots']
+    ticker = Slots['ticker']
+    price = call_quote_api(ticker)
+```
 
 注意，我们已将参数命名为 request，因此我们发送给函数的 `object` 事件在此函数中被称为请求。它包含相同的值和结构，只是重命名了。因此，我们可以通过获取具有 `ticker` 键的项的值来获取之前提到的股票槽的值，如下面的代码所示：
 
-[PRE5]
+```py
+request['currentIntent']['Slots']
+```
 
 然后，我们调用 `call_quote_api()` 函数来检索股票项目的市场报价值。我们尚未实现 `call_quote_api()`，所以让我们接下来做这个。
 
 我们将按照以下方式实现 `call_quote_api` 函数：
 
-[PRE6]
+```py
+def call_quote_api(ticker):
+    response = \
+      urlopen('https://www.alphavantage.co/query?'\
+              'function=GLOBAL_QUOTE&symbol={}'\
+              '&apikey=3WIN88G0AVG7RZPX'.format(ticker))
+    response = json.load(response)
+    ''' Sample Response: \
+        {'Global Quote': {'01\. symbol': 'AAPL', \
+                          '02\. open': '316.2700', \
+                          '03\. high': '318.7400', \
+                          '04\. low': '315.0000', \
+                          '05\. price': '318.7300', \
+                          '06\. volume': '33454635', \
+                          '07\. latest trading day': '2020-01-17', \
+                          '08\. previous close': '315.2400', \
+                          '09\. change': '3.4900', \
+                          '10\. change percent': '1.1071%'}} '''
+    return response['Global Quote']["05\. price"]
+```
 
 在这里，股票代码是股票参数的值（在这个特定示例中，它将是 `GOOG`）。我们使用 Alpha Vantage，它在网上提供了一个静态端点 [https://www.alphavantage.co/](https://www.alphavantage.co/) 来获取报价。我们还捕获了一个示例响应。你应该获取自己的 API 密钥。
 
@@ -538,15 +598,22 @@ NLU展示了使用在大量对话句子上训练并形成大型推理模型的NL
 
 现在我们已经得到了市场报价值，我们可以将其返回到我们的调用应用程序，即我们实现的聊天机器人。然而，我们还需要做一些小事情来返回这个值。首先，我们需要将其格式化为对话响应，如下面的字符串所示：
 
-[PRE7]
+```py
+message = 'The last price (delayed) of ticker {} was {}'\
+          .format(ticker, price)
+```
 
 这应该让聊天机器人显示以下消息：
 
-[PRE8]
+```py
+The last price (delayed) of ticker GOOG was 1107.32
+```
 
 最后一步是构建一个包含我们的消息和其他一些信息的`Amazon Lex` `JSON`返回格式。我们将使用`close`辅助函数来完成此操作：
 
-[PRE9]
+```py
+return close(message)
+```
 
 我们的`close`函数接受一个参数，即我们希望返回给聊天机器人的字符串（在这种情况下，这是消息变量的值）。它生成一个围绕内容的`JSON`包装器，符合我们的基于Lex的机器人所期望的结构，并从中提取内容并将其交付给用户。包装器的结构在此阶段并不重要，但如果你想了解，可以查看`close`函数的实现。如我们之前提到的，`lambda-function.py`文件包含Lambda函数的完整源代码。它可在GitHub上找到，网址为[https://packt.live/2O8TUwA](https://packt.live/2O8TUwA)。
 

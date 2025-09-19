@@ -63,15 +63,82 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 首先，在终端中安装所需的依赖项：
 
-[PRE0]
+```py
+
+pip3 install ragas==0.1.13 datasets==2.20.0 langchain==0.2.12 openai==1.39.0 faiss-cpu==1.8.0.post1
+```
 
 以下代码评估了OpenAI的`text-embedding-ada-002`和`text-embedding-3-large`嵌入模型在样本数据集上的Ragas上下文实体召回评估表现：
 
-[PRE1]
+```py
+
+from ragas.metrics import context_entity_recall
+from ragas import evaluate, RunConfig
+from datasets import load_dataset, Dataset
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+import os
+from typing import List
+# Add your OpenAI API key to the environment variables
+openai_api_key = os.getenv("OPENAI_API_KEY")
+# Load sample dataset.
+dataset = load_dataset("explodinggradients/amnesty_qa", split="eval")
+sample_size = 100
+# Get sample questions from the sample dataset.
+sample_questions = dataset['question'][:sample_size]
+# Get sample context information from the sample dataset.
+sample_contexts = [item for row in dataset["contexts"]
+                   [:sample_size] for item in row]
+sample_ground_truths = [item for row in dataset["ground_truths"]
+                   [:sample_size] for item in row]
+# Break sample context into chunks to use with vector search.
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=400, chunk_overlap=100, add_start_index=True
+)
+chunks: List[str] = []
+for context in sample_contexts:
+    split_chunks = text_splitter.split_text(context)
+    chunks.extend(split_chunks)
+# Embedding models that we are evaluating.
+openai_embedding_models = ["text-embedding-ada-002", "text-embedding-3-large"]
+# Ragas evaluation config to use in all evaluations.
+ragas_run_config = RunConfig(max_workers=4, max_wait=180)
+# #Evaluate each embedding model
+for embedding_model in openai_embedding_models:
+    # Create an in-memory vector store for the evaluation.
+    db = FAISS.from_texts(
+        chunks, OpenAIEmbeddings(openai_api_key=openai_api_key, model=embedding_model))
+    # Get retrieved context using similarity search.
+    retrieval_contexts: List[str] = []
+    for question in sample_questions:
+        search_results = db.similarity_search(question)
+        retrieval_contexts.append(list(map(
+            lambda result: result.page_content, search_results)))
+    # Run evaluation for context relevancy of retrieved information.
+    result = evaluate(
+        dataset=Dataset.from_dict({
+            "question": sample_questions,
+            "contexts": retrieval_contexts,
+            "ground_truth": sample_ground_truths
+        }),
+        metrics=[context_entity_recall],
+        run_config=ragas_run_config,
+        raise_exceptions=False,
+        llm=ChatOpenAI(openai_api_key=openai_api_key, model_name="gpt-4o-mini")
+    )
+    # Print out results
+    print(f"Results for embedding model '{embedding_model}':")
+    print(result)
+```
 
 此代码将以下结果输出到终端：
 
-[PRE2]
+```py
+
+Results for embedding model 'text-embedding-ada-002': {'context_entity_recall': 0.5687}
+Results for embedding model 'text-embedding-3-large': {'context_entity_recall': 0.5973}
+```
 
 如您从这些结果中可以看到，`text-embedding-3-large` 在这次评估中产生了更高的上下文实体召回率。上下文相关性分数在 `0` 和 `1` 之间归一化。
 
@@ -97,21 +164,30 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 | --- | --- | --- |
 | 锚点 | 作为识别相似和不同示例起点的参考文本。 |
 
-[PRE3]
+```py
+
+"I love eating apples."
+```
 
 |
 
 | 正面 | 应该类似于锚示例表示的文本。 |
 | --- | --- |
 
-[PRE4]
+```py
+
+"Apples are my favorite fruit."
+```
 
 |
 
 | 负面 | 应该表示为与锚示例不同或不相似的文本。 |
 | --- | --- |
 
-[PRE5]
+```py
+
+"Apple is a tech company."
+```
 
 |
 
@@ -121,15 +197,59 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 首先，在终端中安装依赖项：
 
-[PRE6]
+```py
+
+pip3 install sentence-transformers==3.0.1 torch==2.2.2
+```
 
 然后运行以下代码：
 
-[PRE7]
+```py
+
+from sentence_transformers import SentenceTransformer, InputExample, losses, util
+from torch.utils.data import DataLoader
+# Load embedding model
+model = SentenceTransformer("Alibaba-NLP/gte-base-en-v1.5", trust_remote_code=True)
+# Function to print similarity score
+def get_similarity_score():
+    sentence1 = "I love the taste of fresh apples."
+    sentence2 = "Apples are rich in vitamins and fiber."
+    embedding1 = model.encode(sentence1)
+    embedding2 = model.encode(sentence2)
+    cosine_score = util.cos_sim(embedding1, embedding2)
+    score_number = cosine_score.item()
+    print(f"Cosine similarity between '{sentence1}' and '{sentence2}': {score_number:.4f}")
+    return cosine_score
+# Print similarity score before training
+print("Before training:")
+similarity_before = get_similarity_score()
+train_examples = [
+    InputExample(texts=["I love eating apples.", "Apples are my favorite fruit", "Apple is a tech company"]),
+    InputExample(texts=["Chocolate is a sweet treat loved by many.", "I can't resist a good piece of chocolate.", "Chocolate Rain was one of the most popular songs on YouTube from 2007."]),
+    InputExample(texts=["Ice cream is a refreshing dessert.", "I love trying different ice cream flavors.", "The rapper and actor Ice Cube was wearing a cream colored suit to the VMAs."]),
+    InputExample(texts=["Salad is a healthy meal option.", "I love a fresh, crisp salad with various vegetables.", "Salad Fingers is a surreal web series created by David Firth."]),
+]
+train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=8)
+train_loss = losses.TripletLoss(model=model)
+# fine tune
+model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=10)
+print("After training:")
+similarity_after = get_similarity_score()
+similarity_difference = similarity_after - similarity_before
+print(f"Change in similarity score: {similarity_difference.item():4f}")
+```
 
 此代码将输出类似以下结果到终端：
 
-[PRE8]
+```py
+
+Before training:
+Cosine similarity between 'I love the taste of fresh apples.' and 'Apples are rich in vitamins and fiber.': 0.4402
+[10/10 00:05, Epoch 10/10]
+After training:
+Cosine similarity between 'I love the taste of fresh apples.' and 'Apples are rich in vitamins and fiber.': 0.4407
+Change in similarity score: 0.000540
+```
 
 如此例所示，仅仅进行的小幅微调就增加了相关句子之间的向量相似度。
 
@@ -154,11 +274,46 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 您有以下*烤大蒜番茄意面*的食谱可以包含在您的食谱数据库中：
 
-[PRE9]
+```py
+
+# Roasted Garlic and Tomato Pasta
+## Ingredients
+- 8 oz pasta
+- 1 head garlic
+- 1 pint cherry tomatoes
+- 1/4 cup olive oil
+- 1/2 cup fresh basil, chopped
+- Salt and pepper
+## Instructions
+1\. Preheat oven to 400°F (200°C).
+2\. Cut the top off the garlic head, drizzle with olive oil, wrap in foil, and roast for 30 minutes.
+3\. Roast cherry tomatoes with olive oil, salt, and pepper for 20 minutes until blistered.
+4\. Cook pasta according to package instructions. Mix pasta with roasted garlic (squeezed out), tomatoes, and olive oil.
+5\. Stir in basil, season with salt and pepper, and serve.
+Yield: 4 servings
+```
 
 在为食谱创建向量嵌入时，您可以在食谱文本之前包含以下元数据：
 
-[PRE10]
+```py
+
+---
+contentType: recipe
+recipeTitle: Roasted Garlic and Tomato Pasta
+keyIngredients: pasta, garlic, tomatoes, olive oil, basil
+servings: 4
+tags: [dinner, Italian, vegetarian]
+summary: A simple pasta dish featuring roasted garlic and cherry tomatoes in a light sauce
+---
+# Roasted Garlic and Tomato Pasta
+## Ingredients
+- 8 oz pasta
+...other ingredients
+## Instructions
+1\. Preheat your oven to 400°F (200°C).
+   ...other instructions
+Yield: 4 servings
+```
 
 通过将此元数据与嵌入文本一起包含，您为文本赋予了更多的语义意义，使其更有可能被用户查询捕获正确的内。这使得相关用户查询与文本的余弦相似度分数更高。
 
@@ -169,21 +324,30 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 |
 
-[PRE11]
+```py
+
+I have tomatoes, basil and pasta in my fridge. What to make?
+```
 
 | `0.7141546` | `0.7306514` | `0.016496778` |
 | --- | --- | --- |
 
 |
 
-[PRE12]
+```py
+
+simple vegetarian pasta with roasted vegetables
+```
 
 | `0.71199816` | `0.76754296` | `0.055544794` |
 | --- | --- | --- |
 
 |
 
-[PRE13]
+```py
+
+vegetarian italian pasta dinner
+```
 
 | `0.60327804` | `0.6559261` | `0.052648067` |
 | --- | --- | --- |
@@ -204,45 +368,99 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 | --- | --- | --- |
 | YAML |
 
-[PRE14]
+```py
 
-[PRE15]
+contentType: recipe
+```
 
-[PRE16]
+```py
 
-[PRE17]
+recipeTitle: Roasted Garlic and Tomato Pasta
+```
 
-[PRE18]
+```py
 
-[PRE19]
+keyIngredients: pasta, garlic, tomatoes, olive oil, basil
+```
+
+```py
+
+servings: 4
+```
+
+```py
+
+tags: [dinner, Italian, vegetarian]
+```
+
+```py
+
+summary: A simple pasta dish featuring roasted garlic and cherry tomatoes in a light sauce
+```
 
 | 60 |
 | --- |
 | JSON |
 
-[PRE20]
+```py
 
-[PRE21]
+{
+```
 
-[PRE22]
+```py
 
-[PRE23]
+  " contentType": "recipe",
+```
 
-[PRE24]
+```py
 
-[PRE25]
+  " recipeTitle": "Roasted Garlic and Tomato Pasta",
+```
 
-[PRE26]
+```py
 
-[PRE27]
+  " keyIngredients": "pasta, garlic, tomatoes, olive oil, basil",
+```
 
-[PRE28]
+```py
 
-[PRE29]
+  " servings": 4,
+```
 
-[PRE30]
+```py
 
-[PRE31]
+  " tags": [
+```
+
+```py
+
+    "dinner",
+```
+
+```py
+
+    "Italian",
+```
+
+```py
+
+    "vegetarian"
+```
+
+```py
+
+  ],
+```
+
+```py
+
+  " summary": "A simple pasta dish featuring roasted garlic and cherry tomatoes in a light sauce"
+```
+
+```py
+
+}
+```
 
 | 89 |
 | --- |
@@ -255,7 +473,18 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 下面是一个前文在 Markdown ([https://commonmark.org/help/](https://commonmark.org/help/)) 文本之前的例子：
 
-[PRE32]
+```py
+
+---
+foo: bar
+letters:
+  - a
+  - b
+  - c
+---
+# Title
+Some **body** text!
+```
 
 前文规范起源于 Jekyll 静态网站构建器 ([https://jekyllrb.com/docs/](https://jekyllrb.com/docs/))。它已经广泛应用于各个领域。鉴于其流行度，语言模型和嵌入模型应该能够理解其语义上下文作为文本其余部分的元数据。此外，还有库可以轻松地操作与主文本内容相关的前文，例如 Python 中的 `python-frontmatter`。
 
@@ -263,15 +492,74 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 首先，在终端中安装 `python-frontmatter` 包：
 
-[PRE33]
+```py
+
+pip3 install python-frontmatter==1.1.0
+```
 
 使用 `python-frontmatter` 库向文本添加前文：
 
-[PRE34]
+```py
+
+import frontmatter
+# Define the text content
+text = """# Roasted Garlic and Tomato Pasta
+## Ingredients
+- 8 oz pasta
+- 1 head garlic
+- 1 pint cherry tomatoes
+- 1/4 cup olive oil
+- 1/2 cup fresh basil, chopped
+- Salt and pepper
+## Instructions
+1\. Preheat oven to 400°F (200°C).
+2\. Cut the top off the garlic head, drizzle with olive oil, wrap in foil, and roast for 30 minutes.
+3\. Roast cherry tomatoes with olive oil, salt, and pepper for 20 minutes until blistered.
+4\. Cook pasta according to package instructions. Mix pasta with roasted garlic (squeezed out), tomatoes, and olive oil.
+5\. Stir in basil, season with salt and pepper, and serve.
+Yield: 4 servings
+"""
+# Define the dictionary to be added as frontmatter
+metadata = {
+    "contentType": "recipe",
+    "recipeTitle": "Roasted Garlic and Tomato Pasta",
+    "keyIngredients": ["pasta", "garlic", "tomatoes", "olive oil", "basil"],
+    "servings": 4,
+    "tags": ["dinner", "Italian", "vegetarian"],
+    "summary": "A simple pasta dish featuring roasted garlic and cherry tomatoes in a light sauce"
+}
+# Create a frontmatter object with the metadata and content
+post = frontmatter.Post(text, **metadata)
+print("Text with front matter:")
+print(frontmatter.dumps(post))
+print("\n------\n")
+print("You can also extract the front matter as a dict:")
+print(post.metadata)
+```
 
 这将在终端输出以下带有前文的文本：
 
-[PRE35]
+```py
+
+---
+contentType: recipe
+keyIngredients: ["pasta", "garlic", "tomatoes", "olive oil", "basil"]recipeTitle: Roasted Garlic and Tomato Pasta
+servings: 4
+summary: A simple pasta dish featuring roasted garlic and cherry tomatoes in a light sauce
+tags: ["dinner", "Italian", "vegetarian"]
+---
+# Roasted Garlic and Tomato Pasta
+## Ingredients
+- 8 oz pasta
+...other ingredients
+## Instructions
+1\. Preheat your oven to 400°F (200°C).
+...other instructions
+Yield: 4 servings
+------
+You can also extract the front matter as a dict:
+{'contentType': 'recipe', 'recipeTitle': 'Roasted Garlic and Tomato Pasta', 'keyIngredients': ['pasta', 'garlic', 'tomatoes', 'olive oil', 'basil'], 'servings': 4, 'tags': ['dinner', 'Italian', 'vegetarian'], 'summary': 'A simple pasta dish featuring roasted garlic and cherry tomatoes in a light sauce'}
+```
 
 前面的例子展示了在语义检索中添加元数据格式（如前文）的有用性。
 
@@ -281,7 +569,11 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 对于一个食谱聊天机器人，您可以在元数据中包含食谱来源。例如：
 
-[PRE36]
+```py
+
+contentType: recipe
+source: The MongoDB Cooking School Cookbook
+```
 
 这确保了特定类型或特定来源的每一份文档都包含一致的基线元数据。然后，您可以像以下章节中讨论的那样，添加额外的动态元数据，这些元数据对每个特定文档是唯一的。包括静态元数据是提供额外语义上下文的一种低效方式，有助于检索和解释。
 
@@ -293,7 +585,39 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 从Markdown文档中提取标题可以创建一个包含类似以下元数据的文档：
 
-[PRE37]
+```py
+
+---
+headers:
+  - text: Vegetable Stir-Fry
+    level: h1
+  - text: Ingredients
+    level: h2
+  - text: Vegetable Preparation
+    level: h3
+  - text: Instructions
+    level: h2
+  - text: Cooking the Stir-Fry
+    level: h3
+  - text: Serving
+    level: h3
+---
+# Vegetable Stir-Fry
+A quick and easy stir-fry with fresh veggies and a savory sauce.
+## Ingredients
+- 2 cups mixed vegetables (e.g., broccoli, carrots, bell peppers)...other ingredients
+### Vegetable Preparation
+- Wash and chop the vegetables into bite-sized pieces.
+...other preparation
+## Instructions
+### Cooking the Stir-Fry
+1\. Heat the sesame oil in a large skillet or wok over high heat.
+...other instructions
+### Serving
+- Serve hot over steamed rice or noodles.
+...other instructions
+Serves 4
+```
 
 ## 使用LLM生成元数据
 
@@ -319,15 +643,58 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 首先，在终端中安装依赖项：
 
-[PRE38]
+```py
+
+pip3 install openai==1.39.0 pydantic==2.8.2
+```
 
 然后，执行以下代码：
 
-[PRE39]
+```py
+
+import os
+from openai import OpenAI
+from pydantic import BaseModel
+import json
+# Create client to call model
+api_key = os.environ["OPENAI_API_KEY"]
+client = OpenAI(
+    api_key=api_key,
+)
+# Format response structure
+class TopicsResult(BaseModel):
+    topics: list[str]
+function_definition = {
+    "name": "get_topics",
+    "description": "Extract the key topics from the text",
+    "parameters": json.loads(TopicsResult.schema_json())
+}
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    functions=[function_definition],
+    function_call={ "name": function_definition["name"] },
+    messages=[
+        {
+            "role": "system",
+            "content": "Extract key topics from the following text. Include no more than 3 key terms. Format response as a JSON object.",
+        },
+        {
+            "role": "user",
+            "content": "Eggs, like milk, form a typical food, inasmuch as they contain all the elements, in the right proportion, necessary for the support of the body. Their highly concentrated, nutritive value renders it necessary to use them in combination with other foods rich in starch (bread, potatoes, etc.). In order that the stomach may have enough to act upon, a certain amount of bulk must be furnished."
+        }
+    ],
+)
+# Get model results as a dict
+content = TopicsResult.model_validate(json.loads(response.choices[0].message.function_call.arguments))
+print(f"Topics: {content.topics}")
+```
 
 此代码在终端产生以下类似输出：
 
-[PRE40]
+```py
+
+Topics: ['eggs', 'milk', 'nutritive value']
+```
 
 正如您在这里看到的，LLMs允许您通过提示工程和最小的技术开销执行许多形式的NLP任务。
 
@@ -339,11 +706,41 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 例如，假设您正在查询之前提到的食谱聊天机器人。给定用户查询`apple pie recipe`，您可能希望使用以下查询进行向量搜索：
 
-[PRE41]
+```py
+
+---
+contentType: recipe
+keyIngredients: apples, sugar, butter
+tags: [dessert, pie]
+---
+apple pie recipe
+```
 
 如上所述的查询将使匹配具有类似结构嵌入元数据的食谱的可能性更高，如下所示：
 
-[PRE42]
+```py
+
+---
+contentType: recipe
+recipeTitle: Classic Apple Pie
+keyIngredients: apples, pie crust, sugar, cinnamon, butter
+servings: 8
+tags: [dessert, baking, American, fruit]
+summary: A classic apple pie with a flaky crust and a sweet, cinnamon-spiced apple filling.
+---
+# Classic Apple Pie
+## Ingredients
+- 1 premade pie crust
+- 1 can apple pie filling
+- 1 teaspoon ground cinnamon
+- 1 egg, beaten (for egg wash)
+## Instructions
+1\. Preheat oven to 425°F (220°C). Place the premade crust in a 9-inch pie plate.
+2\. Pour the apple pie filling into the crust and sprinkle with cinnamon.
+3\. Cover with the top crust, trim and crimp edges, and cut slits for steam. Brush with egg wash.
+4\. Bake for 15 minutes, reduce temperature to 350°F (175°C), and bake for another 30-35 minutes until golden brown. Cool before serving.
+Yield: 8 servings
+```
 
 在查询中包含结构化元数据可以作为一种*语义过滤器*，以获得更精确的搜索结果。下一节将探讨其他提高RAG应用中数据模型准确性的技术。
 
@@ -389,15 +786,119 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 
 首先，在您的终端中安装所需的依赖项：
 
-[PRE43]
+```py
+
+pip3 install openai==1.39.0 pydantic==2.8.2
+```
 
 然后，运行以下代码：
 
-[PRE44]
+```py
+
+from openai import OpenAI
+from pydantic import BaseModel
+import json
+from typing import Literal, Optional
+# Create client to call model
+api_key = os.environ["OPENAI_API_KEY"]
+client = OpenAI(
+    api_key=api_key,
+)
+# Create classifier
+class ContentTopic(BaseModel):
+    topic: Optional[Literal[
+        "nutritional_information",
+        "equipment",
+        "cooking_technique",
+        "recipe"
+    ]]
+function_definition = {
+    "name": "classify_topic",
+    "description": "Extract the key topics from the query",
+    "parameters": json.loads(ContentTopic.schema_json())
+}
+# The topic classifier uses few-shot examples to optimize the classification task.
+def get_topic(query: str):
+    response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    functions=[function_definition],
+    function_call={ "name": function_definition["name"] },
+    temperature=0,
+    messages=[
+        {
+            "role": "system",
+            "content": """Extract the topic of the following user query about cooking.
+Only use the topics present in the content topic classifier function.
+If you cannot tell the query topic or it is not about cooking, respond `null`. Output JSON.
+You MUST choose one of the given content topic types.
+Example 1:
+User:  "How many grams of sugar are in a banana?"
+Assistant: '{"topic": "nutritional_information"}'
+Example 2:
+User: "What are the ingredients for a classic margarita?"
+Assistant: '{"topic": "recipe"}'
+Example 3:
+User: "What kind of knife is best for chopping vegetables?"
+Assistant: '{"topic": "equipment"}'
+Example 4:
+User: "What is a quick recipe for chicken stir-fry?"
+Assistant: '{"topic": "recipe"}'
+Example 5:
+User: Who is the best soccer player ever?
+Assistant: '{"topic": null}'
+Example 6:
+User: Explain gravity to me
+Assistant: '{"topic": null}'""",
+          },
+          {
+              "role": "user",
+              "content": query
+          }
+      ],
+    )
+    content = ContentTopic.model_validate(json.loads(response.choices[0].message.function_call.arguments))
+    return content.topic
+## Test the classifier
+queries = [
+    "what's a recipe for vegetarian spaghetti?",
+    "what is the best way to poach an egg?",
+    "What blender setting should I use to make a fruit smoothie?",
+    "Can you give me a recipe for chocolate chip cookies?",
+    "Why is the sky blue?"
+]
+for query in queries:
+    print(f"Query: {query}")
+    print(f"Topic: {get_topic(query)}")
+    print("---")
+    class ContentTopic(BaseModel):
+    topic: Optional[Literal[
+        "nutritional_information",
+        "equipment",
+        "cooking_technique",
+        "recipe"
+    ]]
+```
 
 这将在您的终端中输出以下内容：
 
-[PRE45]
+```py
+
+Query: what's a recipe for vegetarian spaghetti?
+Topic: recipe
+---
+Query: what is the best way to poach an egg?
+Topic: cooking_technique
+---
+Query: What blender setting should I use to make a fruit smoothie?
+Topic: equipment
+---
+Query: Can you give me a recipe for chocolate chip cookies?
+Topic: recipe
+---
+Query: Why is the sky blue?
+Topic: None
+---
+```
 
 通过结合元数据过滤和向量搜索，您的RAG应用程序可以更高效、更准确地搜索。这种方法将搜索空间缩小到最符合上下文的数据，从而产生更精确和有用的结果。
 
@@ -413,69 +914,153 @@ Ragas还支持其他RAG评估指标，你可以在Ragas文档（https://docs.rag
 | --- | --- | --- |
 | 纯文本 |
 
-[PRE46]
+```py
 
-[PRE47]
+Simple Vegan Soup
+```
 
-[PRE48]
+```py
 
-[PRE49]
+Ingredients
+```
 
-[PRE50]
+```py
 
-[PRE51]
+- 1 can diced tomatoes
+```
 
-[PRE52]
+```py
 
-[PRE53]
+- 1 cup vegetable broth
+```
+
+```py
+
+- 1 cup mixed frozen vegetables
+```
+
+```py
+
+ Instructions
+```
+
+```py
+
+1\. In a medium pot, combine the diced tomatoes, vegetable broth, and mixed frozen vegetables.
+```
+
+```py
+
+2\. Bring to a boil, then reduce heat and simmer for 10-15 minutes, or until the vegetables are heated through. Serve hot.
+```
 
 | 81 |
 | --- |
 | Markdown |
 
-[PRE54]
+```py
 
-[PRE55]
+# Simple Vegan Soup
+```
 
-[PRE56]
+```py
 
-[PRE57]
+## Ingredients
+```
 
-[PRE58]
+```py
 
-[PRE59]
+- 1 can diced tomatoes
+```
 
-[PRE60]
+```py
 
-[PRE61]
+- 1 cup vegetable broth
+```
+
+```py
+
+- 1 cup mixed frozen vegetables
+```
+
+```py
+
+## Instructions
+```
+
+```py
+
+1\. In a medium pot, combine the diced tomatoes, vegetable broth, and mixed frozen vegetables.
+```
+
+```py
+
+2\. Bring to a boil, then reduce heat and simmer for 10-15 minutes, or until the vegetables are heated through. Serve hot.
+```
 
 | 83 |
 | --- |
 | HTML |
 
-[PRE62]
+```py
 
-[PRE63]
+<h1 id="simple-vegan-soup">Simple Vegan Soup</h1>
+```
 
-[PRE64]
+```py
 
-[PRE65]
+<h2 id="ingredients">Ingredients</h2>
+```
 
-[PRE66]
+```py
 
-[PRE67]
+<ul>
+```
 
-[PRE68]
+```py
 
-[PRE69]
+<li>1 can diced tomatoes</li>
+```
 
-[PRE70]
+```py
 
-[PRE71]
+<li>1 cup vegetable broth</li>
+```
 
-[PRE72]
+```py
 
-[PRE73]
+<li>1 cup mixed frozen vegetables</li>
+```
+
+```py
+
+</ul>
+```
+
+```py
+
+<h2 id="instructions">Instructions</h2>
+```
+
+```py
+
+<ol>
+```
+
+```py
+
+<li>In a medium pot, combine the diced tomatoes, vegetable broth, and mixed frozen vegetables.</li>
+```
+
+```py
+
+<li>Bring to a boil, then reduce heat and simmer for 10-15 minutes, or until the vegetables are heated through. Serve hot.</li>
+```
+
+```py
+
+</ol>
+```
 
 | 138 |
 | --- |

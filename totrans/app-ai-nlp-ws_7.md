@@ -18,7 +18,9 @@
 
 1.  让我们创建一个新的 S3 存储桶。`mb` 是创建存储桶的命令：
 
-    [PRE0]
+    ```py
+    aws s3 mb s3://lesson1-text-files-20200217
+    ```
 
     ![图 1.47：创建 S3 存储桶的命令
 
@@ -106,7 +108,9 @@
 
     该文件包含以下文本：
 
-    [PRE1]
+    ```py
+    I am a test file to verify the s3 trigger was successfully configured on 1/20/2020 at 1:34 PM and tried 3 times!
+    ```
 
     在我们执行 `s3_trigger` 之前，考虑以下文本方面的输出：情感（正面、负面或中性）、实体（数量、人物、地点等）和关键词。
 
@@ -192,19 +196,47 @@
 
     `Sentiment_response`：
 
-    [PRE2]
+    ```py
+    { {'Sentiment': 'NEUTRAL', 
+       'SentimentScore': {'Positive': 0.21022377908229828, 
+                          'Negative': 0.27646979689598083, 
+                          'Neutral': 0.5132954716682434, 
+                          'Mixed': 1.0932244549621828e-05},
+    ```
 
     `entity_response` -> 它确实从文本中找到了日期和数量
 
     `entity_response`：
 
-    [PRE3]
+    ```py
+    { 'Entities': [{'Score': 0.9891313314437866, 
+                    'Type': 'DATE', 'Text': '1/20/2020 at 1:34 PM', 
+                    'BeginOffset': 76, 'EndOffset': 96}, 
+                   {'Score': 0.9999986290931702, 'Type': 'QUANTITY', 
+                    'Text': '3 times', 'BeginOffset': 107, 
+                    'EndOffset': 114}], 
+    ```
 
     `key_phases_response` -> 它找到了关键短语，分数接近100%的置信度
 
     `key_phases_response`：
 
-    [PRE4]
+    ```py
+    {'KeyPhrases': [{'Score': 0.9992266297340393, 
+                     'Text': 'a test file', 'BeginOffset': 8, 
+                     'EndOffset': 19}, 
+                    {'Score': 0.9999999403953552, 
+                     'Text': 'the s3 trigger', 'BeginOffset': 30, 
+                     'EndOffset': 44}, 
+                    {'Score': 0.9999963045120239, 
+                     'Text': '1/20/2020', 'BeginOffset': 76, 
+                     'EndOffset': 85}, 
+                    {'Score': 0.9960731863975525, 
+                     'Text': '1:34 PM', 'BeginOffset': 89, 
+                     'EndOffset': 96}, 
+                    {'Score': 0.9999966621398926, 'Text': '3 times', 
+                     'BeginOffset': 107, 'EndOffset': 114}],
+    ```
 
 # 3. 主题建模和主题提取
 
@@ -240,27 +272,49 @@
 
 1.  首先，您将使用以下命令导入`os`和`boto3`包：
 
-    [PRE5]
+    ```py
+    import os
+    import boto3
+    ```
 
 1.  创建一个S3客户端：
 
-    [PRE6]
+    ```py
+    # Create an S3 client
+    s3 = boto3.client('s3')
+    ```
 
 1.  接下来，在突出显示的区域输入您唯一的存储桶名称：
 
-    [PRE7]
+    ```py
+    BUCKET_NAME = '<insert a unique bucket name>'
+    BUCKET_FOLDER = 'movie_review_files/'
+    ```
 
 1.  接下来，获取本地路径中文本文件的当前工作目录：
 
-    [PRE8]
+    ```py
+    LOCAL_PATH = os.getcwd() +'\\os.getcwd() command will get the current path. Ensure that the movie review files are in a folder located at the same path. Based on the folder name, you have to change the highlighted value. Alternatively, you can assign a custom path to LOCAL_PATH as well.
+    ```
 
 1.  创建所有文本文件的列表：
 
-    [PRE9]
+    ```py
+    text_files_list = [f for f in os.listdir(LOCAL_PATH) \
+                       if f.endswith('.txt')]
+    ```
 
 1.  对所有文件进行迭代，并将每个文件上传到`s3`：
 
-    [PRE10]
+    ```py
+    file_count = 0
+    for filename in text_files_list:
+      # print(filename)
+      file_count += 1
+    s3.upload_file(LOCAL_PATH + filename, BUCKET_NAME, \
+                   BUCKET_FOLDER + filename)
+    print(F"Completed uploading {file_count} files.")
+    ```
 
 1.  按*Shift* + *Enter*运行单元格。
 
@@ -440,51 +494,84 @@
 
 1.  首先，我们将导入`boto3`：
 
-    [PRE11]
+    ```py
+    import boto3
+    ```
 
 1.  接下来，导入`pandas`：
 
-    [PRE12]
+    ```py
+    import pandas as pd
+    ```
 
 1.  创建S3客户端对象。
 
-    [PRE13]
+    ```py
+    region = 'us-west-2'
+    s3 = boto3.client('s3',region_name = region)
+    ```
 
 1.  接下来，为存储源CSV文件的S3存储桶创建一个唯一名称。在这里，存储桶被命名为`unknown-tm-analysis-20200302`，但您需要创建一个唯一的名称：
 
-    [PRE14]
+    ```py
+    #'<insert a unique bucket name>'
+    bucket_name = 'unknown-tm-analysis-20200302'
+    ```
 
 1.  接下来，创建一个新的存储桶：
 
-    [PRE15]
+    ```py
+    # Create a location Constraint
+    location = {'LocationConstraint': region}
+    # Creates a new bucket 
+    s3.create_bucket(Bucket=bucket_name,\
+                     CreateBucketConfiguration=location)
+    ```
 
 1.  创建一个CSV文件名列表以导入：
 
-    [PRE16]
+    ```py
+    filenames_list = ['doc-topics.csv', 'topic-terms.csv']
+    ```
 
 1.  遍历每个要上传到S3的文件：
 
-    [PRE17]
+    ```py
+    for filename in filenames_list: 
+        s3.upload_file(filename, bucket_name, filename)
+    ```
 
 1.  接下来，检查文件名是否为`'doc-topics.csv'`：
 
-    [PRE18]
+    ```py
+    if filename == 'doc-topics.csv':
+    ```
 
 1.  现在，获取`doc-topics.csv`文件对象并将其分配给`obj`变量：
 
-    [PRE19]
+    ```py
+    obj = s3.get_object(Bucket=bucket_name, Key=filename)
+    ```
 
 1.  接下来，读取`csv`对象并将其分配给`doc_topics`变量：
 
-    [PRE20]
+    ```py
+    doc_topics = pd.read_csv(obj['Body']) else:
+    obj = s3.get_object(Bucket=bucket_name, Key=filename) \
+                        topic_terms = pd.read_csv(obj['Body'])
+    ```
 
 1.  在主题列上合并文件以获取每个文档的最常见术语：
 
-    [PRE21]
+    ```py
+    merged_df = pd.merge(doc_topics, topic_terms, on='topic')
+    ```
 
 1.  将`merged_df`打印到控制台：
 
-    [PRE22]
+    ```py
+    print(merged_df)
+    ```
 
 1.  接下来，使用*Shift* + *Enter*执行笔记本单元格。
 
@@ -662,39 +749,70 @@
 
 1.  首先，我们从[http://boto3.readthedocs.io/en/latest/](http://boto3.readthedocs.io/en/latest/)导入`boto3`：
 
-    [PRE23]
+    ```py
+    import boto3
+    ```
 
 1.  接下来，创建一个接受两个参数——`event`和`context`的函数：
 
-    [PRE24]
+    ```py
+    def Lambda_handler(event, context):
+    ```
 
 1.  接下来，创建`s3`客户端对象：
 
-    [PRE25]
+    ```py
+    s3 = boto3.client("s3")
+    ```
 
 1.  接下来，将`<输入桶名>`替换为您创建的桶（例如，在我的例子中是`account-balance-202001241911`）：
 
-    [PRE26]
+    ```py
+    # e.g." account-balance-202001241911"
+    bucket = "<input Bucket name>"
+    ```
 
 1.  接下来，将`filename`分配给一个变量，然后打印文件名：
 
-    [PRE27]
+    ```py
+    filename = 'balance.txt'
+    print("filename: ", filename)
+    ```
 
 1.  接下来，通过获取`Bucket`和`Key`创建文件对象：
 
-    [PRE28]
+    ```py
+    file_obj = s3.get_object(Bucket = Bucket, Key = filename)
+    ```
 
 1.  从文件中提取账户余额：
 
-    [PRE29]
+    ```py
+    account_balance =  (float(file_obj['Body'].read()))
+    ```
 
 1.  然后，将余额作为消息返回：
 
-    [PRE30]
+    ```py
+    return close('Your balance is ' + str(account_balance))
+    ```
 
 1.  我们需要为我们的机器人提供一个`close`函数，它需要一个格式良好的 JSON 响应：
 
-    [PRE31]
+    ```py
+    def close(message):
+        return {
+            'sessionAttributes': {},
+            'dialogAction': {
+                'type': 'Close',
+                'fulfillmentState': 'Fulfilled',
+                'message': {
+                    'contentType': 'PlainText',
+                    'content': message
+                }
+            }
+        }
+    ```
 
     记得经常`保存`函数：
 

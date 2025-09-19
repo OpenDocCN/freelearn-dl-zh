@@ -70,21 +70,114 @@ SARSA图和方程
 
 1.  列出的完整源代码如下：
 
-[PRE0]
+```py
+import gym
+import math
+from copy import deepcopy
+import numpy as np
+import matplotlib.pyplot as plt
+
+env = gym.make('MountainCar-v0')
+Q_table = np.zeros((20,20,3))
+alpha=0.3
+buckets=[20, 20]
+gamma=0.99
+rewards=[]
+episodes = 3000
+
+def to_discrete_states(observation):
+ interval=[0 for i in range(len(observation))]
+ max_range=[1.2,0.07] 
+
+ for i in range(len(observation)):
+  data = observation[i]
+  inter = int(math.floor((data + max_range[i])/(2*max_range[i]/buckets[i])))
+ if inter>=buckets[i]:
+   interval[i]=buckets[i]-1
+  elif inter<0:
+   interval[i]=0
+  else:
+   interval[i]=inter
+ return interval
+
+def expect_epsilon(t):
+  return min(0.015, 1.0 - math.log10((t+1)/220.))
+
+def expect_alpha(t):
+  return min(0.1, 1.0 - math.log10((t+1)/125.))
+
+def get_action(observation,t):
+ if np.random.random()<max(0.001, expect_epsilon(t)):
+  return env.action_space.sample()
+ interval = to_discrete_states(observation) 
+ return np.argmax(np.array(Q_table[tuple(interval)]))
+
+def update_SARSA(observation,reward,action,ini_obs,next_action,t): 
+ interval = to_discrete_states(observation)
+ Q_next = Q_table[tuple(interval)][next_action]
+ ini_interval = to_discrete_states(ini_obs)
+ Q_table[tuple(ini_interval)][action]+=max(0.4, expect_alpha(t))*(reward + gamma*(Q_next) - Q_table[tuple(ini_interval)][action])
+
+for episode in range(episodes):
+  observation = env.reset() 
+  t=0
+  done=False
+  while (done==False):
+    env.render()
+    print(observation)
+    action = get_action(observation,episode)
+    obs_next, reward, done, info = env.step(action)
+    next_action = get_action(obs_next,episode)
+    update_SARSA(obs_next,reward,action,observation,next_action,episode) 
+    observation=obs_next
+    action = next_action
+    t+=1
+  rewards.append(t+1)   
+
+plt.plot(rewards)
+plt.show()
+```
 
 1.  跳过导入部分，我们将查看超参数初始化代码：
 
-[PRE1]
+```py
+env = gym.make('MountainCar-v0')
+Q_table = np.zeros((20,20,3))
+alpha=0.3
+buckets=[20, 20]
+gamma=0.99
+rewards=[]
+episodes = 3000
+```
 
 1.  我们从创建一个新的环境`MountainCar-v0`开始，它位于连续空间环境中。然后我们看到`Q_table`表被初始化为全零。然后，我们设置了学习率`alpha`、折现因子`gamma`和剧集数`episodes`的值。我们还看到构建了一个新的列表`buckets`。我们将在稍后介绍`buckets`的作用。
 
 1.  从那里跳到代码的末尾。我们首先想要对代码的功能有一个高级概述。看看这里显示的剧集`for`循环：
 
-[PRE2]
+```py
+observation = env.reset() 
+t=0
+done=False
+while (done==False):
+ env.render()
+ print(observation)
+ action = get_action(observation,episode)
+ obs_next, reward, done, info = env.step(action)
+ next_action = get_action(obs_next,episode)
+ update_SARSA(obs_next,reward,action,observation,next_action,episode)
+  observation=obs_next
+  action = next_action
+  t+=1
+rewards.append(t+1) 
+```
 
 1.  前面的代码是剧集循环代码，非常遵循我们在前几章中看到的模式。这里的一个主要不同点是算法/智能体似乎选择了两次动作，如下面的代码块所示：
 
-[PRE3]
+```py
+action = get_action(observation,episode)
+obs_next, reward, done, info = env.step(action)
+next_action = get_action(obs_next,episode)
+```
 
 1.  与Q-learning相比，这里的区别在于SARSA中的智能体是按策略的，也就是说，它选择的行为也需要决定其下一个行为。回想一下，在Q-learning中，智能体是离策略的，也就是说，它从一个之前学习过的策略中采取行动。同样，这也回到了TD(0)或一步，其中算法仍然只看一步。
 
@@ -110,19 +203,43 @@ SARSA图和方程
 
 1.  我们将从上次结束的地方开始。在上一个点，我们只是在事件`for`循环中用以下行更新`Q_table`表：
 
-[PRE4]
+```py
+update_SARSA(obs_next,reward,action,observation,next_action,episode)
+```
 
 1.  这调用了一个名为`update_SARSA`的函数，如下所示：
 
-[PRE5]
+```py
+def update_SARSA(observation,reward,action,ini_obs,next_action,t):  
+  interval = to_discrete_states(observation) 
+  Q_next = Q_table[tuple(interval)][next_action]
+  ini_interval = to_discrete_states(ini_obs)
+  Q_table[tuple(ini_interval)][action]+=max(0.4, expect_alpha(t))*(reward + gamma*(Q_next) - Q_table[tuple(ini_interval)][action])
+```
 
 1.  现在，忽略`Q_table`更新代码，而是专注于高亮的`to_discrete_states`调用。这些调用接受一个观察值作为输入。观察值表示小车在*x,y*坐标中的绝对位置。这就是我们使用以下函数来离散化状态的地方：
 
-[PRE6]
+```py
+def to_discrete_states(observation):
+ interval=[0 for i in range(len(observation))]
+ max_range=[1.2,0.07] 
+ for i in range(len(observation)):
+   data = observation[i]
+   inter = int(math.floor((data + max_range[i])/(2*max_range[i]/buckets[i])))
+   if inter>=buckets[i]:
+     interval[i]=buckets[i]-1
+   elif inter<0:
+     interval[i]=0
+   else:
+     interval[i]=inter
+ return interval
+```
 
 1.  `to_discrete_states`函数返回小车当前所在的网格区间。在`update_SARSA`函数中，我们使用以下方式将区间列表转换回一个元组：
 
-[PRE7]
+```py
+tuple(interval)
+```
 
 1.  再次运行示例，只是为了确认它按预期工作。
 
@@ -136,19 +253,33 @@ SARSA图和方程
 
 1.  我们感兴趣的代码的两个函数在此处显示：
 
-[PRE8]
+```py
+def expect_epsilon(t):
+  return min(0.015, 1.0 - math.log10((t+1)/220.))
+
+def expect_alpha(t):
+  return min(0.1, 1.0 - math.log10((t+1)/125.))
+```
 
 1.  这两个函数，`expect_epsilon`和`expect_alpha`，根据到目前为止返回的奖励计算期望或比率，其中`t`等于小车在环境中移动的总时间。
 
 1.  我们可以通过查看此处显示的`get_action`函数来关注`expect_epsilon`的使用：
 
-[PRE9]
+```py
+def get_action(observation,t):  
+  if np.random.random()<max(0.001, expect_epsilon(t)):
+    return env.action_space.sample()
+  interval = to_discrete_states(observation) 
+  return np.argmax(np.array(Q_table[tuple(interval)]))
+```
 
 1.  `get_action`函数根据观察到的信息（小车*x*和*y*位置）返回动作。它是通过首先检查是否要采样随机动作，或者相反，选择最佳动作来做到这一点的。我们通过使用`expect_epsilon`方程来确定这种概率，该方程根据在环境中玩的总游戏时间计算epsilon。这意味着在这个例子中，epsilon的范围将在0.001和0.0015之间；看看你是否能在代码中找出这一点。
 
 1.  接下来，我们做类似的事情来计算`update_SARSA`函数中显示的`alpha`。再次显示使用此功能的单行：
 
-[PRE10]
+```py
+Q_table[tuple(ini_interval)][action]+=max(0.4, expect_alpha(t))*(reward + gamma*(Q_next) - Q_table[tuple(ini_interval)][action])
+```
 
 1.  之前的代码现在应该很熟悉了，因为它看起来像我们的常规策略更新方程，只是在这次实例中，我们使用基于当前任务时间的期望来调整`alpha`的值。你也可以从某些方面将其视为一种次级奖励。
 
@@ -180,31 +311,43 @@ SARSA图和方程
 
 1.  大部分代码与最后两个示例相同，所以我们只需要查看差异。我们将从顶部的环境构建部分开始，如下所示：
 
-[PRE11]
+```py
+env = gym.make('CartPole-v0')
+```
 
 1.  这构建了臭名昭著的 **Cart Pole** 环境。再次强调，切换环境很容易，但你的代码必须适应观察和动作空间。**Cart Pole** 和 **Mountain Car** 具有相同的观察/动作空间类型。也就是说，其观察空间是连续的，但动作空间是离散的。
 
 1.  接下来，我们将查看并了解这如何影响我们在此处代码中的 `Q_table` 表的初始化：
 
-[PRE12]
+```py
+Q_table = np.zeros((20,20,20,20,3))
+```
 
 1.  注意现在表格是如何配置为四个维度，每个维度大小为 20。之前，这仅仅是两个维度，每个维度大小为 20。如果你需要比较，请回过头去检查最后的代码示例。
 
 1.  随着 `Q_table` 表中维度的增加，这也意味着我们需要在我们的离散化桶中添加更多维度，如下所示：
 
-[PRE13]
+```py
+buckets=[20, 20, 20, 20]
+```
 
 1.  再次，我们将 `buckets` 数组从两个维度增加到四个，所有维度的大小都是 `20`。我们任意使用大小为 20，但我们也可以使用更大的或更小的值。
 
 1.  我们最后需要做的是重新定义环境观察的边界。回想一下，我们能够从 GitHub 页面提取出这些信息。这是显示范围中最小/最大值的表格。我们感兴趣的代码行就在 `to_discrete_states` 函数内部，如下所示：
 
-[PRE14]
+```py
+def to_discrete_states(observation):
+ interval=[0 for i in range(len(observation))]
+ max_range=[2.4,999999, 41.8,999999]
+```
 
 1.  这一行被突出显示并声明了 `max_range` 变量。`max_range` 设置观察空间中每个维度的最大值。我们用表中的值填充这个变量，在无穷大的情况下，我们使用六个 9（999999），这通常适用于具有无穷大的值的上限。
 
 1.  接下来，我们需要更新用于索引 `Q_table` 表的轴维度，如下所示代码所示：
 
-[PRE15]
+```py
+Q_table[:,:,:,:,action]+=lr*td_error*(eligibility[:,:,:,:,action])
+```
 
 1.  在前面的代码中，请注意我们现在正在对四个维度和动作进行索引。
 
@@ -282,21 +425,115 @@ TD (λ), SARSA (λ), 和 Q (λ)
 
 1.  代码与我们的前例相当相似，但让我们回顾一下完整的源代码，如下所示：
 
-[PRE16]
+```py
+import gym
+import math
+from copy import deepcopy
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+env = gym.make('MountainCar-v0')
+Q_table = np.zeros((65,65,3))
+alpha=0.3
+buckets=[65, 65]
+gamma=0.99
+rewards=[]
+episodes=2000
+lambdaa=0.8
+
+def to_discrete_states(observation):
+ interval=[0 for i in range(len(observation))]
+ max_range=[1.2,0.07] 
+ for i in range(len(observation)):
+  data = observation[i]
+  inter = int(math.floor((data + max_range[i])/(2*max_range[i]/buckets[i])))
+  if inter>=buckets[i]:
+   interval[i]=buckets[i]-1
+  elif inter<0:
+   interval[i]=0
+  else:
+   interval[i]=inter
+ return interval
+
+def expect_epsilon(t):
+  return min(0.015, 1.0 - math.log10((t+1)/220.))
+
+def get_action(observation,t):
+ if np.random.random()<max(0.001, expect_epsilon(t)):
+  return env.action_space.sample()
+ interval = to_discrete_states(observation)
+ return np.argmax(np.array(Q_table[tuple(interval)]))
+
+def expect_alpha(t):
+  return min(0.1, 1.0 - math.log10((t+1)/125.))
+
+def updateQ_SARSA(observation,reward,action,ini_obs,next_action,t,eligibility):
+ interval = to_discrete_states(observation)
+ Q_next = Q_table[tuple(interval)][next_action]
+ ini_interval = to_discrete_states(ini_obs)
+ lr=max(0.4, expect_alpha(t))
+ td_error=(reward + gamma*(Q_next) - Q_table[tuple(ini_interval)][action])
+ Q_table[:,:,action]+=lr*td_error*(eligibility[:,:,action])
+for episode in range(episodes):
+  observation = env.reset()
+  t=0
+  eligibility = np.zeros((65,65,3))
+  done=False
+  while (done==False):
+    env.render()
+    action = get_action(observation,episode)
+    next_obs, reward, done, info = env.step(action)
+    interval = to_discrete_states(observation)
+    eligibility *= lambdaa * gamma
+    eligibility[tuple(interval)][action]+=1
+
+    next_action = get_action(next_obs,episode)
+    updateQ_SARSA(next_obs,reward,action,observation,next_action,episode,eligibility)
+    observation=next_obs
+    action = next_action
+    t+=1
+  rewards.append(t+1)
+
+plt.plot(rewards)
+plt.show()
+```
 
 1.  代码的上半部分与之前的例子相当相似，但有几个显著的不同之处。注意以下代码初始化了 `MountainCar` 环境和 `Q_table` 表格设置：
 
-[PRE17]
+```py
+env = gym.make('MountainCar-v0')
+Q_table = np.zeros((65,65,3))
+```
 
 1.  注意我们是如何在初始化`Q_table`表时将离散状态的数量从20 x 20增加到65 x 65。
 
 1.  现在的主要区别是使用lambda计算可选性。我们可以在下面的代码中的底部`for`循环中找到此代码，如下所示：
 
-[PRE18]
+```py
+env.render()
+action = get_action(observation,episode)        next_obs, reward, done, info = env.step(action)
+interval = to_discrete_states(observation)
+eligibility *= lambdaa * gamma
+eligibility[tuple(interval)][action]+=1 
+next_action = get_action(next_obs,episode)
+updateQ_SARSA(next_obs,reward,action,observation,next_action,episode,eligibility)
+observation=next_obs
+action = next_action
+t+=1
+```
 
 1.  可选性的计算在突出显示的行中进行。注意我们是如何将`eligibility`乘以`lambda`和`gamma`，然后为当前状态加一的。然后将此值传递到`update_SARSA`函数中，如下所示：
 
-[PRE19]
+```py
+def updateQ_SARSA(observation,reward,action,ini_obs,next_action,t,eligibility):
+ interval = to_discrete_states(observation)
+ Q_next = Q_table[tuple(interval)][next_action]
+ ini_interval = to_discrete_states(ini_obs)
+ lr=max(0.4, expect_alpha(t))
+ td_error=(reward + gamma*(Q_next) - Q_table[tuple(ini_interval)][action])
+ Q_table[:,:,action]+=lr*td_error*(eligibility[:,:,action])
+```
 
 1.  注意我们现在是根据`td_error`和`eligibility`的确定来更新`Q_table`表的。换句话说，我们现在考虑信息的当前性和过去的价值。
 
@@ -322,19 +559,26 @@ SARSA（λ）的奖励输出图
 
 1.  以管理员身份打开Anaconda Prompt。运行以下命令：
 
-[PRE20]
+```py
+ conda install swig
+```
 
 SWIG是`Box2D`的要求。
 
 1.  接下来，运行以下命令安装Box2D：
 
-[PRE21]
+```py
+pip install box2d-py
+
+```
 
 +   按照以下步骤在Mac/Linux（或没有Anaconda的Windows）上操作：
 
 1.  打开Python shell并运行以下命令：
 
-[PRE22]
+```py
+pip install gym[all]
+```
 
 1.  如果遇到问题，请参阅Windows安装说明。
 
@@ -342,25 +586,34 @@ SWIG是`Box2D`的要求。
 
 1.  `Chapter_5_5.py`的源代码几乎与`Chapter_5_4.py`相同，除了在设置离散状态方面有一些细微的差异。我们将首先查看如何使用以下代码设置`Q_table`表：
 
-[PRE23]
+```py
+env = gym.make('LunarLander-v2')
+Q_table = np.zeros((5,5,5,5,5,5,5,5,4))
+```
 
 1.  注意我们是如何从65步的值减少到5。最后一个值表示动作空间的大小，它从`MountainCar`中的三个增加到`LunarLander`中的四个。然而，由于有八个维度，我们必须小心数组的尺寸。因此，在这个例子中，我们需要将每个步长限制为五。
 
 1.  接下来，我们初始化`buckets`状态：
 
-[PRE24]
+```py
+buckets=[5,5,5,5,5,5,5,5]
+```
 
 1.  再次，初始化为三个大小，用于八个维度。
 
 1.  然后，我们设置`max_range`值，这是我们想要我们的步骤跨越的最大值，如下所示：
 
-[PRE25]
+```py
+max_range=[100,100,100,100,100,100,100,100] 
+```
 
 1.  我们在这里使用100这个值来表示某个任意的最大值。改变或调整这些值可能会提高训练效率。
 
 1.  接下来，我们需要扩展`Q_table`索引以包括8个维度，如下所示：
 
-[PRE26]
+```py
+Q_table[:,:,:,:,:,:,:,:,action]+=lr*td_error*(eligibility[:,:,:,:,:,:,:,:,action])
+```
 
 1.  注意在这个例子中我们对代理施加的限制。我们实际上让代理以大块的方式观察，其中每个块或轴特征只分为三个部分。这个方法的有效性令人惊讶。
 

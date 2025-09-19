@@ -166,7 +166,10 @@
 
 1.  由于 Mycroft 必须与 ROS 以及我们安装的所有 AI 库（如 TensorFlow、Theano 和 Keras）兼容，因此我们最好使用 `git clone` 方法下载源代码，并在 Jetson Nano 上构建 Mycroft：
 
-    [PRE0]
+    ```py
+    git clone https://github.com/MycroftAI/mycroft-core.git cd Mycroft-core
+    bash dev_setup.sh
+    ```
 
     Mycroft 将创建它运行所需的虚拟环境。它还将 Mycroft 软件包与其他 Jetson Nano 上的软件包隔离开。
 
@@ -176,11 +179,17 @@
 
 1.  为了让 Mycroft 系统能够以这种方式运行，我还必须再进行一个步骤。当我第一次尝试让 Mycroft 运行时，系统总是失败。当我尝试启动调试器时，它会退出或卡住。为了解决这个问题，我必须按照以下步骤重新编译整个系统：
 
-    [PRE1]
+    ```py
+    sudo rm -R -/.virtualenvs/Mycroft
+    cd ~/mycroft-core
+    mycroft-core directory.
+    ```
 
 1.  您可以从调试模式开始：
 
-    [PRE2]
+    ```py
+    Time skill is totally self-contained inside the Jetson Nano. The robot should give you a voice response that is replicated on the debug console.
+    ```
 
 1.  接下来，你可以向 Mycroft 询问更高级的技能，例如在互联网上查找信息。问：“嘿，Mycroft，一加仑有多少盎司？”Mycroft 将使用互联网查找答案并回复。
 
@@ -278,7 +287,9 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  使用`mycroft-msk create`命令，这有助于我们将技能以正确的格式组合在一起：
 
-    [PRE3]
+    ```py
+    cleanroomrobot-skill.
+    ```
 
 1.  然后，它将询问类名和存储库名，这两个我都使用了 `Cleanroomrobot`。
 
@@ -306,11 +317,31 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  我们最终会在 `/opt/Mycroft/skills/cleanroomrobot-skill` 目录结构中拥有以下结构：
 
-    [PRE4]
+    ```py
+    Cleanroomrobot-skill
+       Git
+       __pycache__
+      Locale
+        En-us
+            cleanroomrobot.dialog
+            cleanroomrobot.intent
+    __init__.py
+    LISCENSE.md
+    Manifest.yml
+    README.md
+    init.py file in the skill_pickup_toys directory that we copied from the template.
+    ```
 
 1.  我们将导入 Mycroft 所需的库（`IntentBuilder`，`MycroftSkill`，`getLogger` 和 `intent_handler`）。我们还导入 `rclpy`，ROS 的 Python 接口，以及 ROS 标准消息 `String`，我们通过在 `syscommand` 主题上发布来使用它向机器人发送命令：
 
-    [PRE5]
+    ```py
+    from mycroft import MycroftSkill, intent_handler, intent_file_handler
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import String, Int32MultiArray, Int32
+    from adapt.intent import IntentBuilder
+    from mycroft.util.log import getLogger
+    ```
 
 注意
 
@@ -318,7 +349,10 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  下一个行是 Mycroft 的日志记录器，这样我们就可以保存我们的响应。我们将输出到 stdout 的任何内容，例如打印语句，最终都会记录在日志中，或者在调试模式下显示在屏幕上：
 
-    [PRE6]
+    ```py
+    Cleanroomrobot to match what we defined previously:
+
+    ```
 
     class Cleanroomrobot(MycroftSkill):
 
@@ -334,29 +368,54 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
     pass  # 目前只返回
 
-    [PRE7]
+    ```py
+
+    ```
 
 1.  我们在 ROS 中设置了 `syscommand` 主题的发布者。这是我们通过 ROS 发布/订阅系统向机器人控制程序发送命令的方式。我们只发布命令，我们需要的唯一消息格式是 `String`：
 
-    [PRE8]
+    ```py
+    pub = rospy.Publisher('/syscommand', String, queue_size=1000)
+    # define our service for publishing commands to the robot control system # all our robot commands go out on the topic syscommand
+    def pubMessage(str):
+    pub.publish(str)
+    ```
 
 1.  我们的 Mycroft 技能被创建为 `MycroftSkill` 对象的子对象。我们将我们的技能对象类重命名为 `CleanRoomSkill`：
 
-    [PRE9]
+    ```py
+    class CleanRoomSkill(MycroftSkill):
+    def   init  (self):
+    super(CleanRoomSkill, self).  init  (name="PickupToys")
+    ```
 
     根据模板，Mycroft 需要一个 `init` 方法和 `initialize` 方法。这些命令在 Mycroft 的意图构建器部分设置意图，并在我们任何短语被说出时注册我们的处理器。
 
 1.  接下来，我们使用 `require("CleanRoomKeyword")` 引用我们在 *创建技能* 部分构建的对话框，所以请确保所有的拼写都是正确的：
 
-    [PRE10]
+    ```py
+    def initialize(self):
+            clean_room_intent = IntentBuilder("cleanroomrobot").require("cleanroomrobot").build()
+            self.register_intent(clean_room_intent, self.handle_cleanroomrobot)
+    ```
 
 1.  下一节创建了一个处理程序，当系统识别到我们的一种短语时，并希望执行此命令的操作。这就是我们通过之前定义的`pubMessage`函数使用ROS启动向机器人的控制程序发布命令的地方：
 
-    [PRE11]
+    ```py
+        @intent_file_handler('cleanroomrobot.intent')
+        ##@intent_handler('cleanroomrobot.intent')
+        def handle_cleanroomrobot(self, message):
+            self.speak_dialog('cleanroomrobot')
+            self.interface.cmdPublisher("CleanRoom")
+    ```
 
 1.  我们还需要一个`stop`函数，其中我们可以命令机器人停止清洁，如果需要，以防止任何形式的*米老鼠-魔术师-学徒*事故：
 
-    [PRE12]
+    ```py
+        def stop(self):
+            self.interface.cmdPublisher("STOPCleanRoom")
+            pass
+    ```
 
 注意
 
@@ -364,17 +423,40 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  现在我们需要一个代码块来在程序中创建技能，以便我们将ROS接口与机器人关联到技能中。我们将添加一个`create_skill`函数，以便Mycroft创建技能并有一个函数指针来启用技能：
 
-    [PRE13]
+    ```py
+    def create_skill():
+        newSkill = Cleanroomrobot()
+        newSkill.setRobotInterface(rosInterface())
+        return newSkill
+    ```
 
 1.  接下来，我们有ROS接口。我们只需要向机器人发送一个命令，在`RobotCmd`主题上发布模式命令：
 
-    [PRE14]
+    ```py
+    class rosInterface(Node):
+        def __init__(self):
+            super().__init__('mycroftROS') # node name
+            self.cmdSubscribe = self.create_subscription(String, 'RobotCmd', self.cmdCallback,10)
+            self.cmdPublisher = self.create_publisher(String, 'RobotCmd', 10)
+        def cmdCallback(self,msg):
+            robotCmd = msg.data
+    ```
 
     我们定义我们的ROS接口并创建一个名为`mycroftROS`的控制节点，作为我们的接口。然后我们创建一个订阅者和发布者到`RobotCmd`主题，这样我们就可以从ROS 2接口发送和接收命令。
 
 1.  程序的其余部分只是日常维护。我们需要启动我们的ROS节点，启动Mycroft记录器，并实例化ROS接口对象和ROS和Mycroft的`cleanSkill`对象。然后我们将`cleanSkill`对象指向ROS接口，以便它们可以通信。最后，我们使用`.spin`函数启动ROS 2接口。当程序停止时，我们退出`.spin`并关闭我们的程序：
 
-    [PRE15]
+    ```py
+    ## main ###
+    rclpy.init()
+    LOGGER = getLogger(__name__)
+    interface = rosInterface()
+    cleanSkill = Cleanroomrobot()
+    cleanSkill.setRobotInterface(interface)
+    rclpy.spin(interface)
+    rosInterface.destroy_node()
+    rclpy.shutdown()
+    ```
 
 1.  为了使我们的技能正常工作，我们需要将我们的目录复制到`/opt/mycroft/skills`。从那里，我们可以在调试模式下测试它。记住，你必须源ROS 2目录（`source /opt/ros/foxy/local_setup.sh`和`source ~/ros2_ws/install/local_setup.sh`），否则程序将无法找到所有包含文件或ROS节点。
 
@@ -410,7 +492,10 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 我们首先创建一个包含单行笑话的笑话数据库，我们将将其放入一个文本文件中。由于我们只有两个元素，我们可以用斜杠(`/`)来分隔它们。以下是一个示例：
 
-[PRE16]
+```py
+tarzan / tarzan stripes forever
+orange / orange you glad I can tell jokes?
+```
 
 我在当前章节的仓库文件部分提供了一个大约10个笑话的数据库。请随意添加您喜欢的所有笑话，或者发送给我，我会添加它们。
 
@@ -430,7 +515,9 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  我们首先创建我们的词汇文件，我们需要三个。这些是用户将对机器人说的话。我们有第一个“告诉我一个敲门笑话”短语——所以让我们创建一个名为`knockknock.voc`的文件（您可以使用任何文本编辑器来创建文件）并将以下内容放入其中：
 
-    [PRE17]
+    ```py
+    Tell me a knock-knock joke Can I have a knock-knock joke Give me a knock-knock joke Play me a knock-knock joke
+    ```
 
     请注意，Mycroft STT系统将短语“敲门”解释为带有连字符的`knock-knock`，所以将这一点放入我们的脚本中非常重要。
 
@@ -440,15 +527,25 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  现在我们来处理我们的回应。我们有一个预设的回应，即用短语“敲门”来回应“告诉我一个敲门笑话”。我们不需要任何复杂的对话系统，我们只需要让机器人说出“敲门”短语。为此，我们首先导入在这个程序中需要调用的库，即`MycroftSkill`类和`intent_file_handler`函数：
 
-    [PRE18]
+    ```py
+    from mycroft import MycroftSkill, intent_file_handler
+    ```
 
 1.  我们将我们的技能定义为 `MycroftSkill` 对象的子对象——这是一个标准的面向对象设计。我们正在继承 `MycroftSkill` 父对象的所有功能和数据，并添加我们自己的功能。我们创建了一个初始化函数，然后调用 `init` 父函数来执行父类的代码。我们正在增强 `init` 父函数的功能。如果没有这个调用，我们将用我们自己的替换 `init` 函数，可能需要复制大量工作：
 
-    [PRE19]
+    ```py
+    class Knockknock(MycroftSkill):
+      def __init__(self):
+         MycroftSkill.__init__(self)
+    ```
 
 1.  下一步是创建我们的 `knockknock.intent` 文件，并将该文件放置在 `voc` 目录中（之前是 `dialog/voc-en`）：
 
-    [PRE20]
+    ```py
+    @intent_file_handler('knockknock.intent') 
+    def handle_knockknock(self, message):
+    name,punchline = self.pick_joke()
+    ```
 
     在这里，我们从笑话数据库中获取两个部分：
 
@@ -458,23 +555,50 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  我们使用 `MycroftSkill` 中的 `get_response` 函数让机器人发表声明并等待回复，该回复将被转换成文本字符串并存储在 `response` 变量中：
 
-    [PRE21]
+    ```py
+    response=self.get_response(announcement="knock, knock") 
+    # response will always be "who's there" 
+    response=self.get_response(announcement=name)
+    ```
 
 1.  现在我们到了机器人回应名字的部分。例如，用户问“谁在那里？”机器人回答“哈罗德。”我们期待用户接下来会说“哈罗德（或任何名字）谁？”我们将检查我们的回应，看看是否包含单词“谁”。如果没有，我们可以提示用户跟随笑话。我们只会这样做一次，以避免陷入循环。如果他们不参与，机器人将继续：
 
-    [PRE22]
+    ```py
+    # response will be "name who"
+    # if end of respose is not the word who, we can re-prompt 
+    if "who" not in response:
+      prompt = "You are supposed to say "+name+" who" 
+      response=self.get_response(announcement=prompt)
+    ```
 
 1.  我们已经讲完了笑话，现在轮到说出点睛之笔，比如“哈罗德，你想拥抱吗？”（你想要拥抱吗？）。任务完成，我们退出程序；既包括喜剧程序也包括程序程序：
 
-    [PRE23]
+    ```py
+    self.speak(punchline)
+    ```
 
 1.  我们需要一个函数来读取我们之前定义的笑话数据库。如前所述，数据库中每行有一个敲门笑话，名字和点睛之笔之间用正斜杠（`/`）分隔。我们读取所有笑话，将它们放入一个列表中，然后使用（等着瞧）`random.choice` 函数随机选择一个。我们分别返回名字和点睛之笔。我们应该只为每个笑话实例调用这个程序一次：
 
-    [PRE24]
+    ```py
+    def pick_joke(): 
+      jokeFile="knockknock.jokes" 
+      jfile = open(jokeFile,"r") 
+      jokes = []
+      for jokeline in jfile:
+        jokes.append(jokeline)
+      joke = choice(jokes) 
+      jokeParts = joke.split("/") 
+      name = jokeParts[0] 
+      punchline = jokeParts[1] 
+      return name, punchline
+    ```
 
 1.  我们通过定义 `Knockknock` 类的实例并返回该对象给调用程序 Mycroft 来结束程序：
 
-    [PRE25]
+    ```py
+    def create_skill():
+      return Knockknock()
+    ```
 
 接下来，我们将讨论敲敲门笑话概念的另一端，即接收笑话——孩子想要告诉机器人一个笑话。如果你认识任何七岁的孩子，那么你知道这也是一个要求——孩子也会想要告诉机器人一个笑话。
 
@@ -490,27 +614,70 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 1.  以下是为创建“接收敲门”笑话代码的命令：
 
-    [PRE26]
+    ```py
+    $ msk create
+    Enter a short unique skill name (ie. "siren alarm" or "pizza orderer"): receiveKnock
+    Class name: ReceiveKnockSkill
+    Repo name: receive-knock-skill
+    Looks good? (Y/n) y
+    Enter some example phrases to trigger your skill:
+    knock knock
+    -
+    Enter what your skill should say to respond:
+    who's there
+    Enter a one line description for your skill (ie. Orders fresh pizzas from the store): This skill receives a knock knock joke from the user
+    Enter a long description:
+    This is the other half of the Knock Knock joke continuum - we are giving the robot the ability to receive knock knock jokes. The user says knock knock, the robot responds whos there and so on
+    >
+    Enter author: Francis Govers
+    Would you like to create a GitHub repo for it? (Y/n) Y
+    === GitHub Credentials === Username: ********** Password:*********
+    Counting objects: 12, done.
+    Delta compression using up to 4 threads. Compressing objects: 100% (5/5), done.
+    Writing objects: 100% (12/12), 1.35 KiB | 0 bytes/s, done. Total 12 (delta 0), reused 0 (delta 0)
+    To https://github.com/FGovers/receive-knock-skill
+    * [new branch] master -> master
+    /opt/Mycroft/skills/receive-knock-skill. The program is still the init.py file.
+    ```
 
 1.  我们从导入开始，这些是`MycroftSkill`和`intent_file_handler`。我们还需要`time`库来进行一些暂停：
 
-    [PRE27]
+    ```py
+    from mycroft import MycroftSkill, intent_file_handler import time
+    ```
 
 1.  这里是我们为`ReceiveKnock`类定义的类，它是我们导入的`MycroftSkill`对象的子类。我们在`init`函数中通过传递一个`init`命令回传给父类（`MycroftSkill`）并让它执行初始化。然后我们在其基础上添加我们的自定义功能：
 
-    [PRE28]
+    ```py
+    class ReceiveKnock(MycroftSkill):
+      def __init__(self):
+           MycroftSkill.__init__(self)
+    ```
 
 1.  下一节是我们的意图处理器，用于接收“敲门”笑话。我们使用`@decorator`来扩展意图处理器，在这种情况下，从名为`knock.receive.intent`的文件中读取意图的参数。意图处理器只有我们两个关键词，不朽的短语：“敲门，敲门”。我们很幸运，所有的笑话都以完全相同的方式开始，所以我们只需要这两个词。
 
     在意图引擎看到短语“敲门，敲门”并激活`handle_knock_receive`函数后，控制权传递到我们的处理器。我们的下一步是什么？我们用一个简单的回答“谁在那里？”来回应。你会记得我们说过机器人不使用缩写。我们使用不同的函数来做这件事。我们不希望使用另一个意图处理器，但幸运的是，Mycroft提供了一个自由形式的接口，称为`get_response`。你需要查找这个多功能函数的文档，但它使我们的笑话程序变得更加简单。`get_response`函数既让我们说出我们的回答，然后接收用户接下来说的任何话，并将其存储为字符串在`response`变量中：
 
-    [PRE29]
+    ```py
+    @intent_file_handler('knock.receive.intent') 
+    def handle_knock_receive(self, message):
+      response =self.get_response('who.is.there')
+    ```
 
     现在我们有了我们的回应，我们可以用机器人的声音重复它，并额外加上一个词“谁？”。所以，如果孩子说，“霍华德”，机器人回应“霍华德谁？”
 
 1.  我们再次使用`get_response`让机器人说话，并记录孩子或成人接下来所说的话。我们不需要它，但我们想让机器人的语音系统听到接下来所说的话。我们丢弃了回应，但将我们自己的评论插入到我们的对话`veryfunny.dialog`中，这是一个位于`dialog`目录的文件。我创建了这个文件来保存机器人对我们笑话的回应。我尝试了一些孙子辈可能会觉得好笑的回应——我想我可以把“机器人笑话作家”加到我的简历上，因为我似乎在我的职业生涯中做了很多这样的事情。之后，我添加了一个睡眠计时器，以便在返回控制之前让一切平静下来。我们包括所有`MycroftSkills`所需的`stop`函数，并让我们的`create_skill`函数创建一个`ReceiveCall`对象并返回它：
 
-    [PRE30]
+    ```py
+    response2= response + " who?"
+    response3 =self.get_response(announcement=response2)
+    self.speak_dialog('veryfunny') 
+    time.sleep(3)
+    def stop(self):
+      pass
+    def create_skill():
+      return ReceiveKnock()
+    ```
 
     你可以想多创意就有多创意，但这里是我的建议：
 
@@ -530,7 +697,15 @@ Mycroft 有许多其他我们可以利用的技能，例如设置定时器、设
 
 这里是我们的接收敲门笑话技能的目录结构和文件：
 
-[PRE31]
+```py
+receive-knock-skill directory:
+init .py README.md
+settingsmeta.json
+./dialog/en-us:
+knock.receive.dialog veryfunny.dialog
+./vocab/en-us:
+knock.receive.intent
+```
 
 将技能的本地版本放入`/opt/mycroft/skills/receive-knock-skill`目录。现在尽情测试吧——你能对机器人讲多少个敲门笑话？
 

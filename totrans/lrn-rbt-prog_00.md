@@ -116,15 +116,23 @@
 
 代码块设置如下：
 
-[PRE0]
+```py
+cyan_rgb = [int(c * 255) for c in cyan]
+```
 
 当我们希望您注意代码块中的特定部分时，相关的行或项目将以粗体显示：
 
-[PRE1]
+```py
+right_distance = self.robot.right_distance_sensor.distance
+  # Display this
+            self.display_state(left_distance, right_distance) 
+```
 
 任何命令行输入或输出都按照以下方式编写：
 
-[PRE2]
+```py
+>>> r.leds.show()
+```
 
 **粗体**：表示新术语、重要单词或您在屏幕上看到的单词。例如，菜单或对话框中的单词在文本中显示如下。以下是一个示例：“选择**4**为**其他USB麦克风**并尝试声音测试。”
 

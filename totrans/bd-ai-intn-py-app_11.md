@@ -104,7 +104,11 @@
 
 ChatGPT确认了这一点。当被问及它是如何得出答案时，它明确地陈述如下：
 
-[PRE0]
+```py
+I assess the context of your question. For instance, if you've mentioned the setting (formal or informal), the relationship with the coworker, or any specific preferences, I take those into account.
+If we've interacted before, I consider any speech patterns or preferences you've shown in previous conversations. This helps tailor the response to your style and needs.
+I use general knowledge about cultural and social norms to gauge what might be most appropriate. For example, formal greetings are more suitable in professional settings, while casual greetings work better in relaxed environments.
+```
 
 可以请求生成式人工智能（GenAI）在回答问题之前忽略你之前的互动、个人偏好、语法和/或它之前关于你的任何结论，但当然，这要求用户首先知道这种情况正在发生。
 
@@ -140,11 +144,15 @@ LLM们不断学习、进化，并且被它们的创造者不断改进。在未�
 
 **用户请求**：
 
-[PRE1]
+```py
+Predict the average stock price for $TSLA in May 2024.
+```
 
 **输出答案**：
 
-[PRE2]
+```py
+The average stock price for $TSLA in May 2024 is expected to be $176.
+```
 
 在这个例子中，请注意以下内容：
 
@@ -156,21 +164,29 @@ LLM们不断学习、进化，并且被它们的创造者不断改进。在未�
 
 **用户请求**:
 
-[PRE3]
+```py
+Predict the average annual price for $TSLA in 2024.
+```
 
 **输出答案**:
 
-[PRE4]
+```py
+The average annual stock price for $TSLA in May 2024 is predicted to be $205.
+```
 
 您不会提供一个已经包含年度平均值的训练数据集，因为该信息尚未可用。虽然您可以在训练数据集中包含截至当年的平均数，但不应该包含带有合成或生成的前瞻性数据的年度平均值。如果您创建了一个估计的年度股价并将其包含在训练数据中，那么您就是在使用未来信息。现在，让我们考虑一个最终的例子。
 
 **用户请求**:
 
-[PRE5]
+```py
+What is the average stock price for $TSLA in May 2024?
+```
 
 **输出答案**:
 
-[PRE6]
+```py
+The average stock price for $TSLA in May 2024 is expected to be $176.
+```
 
 注意，与第一个例子相比，这里用户查询的措辞有所不同，尽管它导致了相同的答案。LLMs在推断用户意图方面非常擅长。记住，即使是相当简单的问题，用户也会用许多不同的方式表达（*估计*、*预测*、*预测*、*想象*、*猜测*和*预测*都是他们可能使用的词语）。
 
@@ -240,11 +256,16 @@ ChatGPT和其他LLM都有token限制，这限制了用户可以输入作为提�
 
 **询问**:
 
-[PRE7]
+```py
+what is the latest version of python
+```
 
 **响应**:
 
-[PRE8]
+```py
+The latest stable version of Python is 3.12.4, released on June 6, 2024\. This release is part of the Python 3.12 series, which includes many new features and optimizations. Key improvements in this version include enhanced f-string parsing, support for isolated subinterpreters with separate Global Interpreter Locks, and numerous performance enhancements (Python.org) (Python.org).
+Additionally, Python 3.13 is currently in development, with the first beta release, 3.13.0b1, made available in May 2024\. This upcoming version introduces new features such as an improved interactive interpreter, experimental JIT support, and an incremental garbage collector (Python Insider). For more details, you can visit the official Python website here.
+```
 
 初始询问为36个字符和7个token。响应为162个token，或741个字符。如果您将交互限制在300个token以内，您仍然远远低于您为用户允许的限制。
 
@@ -252,11 +273,46 @@ ChatGPT和其他LLM都有token限制，这限制了用户可以输入作为提�
 
 **询问**:
 
-[PRE9]
+```py
+serverId.nodeId.processID reports error for analysis.
+Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+    at java.util.HashMap.resize(HashMap.java:704)
+    at java.util.HashMap.putVal(HashMap.java:663)
+    at java.util.HashMap.put(HashMap.java:612)
+    at com.example.server.RequestHandler.handleRequest(RequestHandler.java:45)
+    at com.example.server.Server.processRequest(Server.java:78)
+    at com.example.server.Server.run(Server.java:61)
+    at java.lang.Thread.run(Thread.java:834)
+2024-06-18 14:32:21.456 ERROR [Server] - Server encountered an unrecoverable error and will shut down.
+java.lang.OutOfMemoryError: Java heap space
+    at java.util.Arrays.copyOf(Arrays.java:3332)
+    at java.lang.AbstractStringBuilder.ensureCapacityInternal(AbstractStringBuilder.java:124)
+    at java.lang.AbstractStringBuilder.append(AbstractStringBuilder.java:674)
+    at java.lang.StringBuilder.append(StringBuilder.java:214)
+    at com.example.server.Logger.log(Logger.java:27)
+    at com.example.server.RequestHandler.handleRequest(RequestHandler.java:47)
+    at com.example.server.Server.processRequest(Server.java:78)
+    at com.example.server.Server.run(Server.java:61)
+    at java.lang.Thread.run(Thread.java:834)
+```
 
 **响应**:
 
-[PRE10]
+```py
+Exception: The OutOfMemoryError exception indicates that the Java Virtual Machine (JVM) has run out of memory.
+Error Message: Java heap space specifies that the heap memory allocated for the JVM is exhausted.
+Method Calls: The trace shows the sequence of method calls that led to the error.
+The error starts in the HashMap.resize method.
+The putVal and put methods of HashMap are called.
+These methods are used in RequestHandler.handleRequest.
+Server.processRequest and Server.run handle the processing and running of the server, respectively.
+The Thread.run method is the entry point of the thread that encountered the error.
+Timestamp: The timestamp (2024-06-18 14:32:21.456) provides the exact time of the error occurrence.
+Logger: The logger in Logger.log attempted to log the error but also encountered the same OutOfMemoryError.
+Causes and Solutions:
+Causes: Excessive memory usage due to large data structures. Memory leaks where objects are not properly disposed of. Insufficient heap size allocated to the JVM.
+Solutions: Increase the heap size using JVM options (-Xmx for maximum heap size). Optimize the code to use memory more efficiently. Use profiling tools to detect and fix memory leaks.
+```
 
 这个分析器对诊断工程师很有用，因为它可以快速审查堆栈跟踪，总结其发现，并为解决问题提供建议。
 
@@ -282,7 +338,9 @@ GenAI最明显的失败是性能和可靠性相关的问题。既然您已经学
 
 **用户请求**：
 
-[PRE11]
+```py
+Evaluate a sample of the last 20,000 stock prices for TSLA, sort it from highest to lowest, and let me know on which days and times it had the highest price.
+```
 
 获取20,000条随机股票价格看似简单，但用户没有指定时间范围。模型应该评估最后20,000条股票价格的哪个时间段？是过去一个月？还是去年随机选取的时间段？对这些值的排序计算成本高昂，并进一步增加了返回列表的处理负担。
 
@@ -298,7 +356,9 @@ GenAI最明显的失败是性能和可靠性相关的问题。既然您已经学
 
 **用户请求**：
 
-[PRE12]
+```py
+Generate a detailed and historically accurate list of the top three priorities for every US president, but do not include their policies related to South America.
+```
 
 在这种情况下，GenAI 必须首先创建每位美国总统的名单，然后寻找每位总统的信息，接着创建他们在任期间政策和事件的详细总结。它还必须检索与总统优先考虑的事项相关的内容，确定哪些内容是最高优先级的共识，整理并总结所有这些信息，然后输出给用户。这是广泛的知识检索、分析和文本生成。很可能会需要多个 LLM 查询，而更多的查询意味着更多的开销。
 

@@ -402,73 +402,249 @@ Transformer的组件通过称为**序列到序列**（**Seq2Seq**）学习（**S
 
 最初，代码加载了一个数据集并为其训练做准备。数据从CSV文件中加载，然后分为英语和法语文本。为了演示目的，文本限制为100个字符以减少训练时间。CSV文件包含几千个示例数据点，可以在本书的GitHub仓库（[https://github.com/PacktPublishing/Python-Generative-AI](https://github.com/PacktPublishing/Python-Generative-AI)）中找到，包括完整的代码：
 
-[PRE0]
+```py
+import pandas as pd
+import numpy as np
+# Load demo data
+data = pd.read_csv("./Chapter_3/data/en-fr_mini.csv")
+# Separate English and French lexicons
+EN_TEXT = data.en.to_numpy().tolist()
+FR_TEXT = data.fr.to_numpy().tolist()
+# Arbitrarily cap at 100 characters for demonstration to avoid long training times
+def demo_limit(vocab, limit=100):
+    return [i[:limit] for i in vocab]
+EN_TEXT = demo_limit(EN_TEXT)
+FR_TEXT = demo_limit(FR_TEXT)
+# Establish the maximum length of a given sequence
+MAX_LEN = 100
+```
 
 ## 分词
 
 接下来，在文本数据上训练了一个分词器。分词器对于将文本数据转换为模型可以输入的数值数据至关重要：
 
-[PRE1]
+```py
+from tokenizers import Tokenizer
+from tokenizers.models import WordPiece
+from tokenizers.trainers import WordPieceTrainer
+from tokenizers.pre_tokenizers import Whitespace
+def train_tokenizer(texts):
+    tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = Whitespace()
+    trainer = WordPieceTrainer(
+        vocab_size=5000,
+        special_tokens=["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", 
+            "<sos>", "<eos>"],
+    )
+    tokenizer.train_from_iterator(texts, trainer)
+    return tokenizer
+en_tokenizer = train_tokenizer(EN_TEXT)
+fr_tokenizer = train_tokenizer(FR_TEXT)
+```
 
 ## 数据张量化
 
 文本数据随后被张量化，这涉及到将文本数据转换为张量格式。这一步对于使用`PyTorch`进行训练数据准备至关重要：
 
-[PRE2]
+```py
+import torch
+from torch.nn.utils.rnn import pad_sequence
+def tensorize_data(text_data, tokenizer):
+    numericalized_data = [
+        torch.tensor(tokenizer.encode(text).ids) for text in text_data
+    ]
+    padded_data = pad_sequence(numericalized_data,
+        batch_first=True)
+    return padded_data
+src_tensor = tensorize_data(EN_TEXT, en_tokenizer)
+tgt_tensor = tensorize_data(FR_TEXT, fr_tokenizer)
+```
 
 ## 数据集创建
 
 创建了一个自定义数据集类来处理数据。这个类对于在训练期间分批加载数据至关重要：
 
-[PRE3]
+```py
+from torch.utils.data import Dataset, DataLoader
+class TextDataset(Dataset):
+    def __init__(self, src_data, tgt_data):
+        self.src_data = src_data
+        self.tgt_data = tgt_data
+    def __len__(self):
+        return len(self.src_data)
+    def __getitem__(self, idx):
+        return self.src_data[idx], self.tgt_data[idx]
+dataset = TextDataset(src_tensor, tgt_tensor)
+```
 
 ## 嵌入层
 
 嵌入层将每个标记映射到连续的向量空间。这一层对于模型理解和处理文本数据至关重要：
 
-[PRE4]
+```py
+import torch.nn as nn
+class Embeddings(nn.Module):
+    def __init__(self, d_model, vocab_size):
+        super(Embeddings, self).__init__()
+        self.embed = nn.Embedding(vocab_size, d_model)
+    def forward(self, x):
+        return self.embed(x)
+```
 
 ## 位置编码
 
 位置编码层将位置信息添加到嵌入中，这有助于模型理解序列中标记的顺序：
 
-[PRE5]
+```py
+import math
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1,
+                 max_len=MAX_LEN
+    ):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0.0, max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0.0, d_model, 2) * - \
+                (math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer("pe", pe)
+    def forward(self, x):
+        x = x + self.pe[:, : x.size(1)]
+        return self.dropout(x)
+```
 
 ## 多头自注意力
 
 **多头自注意力**（**MHSA**）层是Transformer架构的关键部分，它允许模型在生成输出序列时关注输入序列的不同部分：
 
-[PRE6]
+```py
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, d_model, nhead):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.attention = nn.MultiheadAttention(d_model, nhead)
+    def forward(self, x):
+        return self.attention(x, x, x)
+```
 
 ## FFN
 
 FFN是一个简单的**全连接神经网络**（**FCNN**），它独立地对每个位置进行操作：
 
-[PRE7]
+```py
+class FeedForward(nn.Module):
+    def __init__(self, d_model, d_ff):
+        super(FeedForward, self).__init__()
+        self.linear1 = nn.Linear(d_model, d_ff)
+        self.dropout = nn.Dropout(0.1)
+        self.linear2 = nn.Linear(d_ff, d_model)
+    def forward(self, x):
+        return self.linear2(self.dropout(torch.relu(self.linear1(x))))
+```
 
 ## 编码器层
 
 编码器层由一个MHSA机制和一个简单的FFNN组成。这种结构通过堆叠重复，形成完整的编码器：
 
-[PRE8]
+```py
+class EncoderLayer(nn.Module):
+    def __init__(self, d_model, nhead, d_ff):
+        super(EncoderLayer, self).__init__()
+        self.self_attn = MultiHeadSelfAttention(d_model, nhead)
+        self.feed_forward = FeedForward(d_model, d_ff)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(0.1)
+    def forward(self, x):
+        x = x.transpose(0, 1)
+        attn_output, _ = self.self_attn(x)
+        x = x + self.dropout(attn_output)
+        x = self.norm1(x)
+        ff_output = self.feed_forward(x)
+        x = x + self.dropout(ff_output)
+        return self.norm2(x).transpose(0, 1)
+```
 
 ## 编码器
 
 编码器是一个具有MHSA机制和FFN的相同层的堆栈：
 
-[PRE9]
+```py
+class Encoder(nn.Module):
+    def __init__(self, d_model, nhead, d_ff, num_layers, vocab_size):
+        super(Encoder, self).__init__()
+        self.embedding = Embeddings(d_model, vocab_size)
+        self.pos_encoding = PositionalEncoding(d_model)
+        self.encoder_layers = nn.ModuleList(
+            [EncoderLayer(d_model, nhead, d_ff) for _ in range(
+                num_layers)]
+        )
+        self.feed_forward = FeedForward(d_model, d_ff)
+    def forward(self, x):
+        x = self.embedding(x)
+        x = self.pos_encoding(x)
+        for layer in self.encoder_layers:
+            x = layer(x)
+        return x
+```
 
 ## 解码器层
 
 类似地，解码器层由两个MHA机制组成——一个自注意力和一个交叉注意力——随后是一个FFN：
 
-[PRE10]
+```py
+class DecoderLayer(nn.Module):
+    def __init__(self, d_model, nhead, d_ff):
+        super(DecoderLayer, self).__init__()
+        self.self_attn = MultiHeadSelfAttention(d_model, nhead)
+        self.cross_attn = nn.MultiheadAttention(d_model, nhead)
+        self.feed_forward = FeedForward(d_model, d_ff)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(0.1)
+    def forward(self, x, memory):
+        x = x.transpose(0, 1)
+        memory = memory.transpose(0, 1)
+        attn_output, _ = self.self_attn(x)
+        x = x + self.dropout(attn_output)
+        x = self.norm1(x)
+        attn_output, _ = self.cross_attn(x, memory, memory)
+        x = x + self.dropout(attn_output)
+        x = self.norm2(x)
+        ff_output = self.feed_forward(x)
+        x = x + self.dropout(ff_output)
+        return self.norm3(x).transpose(0, 1)
+```
 
 ## 解码器
 
 解码器也是一个相同层的堆栈。每个层包含两个MHA机制和一个FFN：
 
-[PRE11]
+```py
+class Decoder(nn.Module):
+    def __init__(self, d_model, nhead, d_ff, num_layers, vocab_size):
+        super(Decoder, self).__init__()
+        self.embedding = Embeddings(d_model, vocab_size)
+        self.pos_encoding = PositionalEncoding(d_model)
+        self.decoder_layers = nn.ModuleList(
+            [DecoderLayer(d_model, nhead, d_ff) for _ in range(
+                num_layers)]
+        )
+        self.linear = nn.Linear(d_model, vocab_size)
+        self.softmax = nn.Softmax(dim=2)
+    def forward(self, x, memory):
+        x = self.embedding(x)
+        x = self.pos_encoding(x)
+        for layer in self.decoder_layers:
+            x = layer(x, memory)
+        x = self.linear(x)
+        return self.softmax(x)
+```
 
 这种堆叠层模式继续构建Transformer架构。每个块在处理输入数据和生成输出翻译方面都有特定的作用。
 
@@ -476,25 +652,121 @@ FFN是一个简单的**全连接神经网络**（**FCNN**），它独立地对�
 
 Transformer模型封装了之前定义的编码器和解码器结构。这是用于训练和翻译任务的主要类：
 
-[PRE12]
+```py
+class Transformer(nn.Module):
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        d_ff,
+        num_encoder_layers,
+        num_decoder_layers,
+        src_vocab_size,
+        tgt_vocab_size,
+    ):
+        super(Transformer, self).__init__()
+        self.encoder = Encoder(d_model, nhead, d_ff, \
+            num_encoder_layers, src_vocab_size)
+        self.decoder = Decoder(d_model, nhead, d_ff, \
+            num_decoder_layers, tgt_vocab_size)
+    def forward(self, src, tgt):
+        memory = self.encoder(src)
+        output = self.decoder(tgt, memory)
+        return output
+```
 
 ## 训练函数
 
 `train`函数遍历epoch和批次，计算损失，并更新模型参数：
 
-[PRE13]
+```py
+def train(model, loss_fn, optimizer, NUM_EPOCHS=10):
+    for epoch in range(NUM_EPOCHS):
+        model.train()
+        total_loss = 0
+        for batch in batch_iterator:
+            src, tgt = batch
+            optimizer.zero_grad()
+            output = model(src, tgt)
+            loss = loss_fn(output.view(-1, TGT_VOCAB_SIZE),
+                tgt.view(-1))
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(f"Epoch {epoch}, 
+            Loss {total_loss / len(batch_iterator)}")
+```
 
 ## 翻译函数
 
 `translate`函数使用训练好的模型将源文本翻译成目标语言。它逐个生成翻译标记，并在生成**序列结束**（**EOS**）标记或达到最大目标长度时停止：
 
-[PRE14]
+```py
+def translate(model, src_text, src_tokenizer,
+              tgt_tokenizer, max_target_length=50
+):
+    model.eval()
+    src_tokens = src_tokenizer.encode(src_text).ids
+    src_tensor = torch.LongTensor(src_tokens).unsqueeze(0)
+    tgt_sos_idx = tgt_tokenizer.token_to_id("<sos>")
+    tgt_eos_idx = tgt_tokenizer.token_to_id("<eos>")
+    tgt_tensor = torch.LongTensor([tgt_sos_idx]).unsqueeze(0)
+    for i in range(max_target_length):
+        with torch.no_grad():
+            output = model(src_tensor, tgt_tensor)
+        predicted_token_idx = output.argmax(dim=2)[0, -1].item()
+        if predicted_token_idx == tgt_eos_idx:
+            break
+        tgt_tensor = torch.cat((tgt_tensor,
+            torch.LongTensor([[predicted_token_idx]])),
+            dim=1)
+    translated_token_ids = tgt_tensor[0, 1:].tolist()
+    translated_text = tgt_tokenizer.decode(translated_token_ids)
+    return translated_text
+```
 
 ## 主执行
 
 在脚本的主体块中，定义了超参数，实例化了标记化器和模型，并启动了训练和翻译过程：
 
-[PRE15]
+```py
+if __name__ == "__main__":
+    NUM_ENCODER_LAYERS = 2
+    NUM_DECODER_LAYERS = 2
+    DROPOUT_RATE = 0.1
+    EMBEDDING_DIM = 512
+    NHEAD = 8
+    FFN_HID_DIM = 2048
+    BATCH_SIZE = 31
+    LEARNING_RATE = 0.001
+    en_tokenizer = train_tokenizer(EN_TEXT)
+    fr_tokenizer = train_tokenizer(FR_TEXT)
+    SRC_VOCAB_SIZE = len(en_tokenizer.get_vocab())
+    TGT_VOCAB_SIZE = len(fr_tokenizer.get_vocab())
+    src_tensor = tensorize_data(EN_TEXT, en_tokenizer)
+    tgt_tensor = tensorize_data(FR_TEXT, fr_tokenizer)
+    dataset = TextDataset(src_tensor, tgt_tensor)
+    model = Transformer(
+        EMBEDDING_DIM,
+        NHEAD,
+        FFN_HID_DIM,
+        NUM_ENCODER_LAYERS,
+        NUM_DECODER_LAYERS,
+        SRC_VOCAB_SIZE,
+        TGT_VOCAB_SIZE,
+    )
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    batch_iterator = DataLoader(
+        dataset, batch_size=BATCH_SIZE,
+        shuffle=True, drop_last=True
+    )
+    train(model, loss_fn, optimizer, NUM_EPOCHS=10)
+    src_text = "hello, how are you?"
+    translated_text = translate(
+        model, src_text, en_tokenizer, fr_tokenizer)
+    print(translated_text)
+```
 
 此脚本从加载数据到训练Transformer模型，最终从英语翻译到法语进行机器翻译任务。最初，它加载一个数据集，处理文本，并建立标记化器以将文本转换为数值数据。随后，它定义了`PyTorch`中Transformer模型的架构，详细说明了从嵌入的自注意力机制到编码器和解码器堆栈的每个组件。
 

@@ -73,15 +73,21 @@ PyTorch 提供了构建深度学习网络/计算图的低级和中级接口。�
 
 1.  使用以下命令创建新的虚拟环境：
 
-[PRE0]
+```py
+conda create -n gameAI python=3.6
+```
 
 1.  这将使用 Python 3.6 创建虚拟环境。PyTorch 目前在 Windows 64 位上运行。这可能会根据操作系统而有所不同。然后使用以下命令激活环境：
 
-[PRE1]
+```py
+activate gameAI
+```
 
 1.  将之前生成的 `install` 命令复制并粘贴到窗口中，并执行它。以下是在 Windows 上运行 Anaconda 的命令示例：
 
-[PRE2]
+```py
+conda install pytorch torchvision cpuonly -c pytorch
+```
 
 1.  此命令应安装 PyTorch。如果您遇到任何问题，例如显示库对 32 位不可用的错误，请确保您正在使用 64 位版本的 Python。
 
@@ -99,19 +105,60 @@ PyTorch 提供了构建深度学习网络/计算图的低级和中级接口。�
 
 1.  打开`Chapter_6_1.py`代码示例。该示例是从PyTorch快速入门手册中提取的，其中一些变量名被更改以更具上下文性：
 
-[PRE3]
+```py
+import torch
+
+dtype = torch.float
+device = torch.device("cpu")
+# device = torch.device("cuda:0") # Uncomment this to run on GPU
+
+batch_size, inputs, hidden, outputs = 64, 1000, 100, 10
+x = torch.randn(batch_size, inputs, device=device, dtype=dtype)
+y = torch.randn(batch_size, outputs, device=device, dtype=dtype)
+
+layer1 = torch.randn(inputs, hidden, device=device, dtype=dtype)
+layer2 = torch.randn(hidden, outputs, device=device, dtype=dtype)
+learning_rate = 1e-6
+
+for t in range(500):
+  h = x.mm(layer1)
+  h_relu = h.clamp(min=0)
+  y_pred = h_relu.mm(layer2)
+
+  loss = (y_pred - y).pow(2).sum().item()
+  if t % 100 == 99:
+    print(t, loss)
+
+  grad_y_pred = 2.0 * (y_pred - y)
+  grad_layer2 = h_relu.t().mm(grad_y_pred)
+  grad_h_relu = grad_y_pred.mm(layer2.t())
+  grad_h = grad_h_relu.clone()
+  grad_h[h < 0] = 0
+  grad_layer1 = x.t().mm(grad_h)
+
+  layer1 -= learning_rate * grad_layer1
+  layer2 -= learning_rate * grad_layer2
+```
 
 1.  我们首先使用`import torch`导入PyTorch库。然后设置我们首选的数据类型`dtype`变量为`torch.float`。接着通过使用`torch.device`并传入`cpu`来初始化设备变量，表示仅使用CPU。示例中保留了启用CUDA在GPU上运行的选项，但安装CUDA由您自行决定：
 
-[PRE4]
+```py
+batch_size, inputs, hidden, outputs = 64, 1000, 100, 10
+```
 
 1.  接下来，我们设置一些变量来定义数据的处理方式和网络的架构。`batch_size`参数表示在一次迭代中要训练的项目数量。`inputs`变量表示输入空间的大小，而`hidden`变量代表网络中隐藏或中间层的神经元数量。最后的`outputs`变量表示输出空间或网络输出层的神经元数量：
 
-[PRE5]
+```py
+x = torch.randn(batch_size, inputs, device=device, dtype=dtype)
+y = torch.randn(batch_size, outputs, device=device, dtype=dtype)
+```
 
 1.  之后，我们设置了输入和输出变量：`x`作为输入，`y`作为输出，这些变量将基于`batch_size`的随机采样进行学习。在这个例子中，`inputs`变量的大小为1,000，因此批次的每个元素都将有1,000个输入用于`x`。输出有10个值，因此每个`y`的样本也将有10个项目：
 
-[PRE6]
+```py
+layer1 = torch.randn(inputs, hidden, device=device, dtype=dtype)
+layer2 = torch.randn(hidden, outputs, device=device, dtype=dtype)
+```
 
 1.  这两条线创建了我们深度学习网络中的计算层，这些层是由我们之前的 `inputs`、`hidden` 和 `outputs` 参数定义的。此时，`layer1` 和 `layer2` 的张量内容包含一个初始化的随机权重集，其大小由输入数量、隐藏层和输出数量设置。
 
@@ -125,7 +172,10 @@ PyTorch 提供了构建深度学习网络/计算图的低级和中级接口。�
 
 1.  接下来，我们定义一个 `learning_rate` 参数，或者我们现在将明确地称之为超参数。学习率是一个乘数，我们可以用它来缩放学习的速率，并且与之前探索的学习率 alpha 没有区别：
 
-[PRE7]
+```py
+learning_rate = 1e-6
+
+```
 
 在深度学习中，我们经常使用 `weight` 和 `parameter` 这两个术语来表示相同的意思。因此，其他参数，如 `learning_rate`、epoch、批量大小等，将被描述为超参数。学习调整超参数将是构建深度学习示例的持续旅程。
 
@@ -143,7 +193,12 @@ PyTorch 提供了构建深度学习网络/计算图的低级和中级接口。�
 
 1.  我们将从以下代码中显示的 `for` 循环开始的训练循环的开始处开始。
 
-[PRE8]
+```py
+for t in range(500):
+  h = x.mm(layer1)
+  h_relu = h.clamp(min=0)
+  y_pred = h_relu.mm(layer2)
+```
 
 1.  在这个例子中，500表示总的训练迭代次数或周期数。在每个迭代中，我们使用接下来的三行计算预测输出。这一步被称为通过图或网络的正向传递。第一行使用`x.mm`对`layer1`权重与`x`输入进行矩阵乘法。然后，它将这些输出值通过一个名为**clamp**的激活函数。clamp为网络的输出设置限制，在这种情况下，我们使用clamp限制为0。这也恰好对应于修正线性单元或ReLU函数。
 
@@ -153,17 +208,31 @@ PyTorch 提供了构建深度学习网络/计算图的低级和中级接口。�
 
 1.  从那里，我们使用以下代码预测我们想要实际预测的`y`张量与我们的网络刚刚预测的张量`y_pred`之间的损失或误差量：
 
-[PRE9]
+```py
+loss = (y_pred - y).pow(2).sum().item()
+if t % 100 == 99:
+  print(t, loss)
+```
 
 1.  使用**均方误差**或**MSE**方法计算`loss`值或总误差。请注意，由于`y_pred`和`y`都是张量，减法操作是在张量范围内进行的。也就是说，所有10个预测值都从预测的`y`值中减去，然后平方并求和。我们在这里使用相同的输出技术来打印出每99次迭代的总损失。
 
 1.  在计算损失之后，我们接下来需要计算图权重的梯度，以确定如何推动和纠正图中的错误。计算这个梯度超出了本书的范围，但代码如下所示：
 
-[PRE10]
+```py
+grad_y_pred = 2.0 * (y_pred - y)
+grad_layer2 = h_relu.t().mm(grad_y_pred)
+grad_h_relu = grad_y_pred.mm(layer2.t())
+grad_h = grad_h_relu.clone()
+grad_h[h < 0] = 0
+grad_layer1 = x.t().mm(grad_h)
+```
 
 1.  我们在这里展示低级代码，以GD（梯度下降）对抗一个简单的网络图为例，来说明数学是如何工作的。幸运的是，自动微分让我们大部分时间可以忽略那些更精细、更痛苦细节。这里计算出的梯度现在需要使用以下代码应用到图层的权重上：
 
-[PRE11]
+```py
+layer1 -= learning_rate * grad_layer1
+layer2 -= learning_rate * grad_layer2
+```
 
 1.  注意我们再次使用张量减法来减去按学习率缩放的已计算的梯度`grad_layer1`和`grad_layer2`。
 
@@ -177,31 +246,82 @@ PyTorch 提供了构建深度学习网络/计算图的低级和中级接口。�
 
 1.  整个示例的源代码如下：
 
-[PRE12]
+```py
+import torch
+
+batch_size, inputs, hidden, outputs = 64, 1000, 100, 10
+
+x = torch.randn(batch_size, inputs)
+y = torch.randn(batch_size, outputs)
+
+model = torch.nn.Sequential(
+  torch.nn.Linear(inputs, hidden),
+  torch.nn.ReLU(),
+  torch.nn.Linear(hidden, outputs),
+)
+
+loss_fn = torch.nn.MSELoss(reduction='sum')
+learning_rate = 1e-4
+
+for t in range(500):   
+  y_pred = model(x)
+
+  loss = loss_fn(y_pred, y)
+
+  if t % 100 == 99:
+    print(t, loss.item())  
+
+  model.zero_grad()
+  loss.backward()  
+
+  with torch.no_grad():
+    for param in model.parameters():
+      param -= learning_rate * param.grad
+```
 
 1.  代码变得大大简化，但并没有到无法让我们控制深度学习图内部结构的地步。这可能是你直到与其他深度学习框架一起工作时才完全欣赏的东西。然而，推动PyTorch成为深度学习领域第一框架的不是简单性，而是灵活性：
 
-[PRE13]
+```py
+model = torch.nn.Sequential(
+  torch.nn.Linear(inputs, hidden),
+  torch.nn.ReLU(),
+  torch.nn.Linear(hidden, outputs),
+)
+```
 
 1.  代码的上部有一些重大变化，最值得注意的是使用`torch.nn.Sequential`设置模型。这个模型或图的设置与我们之前做的是一样的，只是更明确地描述了每个连接点。我们可以看到第一层是用`torch.nn.Linear`定义的，它以`inputs`和`hidden`作为参数。这连接到激活函数，再次是ReLU，由`torch.nn.ReLU`表示。之后，我们使用`hidden`和`outputs`作为参数创建最终的层。模型的`Sequential`术语表示整个图是完全连接的；就像我们在上一个例子中看到的那样：
 
-[PRE14]
+```py
+loss_fn = torch.nn.MSELoss(reduction='sum')
+```
 
 1.  在模型定义之后，我们还可以看到我们的`loss_fn`损失函数通过使用`torch.nn.MSELoss`作为函数变得更加描述性。这让我们明确知道`loss`函数是什么以及它将如何被减少，在这种情况下，减少总和，用`reduction='sum'`表示，或者平均平方误差的总和：
 
-[PRE15]
+```py
+for t in range(500):   
+  y_pred = model(x)
+```
 
 1.  训练循环的开始与之前相同，但这次`y_pred`是从将整个`x`批次输入到`model`中获得的。这个操作与正向传播相同，或者说是网络输出答案的地方：
 
-[PRE16]
+```py
+loss = loss_fn(y_pred, y)
+```
 
 1.  之后，我们使用`loss_fn`函数计算`loss`作为Torch张量。接下来的代码片段与之前看到的相同损失输出代码：
 
-[PRE17]
+```py
+model.zero_grad()
+loss.backward()
+```
 
 1.  接下来，我们在模型中清除任何梯度——这本质上是一个重置。然后我们使用`backward`函数计算损失张量中的梯度。这本质上是我们之前看到的那个讨厌的代码片段，现在已经被简化为单行：
 
-[PRE18]
+```py
+with torch.no_grad():
+    for param in model.parameters():
+      param -= learning_rate * param.grad
+```
 
 1.  我们通过调整模型中的权重来结束训练，使用计算出的`loss`张量的梯度。虽然这段代码比我们之前的例子更冗长，但它更好地解释了实际的学习过程。
 
@@ -229,15 +349,24 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  首先，让我们安装Windows所需的库，记住这些步骤仅适用于Windows安装，以下命令：
 
-[PRE19]
+```py
+conda install swig
+pip install box2d-py
+```
 
 1.  在Windows上安装了所有必备条件后，您可以使用安装Gym的命令来完成剩余的安装工作。这个命令在Mac和Linux的安装中也会用到：
 
-[PRE20]
+```py
+pip install gym[all]
+
+```
 
 1.  接下来，使用以下命令安装`matplotlib`和`tqdm`：
 
-[PRE21]
+```py
+pip install matplotlib
+pip install tqdm
+```
 
 1.  回想一下，那些是我们用来监控训练的辅助库。
 
@@ -259,11 +388,35 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  到目前为止，样本已经变得太大，无法在一个列表中列出。相反，我们将像往常一样分部分进行。通常，如果你在编辑器中跟随代码，这会有所帮助：
 
-[PRE22]
+```py
+import math, random
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.autograd as autograd 
+import torch.nn.functional as F
+
+import matplotlib.pyplot as plt
+import gym
+import numpy as np
+from collections import deque
+from tqdm import trange
+```
 
 1.  这些是常见的导入，但应该指出的是，`torch`需要在导入`gym`或`numpy`等其他导入之前加载。我们将跳过第一个`ReplayBuffer`函数，直到稍后：
 
-[PRE23]
+```py
+env_id = "CartPole-v0"
+env = gym.make(env_id)
+epsilon_start = 1.0
+
+epsilon_final = 0.01
+epsilon_decay = 500
+eps_by_episode = lambda epoch: epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1\. * epoch / epsilon_decay)
+
+plt.plot([eps_by_episode(i) for i in range(10000)])
+plt.show()
+```
 
 1.  前面的代码显示了创建强化学习环境和设置超参数的典型设置。注意我们是如何使用lambda表达式生成`eps_by_episode`来生成衰减的`epsilon`的。这是一种非常Pythonic的方式来产生衰减的epsilon。代码的最后几行将衰减的epsilon绘制在图表中，并输出类似于以下图表的内容：
 
@@ -273,15 +426,57 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  你可以从前面的图中看到，epsilon在大约2,000次迭代时稳定在某个水平；这似乎表明代理那时应该已经学到了足够的知识。我们现在将向下滚动到函数外的下一块代码：
 
-[PRE24]
+```py
+model = DQN(env.observation_space.shape[0], env.action_space.n)
+optimizer = optim.Adam(model.parameters())
+replay_buffer = ReplayBuffer(1000)
+```
 
 1.  这三行代码设置了关键组件——模型，它是`DQN`类型的，以及我们很快就会接触到的类。在这种情况下，**优化器**是`Adam`类型的，由`optim.Adam`定义。最后一行创建了`ReplayBuffer`，这是我们很快就会接触到的另一个类。我们再次向下滚动，跳过函数中的所有代码，并回顾主代码的下一部分：
 
-[PRE25]
+```py
+episodes = 10000
+batch_size = 32
+gamma      = 0.99
+
+losses = []
+all_rewards = []
+episode_reward = 0
+
+state = env.reset()
+tot_reward = 0
+tr = trange(episodes+1, desc='Agent training', leave=True)
+```
 
 1.  到现在为止，大部分代码应该看起来很熟悉。注意我们现在设置了一个新的超参数，称为`batch_size`。基本上，`batch_size`是我们一次通过网络推送的项目数量的大小。我们更喜欢批量处理，因为这提供了更好的平均机制。这意味着当我们训练模型时，我们将以批量的方式进行：
 
-[PRE26]
+```py
+for episode in tr:
+  tr.set_description("Agent training (episode{}) Avg Reward {}".format(episode+1,tot_reward/(episode+1)))
+  tr.refresh() 
+  epsilon = eps_by_episode(episode)
+
+  action = model.act(state, epsilon)
+  next_state, reward, done, _ = env.step(action)
+
+  replay_buffer.push(state, action, reward, next_state, done)
+  tot_reward += reward
+
+  state = next_state
+  episode_reward += reward
+
+  if done:
+    state = env.reset()
+    all_rewards.append(episode_reward)
+    episode_reward = 0
+
+  if len(replay_buffer) > batch_size:
+    loss = compute_td_loss(batch_size)
+ losses.append(loss.item())
+
+  if epoch % 2000 == 0:
+    plot(epoch, all_rewards, losses) 
+```
 
 1.  再次强调，现在大部分代码应该已经很熟悉了，因为它与我们之前的许多示例相似。我们将关注两个代码高亮部分。第一个是推送`state`、`action`、`reward`、`next_state`和`done`函数到`replay_buffer`的行。我们尚未查看`replay`缓冲区，但在此阶段，所有这些信息都将被存储以供后续使用。另一个高亮部分与使用`compute_td_loss`函数计算损失有关。该函数使用TD误差来计算损失，正如我们在介绍TD和SARSA时所见。
 
@@ -299,27 +494,60 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  `ReplayBuffer`类的整个代码如下所示：
 
-[PRE27]
+```py
+class ReplayBuffer(object):
+  def __init__(self, capacity):
+    self.buffer = deque(maxlen=capacity)
+
+  def push(self, state, action, reward, next_state, done):
+    state      = np.expand_dims(state, 0)
+    next_state = np.expand_dims(next_state, 0)
+    self.buffer.append((state, action, reward, next_state, done))
+
+  def sample(self, batch_size): 
+ state, action, reward, next_state, done 
+ = zip(*random.sample(self.buffer, batch_size))
+    return np.concatenate(state), action,
+  reward, np.concatenate(next_state), done
+
+  def __len__(self):
+    return len(self.buffer)
+```
 
 1.  在内部，`ReplayBuffer`使用一个名为`deque`的类，这是一个可以存储任何类型对象的类。在`init`函数中，我们创建了一个所需指定大小的队列。该类有三个函数`push`、`sample`和`len`。`len`函数相当直观，但我们应该查看的其他函数：
 
-[PRE28]
+```py
+def push(self, state, action, reward, next_state, done):
+  state      = np.expand_dims(state, 0)
+  next_state = np.expand_dims(next_state, 0)
+  self.buffer.append((state, action, reward, next_state, done))
+```
 
 1.  `push`函数将`state`、`action`、`reward`、`next_state`和`done`观察结果推送到队列中以便稍后处理：
 
-[PRE29]
+```py
+def sample(self, batch_size): 
+    state, action, reward, next_state, done 
+      = zip(*random.sample(self.buffer, batch_size))
+    return np.concatenate(state), action,
+      reward, np.concatenate(next_state), done
+```
 
 1.  另一个函数`sample`是缓冲区从队列中随机采样事件并使用`zip`将它们组合起来。然后，它将返回这个随机事件批次以供网络学习。
 
 1.  找到设置重放缓冲区大小的代码行，并将其更改为以下内容：
 
-[PRE30]
+```py
+replay_buffer = ReplayBuffer(3000)
+```
 
 1.  再次运行示例，并观察新的缓冲区大小对训练的影响。
 
 1.  现在再次使用以下代码更改缓冲区大小：
 
-[PRE31]
+```py
+replay_buffer = ReplayBuffer(333)
+```
 
 1.  再次运行示例，并仔细观察输出。注意训练性能的变化。
 
@@ -333,7 +561,31 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  DQN类的整个代码如下：
 
-[PRE32]
+```py
+class DQN(nn.Module):
+  def __init__(self, num_inputs, num_actions):
+    super(DQN, self).__init__()
+
+    self.layers = nn.Sequential(
+      nn.Linear(env.observation_space.shape[0], 128),
+      nn.ReLU(),
+      nn.Linear(128, 128),
+      nn.ReLU(),
+      nn.Linear(128, env.action_space.n))
+
+  def forward(self, x):
+    return self.layers(x)
+
+  def act(self, state, epsilon):
+    if random.random() > epsilon:
+      state   = autograd.Variable(torch.FloatTensor(state).unsqueeze(0),
+        volatile=True)
+      q_value = self.forward(state)
+      action  = q_value.max(1)[1].item()
+    else:
+      action = random.randrange(env.action_space.n)
+    return action
+```
 
 1.  `init`函数使用PyTorch的`nn.Sequential`类初始化网络，以生成一个全连接网络。我们可以看到第一层的输入由`env.observation_space.shape[0]`设置，神经元数量为128。
 
@@ -343,13 +595,25 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  最后，`act`函数与其他我们之前构建的Q学习样本非常相似。我们想要关注的一点是在非探索期间如何选择实际动作，如下面的代码片段所示：
 
-[PRE33]
+```py
+state   = autograd.Variable(torch.FloatTensor(state).unsqueeze(0),
+        volatile=True)
+q_value = self.forward(state)
+action  = q_value.max(1)[1].item()
+```
 
 1.  在第一行使用`autograd.Variable`计算`state`张量是将状态转换为张量以便它可以被输入到前向传递中。这是在下一行调用`self.forward`来计算该`state`张量的所有Q值`q_value`的地方。然后我们在最后一行使用贪婪（最大）选择策略来选择动作。
 
 1.  将网络大小从128个神经元更改为32、64或256，以观察这对训练的影响。以下代码显示了配置示例以使用64个神经元的正确方式：
 
-[PRE34]
+```py
+self.layers = nn.Sequential(
+      nn.Linear(env.observation_space.shape[0], 64),
+      nn.ReLU(),
+      nn.Linear(64, 64),
+      nn.ReLU(),
+      nn.Linear(64, env.action_space.n))
+```
 
 1.  再次运行示例，并观察不同大小变化对训练性能的影响。
 
@@ -363,27 +627,64 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  计算基于TD误差的损失的函数如下所示：
 
-[PRE35]
+```py
+def compute_td_loss(batch_size):
+  state, action, reward, next_state, done = replay_buffer.sample(batch_size)
+
+  state      = autograd.Variable(torch.FloatTensor(np.float32(state)))
+  next_state = autograd.Variable(torch.FloatTensor(np.float32(next_state)),
+    volatile=True)
+  action     = autograd.Variable(torch.LongTensor(action))
+  reward     = autograd.Variable(torch.FloatTensor(reward))
+  done       = autograd.Variable(torch.FloatTensor(done))
+
+  q_values      = model(state)
+  next_q_values = model(next_state)
+  q_value       = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+
+  next_q_value  = next_q_values.max(1)[0]
+  expected_q_value = reward + gamma * next_q_value * (1 - done)
+
+  loss = (q_value - autograd.Variable(expected_q_value.data)).pow(2).mean()
+  optimizer.zero_grad()
+  loss.backward()
+  optimizer.step()
+
+  return loss
+```
 
 1.  在第一行中，我们使用`batch_size`作为输入从`replay_buffer`调用`sample`。这返回了从之前运行中随机采样的一组事件。这返回了`state`、`next_state`、`action`、`reward`和`done`。然后，在接下来的五行中，使用`autograd.Variable`函数将这些转换为张量。这个函数是一个辅助函数，用于将类型转换为适当类型的张量。注意，动作是`long`类型，使用`torch.LongTensor`，而其他变量只是浮点数。
 
 1.  下一节代码计算Q值：
 
-[PRE36]
+```py
+q_values      = model(state)
+next_q_values = model(next_state)
+q_value       = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+```
 
 1.  记住，当我们调用`model(state)`时，这相当于在网络上进行前向传递或预测。现在这和我们在之前的例子中从策略中采样是相同的。
 
 1.  然后，我们回到之前定义的Q学习方程，并使用它来确定最佳期望Q值应该是什么，以下代码所示：
 
-[PRE37]
+```py
+next_q_value  = next_q_values.max(1)[0]
+expected_q_value = reward + gamma * next_q_value * (1 - done)
+```
 
 1.  从之前计算`expected_q_value`值使用Q学习方程来确定期望值应该是什么。基于期望值，我们可以确定网络误差的大小以及它需要通过以下行来纠正的损失：
 
-[PRE38]
+```py
+loss = (q_value - autograd.Variable(expected_q_value.data)).pow(2).mean()  
+```
 
 1.  这行代码将值转换为张量，然后使用我们老朋友均方误差（MSE）来确定损失。我们的最后一步是使用以下代码来优化或减少网络的损失：
 
-[PRE39]
+```py
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
 
 1.  代码与我们之前用来优化我们的神经网络和计算图示例的代码非常相似。我们首先对优化器应用`zero_grad`，以便将任何梯度归零作为重置。然后我们将损失反向传播，最后在优化器上执行一步。最后这部分是新的，与我们使用的优化器类型有关。
 
@@ -403,19 +704,38 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  代码几乎与之前的 DQN 示例完全相同，所以我们不需要审查整个代码。然而，我们确实想介绍两个新的变量作为超参数；这将使我们能够更好地控制网络训练和观察性能：
 
-[PRE40]
+```py
+buffer_size = 1000
+neurons = 128
+```
 
 1.  我们将使用 `buffer_size` 来表示缓冲区的大小。这个值在我们确定我们的模型是否有一些训练量时也会很有用。DQN 不会开始训练模型，直到重放缓冲区或我们通常所说的经验缓冲区填满。注意我们还添加了一个新的神经元超参数；这将允许我们根据需要快速调整网络。
 
 1.  接下来，我们将查看将渲染智能体玩游戏代码注入到训练循环中的方法：
 
-[PRE41]
+```py
+ if done:
+   if episode > buffer_size:
+ play_game()
+   state = env.reset()
+   all_rewards.append(episode_reward)
+   episode_reward = 0  
+```
 
 1.  高亮行表示新的代码，该代码将检查当前剧集是否大于 `buffer_size`。如果是，则使用模型/策略渲染智能体玩游戏。
 
 1.  接下来，我们将查看新的 `play_game` 函数，如下所示：
 
-[PRE42]
+```py
+def play_game():
+  done = False
+  state = env.reset()
+  while(not done):
+    action = model.act(state, epsilon_final)
+    next_state, reward, done, _ = env.step(action)
+    env.render()
+    state = next_state
+```
 
 1.  这段代码与我们之前编写的其他 `play_game` 函数非常相似。注意高亮行显示了如何使用 `model.act` 函数预测下一个动作。传递给这个函数的是状态和我们的最小 epsilon 值，称为 `epsilon_final`。我们在这里设置最小值，因为我们选择执行最小探索的智能体，并且动作完全从策略/模型中选择。
 
@@ -433,11 +753,19 @@ DQN 就像是 DRL 的 Hello World，几乎每本关于这个主题的书籍或�
 
 1.  打开`Chapter_6_DQN_lunar.py`示例，注意`env_id`环境ID和创建的环境如下所示：
 
-[PRE43]
+```py
+env_id = 'LunarLander-v2'
+env = gym.make(env_id)
+```
 
 1.  我们还调整了一些超参数，以应对环境复杂性的增加：
 
-[PRE44]
+```py
+epsilon_decay = 1000
+buffer_size = 3000
+neurons = 192
+
+```
 
 1.  我们增加`epsilon_decay`的值，以鼓励智能体进行更长时间的探索。探索是我们始终需要与环境平衡的权衡。注意，`buffer_size`也增加到3,000，以应对环境复杂性的增加。此外，我们还把网络的神经元数量统一增加到192。
 

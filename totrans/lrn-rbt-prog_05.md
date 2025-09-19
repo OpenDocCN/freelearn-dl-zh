@@ -76,7 +76,9 @@
 
     +   `wpa_supplicant.conf`：此文件包含你的Wi-Fi网络配置，如下所示：
 
-        [PRE0]
+        ```py
+        wpa_supplicant.conf file on your computer to use on other Raspberry Pi SD cards.Important noteThe `ssh` file must have no extension. It must not be `ssh.txt` or some other variation.
+        ```
 
 1.  弹出MicroSD卡。请记住使用菜单来这样做。这确保在移除之前文件已经完全写入。
 
@@ -106,15 +108,23 @@
 
 你可以使用以下命令在命令提示符中检查它是否已经工作：
 
-[PRE1]
+```py
+C:\Users\danny>ping raspberrypi.local
+```
 
 如果你看到这个，说明你已经安装了 Bonjour：
 
-[PRE2]
+```py
+PING raspberrypi.local (192.168.0.53) 56(84) bytes of data.
+64 bytes from 192.168.0.53 (192.168.0.53): icmp_seq=1 ttl=64 time=0.113 ms
+64 bytes from 192.168.0.53 (192.168.0.53): icmp_seq=2 ttl=64 time=0.079 ms
+```
 
 如果你看到这个，你需要安装它：
 
-[PRE3]
+```py
+Ping request could not find host raspberrypi.local. Please check the name and try again.
+```
 
 要这样做，浏览到 Apple Bonjour For Windows 网站 [https://support.apple.com/downloads/bonjour_for_windows](https://support.apple.com/downloads/bonjour_for_windows)，下载它，然后安装 **Download Bonjour Print Services for Windows**。一旦运行，Windows 将能够通过名称请求 mDNS 设备。
 
@@ -124,11 +134,20 @@
 
 在 Windows 中，通过按 Windows 键并在窗口搜索栏中输入 `CMD` 来召唤命令行。在 Linux 或 macOS 中，打开终端。从终端，我们将尝试 `ping` 树莓派，即在网络上找到 Pi 并发送一条简短的消息以获取响应：
 
-[PRE4]
+```py
+ping raspberrypi.local
+```
 
 如果一切顺利，计算机将显示它已连接到Pi：
 
-[PRE5]
+```py
+$ ping raspberrypi.local
+PING raspberrypi.local (192.168.0.53) 56(84) bytes of data.
+64 bytes from 192.168.0.53 (192.168.0.53): icmp_seq=1 ttl=64 time=0.113 ms
+64 bytes from 192.168.0.53 (192.168.0.53): icmp_seq=2 ttl=64 time=0.079 ms
+64 bytes from 192.168.0.53 (192.168.0.53): icmp_seq=3 ttl=64 time=0.060 ms
+64 bytes from 192.168.0.53 (192.168.0.53): icmp_seq=4 ttl=64 time=0.047 ms
+```
 
 如果你无法连接到树莓派怎么办？在下一节中，我们将尝试一些故障排除步骤。
 
@@ -190,7 +209,9 @@ PuTTY是一个方便的工具，用于访问SSH，适用于Windows、Linux和Mac
 
 我们可以使用`raspi-config`工具执行许多这些任务，这是一个用于在树莓派OS上执行配置任务的菜单系统。我们通过另一个工具`sudo`启动它，它以root（主用户）的身份运行`raspi-config`。请参考以下命令：
 
-[PRE6]
+```py
+sudo raspi-config
+```
 
 `raspi-config`界面将显示，如图4.5所示：
 
@@ -266,7 +287,26 @@ PuTTY是一个方便的工具，用于访问SSH，适用于Windows、Linux和Mac
 
 在这里要做的最后一件事是确保你的树莓派上安装了最新的软件。这是一个你可以开始并离开去吃饭的过程，因为它会花费一些时间。输入 `sudo apt update -y && sudo apt upgrade -y` 命令，你应该会看到以下类似的内容：
 
-[PRE7]
+```py
+pi@myrobot:~ $ sudo apt update – y && sudo apt upgrade -y
+Hit:1 http://raspbian.raspberrypi.org/raspbian buster InRelease
+Hit:2 http://archive.raspberrypi.org/debian buster InRelease
+. 
+.
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+Calculating upgrade... Done
+The following packages will be upgraded:
+  bluez-firmware curl libcurl3 libcurl3-gnutls libprocps6 pi-bluetooth procps
+  raspi-config wget
+9 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Need to get 1,944 kB of archives.
+After this operation, 16.4 kB of additional disk space will be used. Get:1 http://archive.raspberrypi.org/debian buster/main armhf bluez-firmware all 1.2-3+rpt6 [126 kB]
+.
+.
+.
+```
 
 请让Pi继续运行，直到这里完成，不要中断或关闭电源，直到 `pi@myrobot:~ $` 提示符重新出现。
 
@@ -280,7 +320,9 @@ PuTTY是一个方便的工具，用于访问SSH，适用于Windows、Linux和Mac
 
 当你完成Pi的会话时，按照以下方式关闭它：
 
-[PRE8]
+```py
+pi@myrobot:~ $ sudo poweroff 
+```
 
 等待绿灯活动停止；PuTTY 将检测到它已断开连接。你现在可以安全地断开电源。
 

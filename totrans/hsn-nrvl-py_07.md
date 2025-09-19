@@ -90,7 +90,25 @@
 
 迷宫求解代理的Python实现具有多个字段，用于存储其当前状态并维护其传感器的激活状态：
 
-[PRE0]
+```py
+    def __init__(self, location, heading=0, speed=0, 
+                 angular_vel=0, radius=8.0, range_finder_range=100.0):
+        self.heading = heading
+        self.speed = speed
+        self.angular_vel = angular_vel
+        self.radius = radius
+        self.range_finder_range = range_finder_range
+        self.location = location
+        # defining the range finder sensors
+        self.range_finder_angles = [-90.0, -45.0, 0.0, 45.0, 90.0, -180.0]
+        # defining the radar sensors
+        self.radar_angles = [(315.0, 405.0), (45.0, 135.0),
+                             (135.0, 225.0), (225.0, 315.0)]
+        # the list to hold range finders activations
+        self.range_finders = [None] * len(self.range_finder_angles)
+        # the list to hold pie-slice radar activations
+        self.radar = [None] * len(self.radar_angles)
+```
 
 更多实现细节，请参阅[https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python/blob/master/Chapter5/agent.py](https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python/blob/master/Chapter5/agent.py)文件。
 
@@ -102,7 +120,18 @@
 
 所有这些特性都集成在一个逻辑块中，该逻辑块封装在`MazeEnvironment` Python类中，该类具有以下字段（如类构造函数所示）：
 
-[PRE1]
+```py
+    def __init__(self, agent, walls, exit_point, exit_range=5.0):
+        self.walls = walls
+        self.exit_point = exit_point
+        self.exit_range = exit_range
+        # The maze navigating agent
+        self.agent = agent
+        # The flag to indicate if exit was found
+        self.exit_found = False
+        # The initial distance of agent from exit
+        self.initial_distance = self.agent_distance_to_exit()
+```
 
 上述代码显示了`MazeEnvironment`类的默认构造函数及其所有字段的初始化：
 
@@ -126,13 +155,49 @@
 
 测距传感器的数组更新如下（参见`update_rangefinder_sensors`函数）：
 
-[PRE2]
+```py
+        for i, angle in enumerate(self.agent.range_finder_angles):
+            rad = geometry.deg_to_rad(angle)
+            projection_point = geometry.Point(
+                x = self.agent.location.x + math.cos(rad) * \
+                    self.agent.range_finder_range,
+                y = self.agent.location.y + math.sin(rad) * \
+                    self.agent.range_finder_range
+            )
+            projection_point.rotate(self.agent.heading, 
+                                    self.agent.location)
+            projection_line = geometry.Line(a = self.agent.location, 
+                                            b = projection_point)
+            min_range = self.agent.range_finder_range
+            for wall in self.walls:
+                found, intersection = wall.intersection(projection_line)
+                if found:
+                    found_range = intersection.distance(
+                                                   self.agent.location)
+                    if found_range < min_range:
+                        min_range = found_range
+            # Store the distance to the closest obstacle
+            self.agent.range_finders[i] = min_range
+```
 
 此代码列出了测距传感器的所有检测方向，这些方向由方向角度确定（参见`Agent`构造函数中的`range_finder_angles`字段初始化）。对于每个方向，然后创建一条从代理当前位置开始，长度等于测距器检测范围的投影线。之后，测试投影线是否与迷宫墙壁相交。如果检测到多个交点，则将最近墙壁的距离存储为特定测距传感器的值。否则，将最大检测范围保存为测距传感器的值。
 
 在`MazeEnvironment`类中，需要使用以下代码更新扇形雷达传感器的数组：
 
-[PRE3]
+```py
+    def update_radars(self):
+        target = geometry.Point(self.exit_point.x, self.exit_point.y)
+        target.rotate(self.agent.heading, self.agent.location)
+        target.x -= self.agent.location.x
+        target.y -= self.agent.location.y
+        angle = target.angle()
+        for i, r_angles in enumerate(self.agent.radar_angles):
+            self.agent.radar[i] = 0.0 # reset specific radar 
+            if (angle >= r_angles[0] and angle < r_angles[1]) or 
+               (angle + 360 >= r_angles[0] and angle + 360 < r_angles[1]):
+                # fire the radar
+                self.agent.radar[i] = 1.0
+```
 
 上述代码创建迷宫出口点的副本，并在全局坐标系中相对于代理的航向和位置进行旋转。然后，目标点被平移以使其与迷宫求解代理的局部坐标系对齐；代理被放置在坐标原点。之后，我们计算在代理局部坐标系中从坐标原点到目标点的向量的角度。这个角度是从当前代理位置到迷宫出口点的方位角。当找到方位角时，我们遍历已注册的扇形雷达传感器，以找到包含方位角在其视场内的一个。相应的雷达传感器通过将其值设置为 1 被激活，而其他雷达传感器通过将其值置零被停用。
 
@@ -140,25 +205,76 @@
 
 在从控制器 ANN 接收到相应的控制信号后，迷宫求解代理在迷宫中的位置需要在每个模拟步骤中进行更新。以下代码用于更新迷宫求解代理的位置：
 
-[PRE4]
+```py
+    def update(self, control_signals):
+        if self.exit_found:
+            return True # Maze exit already found
+        self.apply_control_signals(control_signals)
+        vx = math.cos(geometry.deg_to_rad(self.agent.heading)) * \
+                      self.agent.speed
+        vy = math.sin(geometry.deg_to_rad(self.agent.heading)) * \
+                      self.agent.speed
+        self.agent.heading += self.agent.angular_vel
+        if self.agent.heading > 360:
+            self.agent.heading -= 360
+        elif self.agent.heading < 0:
+            self.agent.heading += 360
+        new_loc = geometry.Point(
+            x = self.agent.location.x + vx, 
+            y = self.agent.location.y + vy
+        )
+        if not self.test_wall_collision(new_loc):
+            self.agent.location = new_loc
+        self.update_rangefinder_sensors()
+        self.update_radars()
+        distance = self.agent_distance_to_exit()
+        self.exit_found = (distance < self.exit_range)
+        return self.exit_found
+```
 
 `update(self, control_signals)` 函数定义在 `MazeEnvironment` 类中，并在每个模拟时间步被调用。它接收一个包含控制信号的列表作为输入，并返回一个布尔值，指示迷宫求解代理在其位置更新后是否已到达出口区域。
 
 此函数开头代码将接收到的控制信号应用于代理的角速度和线速度的当前值，如下所示（参见 `apply_control_signals(self, control_signals)` 函数）：
 
-[PRE5]
+```py
+       self.agent.angular_vel += (control_signals[0] - 0.5)
+       self.agent.speed += (control_signals[1] - 0.5)
+```
 
 之后，计算 `x` 和 `y` 速度分量以及代理的航向，并用于估计其在迷宫中的新位置。如果这个新位置没有与迷宫的任何墙壁发生碰撞，那么它将被分配给代理并成为其当前位置：
 
-[PRE6]
+```py
+        vx = math.cos(geometry.deg_to_rad(self.agent.heading)) * \
+                      self.agent.speed
+        vy = math.sin(geometry.deg_to_rad(self.agent.heading)) * \
+                      self.agent.speed
+        self.agent.heading += self.agent.angular_vel
+        if self.agent.heading > 360:
+            self.agent.heading -= 360
+        elif self.agent.heading < 0:
+            self.agent.heading += 360
+        new_loc = geometry.Point(
+            x = self.agent.location.x + vx, 
+            y = self.agent.location.y + vy
+        )
+        if not self.test_wall_collision(new_loc):
+            self.agent.location = new_loc
+```
 
 在此之后，新代理位置被用于以下函数中，这些函数更新测距仪和雷达传感器，以估计下一次时间步的新传感器输入：
 
-[PRE7]
+```py
+        self.update_rangefinder_sensors()
+        self.update_radars()
+```
 
 最后，以下函数测试代理是否已到达迷宫出口，该出口由出口点周围的圆形区域定义，其半径等于 `exit_range` 字段的值：
 
-[PRE8]
+```py
+        distance = self.agent_distance_to_exit()
+        self.exit_found = (distance < self.exit_range)
+        return self.exit_found
+```
 
 如果已到达迷宫出口，则将 `exit_found` 字段的值设置为 `True` 以指示任务的顺利完成，并从函数调用中返回其值。
 
@@ -170,7 +286,17 @@
 
 `AgentRecord`类由几个数据字段组成，如下所示，可以在类构造函数中看到：
 
-[PRE9]
+```py
+    def __init__(self, generation, agent_id):
+        self.generation = generation
+        self.agent_id = agent_id
+        self.x = -1
+        self.y = -1
+        self.fitness = -1
+        self.hit_exit = False
+        self.species_id = -1
+        self.species_age = -1
+```
 
 字段定义如下：
 
@@ -192,7 +318,26 @@
 
 在基因组适应度评估后，将新的`AgentRecord`实例添加到存储中，如`maze_experiment.py`文件中实现的`eval_fitness(genome_id, genome, config, time_steps=400)`函数所定义的。这是通过以下代码完成的：
 
-[PRE10]
+```py
+def eval_fitness(genome_id, genome, config, time_steps=400):
+    maze_env = copy.deepcopy(trialSim.orig_maze_environment)
+    control_net = neat.nn.FeedForwardNetwork.create(genome, config)
+    fitness = maze.maze_simulation_evaluate(
+              env=maze_env, net=control_net, time_steps=time_steps)
+    record = agent.AgentRecord(
+        generation=trialSim.population.generation,
+        agent_id=genome_id)
+    record.fitness = fitness
+    record.x = maze_env.agent.location.x
+    record.y = maze_env.agent.location.y
+    record.hit_exit = maze_env.exit_found
+    record.species_id = trialSim.population.species.\
+                                       get_species_id(genome_id)
+    record.species_age = record.generation - \
+      trialSim.population.species.get_species(genome_id).created
+    trialSim.record_store.add_record(record)
+    return fitness
+```
 
 此代码首先创建原始迷宫环境的深度副本，以避免评估运行之间的干扰。之后，它使用提供的NEAT配置从指定的基因组创建控制ANN，并开始对给定的时间步数进行迷宫模拟评估。然后，代理的返回适应度得分以及其他统计数据被存储到特定的`AgentRecord`实例中，并添加到记录存储中。
 
@@ -238,7 +383,18 @@
 
 以下 Python 代码实现了以目标为导向的目标函数：
 
-[PRE11]
+```py
+    # Calculate the fitness score based on distance from exit
+    fitness = env.agent_distance_to_exit()
+    if fitness <= self.exit_range:
+         fitness = 1.0
+    else:
+        # Normalize fitness score to range (0,1]
+        fitness = (env.initial_distance - fitness) / \
+                   env.initial_distance
+        if fitness <= 0.01:
+            fitness = 0.01
+```
 
 代码首先调用 `agent_distance_to_exit()` 函数，该函数计算当前智能体位置到迷宫出口的欧几里得距离，并使用返回值作为适应度分数的第一个近似值。之后，将适应度分数（到迷宫出口的距离）与出口范围值进行比较。如果适应度分数小于或等于出口范围值，我们将其赋予最终的值 `1.0`。否则，归一化适应度分数通过将智能体到迷宫出口的最终距离与初始距离之差除以初始距离来计算。有时，这可能导致归一化适应度值为负，这可以通过将适应度值与 `0.01` 进行比较并进行必要的修正来纠正。
 
@@ -262,25 +418,45 @@
 
 以下是从配置文件中摘录的包含我们刚刚讨论的参数定义的部分：
 
-[PRE12]
+```py
+[NEAT]
+fitness_criterion = max
+fitness_threshold = 1.0
+pop_size = 250
+reset_on_extinction = False
+```
 
 表型人工神经网络的初始配置包括`10`个输入节点、`2`个输出节点和`1`个隐藏节点。输入和输出节点对应于输入传感器和控制信号输出。隐藏节点从神经进化过程开始就引入非线性，并为进化过程节省时间以发现它。人工神经网络配置如下：
 
-[PRE13]
+```py
+num_hidden = 1
+num_inputs = 10
+num_outputs = 2
+```
 
 为了扩展解决方案搜索区域，我们需要提高种群的物种分化，以在有限代数内尝试不同的基因组配置。这可以通过降低兼容性阈值或增加用于计算基因组兼容性分数的系数值来实现。
 
 在这个实验中，我们使用了两种修正，因为适应度函数的地形具有欺骗性，我们需要强调基因组配置中的微小变化以创建新的物种。以下配置参数受到影响：
 
-[PRE14]
+```py
+[NEAT]
+compatibility_disjoint_coefficient = 1.1
+[DefaultSpeciesSet]
+compatibility_threshold = 3.0
+```
 
 我们特别关注创建一个迷宫求解控制人工神经网络的最佳配置，该配置具有最少的隐藏节点和连接。通过神经进化过程，最佳人工神经网络配置在迷宫求解模拟器的训练阶段以及推理阶段都更节省计算资源。通过减少添加新节点的可能性，可以产生最佳人工神经网络配置，如下所示，这是从NEAT配置文件中的片段：
 
-[PRE15]
+```py
+node_add_prob          = 0.1
+node_delete_prob       = 0.1
+```
 
 最后，我们允许神经进化过程不仅利用具有前馈连接的ANN配置，还包括循环连接。通过循环连接，我们使ANN具有记忆功能，成为一个状态机。这对进化过程来说是有益的。以下配置超参数控制了这一行为：
 
-[PRE16]
+```py
+feed_forward            = False
+```
 
 本节中描述的超参数被发现对实验中使用的NEAT算法有益，该算法在有限代数内创建了一个成功的迷宫求解代理。
 
@@ -290,7 +466,16 @@
 
 我们的实验迷宫配置以纯文本形式提供。此文件被加载到模拟环境中，相应的迷宫配置便被实例化。配置文件的内容类似于以下内容：
 
-[PRE17]
+```py
+11
+30 22
+0
+270 100
+5 5 295 5
+295 5 295 135
+295 135 5 135
+…
+```
 
 迷宫配置文件的格式如下：
 
@@ -310,7 +495,14 @@
 
 使用以下命令在您选择的终端应用程序中设置简单迷宫求解实验的工作环境：
 
-[PRE18]
+```py
+$ conda create --name maze_objective_neat python=3.5
+$ conda activate maze_objective_neat
+$ pip install neat-python==0.92 
+$ conda install matplotlib
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 这些命令使用Python 3.5创建并激活了一个`maze_objective_neat`虚拟环境。之后，安装了版本为0.92的NEAT-Python库，以及我们可视化工具所用的其他依赖。
 
@@ -324,31 +516,65 @@
 
 1.  我们首先使用以下行初始化迷宫模拟环境：
 
-[PRE19]
+```py
+    maze_env_config = os.path.join(local_dir, '%s_maze.txt' % 
+                                   args.maze)
+    maze_env = maze.read_environment(maze_env_config)
+```
 
 `args.maze` 指的是用户在启动Python脚本时提供的命令行参数，它指的是我们想要实验的迷宫环境类型。它可以有两个值：*中等*和*困难*。前者指的是我们在本次实验中使用的简单迷宫配置。
 
 1.  之后，我们为随机数生成器设置了特定的种子数，创建了NEAT配置对象，并使用创建的配置对象创建了`neat.Population`对象：
 
-[PRE20]
+```py
+    seed = 1559231616
+    random.seed(seed)
+    config = neat.Config(neat.DefaultGenome, 
+                         neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, 
+                         neat.DefaultStagnation,
+                         config_file)
+    p = neat.Population(config)
+```
 
 偶然的是，在双杆平衡实验中找到的随机种子值也适用于这个实验。我们可以假设我们找到了一个针对NEAT-Python库实现的随机过程的特定随机吸引子。在本书的后面，我们将检查这同样适用于其他实验。
 
 1.  现在我们已经准备好创建适当的迷宫模拟环境，并将其存储为全局变量，以简化从健身评估回调函数中对它的访问：
 
-[PRE21]
+```py
+    global trialSim
+    trialSim = MazeSimulationTrial(maze_env=maze_env, 
+                                   population=p)
+```
 
 `MazeSimulationTrial`对象包含字段，提供对原始迷宫模拟环境和用于保存迷宫求解代理评估结果的记录存储器的访问。在每次调用健身评估回调函数`eval_fitness(genome_id, genome, config, time_steps=400)`时，原始迷宫模拟环境将被复制，并将用于特定求解代理在400个时间步内进行迷宫求解模拟。之后，将从环境中收集关于迷宫求解代理的完整统计数据，包括其在迷宫中的最终位置，并将其添加到记录存储器中。
 
 1.  以下代码已成为我们实验的标准，它与添加各种统计报告器相关：
 
-[PRE22]
+```py
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    p.add_reporter(neat.Checkpointer(5, 
+                 filename_prefix='%s/maze-neat-checkpoint-' % 
+                 trial_out_dir))
+```
 
 报告器用于在控制台显示神经进化过程的中间结果，以及收集在过程完成后将渲染的更详细统计数据。
 
 1.  最后，我们运行指定代数的神经进化过程，并检查是否找到了解决方案：
 
-[PRE23]
+```py
+    start_time = time.time()
+    best_genome = p.run(eval_genomes, n=n_generations)
+    elapsed_time = time.time() - start_time
+    solution_found = (best_genome.fitness >= \
+                      config.fitness_threshold)
+    if solution_found:
+        print("SUCCESS: The stable maze solver controller was found!!!")
+    else:
+        print("FAILURE: Failed to find the stable maze solver controller!!!")
+```
 
 我们假设如果NEAT-Python库返回的最佳基因组的适应性评分大于或等于配置文件中设置的适应性阈值值（`1.0`），则已找到解决方案。计算已用时间以打印完成过程所需的时间。
 
@@ -356,7 +582,11 @@
 
 评估属于特定生物种群的所有基因组的适应性评分的回调函数实现如下：
 
-[PRE24]
+```py
+def eval_genomes(genomes, config):
+    for genome_id, genome in genomes:
+        genome.fitness = eval_fitness(genome_id, genome, config)
+```
 
 `eval_fitness(genome_id, genome, config)`函数通过运行迷宫求解模拟来评估特定基因组的适应性。此函数的实现在此处未提供，因为它已在本章中讨论过。
 
@@ -366,7 +596,9 @@
 
 然后，进入此目录并从你选择的终端应用程序中执行以下命令：
 
-[PRE25]
+```py
+$ python maze_experiment.py -m medium -g 150
+```
 
 不要忘记使用以下命令激活适当的虚拟环境：
 
@@ -380,11 +612,41 @@
 
 1.  首先，关于基因组种群的一般统计信息：
 
-[PRE26]
+```py
+****** Running generation 145 ****** 
+
+Maze solved in 388 steps
+Population's average fitness: 0.24758 stdev: 0.25627
+Best fitness: 1.00000 - size: (3, 11) - species 7 - id 35400
+
+Best individual in generation 145 meets fitness threshold - complexity: (3, 11)
+```
 
 1.  其次，配置编码成功迷宫求解控制器ANN的基因组：
 
-[PRE27]
+```py
+Best genome:
+Key: 35400
+Fitness: 1.0
+Nodes:
+ 0 DefaultNodeGene(key=0, bias=5.534849614521037, response=1.0, activation=sigmoid, aggregation=sum)
+ 1 DefaultNodeGene(key=1, bias=1.8031133229851957, response=1.0, activation=sigmoid, aggregation=sum)
+ 158 DefaultNodeGene(key=158, bias=-1.3550878188609456, response=1.0, activation=sigmoid, aggregation=sum)
+Connections:
+ DefaultConnectionGene(key=(-10, 158), weight=-1.6144052085440168, enabled=True)
+ DefaultConnectionGene(key=(-8, 158), weight=-1.1842193888036392, enabled=True)
+ DefaultConnectionGene(key=(-7, 0), weight=-0.3263706518456319, enabled=True)
+ DefaultConnectionGene(key=(-7, 1), weight=1.3186165993348418, enabled=True)
+ DefaultConnectionGene(key=(-6, 0), weight=2.0778575294986945, enabled=True)
+ DefaultConnectionGene(key=(-6, 1), weight=-2.9478037554862824, enabled=True)
+ DefaultConnectionGene(key=(-6, 158), weight=0.6930281879212032, enabled=True)
+ DefaultConnectionGene(key=(-4, 1), weight=-1.9583885391583729, enabled=True)
+ DefaultConnectionGene(key=(-3, 1), weight=5.5239054588484775, enabled=True)
+ DefaultConnectionGene(key=(-1, 0), weight=0.04865917999517305, enabled=True)
+ DefaultConnectionGene(key=(158, 0), weight=0.6973191076874032, enabled=True)
+SUCCESS: The stable maze solver controller was found!!!
+Record store file: out/maze_objective/medium/data.pickle
+```
 
 在控制台输出中，你可以看到在进化过程中找到了成功的迷宫求解控制器，并且能够在400步中达到迷宫出口区域，共388步。成功迷宫求解控制器的控制ANN配置包括2个输出节点和1个隐藏节点，节点之间和从输入到节点之间有11个连接。控制器ANN的最终配置如下所示：
 
@@ -418,7 +680,9 @@
 
 在这个实验中，我们提出了一种新的可视化方法，使我们能够直观地辨别进化过程中各种物种的性能。可视化可以通过以下命令执行，该命令在实验的工作目录中执行：
 
-[PRE28]
+```py
+$ python visualize.py -m medium -r out/maze_objective/medium/data.pickle --width 300 --height 150
+```
 
 命令加载了每个迷宫解决代理在进化过程中的适应度评估记录，这些记录存储在`data.pickle`文件中。之后，它将在迷宫解决模拟结束时在迷宫地图上绘制代理的最终位置。每个代理的最终位置以颜色编码的圆圈表示。圆圈的颜色编码了特定代理所属的物种。进化过程中产生的每个物种都有一个独特的颜色编码。以下图表显示了可视化结果：
 
@@ -460,7 +724,9 @@
 
 正如我们提到的，我们将使用与之前实验相同的实验运行实现和相同的NEAT超参数设置。但我们将配置不同的迷宫环境如下：
 
-[PRE29]
+```py
+$ python maze_experiment.py -m hard -g 500
+```
 
 过了一段时间，当实验结束后，我们发现即使经过`500`代的进化，仍未找到成功的迷宫求解器。使用神经进化算法获得的最佳基因组编码了一个奇特且非功能性的控制器ANN配置，如下图所示：
 

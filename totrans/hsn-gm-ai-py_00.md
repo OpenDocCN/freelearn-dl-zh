@@ -82,15 +82,31 @@
 
 代码块是这样设置的：
 
-[PRE0]
+```py
+env_id = 'PongNoFrameskip-v4'
+env = make_atari(env_id)
+env = wrap_deepmind(env)
+env = wrap_pytorch(env)
+```
 
 当我们希望您注意代码块中的特定部分时，相关的行或项目将以粗体显示：
 
-[PRE1]
+```py
+epsilon_start = 1.0
+epsilon_final = 0.01
+epsilon_decay = 30000
+
+epsilon_by_episode = lambda episode: epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1\. * episode / epsilon_decay)
+
+plt.plot([epsilon_by_episode(i) for i in range(1000000)])
+plt.show()
+```
 
 任何命令行输入或输出都应如下编写：
 
-[PRE2]
+```py
+pip install mujoco
+```
 
 **粗体**：表示新术语、重要单词或屏幕上看到的单词。例如，菜单或对话框中的单词在文本中显示如下。以下是一个示例：“在此基础上，我们将探讨DQN的一个变体，称为**DDQN**，或**双（对抗）DQN**。”
 

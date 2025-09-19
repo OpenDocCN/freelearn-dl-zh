@@ -148,7 +148,16 @@ Dr. Richard S. Sutton，DeepMind的杰出研究科学家，同时也是阿尔伯
 
 1.  让我们检查代码的第一个部分，如下所示：
 
-[PRE0]
+```py
+import random
+
+reward = [1.0, 0.5, 0.2, 0.5, 0.6, 0.1, -.5]
+arms = len(reward)
+episodes = 100
+learning_rate = .1
+Value = [0.0] * arms
+print(Value)
+```
 
 1.  我们首先开始通过 `import` 导入 `random`。我们将在每个训练轮次中使用 `random` 随机选择一个臂。
 
@@ -162,7 +171,9 @@ Dr. Richard S. Sutton，DeepMind的杰出研究科学家，同时也是阿尔伯
 
 1.  然后，我们使用以下代码在一个名为 `Value` 的列表中初始化每个动作的值：
 
-[PRE1]
+```py
+Value = [0.0] * arms
+```
 
 1.  然后，我们将 `Value` 列表打印到控制台，确保所有值都是 0.0。
 
@@ -170,19 +181,31 @@ Dr. Richard S. Sutton，DeepMind的杰出研究科学家，同时也是阿尔伯
 
 1.  列表中我们想要关注的下一部分代码是标题为 `agent learns` 的部分，如下所示供参考：
 
-[PRE2]
+```py
+# agent learns
+for i in range(0, episodes):
+    action = random.randint(0,arms-1)
+    Value[action] = Value[action] + learning_rate * (
+        reward[action] - Value[action])
+
+print(Value)
+```
 
 1.  我们首先定义一个 `for` 循环，该循环从 `0` 到我们的轮数。对于每个轮次，我们让代理拉动一个臂，并使用该拉动的奖励来更新其对该动作或臂的价值判断。
 
 1.  然后，我们想要确定代理随机拉动的动作或臂，使用以下代码：
 
-[PRE3]
+```py
+action = random.randint(0,arms-1)
+```
 
 1.  代码只是根据老虎机上臂的总数（减一以允许正确的索引）随机选择一个臂/动作编号。
 
 1.  这允许我们使用下一行代码确定拉动的价值，该代码与我们的先前价值方程非常相似：
 
-[PRE4]
+```py
+Value[action] = Value[action] + learning_rate * (       reward[action] - Value[action])
+```
 
 1.  这行代码明显类似于我们之前的`Value`方程的数学公式。现在，思考一下`learning_rate`是如何在剧集的每次迭代中应用的。注意，以`.1`的速率，我们的智能体正在学习或应用智能体收到的`reward`与智能体之前等价的`Value`函数之差的1/10^(th)。这个小技巧的效果是在剧集之间平均化值。
 
@@ -206,13 +229,35 @@ Dr. Richard S. Sutton，DeepMind的杰出研究科学家，同时也是阿尔伯
 
 1.  打开`Chapter_1_2.py`示例。代码基本上与我们的上一个示例相同，除了剧集迭代和特别地，动作或杠杆的选择。完整的列表可以在这里看到——注意新的高亮部分：
 
-[PRE5]
+```py
+import random
+
+reward = [1.0, 0.5, 0.2, 0.5, 0.6, 0.1, -.5]
+arms = len(reward)
+learning_rate = .1
+episodes = 100
+Value = [0.0] * arms
+print(Value)
+
+def greedy(values):
+ return values.index(max(values))
+
+# agent learns
+for i in range(0, episodes):
+    action = greedy(Value)
+    Value[action] = Value[action] + learning_rate * (
+        reward[action] - Value[action])
+
+print(Value)
+```
 
 1.  注意到新加入的`greedy()`函数。这个函数将始终选择具有最高价值的动作，并返回相应的索引/动作索引。这个函数本质上就是我们的智能体的策略。
 
 1.  在代码中向下滚动，注意在训练循环中我们现在是如何使用 `greedy()` 函数来选择我们的动作，如下所示：
 
-[PRE6]
+```py
+action = greedy(Value)
+```
 
 1.  再次，运行代码并查看输出。这是你预期的结果吗？出了什么问题？
 
@@ -224,7 +269,10 @@ Dr. Richard S. Sutton，DeepMind的杰出研究科学家，同时也是阿尔伯
 
 1.  打开 `Chapter_1_3.py` 并查看这里显示的突出显示的行：
 
-[PRE7]
+```py
+episodes = 10000
+Value = [5.0] * arms
+```
 
 1.  首先，我们将 `episodes` 的数量增加到 `10000`。这将使我们能够确认我们的新策略正在收敛到某个适当的解决方案。
 
@@ -272,29 +320,91 @@ Chapter_1_3.py 的输出
 
 1.  这里是完整的代码列表，供参考：
 
-[PRE8]
+```py
+import random
+
+arms = 7
+bandits = 7
+learning_rate = .1
+gamma = .9
+episodes = 10000
+
+reward = []
+for i in range(bandits): 
+ reward.append([]) 
+ for j in range(arms): 
+ reward[i].append(random.uniform(-1,1))
+print(reward)
+
+Q = []
+for i in range(bandits): 
+ Q.append([]) 
+ for j in range(arms): 
+ Q[i].append(10.0)
+print(Q)
+
+def greedy(values):
+    return values.index(max(values))
+
+def learn(state, action, reward, next_state):
+ q = gamma * max(Q[next_state])
+ q += reward
+ q -= Q[state][action]
+ q *= learning_rate
+ q += Q[state][action]
+ Q[state][action] = q
+
+# agent learns
+bandit = random.randint(0,bandits-1)
+for i in range(0, episodes):
+    last_bandit = bandit
+ bandit = random.randint(0,bandits-1)
+ action = greedy(Q[bandit]) 
+ r = reward[last_bandit][action]
+ learn(last_bandit, action, r, bandit) print(Q)
+```
 
 1.  所有加亮的代码部分都是新的，值得仔细关注。让我们更详细地看看每个部分：
 
-[PRE9]
+```py
+arms = 7 bandits = 7
+gamma = .9 
+```
 
 1.  我们首先将 `arms` 变量初始化为 `7`，然后创建一个新的 `bandits` 变量也是 `7`。回想一下，`arms` 类似于 `actions`，而 `bandits` 同样是 `state`。最后一个新变量 `gamma` 是一个新的学习参数，用于折现奖励。我们将在未来的章节中探讨这个折现因子概念：
 
-[PRE10]
+```py
+reward = [] for i in range(bandits):
+ reward.append([])    for j in range(arms):
+ reward[i].append(random.uniform(-1,1)) print(reward)
+```
 
 1.  下一节代码构建了一个奖励表矩阵，其中包含从 -1 到 1 的随机值。在这个例子中，我们使用列表的列表来更好地表示单独的概念：
 
-[PRE11]
+```py
+Q = [] for i in range(bandits):  
+    Q.append([])     
+    for j in range(arms): 
+Q[i].append(10.0) print(Q)
+```
 
 1.  下一个部分非常相似，这次设置了一个 Q 表矩阵来存储我们计算的质量值。注意我们如何将初始 Q 值初始化为 10.0。我们这样做是为了考虑到数学中的细微变化，我们将在后面讨论这一点。
 
 1.  由于我们的状态和动作都可以映射到一个矩阵/表中，我们将我们的强化学习系统称为使用模型。模型代表环境中的所有动作和状态：
 
-[PRE12]
+```py
+def learn(state, action, reward, next_state):
+ q = gamma * max(Q[next_state]) q += reward q -= Q[state][action] q *= learning_rate q += Q[state][action] Q[state][action] = q
+```
 
 1.  接下来，我们定义了一个新的函数，称为 `learn`。这个新函数只是我们之前观察到的 Q 方程的直接实现：
 
-[PRE13]
+```py
+bandit = random.randint(0,bandits-1) for i in range(0, episodes):
+    last_bandit = bandit
+ bandit = random.randint(0,bandits-1) action = greedy(Q[bandit])    r = reward[last_bandit][action]
+ learn(last_bandit, action, r, bandit) print(Q)
+```
 
 1.  最后，智能体学习部分通过新的代码进行了显著更新。这段新代码设置了我们需要的新学习函数的参数。注意老虎机或状态每次都是随机选择的。本质上，这意味着我们的智能体只是在老虎机之间随机漫步。
 
@@ -308,7 +418,16 @@ Chapter_1_3.py 的输出
 
 1.  我们真正需要关注的代码部分只有更新的`learn`函数，如下所示：
 
-[PRE14]
+```py
+def learn(state, action, reward, next_state):
+    #q = gamma * max(Q[next_state])
+    q = 0
+    q += reward
+    q -= Q[state][action]
+    q *= learning_rate
+    q += Q[state][action]
+    Q[state][action] = q
+```
 
 1.  函数中的第一行代码负责折现下一个状态的未来奖励。由于我们例子中的所有状态都没有连接，我们只需注释掉那一行。在下一行，我们为`q = 0`创建一个新的初始化器。
 

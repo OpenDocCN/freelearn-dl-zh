@@ -54,7 +54,15 @@ NS实现应包括用于存储关于已探索新颖项的信息的数据结构，
 
 这个类是主要结构，用于存储在进化过程中评估的每个个体的新颖度分数信息。它有几个字段用于存储相关信息，正如我们在源代码中所看到的：
 
-[PRE0]
+```py
+    def __init__(self, generation=-1, genomeId=-1, fitness=-1, novelty=-1):
+        self.generation = generation
+        self.genomeId = genomeId
+        self.fitness = fitness
+        self.novelty = novelty
+        self.in_archive = False
+        self.data = []
+```
 
 `generation` 字段持有创建此项时的代数 ID。基本上，`genomeId` 是被评估的基因组的 ID，而 `fitness` 是被评估基因组的（目标导向的）适应度分数（接近迷宫出口的距离）。此外，`novelty` 是分配给被评估基因组的新颖度分数，正如我们在下一节中讨论的，而 `data` 是表示迷宫求解代理在模拟过程中访问的特定迷宫位置坐标的数据点列表。此数据列表用于估计当前新颖项与其他新颖项之间的距离。计算出的距离之后可以用来估计与特定新颖项相关联的新颖度分数。
 
@@ -62,7 +70,18 @@ NS实现应包括用于存储关于已探索新颖项的信息的数据结构，
 
 这个类维护了一个相关新颖项的列表，并提供方法来评估单个基因组以及整个基因组种群的新颖度分数。它在构造函数中定义了以下字段：
 
-[PRE1]
+```py
+    def __init__(self, threshold, metric):
+        self.novelty_metric = metric
+        self.novelty_threshold = threshold
+        self.novelty_floor = 0.25
+        self.items_added_in_generation = 0
+        self.time_out = 0
+        self.neighbors = KNNNoveltyScore
+        self.generation = 0
+        self.novel_items = []
+        self.fittest_items = []
+```
 
 注意，`novelty_metric` 是一个指向函数的引用，该函数可以用来估计新颖度度量或两个新颖项之间的距离。
 
@@ -70,13 +89,44 @@ NS实现应包括用于存储关于已探索新颖项的信息的数据结构，
 
 `novelty_threshold` 字段的动态性由以下源代码确定：
 
-[PRE2]
+```py
+    def _adjust_archive_settings(self):
+        if self.items_added_in_generation == 0:
+            self.time_out += 1
+        else:
+            self.time_out = 0
+        if self.time_out >= 10:
+            self.novelty_threshold *= 0.95
+            if self.novelty_threshold < self.novelty_floor:
+                self.novelty_threshold = self.novelty_floor
+            self.time_out = 0
+        if self.items_added_in_generation >= 4:
+            self.novelty_threshold *= 1.2
+        self.items_added_in_generation = 0
+```
 
 在每个进化代结束时调用前面的函数来调整下一代的`novelty_threshold`字段值。如前所述，此值决定了下一代应添加多少创新项目到存档中。随着时间的推移，使用NS方法找到新颖解决方案的难度动态调整此属性是必要的。在进化的开始，由于在迷宫中只探索了少数路径，因此找到具有高创新度分数的新颖解决方案的机会巨大。然而，在进化的后期，由于剩余未探索的路径较少，这变得更为困难。为了补偿这一点，如果在最后2,500次评估（`10`代）中没有找到新颖路径，则将`novelty_threshold`值降低5%。另一方面，为了在进化的早期阶段降低将新的`NoveltyItem`添加到存档的速度，如果在上一代中添加了超过四个项目，则将`novelty_threshold`值提高20%。
 
 以下源代码显示了如何使用`novelty_threshold`值来确定要添加哪个`NoveltyItem`：
 
-[PRE3]
+```py
+    def evaluate_individual_novelty(self, genome, genomes, n_items_map, 
+                                    only_fitness=False):
+        item = n_items_map[genome.key]
+        result = 0.0
+        if only_fitness:
+            result = self._novelty_avg_knn(item=item, genomes=genomes, 
+                                           n_items_map=n_items_map)
+        else:
+            result = self._novelty_avg_knn(item=item, neighbors=1, 
+                                           n_items_map=n_items_map)
+            if result > self.novelty_threshold or \
+               len(self.novel_items) < ArchiveSeedAmount:
+                self._add_novelty_item(item)
+        item.novelty = result
+        item.generation = self.generation
+        return result
+```
 
 前面的代码使用一个函数来评估创新度分数，我们将在下一节中描述该函数，以估计提供的基因组的新颖性。如果在此更新存档模式（`only_fitness = False`）下调用此函数，则获得的创新度分数（`result`）与当前`novelty_threshold`字段的值进行比较。根据比较结果，将`NoveltyItem`对象添加到`NoveltyArchive`对象中或不添加。此外，引入了`ArchiveSeedAmount`常量，在进化开始时存档仍然为空时，使用`NoveltyItem`实例对存档进行初始播种。
 
@@ -104,33 +154,89 @@ NS实现应包括用于存储关于已探索新颖项的信息的数据结构，
 
 查找新颖分数的 Python 代码定义在以下函数中：
 
-[PRE4]
+```py
+    def _novelty_avg_knn(self, item, n_items_map, genomes=None, 
+                         neighbors=None):
+        distances = None
+        if genomes is not None:
+            distances = self._map_novelty_in_population(item=item, 
+                          genomes=genomes, n_items_map=n_items_map)
+        else:
+            distances = self._map_novelty(item=item)
+        distances.sort()
+        if neighbors is None:
+            neighbors = self.neighbors
+
+        density, weight, distance_sum = 0.0, 0.0, 0.0
+        length = len(distances)
+        if length >= ArchiveSeedAmount:
+            length = neighbors
+            if len(distances) < length:
+                length = len(distances)
+            i = 0
+            while weight < float(neighbors) and i < length:
+                distance_sum += distances[i].distance
+                weight += 1.0
+                i += 1
+            if weight > 0:
+                sparsity = distance_sum / weight
+        return sparsity
+```
 
 上述函数的主要实现部分如下：
 
 1.  首先，我们检查提供的 `_novelty_avg_knn` 函数的参数是否包含当前种群中所有基因组的列表。如果是这样，我们就开始填充种群中所有基因组的特征行为之间的距离列表，包括来自 `NoveltyArchive` 的所有 `NoveltyItem` 对象。否则，我们使用提供的新颖性项（`item`）来找到它与 `NoveltyArchive` 中所有 `NoveltyItem` 对象之间的距离。
 
-[PRE5]
+```py
+    distances = None
+    if genomes is not None:
+        distances = self._map_novelty_in_population(item=item, 
+                         genomes=genomes, n_items_map=n_items_map)
+    else:
+        distances = self._map_novelty(item=item)
+```
 
 1.  然后，我们将距离列表按升序排序，以便首先得到最小的距离，因为我们对在行为空间中与提供的创新项最接近的点感兴趣：
 
-[PRE6]
+```py
+    distances.sort()
+```
 
 1.  接下来，我们初始化计算 k 个最近邻分数所必需的所有中间变量，并测试在之前步骤中收集的距离值数量是否高于 `ArchiveSeedAmount` 常量值：
 
-[PRE7]
+```py
+    if neighbors is None:
+        neighbors = self.neighbors
+
+    density, weight, distance_sum = 0.0, 0.0, 0.0
+    length = len(distances)
+```
 
 1.  现在，我们可以检查找到的距离列表的长度是否小于我们要求测试的邻居数量（`neighbors`）。如果是这样，我们更新相关变量的值：
 
-[PRE8]
+```py
+    if length >= ArchiveSeedAmount:
+        length = neighbors
+        if len(distances) < length:
+            length = len(distances)
+```
 
 1.  在所有局部变量都设置为正确值之后，我们可以开始收集每个连接的所有距离和权重的总和的循环：
 
-[PRE9]
+```py
+        i = 0
+        while weight < float(neighbors) and i < length:
+            distance_sum += distances[i].distance
+            weight += 1.0
+            i += 1
+```
 
 1.  当先前的循环由于计算出的权重值超过指定的邻居数量而退出，或者如果我们已经迭代过`distances`列表中的所有距离值，我们就准备好计算给定项目的新颖性得分，作为到k个最近邻的平均距离：
 
-[PRE10]
+```py
+        if weight < 0:
+            sparsity = distance_sum / weight 
+```
 
 函数随后返回估计的新颖性得分值。
 
@@ -150,7 +256,16 @@ NS实现应包括用于存储关于已探索新颖项的信息的数据结构，
 
 以下是对新颖性度量值估计的Python代码：
 
-[PRE11]
+```py
+def maze_novelty_metric(first_item, second_item):
+    diff_accum = 0.0
+    size = len(first_item.data)
+    for i in range(size):
+        diff = abs(first_item.data[i] - second_item.data[i])
+        diff_accum += diff
+
+    return diff_accum / float(size)
+```
 
 上述代码取两个新颖性项，并找到在迷宫导航模拟中持有相应求解代理位置的两个轨迹向量之间的**项距离**。
 
@@ -180,21 +295,76 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 函数的完整源代码如下：
 
-[PRE12]
+```py
+def eval_genomes(genomes, config):
+    n_items_map = {}
+    solver_genome = None
+    for genome_id, genome in genomes:
+        found = eval_individual(genome_id=genome_id, 
+                                genome=genome, 
+                                genomes=genomes, 
+                                n_items_map=n_items_map, 
+                                config=config)
+        if found:
+            solver_genome = genome
+    trial_sim.archive.end_of_generation()
+    # Now evaluate fitness of each genome in population
+    for genome_id, genome in genomes:
+        fitness = trial_sim.archive.evaluate_individual_novelty(
+                   genome=genome,
+                   genomes=genomes,
+                   n_items_map=n_items_map,
+                   only_fitness=True)
+        if fitness > 1:
+            fitness = math.log(fitness)
+        else:
+            fitness = 0
+        genome.fitness = fitness
+
+    if solver_genome is not None:
+        solver_genome.fitness = math.log(800000) # ~=13.59
+```
 
 函数实现的显著部分如下：
 
 1.  首先，我们创建字典以存储评估后的新颖性项目（`n_items_map`），用于种群中每个基因，并遍历种群中的所有基因，评估它们的迷宫解决性能：
 
-[PRE13]
+```py
+    n_items_map = {}
+    solver_genome = None
+    for genome_id, genome in genomes:
+        found = eval_individual(genome_id=genome_id, 
+                                genome=genome, 
+                                genomes=genomes, 
+                                n_items_map=n_items_map, 
+                                config=config)
+        if found:
+            solver_genome = genome
+    trial_sim.archive.end_of_generation()
+```
 
 1.  之后，我们再次遍历种群中的所有基因，使用估计的新颖性分数为基因分配适应度分数。新颖性分数估计的过程使用在第一次循环（如前所述）中收集的`NoveltyItem`对象，在迷宫解决模拟期间：
 
-[PRE14]
+```py
+    for genome_id, genome in genomes:
+        fitness = trial_sim.archive.evaluate_individual_novelty(
+                   genome=genome,
+                   genomes=genomes,
+                   n_items_map=n_items_map,
+                   only_fitness=True)
+        if fitness > 1:
+            fitness = math.log(fitness)
+        else:
+            fitness = 0
+        genome.fitness = fitness
+```
 
 1.  最后，如果在第一个循环中找到成功的解决基因组，我们将其分配一个等于前面描述的指示性适应度分数的适应度值（`~13.59`）：
 
-[PRE15]
+```py
+    if solver_genome is not None:
+        solver_genome.fitness = math.log(800000) # ~13.59
+```
 
 请注意，我们将获得的创新度分数值和指示性创新度分数应用自然对数，以保持它们在数值上的接近。因此，我们可以使用实验期间收集的统计数据正确地绘制性能图表。
 
@@ -204,29 +374,107 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 通过迷宫导航模拟评估个体基因组作为迷宫解决代理的情况如下：
 
-[PRE16]
+```py
+def eval_individual(genome_id, genome, genomes, n_items_map, config):
+    n_item = archive.NoveltyItem(
+                        generation=trial_sim.population.generation,
+                        genomeId=genome_id)
+    n_items_map[genome_id] = n_item
+    maze_env = copy.deepcopy(trial_sim.orig_maze_environment)
+    control_net = neat.nn.FeedForwardNetwork.create(genome, config)
+    goal_fitness = maze.maze_simulation_evaluate(
+                                    env=maze_env, 
+                                    net=control_net, 
+                                    time_steps=SOLVER_TIME_STEPS,
+                                    n_item=n_item,
+                                    mcns=MCNS)
+
+    if goal_fitness == -1:
+        # The individual doesn't meet the min. fitness criterion
+        print("Individ with ID %d marked for extinction, MCNS %f" 
+               % (genome_id, MCNS))
+        return False
+
+    record = agent.AgentRecord(
+        generation=trial_sim.population.generation,
+        agent_id=genome_id)
+    record.fitness = goal_fitness
+    record.x = maze_env.agent.location.x
+    record.y = maze_env.agent.location.y
+    record.hit_exit = maze_env.exit_found
+    record.species_id = trial_sim.population.species \
+        .get_species_id(genome_id)
+    record.species_age = record.generation - \
+       trial_sim.population.species.get_species(genome_id).created
+    trial_sim.record_store.add_record(record)
+
+    if not maze_env.exit_found:
+        record.novelty = trial_sim.archive \
+         .evaluate_individual_novelty(genome=genome, 
+                       genomes=genomes, n_items_map=n_items_map)
+
+    trial_sim.archive.update_fittest_with_genome(genome=genome, 
+                                        n_items_map=n_items_map)
+    return maze_env.exit_found
+```
 
 让我们深入探讨`eval_individual`函数实现中所有核心部分的意义：
 
 1.  首先，我们创建一个`NoveltyItem`对象来保存与特定基因组相关的创新度分数信息，并将其保存在`n_items_map`字典中的`genome_id`键下：
 
-[PRE17]
+```py
+    n_item = archive.NoveltyItem(
+                       generation=trial_sim.population.generation,
+                       genomeId=genome_id)
+    n_items_map[genome_id] = n_item
+```
 
 1.  之后，我们创建原始迷宫环境的深度副本以避免模拟期间的副作用，并从提供的基因组创建控制ANN：
 
-[PRE18]
+```py
+    maze_env = copy.deepcopy(trial_sim.orig_maze_environment)
+    control_net = neat.nn.FeedForwardNetwork.create(genome, config)
+```
 
 1.  现在，使用迷宫环境的副本和创建的控制ANN，我们执行给定步数的迷宫解决模拟：
 
-[PRE19]
+```py
+    goal_fitness = maze.maze_simulation_evaluate(
+                                    env=maze_env, 
+                                    net=control_net, 
+                                    time_steps=SOLVER_TIME_STEPS,
+                                    n_item=n_item,
+                                    mcns=MCNS)
+```
 
 1.  模拟完成后，返回的基于目标的适应度分数（接近迷宫出口的距离）和其他模拟及基因组参数存储在`AgentRecord`中，然后将其添加到记录存储中：
 
-[PRE20]
+```py
+    record = agent.AgentRecord(
+        generation=trial_sim.population.generation,
+        agent_id=genome_id)
+    record.fitness = goal_fitness
+    record.x = maze_env.agent.location.x
+    record.y = maze_env.agent.location.y
+    record.hit_exit = maze_env.exit_found
+    record.species_id = trial_sim.population.species \
+        .get_species_id(genome_id)
+    record.species_age = record.generation - \
+       trial_sim.population.species.get_species(genome_id).created
+    trial_sim.record_store.add_record(record)
+```
 
 1.  最后，如果给定的基因组不是赢家，我们估计其创新度分数，并在适当的情况下，使用当前基因组的`NoveltyItem`更新`NoveltyArchive`中适应度最高的基因组列表：
 
-[PRE21]
+```py
+    if not maze_env.exit_found:
+        record.novelty = trial_sim.archive \
+         .evaluate_individual_novelty(genome=genome, 
+              genomes=genomes, n_items_map=n_items_map)
+
+    trial_sim.archive.update_fittest_with_genome(genome=genome, 
+                                        n_items_map=n_items_map)
+```
 
 在这个实验中，基因组的适应度分数定义为两个不同的值，每个值都服务于不同的目的。目标导向的适应度分数有助于测试是否找到了解决方案并收集有用的性能统计数据。基于创新度的适应度分数引导神经进化过程朝着解决行为最大多样性的方向发展，这意味着解决方案搜索的梯度被引导去探索不同的行为，而不存在任何明确的目标。
 
@@ -250,11 +498,20 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 我们选择了`800000`作为指示性新颖度分数值。然而，为了在绘制实验结果时保持适应度分数的视觉表现，我们使用自然对数缩小了求解器代理获得的新颖度分数。因此，配置文件中使用的适应度阈值值变为`13.5`，略低于最大可能的适应度分数（`13.59`），以避免浮点数舍入的问题。此外，我们将种群大小从上一章中描述的值（`250`）增加到使解决方案搜索空间更深入，因为我们需要检查迷宫中最大数量的唯一位置：
 
-[PRE22]
+```py
+[NEAT]
+fitness_criterion = max
+fitness_threshold = 13.5
+pop_size = 500
+reset_on_extinction = False
+```
 
 在每个试验中，我们运行的代数比上一章实验中多。因此，我们将停滞值增加，以使物种保持更长时间：
 
-[PRE23]
+```py
+[DefaultStagnation]
+max_stagnation = 100
+```
 
 所有其他NEAT超参数的值与上一章中展示的类似。请参考上一章了解选择特定超参数值的原因。
 
@@ -264,7 +521,14 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 实验的工作环境应包括所有依赖项，并可以使用以下命令使用Anaconda创建：
 
-[PRE24]
+```py
+$ conda create --name maze_ns_neat python=3.5
+$ conda activate maze_ns_neat
+$ pip install neat-python==0.92 
+$ conda install matplotlib
+$ conda install graphviz
+$ conda install python-graphviz
+```
 
 这些命令创建并激活了一个Python 3.5的`maze_ns_neat`虚拟环境。之后，安装了版本0.92的NEAT-Python库，以及我们可视化工具使用的其他依赖项。
 
@@ -278,13 +542,38 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 实验运行函数的主循环现在看起来是这样的（参见`maze_experiment.py`脚本中的`__main__`）：
 
-[PRE25]
+```py
+    print("Starting the %s maze experiment (Novelty Search), for %d trials" 
+          % (args.maze, args.trials))
+    for t in range(args.trials):
+        print("\n\n----- Starting Trial: %d ------" % (t))
+        # Create novelty archive
+        novelty_archive = archive.NoveltyArchive(
+                                  threshold=args.ns_threshold,
+                                  metric=maze.maze_novelty_metric)
+        trial_out_dir = os.path.join(out_dir, str(t))
+        os.makedirs(trial_out_dir, exist_ok=True)
+        solution_found = run_experiment( config_file=config_path, 
+                                        maze_env=maze_env, 
+                                        novelty_archive=novelty_archive,
+                                        trial_out_dir=trial_out_dir,
+                                        n_generations=args.generations,
+                                        args=args,
+                                        save_results=True,
+                                        silent=True)
+        print("\n------ Trial %d complete, solution found: %s ------\n" 
+               % (t, solution_found))
+```
 
 循环运行`args.trials`数量的实验试验，其中`args.trials`是由用户从命令行提供的。
 
 循环的前几行创建了一个`NoveltyArchive`对象，它是新颖性搜索算法的一部分。在特定的试验中，此对象将用于存储所有相关的`NoveltyItems`：
 
-[PRE26]
+```py
+        novelty_archive = archive.NoveltyArchive(
+                       threshold=args.ns_threshold,
+                       metric=maze.maze_novelty_metric)
+```
 
 注意，`maze.maze_novelty_metric`是对用于评估每个求解代理新颖度分数的函数的引用。
 
@@ -304,35 +593,117 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 1.  它从为随机数生成器选择一个特定的种子值开始，这个种子值基于当前系统时间：
 
-[PRE27]
+```py
+    seed = int(time.time())
+    random.seed(seed)
+```
 
 1.  之后，它加载NEAT算法配置并创建一个初始基因组种群：
 
-[PRE28]
+```py
+config = neat.Config(neat.DefaultGenome, 
+                     neat.DefaultReproduction, 
+                     neat.DefaultSpeciesSet, 
+                     neat.DefaultStagnation, 
+                     config_file)
+p = neat.Population(config) 
+```
 
 1.  为了在每代评估后保存中间结果，我们使用`MazeSimulationTrial`对象初始化一个名为`trial_sim`的全局变量。
 
 我们使用一个全局变量，以便它可以通过传递给NEAT-Python框架的适应度评估回调函数（`eval_genomes(genomes, config)`）进行访问：
 
-[PRE29]
+```py
+    global trial_sim
+    trial_sim = MazeSimulationTrial(maze_env=maze_env, 
+                                    population=p,
+                                    archive=novelty_archive)
+```
 
 1.  此外，传统上，我们通过`Population`对象注册报告算法结果和收集统计信息的报告者数量：
 
-[PRE30]
+```py
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+```
 
 1.  现在，我们已经准备好在指定数量的代数上运行NEAT算法并评估结果：
 
-[PRE31]
+```py
+    start_time = time.time()
+    best_genome = p.run(eval_genomes, n=n_generations)
+    elapsed_time = time.time() - start_time
+    # Display the best genome among generations.
+    print('\nBest genome:\n%s' % (best_genome))
+    solution_found = \
+        (best_genome.fitness >= config.fitness_threshold)
+    if solution_found:
+        print("SUCCESS: The stable maze solver controller was found!!!")
+    else:
+        print("FAILURE: Failed to find the stable maze solver controller!!!")
+```
 
 1.  之后，收集的统计数据和新颖性存档记录可以被可视化并保存到文件系统：
 
-[PRE32]
+```py
+    node_names = {-1:'RF_R', -2:'RF_FR', -3:'RF_F', -4:'RF_FL', 
+                    -5:'RF_L', -6: 'RF_B', -7:'RAD_F', -8:'RAD_L',
+                    -9:'RAD_B', -10:'RAD_R', 0:'ANG_VEL', 1:'VEL'}
+    visualize.draw_net(config, best_genome, view=show_results, 
+                           node_names=node_names, 
+                           directory=trial_out_dir, fmt='svg')
+    if args is None:
+        visualize.draw_maze_records(maze_env, 
+                                trial_sim.record_store.records,
+                                view=show_results)
+    else:
+        visualize.draw_maze_records(maze_env, 
+                           trial_sim.record_store.records, 
+                           view=show_results, width=args.width, 
+                           height=args.height,
+                           filename=os.path.join(trial_out_dir, 
+                                           'maze_records.svg'))
+    visualize.plot_stats(stats, ylog=False, 
+                          view=show_results,
+                          filename=os.path.join(trial_out_dir, 
+                                           'avg_fitness.svg'))
+    visualize.plot_species(stats, view=show_results, 
+                          filename=os.path.join(trial_out_dir, 
+                                            'speciation.svg'))
+    # store NoveltyItems archive data
+    trial_sim.archive.write_fittest_to_file(
+                             path=os.path.join(trial_out_dir, 
+                                     'ns_items_fittest.txt'))
+    trial_sim.archive.write_to_file(
+                             path=os.path.join(trial_out_dir, 
+                                         'ns_items_all.txt'))
+```
 
 1.  最后，我们执行本章中介绍的其他可视化程序，这些程序可视化迷宫求解代理在迷宫中的路径。
 
 我们通过运行迷宫导航模拟，与在进化过程中找到的最佳求解代理的控制器ANN进行对比来实现这一点。在这次模拟运行期间，所有由求解代理访问的路径点都被收集起来，稍后由`draw_agent_path`函数进行渲染：
 
-[PRE33]
+```py
+    maze_env = copy.deepcopy(trial_sim.orig_maze_environment)
+    control_net = neat.nn.FeedForwardNetwork.create(
+                                            best_genome, config)
+    path_points = []
+    evaluate_fitness = maze.maze_simulation_evaluate(
+                                    env=maze_env, 
+                                    net=control_net, 
+                                    time_steps=SOLVER_TIME_STEPS,
+                                    path_points=path_points)
+    print("Evaluated fitness of best agent: %f" 
+              % evaluate_fitness)
+    visualize.draw_agent_path(trial_sim.orig_maze_environment, 
+                             path_points, best_genome,
+                             view=show_results, 
+                             width=args.width,
+                             height=args.height,
+                             filename=os.path.join(trial_out_dir,
+                                        'best_solver_path.svg'))
+```
 
 最后，`run_experiment`函数返回一个布尔值，指示在试验期间是否找到了成功的迷宫求解代理。
 
@@ -344,7 +715,9 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 现在进入这个目录，并在终端应用程序中执行以下命令：
 
-[PRE34]
+```py
+python maze_experiment.py -g 500 -t 10 -m medium --width 300 --height 150
+```
 
 不要忘记使用以下命令激活适当的虚拟环境：
 
@@ -354,11 +727,45 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 在进化`99`代之后，成功迷宫求解代理在第`100`代被发现。在进化的最后一代中，关于基因组种群的一般统计数据。在完成Python程序的控制台输出中，您将看到以下内容：
 
-[PRE35]
+```py
+ ****** Running generation 100 ****** 
+
+Maze solved in 391 steps
+Population's average fitness: 1.28484 stdev: 0.90091
+Best fitness: 13.59237 - size: (2, 8) - species 1 - id 48354
+
+Best individual in generation 100 meets fitness threshold - complexity: (2, 8)
+```
 
 之后，我们显示获胜基因组的配置和关于试验的一般统计数据：
 
-[PRE36]
+```py
+Best genome:
+Key: 48354
+Fitness: 13.592367006650065
+Nodes:
+ 0 DefaultNodeGene(key=0, bias=-2.1711339938349026, response=1.0, activation=sigmoid, aggregation=sum)
+ 1 DefaultNodeGene(key=1, bias=6.576480565646596, response=1.0, activation=sigmoid, aggregation=sum)
+Connections:
+ DefaultConnectionGene(key=(-10, 1), weight=-0.5207773885939109, enabled=True)
+ DefaultConnectionGene(key=(-9, 0), weight=1.7778928210387814, enabled=True)
+ DefaultConnectionGene(key=(-7, 1), weight=-2.4940590667086524, enabled=False)
+ DefaultConnectionGene(key=(-6, 1), weight=-1.3708732457648565, enabled=True)
+ DefaultConnectionGene(key=(-4, 0), weight=4.482428082179011, enabled=True)
+ DefaultConnectionGene(key=(-4, 1), weight=-1.3103728328721098, enabled=True)
+ DefaultConnectionGene(key=(-3, 0), weight=-0.4583080031587811, enabled=True)
+ DefaultConnectionGene(key=(-3, 1), weight=4.643599450804774, enabled=True)
+ DefaultConnectionGene(key=(-2, 1), weight=-0.9055329546235956, enabled=True)
+ DefaultConnectionGene(key=(-1, 0), weight=-1.5899992185951817, enabled=False)
+SUCCESS: The stable maze solver controller was found!!!
+Record store file: out/maze_ns/medium/0/data.pickle
+Random seed: 1567086899
+Trial elapsed time: 7452.462 sec
+Plot figure width: 6.8, height: 7.0
+Maze solved in 391 steps
+Evaluated fitness of best agent: 1.000000
+Plot figure width: 7.8, height: 4.0
+```
 
 控制台输出显示，编码成功迷宫求解者控制ANN的获胜基因组只有两个节点基因和八个连接基因。这些基因对应于控制器ANN中的两个输出节点，八个连接用于与输入建立联系。控制器ANN的结果配置如下所示：
 
@@ -418,7 +825,9 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 1.  将命令行参数`location_sample_rate`从默认值（`4000`）修改，这允许你只将迷宫求解器的最终位置包含到其行为向量中。尝试小于`400`（迷宫模拟步骤数）的值。例如，如果我们设置此参数为`100`，那么行为向量将包括每个求解代理最多四个轨迹点的坐标。看看这个参数如何影响算法性能。你可以通过运行以下命令来提供此参数的值：
 
-[PRE37]
+```py
+python maze_experiment.py -g 500 -t 10 -r 100 -m medium --width 300 --height 150
+```
 
 上述命令以`location_sample_rate`设置为`100`运行简单的迷宫实验。
 
@@ -444,7 +853,9 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 要运行此实验，我们可以使用为简单迷宫实验开发的相同实验运行器，唯一的区别是在启动时应该提供不同的命令行参数。你可以使用以下命令启动困难迷宫实验：
 
-[PRE38]
+```py
+$ python maze_experiment.py -m hard -g 500 -t 10 --width 200 --height 200
+```
 
 此命令启动了10次试验的难以解决的迷宫实验，每次试验有500代。宽度和高度参数决定了绘制实验期间收集到的迷宫记录的子图的尺寸。
 
@@ -484,11 +895,15 @@ NEAT-Python库不允许我们从回调函数发送任何关于任务完成的信
 
 1.  使用以下命令更新当前Anaconda环境，安装MultiNEAT Python库：
 
-[PRE39]
+```py
+$ conda install -c conda-forge multineat
+```
 
 1.  基于MultiNEAT库运行实验运行器实现：
 
-[PRE40]
+```py
+$ python maze_experiment_multineat.py -m hard -g 500 -t 10 --width 200 --height 200
+```
 
 这些命令在当前Anaconda环境中安装MultiNEAT库，并使用适当的实验运行器启动10次（每次500代）的困难迷宫实验。
 

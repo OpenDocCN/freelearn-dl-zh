@@ -94,7 +94,15 @@
 
 例如，MongoDB文档聊天机器人的评估数据集包括针对前250个搜索术语、前250个按数量排序的支持问题和关于MongoDB的一些最常见问题的问答。这可以采取简单的关键词或完整的句子格式，如下所示：
 
-[PRE0]
+```py
+Mongodb install
+Install mongodb ubuntu
+Mongodb connection string
+$in mongodb
+How to create a collection in mongodb
+What is an aggregation pipeline
+Cannot deserialize a 'String' from BsonType 'ObjectId' in C#
+```
 
 这些术语和问题是从多个来源检索的，具体取决于您的基础设施。对于MongoDB，这些基础设施来自[mongodb.com](http://mongodb.com)的Google搜索控制台，以及支持聊天、社区论坛和Stack Overflow。
 
@@ -114,21 +122,41 @@
 
 这是用户输入：
 
-[PRE1]
+```py
+Please generate a linkedin post less than 500 words about the company OpenAI.
+```
 
 这里是输出：
 
-[PRE2]
+```py
+🚀 Pioneering the Future with OpenAI 🚀
+In the dynamic world of technology, OpenAI stands as a beacon of innovation and progress. Their mission to advance artificial general intelligence (AGI) is not just envisioning the future; they are actively shaping it.
+OpenAI operates under the guidance of visionary leaders like CEO Sam Altman. Their cutting-edge research is pushing the boundaries of what's possible in AI, crafting a future where technology enhances human capabilities and opens new realms of possibility.
+From healthcare to finance, and education to entertainment, OpenAI's innovations are leaving an indelible mark. Their models, such as GPT-4, are revolutionizing how we interact with technology. Businesses are leveraging these tools to enhance customer experiences, streamline operations, and achieve unprecedented levels of productivity.
+OpenAI thrives on collaboration, partnering with organizations worldwide to accelerate innovation. Their open research culture demonstrates a belief in collective progress. By sharing insights, tools, and findings, OpenAI is democratizing access to AI, empowering developers, researchers, and businesses to push the boundaries of what's possible. Through initiatives like the OpenAI Scholars and Fellows programs, they are nurturing the next generation of AI talent. These programs provide mentorship, resources, and opportunities to individuals from diverse backgrounds, ensuring a wealth of perspectives and ideas in AI development.
+Join the conversation and be part of the future OpenAI is creating.
+#AI #OpenAI #Innovation #Technology #Future #Collaboration #Leadership
+```
 
 **示例 2**：现在，让我们尝试使用few-shot提示的例子。
 
 这是用户输入：
 
-[PRE3]
+```py
+Please generate a linkedin post focusing on the OpenAI company. It should be less than 500 words in length. Also, please match the tone, syntax, word choices, and style of this passage:"There's a way to do it better. Find it." — Thomas Edison
+"Lies. We are being lied to. We are told that technology takes our jobs, reduces our wages, increases inequality, threatens our health, ruins the environment, degrades our society, corrupts our children, impairs our humanity, threatens our future, and is ever on the verge of ruining everything.
+We are told to be angry, bitter, and resentful about technology. We are told to be pessimistic. The myth of Prometheus – in various updated forms like Frankenstein, Oppenheimer, and Terminator – haunts our nightmares. We are told to denounce our birthright – our intelligence, our control over nature, our ability to build a better world. We are told to be miserable about the future." –Marc Andreessen
+```
 
 这里是输出：
 
-[PRE4]
+```py
+We are told that artificial intelligence is a threat, that it steals our jobs, that it widens the chasm of inequality, that it's an invisible force eroding our humanity. We are told that AI is an uncontrollable beast, ready to plunge us into dystopia.
+OpenAI is here to shatter these myths.
+Founded on the principle of advancing digital intelligence for the collective good, OpenAI isn't just another tech company. It's a bold proclamation that the future is ours to shape. OpenAI stands as a beacon against the darkness of misinformation and fearmongering. It's a rallying cry for innovation, for the relentless pursuit of better.
+Imagine a world where AI enhances every aspect of our lives—where it amplifies human potential rather than diminishes it. OpenAI's groundbreaking models, like GPT-4, are not instruments of destruction but tools of empowerment. From revolutionizing healthcare to transforming education, from pioneering new frontiers in entertainment to optimizing complex financial systems, OpenAI's innovations are the keystones of a new era.
+OpenAI is driven by visionaries who refuse to bow to the pessimism that pervades our discourse. That we are a testament to what can be achieved when we refuse to accept the status quo. We are the architects of tomorrow, wielding AI not as a weapon, but as a bridge.
+```
 
 你可以看到，通过提供示例文本，你可以增强输出以匹配你偏好的任何语法。额外的提示信息也不需要特别困难来生成。如果你能向你的GenAI应用提供示例输出，其结果将更接近你期望的。
 
@@ -202,17 +230,23 @@
 
 为了帮助用户获得更好的结果，你可以在用户界面中添加三个按钮，以便用户可以选择“一只小猫的图片”，查询被修改为以下内容：
 
-[PRE5]
+```py
+An image of a kitten, in anime style, large eyes, chikai, chibi-style, pixel-style, anime illustration, cute, in the style of Akira Toriyama.
+```
 
 在这里，对于每种按钮样式，你可以在提交前添加增强用户查询的术语。
 
 作为另一个例子，考虑以下用户查询：
 
-[PRE6]
+```py
+"What's the average revenue?"
+```
 
 有意义的重写可能如下所示：
 
-[PRE7]
+```py
+"What's the average revenue for [May 2024] for [sales sku 123]?"
+```
 
 这个添加了额外上下文的重写查询有助于系统理解用户正在请求特定产品和时间段，从而得到更准确和有用的响应。
 

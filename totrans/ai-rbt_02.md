@@ -214,21 +214,31 @@ Linux Ubuntu系统将自带一个Python默认版本。我将假设您熟悉Pytho
 
 一旦您登录到虚拟机，请通过打开一个终端窗口并在命令提示符中输入`python`来检查您拥有的Python版本。您应该看到Python版本，如下所示：
 
-[PRE0]
+```py
+>python
+Python 3.8.16 (default, Jan 17 2023, 22:25:28) [MSC v.1916 64 bit (AMD64)]
+```
 
 你可以看到，在这种情况下我使用的是版本 3.8.16。
 
 我们将需要几个附加库，这些库可以添加到Python中并扩展其功能。首先需要检查的是您是否已安装`pip`。这是通过在以下命令提示符中输入以下内容来完成的：
 
-[PRE1]
+```py
+pip
+```
 
 如果您得到输出`未找到命令'pip'`，那么您需要安装Pip。输入以下内容：
 
-[PRE2]
+```py
+sudo apt-get install python-pip python-dev build-essential
+sudo pip install --upgrade pip
+```
 
 现在我们可以安装我们需要的其他包。作为开始，我们需要Python数学包`numpy`、科学Python库`scipy`和数学绘图库`matplotlib`。让我们来安装它们：
 
-[PRE3]
+```py
+sudo apt-get install python-numpy python-scipy python-matplotlib python-sympy
+```
 
 我将在适当章节中介绍我们将要使用的其他Python库（OpenCV、scikit-learn、Keras等），因为我们需要在适当章节中使用它们。
 
@@ -260,23 +270,47 @@ Linux Ubuntu系统将自带一个Python默认版本。我将假设您熟悉Pytho
 
 1.  使用以下代码设置`locale`：
 
-    [PRE4]
+    ```py
+    locale
+    sudo apt update && sudo apt install locales
+    sudo locale-gen en_US en_US.UTF-8
+    sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    locale
+    ```
 
 1.  设置要使用的源仓库：
 
-    [PRE5]
+    ```py
+    apt-cache policy | grep universe or
+    sudo apt install software-properties-common
+    sudo add-apt-repository universe
+    sudo apt update && sudo apt install curl gnupg2 lsb-release
+    sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(source /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+    ```
 
 1.  安装ROS包：
 
-    [PRE6]
+    ```py
+    sudo apt update
+    sudo apt upgrade
+    sudo apt install ros-foxy-desktop
+    sudo apt install ros-foxy-ros-base
+    ```
 
 1.  设置环境：
 
-    [PRE7]
+    ```py
+    source /opt/ros/foxy/setup.bash
+    ```
 
 1.  完成后，您可以通过输入以下内容来检查您的安装是否正确完成：
 
-    [PRE8]
+    ```py
+    ros2 topic list
+    ros2 node list
+    ```
 
 在我们继续之前，让我们看看ROS是如何工作的。
 
@@ -298,15 +332,21 @@ ROS机器人控制系统中的每个独立部分都称为**节点**。节点是�
 
 ROS 2允许我们设置`arm_base_lock`，将其定义为布尔值，并使用以下命令：
 
-[PRE9]
+```py
+ros2 param set /robot_arm arm_base_lock true
+```
 
 这将开启旋转锁定。然后我们可以使用以下方式来检查这个设置：
 
-[PRE10]
+```py
+ros2 param get /robot_arm arm_base_lock
+```
 
 我们得到以下回复：
 
-[PRE11]
+```py
+Boolean value is true
+```
 
 由于我们的机器人将由多个节点（程序）组成，这些节点都需要一起启动，ROS 2提供了**启动文件**的概念，使我们能够通过一个命令启动所有程序。在ROS 1中，启动文件是内置的**YAML**格式。YAML代表**另一种标记语言**。在ROS 2中，我们可以使用YAML、Python或**可扩展标记语言**（**XML**）来定义启动文件。我习惯于创建YAML格式的文件，所以我们将继续使用它。在我们的启动文件中，我们可以启动节点、更改参数，如果需要启动多个节点的副本（例如，如果我们有三个摄像头），我们还可以创建命名空间。
 

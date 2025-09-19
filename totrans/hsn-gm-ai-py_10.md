@@ -104,25 +104,128 @@ PG方法背后的基本直觉是我们从寻找描述确定性策略的价值函
 
 1.  在 PyTorch 中，REINFORCE 成为一个紧凑的算法，整个代码列表如下所示：
 
-[PRE0]
+```py
+import gym
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.distributions import Categorical
+
+#Hyperparameters
+learning_rate = 0.0002
+gamma = 0.98
+
+class REINFORCE(nn.Module):
+  def __init__(self, input_shape, num_actions):
+    super(REINFORCE, self).__init__()
+    self.data = []
+
+    self.fc1 = nn.Linear(input_shape, 128)
+    self.fc2 = nn.Linear(128, num_actions)
+    self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+
+ def act(self, x):
+   x = F.relu(self.fc1(x))
+   x = F.softmax(self.fc2(x), dim=0)
+   return x
+
+ def put_data(self, item):
+   self.data.append(item)
+
+ def train_net(self):
+   R = 0
+   for r, log_prob in self.data[::-1]:
+     R = r + gamma * R
+     loss = -log_prob * R
+     self.optimizer.zero_grad()
+     loss.backward()
+     self.optimizer.step()
+   self.data = []
+
+env = gym.make('LunarLander-v2')
+pi = REINFORCE(env.observation_space.shape[0], env.action_space.n)
+score = 0.0
+print_interval = 100
+iterations = 10000
+min_play_reward = 20
+
+def play_game():
+  done = False
+  state = env.reset()
+  its = 500
+  while(not done and its > 0):
+    its -= 1
+    prob = pi.act(torch.from_numpy(state).float())
+    m = Categorical(prob)
+    action = m.sample()
+    next_state, reward, done, _ = env.step(action.item())
+    env.render()
+    state = next_state
+
+for iteration in range(iterations):
+  s = env.reset()
+  for t in range(501):
+    prob = pi.act(torch.from_numpy(s).float())
+    m = Categorical(prob)
+    action = m.sample()
+    s_prime, r, done, info = env.step(action.item())
+    pi.put_data((r,torch.log(prob[action])))
+
+    s = s_prime
+    score += r
+    if done:
+      if score/print_interval > min_play_reward:
+        play_game()
+      break
+  pi.train_net()
+  if iteration%print_interval==0 and iteration!=0:
+    print("# of episode :{}, avg score : {}".format(iteration, score/print_interval))
+    score = 0.0 
+
+env.close()
+```
 
 1.  如同往常，我们从我们常用的导入开始，增加了一个来自 `torch.distributions` 的新导入，名为 `Categorical`。现在，`Categorical` 用于从连续概率空间采样我们的动作空间到离散动作值。之后，我们初始化我们的基本超参数，`learning_rate` 和 `gamma`。
 
 1.  接下来，我们来到一个新的类 `REINFORCE`，它封装了我们的代理算法的功能。我们在 DQN 和 DDQN 配置中已经看到了大部分代码。然而，我们想要关注的是这里所示的训练函数 `train_net`。
 
-[PRE1]
+```py
+def train_net(self):
+   R = 0
+   for r, log_prob in self.data[::-1]:
+     R = r + gamma * R
+     loss = -log_prob * R
+     self.optimizer.zero_grad()
+     loss.backward()
+     self.optimizer.step()
+   self.data = []
+```
 
 1.  `train_net` 是我们使用损失计算来推动（反向传播）策略网络中的错误的地方。注意，在这个课程中，我们不使用重放缓冲区，而是仅使用一个名为 `data` 的列表。也应该清楚，我们将列表中的所有值都反向通过网络。
 
 1.  在类定义之后，我们跳转到创建环境和设置一些额外的变量，如下所示：
 
-[PRE2]
+```py
+env = gym.make('LunarLander-v2')
+pi = REINFORCE(env.observation_space.shape[0], env.action_space.n)
+score = 0.0
+print_interval = 100
+iterations = 10000
+min_play_reward = 20
+```
 
 1.  你可以看到我们又回到了玩月球着陆环境。其他变量与我们之前用来控制训练量和输出结果频率的变量相似。如果你将其更改为不同的环境，你很可能需要调整这些值。
 
 1.  再次，训练迭代代码与我们之前的例子非常相似，唯一的显著区别是我们如何在环境中采样和执行动作。以下是完成这一部分的代码：
 
-[PRE3]
+```py
+prob = pi.act(torch.from_numpy(s).float())
+m = Categorical(prob)
+action = m.sample()
+s_prime, r, done, info = env.step(action.item())
+pi.put_data((r,torch.log(prob[action])))
+```
 
 1.  这里要注意的主要事情是我们正在从 REINFORCE 生成的策略中提取动作的概率，使用 `pi.act`。之后，我们使用 `Categorical` 将这个概率转换为分类或离散的值箱。然后我们使用 `m.sample()` 提取离散的动作值。这种转换对于离散动作空间，如月球着陆 v2 环境，是必要的。
 
@@ -150,7 +253,63 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  由于此代码遵循与之前示例相同的模式，我们只需要详细说明几个部分。最重要的部分是文件顶部的`ActorCritic`类，如下所示：
 
-[PRE4]
+```py
+class ActorCritic(nn.Module):
+ def __init__(self, input_shape, num_actions):
+   super(ActorCritic, self).__init__()
+   self.data = []
+   self.fc1 = nn.Linear(input_shape,256)
+   self.fc_pi = nn.Linear(256,num_actions)
+   self.fc_v = nn.Linear(256,1)
+   self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+
+ def pi(self, x, softmax_dim = 0):
+   x = F.relu(self.fc1(x))
+   x = self.fc_pi(x)
+   prob = F.softmax(x, dim=softmax_dim)
+   return prob
+
+ def v(self, x):
+   x = F.relu(self.fc1(x))
+   v = self.fc_v(x)
+   return v
+
+ def put_data(self, transition):
+   self.data.append(transition)
+
+ def make_batch(self):
+   s_lst, a_lst, r_lst, s_prime_lst, done_lst = [], [], [], [], []
+   for transition in self.data:
+     s,a,r,s_prime,done = transition
+     s_lst.append(s)
+     a_lst.append([a])
+     r_lst.append([r/100.0])
+     s_prime_lst.append(s_prime)
+     done_mask = 0.0 if done else 1.0  
+     done_lst.append([done_mask])
+
+     s_batch, a_batch, r_batch, s_prime_batch, done_batch
+       = torch.tensor(s_lst, dtype=torch.float),
+       torch.tensor(a_lst), \
+       torch.tensor(r_lst, dtype=torch.float),
+       torch.tensor(s_prime_lst,   dtype=torch.float), \ 
+       torch.tensor(done_lst, dtype=torch.float)
+
+     self.data = []
+     return s_batch, a_batch, r_batch, s_prime_batch, done_batch
+
+ def train_net(self):
+   s, a, r, s_prime, done = self.make_batch()
+   td_target = r + gamma * self.v(s_prime) * done
+   delta = td_target - self.v(s)
+   pi = self.pi(s, softmax_dim=1)
+   pi_a = pi.gather(1,a)
+   loss = -torch.log(pi_a) * delta.detach() 
+     + F.smooth_l1_loss(self.v(s), td_target.detach())
+   self.optimizer.zero_grad()
+   loss.mean().backward()
+   self.optimizer.step()
+```
 
 1.  从`init`函数开始，我们可以看到我们构建了三个`Linear`网络层：`fc1`和`fc_pi`用于`policy`，`fc_v`用于`value`。然后，在`init`之后，我们看到`pi`和`v`函数。这些函数对每个网络（`pi`和`v`）进行前向传递。注意这两个网络都共享`fc1`作为输入层。这意味着我们网络的第一层将用于以演员和评论家网络共享的形式编码网络状态。在更高级的网络配置中，共享这样的层是常见的。
 
@@ -160,7 +319,34 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  我们将跳过`ActorCritic`训练函数`train_net`，并跳到下面的迭代训练代码，如下所示：
 
-[PRE5]
+```py
+for iteration in range(iterations):
+ done = False
+ s = env.reset()
+ while not done:
+   for t in range(n_rollout):
+     prob = model.pi(torch.from_numpy(s).float())
+     m = Categorical(prob)
+     a = m.sample().item()
+     s_prime, r, done, info = env.step(a) 
+     model.put_data((s,a,r,s_prime,done))
+
+     s = s_prime
+     score += r
+     if done:
+       if score/print_interval > min_play_reward:
+         play_game()
+       break 
+
+     model.train_net()
+
+     if iteration%print_interval==0 and iteration!=0:
+       print("# of episode :{},
+         avg score : {:.1f}".format(iteration, score/print_interval))
+       score = 0.0
+
+env.close()
+```
 
 1.  你可能没有注意到，但我们的最后一个练习使用了基于事件的训练或我们所说的蒙特卡洛或离线策略训练。这次，我们的训练是在策略下进行的，这意味着我们的代理在接收到新的更新后立即采取行动。否则，代码与其他许多示例非常相似，并且可以运行。
 
@@ -174,25 +360,40 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  我们的主要关注点将是之前看到的 `ActorCritic` 类中的 `train_net` 函数。从前两行开始，我们可以看到这是训练批次首先被创建的地方，我们计算 `td_target`。回想一下，当我们实现 DDQN 时，我们覆盖了 TD 错误计算的形式检查：
 
-[PRE6]
+```py
+s, a, r, s_prime, done = self.make_batch()
+td_target = r + gamma * self.v(s_prime) * done
+```
 
 1.  接下来，我们计算目标函数和值函数之间的变化或增量。同样，这在 DDQN 中已经覆盖了，执行此操作的代码如下：
 
-[PRE7]
+```py
+delta = td_target - self.v(s) 
+```
 
 1.  之后，我们使用 `self.pi` 在 π 网络上执行前向传递，然后收集结果。收集函数本质上是对数据进行对齐或收集。感兴趣的读者应查阅 PyTorch 网站以获取有关 `gather` 的进一步文档。此步骤的代码如下：
 
-[PRE8]
+```py
+pi = self.pi(s, softmax_dim=1)
+pi_a = pi.gather(1,a)
+```
 
 1.  然后，我们使用以下代码计算损失：
 
-[PRE9]
+```py
+loss = -torch.log(pi_a) * delta.detach() 
+     + F.smooth_l1_loss(self.v(s), td_target.detach())
+```
 
 1.  损失是通过更新策略方法计算的，其中我们使用对数来对动作进行逆优化。回想一下，在我们之前的讨论中，介绍了 ![](img/aafe4f10-5c43-4378-8061-8031f956c590.png) 函数。此函数表示优势函数，其中我们取策略的负对数并将其添加到值函数 `v` 和 `td_target` 的 L1 平方误差输出中。张量上的 `detach` 函数仅允许网络在训练时不对这些值进行更新。
 
 1.  最后，我们使用以下代码将损失反向传递到网络中：
 
-[PRE10]
+```py
+self.optimizer.zero_grad()
+loss.mean().backward()
+self.optimizer.step()
+```
 
 1.  这里没有什么新的内容。代码首先将梯度置零，然后计算批次的平均损失，并通过调用 `backward` 将其反向传递，最后使用 `step` 步进优化器完成。
 
@@ -210,21 +411,55 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  这个示例的完整源代码太大，无法全部列出。相反，我们将通过练习中的相关部分进行讲解，从超参数开始，如下所示：
 
-[PRE11]
+```py
+lr_mu = 0.0005
+lr_q = 0.001
+gamma = 0.99
+batch_size = 32
+buffer_limit = 50000
+tau = 0.005
+```
 
 1.  看起来我们介绍了一些新的超参数，但实际上我们只介绍了一个新的参数，称为`tau`。其他变量`lr_mu`和`lr_q`是两个不同网络的 学习率。
 
 1.  接下来，我们跳过了`ReplayBuffer`类，这个类我们之前已经见过，用于存储经验，然后继续跳过其他代码，直到我们到达环境设置和更多变量定义的部分，如下所示：
 
-[PRE12]
+```py
+env = gym.make('Pendulum-v0')
+memory = ReplayBuffer()
+
+q, q_target = QNet(), QNet()
+q_target.load_state_dict(q.state_dict())
+mu, mu_target = MuNet(), MuNet()
+mu_target.load_state_dict(mu.state_dict())
+
+score = 0.0
+print_interval = 20
+min_play_reward = 0
+iterations = 10000
+
+mu_optimizer = optim.Adam(mu.parameters(), lr=lr_mu)
+q_optimizer = optim.Adam(q.parameters(), lr=lr_q)
+ou_noise = OrnsteinUhlenbeckNoise(mu=np.zeros(1))
+```
 
 1.  首先，我们看到新环境的设置，`Pendulum`。现在，`Pendulum` 是一个连续控制环境，需要学习连续空间动作。之后，创建了 `memory` 和 `ReplayBuffer`，接着创建了两个名为 `QNet` 和 `MuNet` 的类。接下来，初始化了更多的控制/监控参数。在最后一行之前，我们看到创建了两个优化器，`mu_optimizer` 和 `q_optimizer`，分别用于 `MuNet` 和 `QNet` 网络。最后，在最后一行，我们看到创建了一个新的张量 `ou_noise`。这里有很多新的事情在进行，但我们很快就会看到这一切是如何结合在一起的：
 
-[PRE13]
+```py
+for iteration in range(iterations):
+  s = env.reset() 
+  for t in range(300):
+```
 
 1.  接下来，向下移动到前面行中显示的训练循环的顶部。我们确保算法可以完全循环通过一个场景。因此，我们将内循环的范围设置为高于智能体在环境中获得的迭代次数的值：
 
-[PRE14]
+```py
+a = mu(torch.from_numpy(s).float()) 
+a = a.item() + ou_noise()[0]
+s_prime, r, done, info = env.step([a]) memory.put((s,a,r/100.0,s_prime,done))
+score +=r
+s = s_prime
+```
 
 1.  接下来是试错训练代码。请注意，`a` 动作是从名为 `mu` 的网络中提取的。然后，在下一行，我们将 `ou_noise` 值添加到其中。之后，我们让智能体迈出一步，将结果存入记忆中，并更新分数和状态。我们这里使用的噪声值基于 Ornstein-Uhlenbeck 过程，并由同名类生成。这个过程生成一个移动的随机值，倾向于收敛到值 ![](img/29efbecd-091a-4a5a-823e-d5b784d76923.png) 或 `mu`。
 
@@ -234,11 +469,21 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  在训练循环内部，我们跳转到执行实际训练的代码部分：
 
-[PRE15]
+```py
+if memory.size()>2000:
+  for i in range(10):
+    train(mu, mu_target, q, q_target, memory, q_optimizer, mu_optimizer)
+    soft_update(mu, mu_target)
+    soft_update(q, q_target)
+```
 
 1.  我们可以看到，一旦记忆 `ReplayBuffer` 超过 `2000`，智能体就开始以 10 个循环进行训练。首先，我们看到对 `train` 函数的调用，其中包含构建的各种网络/模型 `mu`、`mu_target`、`q` 和 `q_target`；`memory`；以及 `q_optimizer` 和 `mu_optimizer` 优化器。然后，有两个对 `soft_update` 函数的调用，使用各种模型。这里显示的 `soft_update` 只是通过使用 `tau` 缩放每次迭代的改变量，以迭代方式将输入模型收敛到目标：
 
-[PRE16]
+```py
+def soft_update(net, net_target):
+  for param_target, param in zip(net_target.parameters(), net.parameters()):
+   param_target.data.copy_(param_target.data * (1.0 - tau) + param.data * tau)
+```
 
 1.  这种从某些演员模型到目标的收敛并不新鲜，但是随着AC的引入，它确实使事情复杂化了。不过，在我们到达那里之前，让我们运行这个示例并看看它是如何运作的。像平常一样运行代码并等待：这个可能需要一段时间。如果你的智能体达到足够高的分数，你将获得以下奖励：
 
@@ -262,7 +507,24 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  我们将首先查看这里显示的评论者或`QNet`网络类的定义：
 
-[PRE17]
+```py
+class QNet(nn.Module):
+  def __init__(self):
+    super(QNet, self).__init__()
+
+    self.fc_s = nn.Linear(3, 64)
+    self.fc_a = nn.Linear(1,64)
+    self.fc_q = nn.Linear(128, 32)
+    self.fc_3 = nn.Linear(32,1)
+
+  def forward(self, x, a):
+    h1 = F.relu(self.fc_s(x))
+    h2 = F.relu(self.fc_a(a))
+    cat = torch.cat([h1,h2], dim=1)
+    q = F.relu(self.fc_q(cat))
+    q = self.fc_3(q)
+    return q
+```
 
 1.  这个网络的构建也略有不同，这里发生的事情是`fc_s`层编码状态，然后`fc_a`编码动作。这两个层在正向传递中连接，创建一个单一的Q层，`fc_q`，然后通过最后一层，`fc_3`输出。
 
@@ -270,21 +532,49 @@ AC方法使用网络组合来预测价值和策略函数的输出，其中我们
 
 1.  从评论者网络转移到由`MuNet`类定义的演员网络，如下所示：
 
-[PRE18]
+```py
+class MuNet(nn.Module):
+  def __init__(self):
+    super(MuNet, self).__init__()
+
+    self.fc1 = nn.Linear(3, 128)
+    self.fc2 = nn.Linear(128, 64)
+    self.fc_mu = nn.Linear(64, 1)
+
+  def forward(self, x):
+    x = F.relu(self.fc1(x))
+    x = F.relu(self.fc2(x))
+    mu = torch.tanh(self.fc_mu(x))*2 
+    return mu
+```
 
 1.  `MuNet`是一个将状态从3个值编码到128个输入神经元`fc1`的简单网络实现，然后是64个隐藏层神经元`fc2`，最后输出到输出层上的单个值`fc_mu`。唯一值得注意的注释是我们如何将`fc_mu`，`forward`函数中的输出层，转换为`mu`输出值。这是为了考虑到`Pendulum`环境中的控制范围，该环境接受-2到2的动作值。如果你将这个示例转换到另一个环境，请确保考虑到动作空间值的变化。
 
 1.  接下来，我们将向下移动到`train`函数的开始，如下所示：
 
-[PRE19]
+```py
+def train(mu, mu_target, q, q_target, memory, q_optimizer, mu_optimizer):
+  s,a,r,s_prime,done_mask = memory.sample(batch_size)
+```
 
 1.  `train`函数接受所有网络、记忆和优化器作为输入。在第一行，它从`replayBuffer`记忆中提取`s`状态、`a`动作、`r`奖励、`s_prime`下一个状态和`done_mask`：
 
-[PRE20]
+```py
+target = r + gamma * q_target(s_prime, mu_target(s_prime))
+q_loss = F.smooth_l1_loss(q(s,a), target.detach())
+q_optimizer.zero_grad()
+q_loss.backward()
+q_optimizer.step()
+```
 
 1.  函数内部的第一块代码根据`q_target`网络的输出计算目标值，该网络以最后一个状态`s_prime`和从最后一个状态输出的`mu_target`作为输入。然后，我们根据使用`target`值作为目标的输入状态和动作来计算`q_loss`损失。这种有些抽象的转换是为了将值从随机转换为确定性。在最后三行中，我们看到典型的优化器代码用于归零梯度并进行反向传播：
 
-[PRE21]
+```py
+mu_loss = -q(s,mu(s)).mean() 
+mu_optimizer.zero_grad()
+mu_loss.backward()
+mu_optimizer.step()
+```
 
 1.  计算`mu_loss`策略损失要简单得多，我们只需使用`mu`网络的状态和输出动作来获取`q`网络的输出。需要注意的是，我们将损失设置为负值并取平均值。然后，我们使用典型的优化器反向传播来完成`mu_loss`函数。
 
@@ -322,11 +612,24 @@ TRPO和另一种名为**近端策略优化（proximal policy optimization）**�
 
 1.  滚动到大约中间位置，你将看到环境是如何在主要策略和价值网络上构建的，如图所示：
 
-[PRE22]
+```py
+env = gym.make(args.env_name)
+
+num_inputs = env.observation_space.shape[0]
+num_actions = env.action_space.shape[0]
+
+env.seed(args.seed)
+torch.manual_seed(args.seed)
+
+policy_net = Policy(num_inputs, num_actions)
+value_net = Value(num_inputs)
+```
 
 1.  接下来，继续向下滚动，直到你到达那个熟悉的训练循环。大部分应该看起来与其他例子相似，除了引入了另一个`while`循环，如下所示：
 
-[PRE23]
+```py
+while num_steps < args.batch_size:
+```
 
 1.  这段代码确保一个智能体（agent）的回合（episode）由`batch_size`决定的给定步数组成。然而，我们仍然不会在环境表示回合完成之前打破内部训练循环。但是，现在，只有在达到提供的`batch_size`之后，才会完成一个回合或轨迹更新。这试图解决我们之前讨论过的PG方法采样问题。
 
@@ -362,13 +665,33 @@ Jonathan Hui ([https://medium.com/@jonathan_hui](https://medium.com/@jonathan_hu
 
 1.  在 `TRPO` 文件夹中打开 `trpo.py` 文件。此文件中的三个函数旨在解决我们遇到的 PG 问题的各种问题。我们遇到的第一问题是反转梯度，执行此操作的代码如下所示：
 
-[PRE24]
+```py
+def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
+  x = torch.zeros(b.size())
+  r = b.clone()
+  p = b.clone()
+  rdotr = torch.dot(r, r)
+  for i in range(nsteps):
+    _Avp = Avp(p)
+    alpha = rdotr / torch.dot(p, _Avp)
+    x += alpha * p
+    r -= alpha * _Avp
+    new_rdotr = torch.dot(r, r)
+    betta = new_rdotr / rdotr
+    p = r + betta * p
+    rdotr = new_rdotr
+    if rdotr < residual_tol:
+      break
+  return x
+```
 
 1.  `conjugate_gradients` 函数被迭代使用，以产生一个更自然、更稳定的梯度，我们可以用它来进行上升。
 
 1.  滚动到 `trpo_step` 函数，你将看到这个方法如何在代码中展示使用：
 
-[PRE25]
+```py
+stepdir = conjugate_gradients(Fvp, -loss_grad, 10)
+```
 
 1.  这输出一个 `stepdir` 张量，表示用于移动网络的梯度。我们可以通过输入参数看到，输出共轭梯度将通过一个近似函数 `Fvp` 和损失梯度的逆 `loss_grad` 在 10 次迭代中求解。这与其他一些优化纠缠在一起，所以我们现在暂停。
 
@@ -388,23 +711,58 @@ Jonathan Hui ([https://medium.com/@jonathan_hui](https://medium.com/@jonathan_hu
 
 1.  再次打开 `trpo.py` 并向下滚动到以下代码块：
 
-[PRE26]
+```py
+def linesearch(model, f, x, fullstep, expected_improve_rate,   
+  max_backtracks=10, accept_ratio=.1):
+  fval = f(True).data   
+  print("fval before", fval.item())
+  for (_n_backtracks, stepfrac) in enumerate(.5**np.arange(max_backtracks)):
+    xnew = x + stepfrac * fullstep
+    set_flat_params_to(model, xnew)
+    newfval = f(True).data
+    actual_improve = fval - newfval
+    expected_improve = expected_improve_rate * stepfrac
+    ratio = actual_improve / expected_improve
+    print("a/e/r", actual_improve.item(), expected_improve.item(), 
+     ratio.item())
+
+  if ratio.item() > accept_ratio and actual_improve.item() > 0:
+    print("fval after", newfval.item())
+    return True, xnew
+
+  return False, x
+```
 
 1.  `linesearch` 函数用于确定我们想要在山脊上定位下一个信任区域的距离。这个函数用于指示到下一个信任区域的距离，并使用以下代码执行：
 
-[PRE27]
+```py
+success, new_params = linesearch(model, get_loss, prev_params, fullstep,
+   neggdotstepdir / lm[0])
+```
 
 1.  注意到 `neggdotstepdir` 的使用。这个值是从我们在上一个练习中计算的步长方向 `stepdir` 计算出来的，以下代码所示：
 
-[PRE28]
+```py
+neggdotstepdir = (-loss_grad * stepdir).sum(0, keepdim=True)
+```
 
 1.  现在我们有了 `neggdotstepdir` 方向和 `linesearch` 数量，我们可以用以下代码确定信任区域：
 
-[PRE29]
+```py
+ set_flat_params_to(model, new_params)
+```
 
 1.  `set_flat_params_to` 函数位于 `utils.py` 文件中，代码如下所示：
 
-[PRE30]
+```py
+def set_flat_params_to(model, flat_params):
+  prev_ind = 0
+  for param in model.parameters():
+    flat_size = int(np.prod(list(param.size())))
+    param.data.copy_(
+      flat_params[prev_ind:prev_ind + flat_size].view(param.size()))
+    prev_ind += flat_size
+```
 
 1.  这段代码本质上是将参数平坦化到信任区域。这是我们用来测试下一步是否在其中的信任区域，使用 `linesearch` 函数。
 
@@ -416,17 +774,29 @@ Jonathan Hui ([https://medium.com/@jonathan_hui](https://medium.com/@jonathan_hu
 
 1.  打开 `main.py` 文件，找到大约在第 130 行的以下代码行：
 
-[PRE31]
+```py
+trpo_step(policy_net, get_loss, get_kl, args.max_kl, args.damping)
+```
 
 1.  这最后一行代码位于 `update_params` 函数中，这是大部分训练发生的地方。
 
 1.  你可以在 `main.py` 文件几乎最底部看到对 `update_params` 函数的调用，其中 `batch` 是从 `memory` 中抽取的样本，如下面的代码所示：
 
-[PRE32]
+```py
+batch = memory.sample()
+update_params(batch)
+```
 
 1.  滚回 `update_params` 函数，注意第一个循环使用以下代码构建 `returns`、**`deltas`** 和 `advantages`：
 
-[PRE33]
+```py
+for i in reversed(range(rewards.size(0))):
+  returns[i] = rewards[i] + args.gamma * prev_return * masks[i]
+  deltas[i] = rewards[i] + args.gamma * prev_value *
+    masks[i] - values.data[i]
+  advantages[i] = deltas[i] + args.gamma * args.tau * 
+    prev_advantage * masks[i]
+```
 
 1.  注意我们是如何反转奖励，然后通过它们循环以构建我们的各种列表 `returns`、**`deltas`** 和 `advantages`。
 

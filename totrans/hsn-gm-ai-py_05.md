@@ -74,7 +74,55 @@ DP、MC和TDL的备份图
 
 1.  打开`Chapter_4_1.py`源代码示例，如下所示：
 
-[PRE0]
+```py
+import numpy as np
+from tqdm import tqdm
+import random
+
+gamma = 0.5 
+rewardSize = -1
+gridSize = 4
+alpha = 0.5 
+terminations = [[0,0], [gridSize-1, gridSize-1]]
+actions = [[-1, 0], [1, 0], [0, 1], [0, -1]]
+episodes = 10000
+
+V = np.zeros((gridSize, gridSize))
+returns = {(i, j):list() for i in range(gridSize) for j in range(gridSize)}
+deltas = {(i, j):list() for i in range(gridSize) for j in range(gridSize)}
+states = [[i, j] for i in range(gridSize) for j in range(gridSize)]
+
+def generateInitialState():
+    initState = random.choice(states[1:-1])
+    return initState
+
+def generateNextAction():
+    return random.choice(actions)
+
+def takeAction(state, action):
+  if list(state) in terminations:
+    return 0, None
+  finalState = np.array(state)+np.array(action)
+
+  if -1 in list(finalState) or gridSize in list(finalState):
+    finalState = state
+  return rewardSize, list(finalState)
+
+for it in tqdm(range(episodes)):    
+  state = generateInitialState()
+  while True:
+    action = generateNextAction()
+    reward, finalState = takeAction(state, action) 
+    if finalState is None:
+      break
+
+  before =  V[state[0], state[1]]
+  V[state[0], state[1]] += alpha*(reward + gamma*V[finalState[0], finalState[1]] - V[state[0], state[1]])
+  deltas[state[0], state[1]].append(float(np.abs(before-V[state[0], state[1]])))        
+  state = finalState
+
+print(V)
+```
 
 1.  这是一个直接展示价值更新工作原理的代码示例，并且不使用RL环境。我们将重点关注的第一个部分是在导入之后初始化我们的参数。在这里，我们初始化学习率`alpha`（`0.5`）、折现因子`gamma`（`0.5`）、环境大小`gridSize`（`4`）、状态`terminations`列表、`actions`列表，最后是`episodes`。动作代表移动向量，终止代表一个episod将终止的网格方块。
 
@@ -82,7 +130,15 @@ DP、MC和TDL的备份图
 
 1.  然后，我们定义了一些效用函数，`generateInitialState`、`generateNextAction`和`takeAction`。前两个函数是自解释的，但让我们专注于`takeAction`函数：
 
-[PRE1]
+```py
+def takeAction(state, action):
+ if list(state) in terminations:
+   return 0, None
+ finalState = np.array(state)+np.array(action)
+ if -1 in list(finalState) or gridSize in list(finalState):
+   finalState = state
+ return rewardSize, list(finalState)
+```
 
 1.  前面的函数接受当前`state`和`action`作为输入。然后，它确定当前状态是否是终端状态；如果是，则返回。否则，它使用简单的向量数学计算下一个状态以获得`finalState`。
 
@@ -90,7 +146,9 @@ DP、MC和TDL的备份图
 
 1.  在`for`循环开始时发生的第一件事是代理的状态被随机初始化。之后，它进入一个`while`循环，运行整个一个episodic。大部分代码都是自解释的，除了这里所示的价值更新方程的实现：
 
-[PRE2]
+```py
+V[state[0], state[1]] += alpha*(reward + gamma*V[finalState[0], finalState[1]] - V[state[0], state[1]])
+```
 
 1.  这段代码块是之前价值更新函数的实现。注意学习率`alpha`和折现因子`gamma`的使用。
 
@@ -112,19 +170,35 @@ DP、MC和TDL的备份图
 
 1.  请记住，你可以使用以下命令从 Python 控制台安装 `matplotlib`：
 
-[PRE3]
+```py
+pip install matplotlib
+```
 
 1.  我们使用 `matplotlib` 来渲染我们训练努力的成果。随着我们继续阅读本书，我们将在后面探讨更高级的方法。
 
 1.  接下来，我们看到超参数 alpha 和 gamma 已经被修改为 `0.1` 的值：
 
-[PRE4]
+```py
+gamma = 0.1 
+rewardSize = -1
+gridSize = 4
+alpha = 0.1 
+```
 
 1.  现在，由于你经常对训练进行微调，你很可能只想一次只修改一个参数。这将使你能够更好地控制并理解参数可能产生的影响。
 
 1.  最后，在文件末尾，我们看到输出训练值或改变训练值的代码。回想一下我们之前创建的名为 `deltas` 的列表。在这个列表中捕获了训练期间所做的所有 delta 或变化。这可以非常有助于可视化，正如我们将看到的：
 
-[PRE5]
+```py
+plt.figure(figsize=(20,10))
+all_series = [list(x)[:50] for x in deltas.values()]
+for series in all_series:
+    plt.plot(series)
+
+plt.show()
+
+print(V)
+```
 
 1.  这段代码只是遍历每个一集中训练期间所做的变化列表。我们期望的是，随着训练的进行，变化量将减少。减少变化量允许代理收敛到某个最优值函数和策略。
 
@@ -170,25 +244,54 @@ TDL对于第一步或TD(0)实际上简化为Q-learning。为了全面比较此�
 
 1.  代码的完整列表太大，无法展示。相反，我们将从导入部分开始分节审查代码：
 
-[PRE6]
+```py
+from os import system, name
+from time import sleep
+import numpy as np
+import gym
+import random
+from tqdm import tqdm
+```
 
 1.  我们之前已经看到所有这些导入，所以这里没有什么新内容。接下来，我们将介绍环境初始化和输出一些初始环境变量的过程：
 
-[PRE7]
+```py
+env = gym.make("FrozenLake-v0")
+env.render()
+action_size = env.action_space.n
+print("Action size ", action_size)
+state_size = env.observation_space.n
+print("State size ", state_size)
+```
 
 1.  这里也没有什么新内容。接下来，我们介绍Q表或质量表的概念，它现在以`状态-动作`对的形式定义了我们的策略。我们通过将每个`状态-动作`对的质量设置为等于该状态下动作的总数（`action-size`）来设置这个值：
 
-[PRE8]
+```py
+qtable = np.ones((state_size, action_size))/action_size 
+print(qtable)
+```
 
 1.  接下来，我们可以看到超参数的一部分：
 
-[PRE9]
+```py
+total_episodes = 50000 
+total_test_episodes = 100
+play_game_test_episode = 1000
+max_steps = 99 
+learning_rate = 0.7 
+gamma = 0.618 
+```
 
 1.  这里有两个新的参数，称为 `play_game_test_episode` 和 `max_steps`。`max_steps` 决定了我们的算法在一个场景中可能运行的最大步数。我们这样做是为了限制智能体陷入可能的无穷循环。`play_game_test_episode` 设置场景编号，以显示基于当前最佳 Q 表的智能体预览。
 
 1.  接下来，我们介绍一组全新的参数，这些参数必须处理探索和利用：
 
-[PRE10]
+```py
+epsilon = 1.0 
+max_epsilon = 1.0
+min_epsilon = 0.01
+decay_rate = 0.01 
+```
 
 1.  回想一下，我们在 [第 1 章](5553d896-c079-4404-a41b-c25293c745bb.xhtml) 中讨论了 RL 中的探索与利用的困境，*理解基于奖励的学习*。在本节中，我们介绍了 `epsilon`、`max_epsilon`、`min_epsilon` 和 `decay_rate`。这些超参数控制智能体在探索时的探索率，其中 `epsilon` 是智能体在时间步长内探索的概率。最大和最小 ε 代表智能体探索的多少或多少的限制，`decay_rate` 控制从时间步到时间步 `epsilon` 值衰减的程度。
 
@@ -240,15 +343,42 @@ OpenAI Gym提供了许多有趣的环境，使我们能够轻松切换和测试�
 
 1.  这个代码示例几乎与`Chapter_4_4.py`相同，除了显示的环境初始化不同：
 
-[PRE11]
+```py
+env = gym.make("Taxi-v2")
+```
 
 1.  我们将使用之前相同的超参数，因此没有必要再次查看它们。相反，跳到下面的`play_game`函数，如下面的代码块所示：
 
-[PRE12]
+```py
+def play_game(render_game):
+  state = env.reset()
+  step = 0
+  done = False
+  total_rewards = 0 
+  for step in range(max_steps):
+    if render_game:
+      env.render()
+      print("**...*****************")
+      print("EPISODE ", episode)
+      sleep(.5)
+      clear()
+   action = np.argmax(qtable[state,:])
+   new_state, reward, done, info = env.step(action)
+   total_rewards += reward
+   if done:
+     rewards.append(total_rewards)
+     if render_game:
+       print ("Score", total_rewards)
+     break
+   state = new_state
+ return done, state, step, total_rewards
+```
 
 1.  `play_game`函数本质上使用的是`qtable`列表，这实际上是状态-动作对的生成策略。现在代码应该很熟悉了，一个需要注意的细节是智能体如何使用以下代码从`qtable`列表中选择动作：
 
-[PRE13]
+```py
+action = np.argmax(qtable[state,:])
+```
 
 1.  这里的`play_game`函数扮演了我们之前提到的智能体测试函数的角色。这个函数将允许你在智能体训练过程中看到它玩游戏。这是通过将`render_game`设置为`play_game`为`True`来实现的。这样做可以让你可视化智能体在游戏中的一个回合。
 
@@ -256,23 +386,61 @@ OpenAI Gym提供了许多有趣的环境，使我们能够轻松切换和测试�
 
 1.  接下来，我们跳到下一个for循环，该循环遍历训练回合并训练`qtable`。当经过`play_game_test_episode`设定的回合数阈值后，我们允许智能体玩一个可见的游戏。这样做可以让我们可视化整体训练进度。然而，重要的是要记住，这只是一个回合，智能体可能正在进行广泛的探索。因此，当观察智能体时，它们可能只是偶尔随机探索。代码展示了我们如何遍历回合：
 
-[PRE14]
+```py
+for episode in tqdm(range(total_episodes)):
+  state = env.reset()
+  step = 0
+  done = False
+  if episode % play_game_test_episode == 0:
+    play_game(True)
+  for step in range(max_steps):
+    exp_exp_tradeoff = random.uniform(0,1)
+    if exp_exp_tradeoff > epsilon:
+      action = np.argmax(qtable[state,:])
+    else:
+      action = env.action_space.sample()
+   new_state, reward, done, info = env.step(action)
+   qtable[state, action] = qtable[state, action] + learning_rate * (reward + gamma * np.max(qtable[new_state, :]) - qtable[state, action])
+   state = new_state
+   if done == True:
+     break
+  epsilon = min_epsilon + (max_epsilon - min_epsilon)*np.exp(-decay_rate*episode)
+```
 
 1.  首先，在情节循环内部，我们通过采样一个随机值并将其与epsilon进行比较来处理探索-利用困境。如果它大于贪婪动作，则选择该动作；否则，选择一个随机的探索性动作，如代码所示：
 
-[PRE15]
+```py
+exp_exp_tradeoff = random.uniform(0,1)
+if exp_exp_tradeoff > epsilon:
+  action = np.argmax(qtable[state,:])
+else:
+  action = env.action_space.sample()
+```
 
 1.  然后，下一行是执行所选动作的地方。之后，根据之前的Q-learning方程更新`qtable`。这一行代码中发生了很多事情，所以请确保你理解它：
 
-[PRE16]
+```py
+qtable[state, action] = qtable[state, action] + learning_rate * (reward + gamma * np.max(qtable[new_state, :]) - qtable[state, action])
+```
 
 1.  之后，我们通过`done`标志检查情节是否结束。如果是，我们终止并继续下一个情节。否则，我们使用以下代码更新`epsilon`的值：
 
-[PRE17]
+```py
+epsilon = min_epsilon + (max_epsilon - min_epsilon)*np.exp(-decay_rate*episode)
+```
 
 1.  最后，剩余的代码如下：
 
-[PRE18]
+```py
+env.reset()
+print(qtable)
+
+for episode in range(total_test_episodes):
+  done, state, step, total_rewards = play_game(False)
+
+env.close()
+print ("Score over time: " + str(sum(rewards)/total_test_episodes))
+```
 
 1.  最后一段代码重置并使用训练好的`qtable`测试环境，进行`total_test_episodes`次，然后输出一个情节的平均得分或奖励。
 

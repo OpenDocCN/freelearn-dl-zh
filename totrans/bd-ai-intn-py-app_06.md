@@ -84,47 +84,87 @@ MDN将存储新闻文章、订阅者资料、账单信息等。为了简化，�
 
 |
 
-[PRE0]
+```py
+{
+```
 
-[PRE1]
+```py
+  "fields": [
+```
 
-[PRE2]
+```py
+	{
+```
 
-[PRE3]
+```py
+  	"numDimensions": 1024,
+```
 
-[PRE4]
+```py
+  	"path": "semantic_embedding",
+```
 
-[PRE5]
+```py
+  	"similarity": "cosine",
+```
 
-[PRE6]
+```py
+  	"type": "vector"
+```
 
-[PRE7]
+```py
+	}
+```
 
-[PRE8]
+```py
+  ]
+```
 
-[PRE9]
+```py
+}
+```
 
 |
 
-[PRE10]
+```py
+{
+```
 
-[PRE11]
+```py
+  "fields": [
+```
 
-[PRE12]
+```py
+	{
+```
 
-[PRE13]
+```py
+  	"numDimensions": 768,
+```
 
-[PRE14]
+```py
+  	"path": "content_embedding",
+```
 
-[PRE15]
+```py
+  	"similarity": "cosine",
+```
 
-[PRE16]
+```py
+  	"type": "vector"
+```
 
-[PRE17]
+```py
+	}
+```
 
-[PRE18]
+```py
+  ]
+```
 
-[PRE19]
+```py
+}
+```
 
 |
 
@@ -152,87 +192,167 @@ MDN将存储新闻文章、订阅者资料、账单信息等。为了简化，�
 
 |
 
-[PRE20]
+```py
+{
+```
 
-[PRE21]
+```py
+  "fields": [
+```
 
-[PRE22]
+```py
+    {
+```
 
-[PRE23]
+```py
+      "numDimensions": 1024,
+```
 
-[PRE24]
+```py
+      "path": "semantic_embedding",
+```
 
-[PRE25]
+```py
+      "similarity": "cosine",
+```
 
-[PRE26]
+```py
+      "type": "vector"
+```
 
-[PRE27]
+```py
+    },
+```
 
-[PRE28]
+```py
+    {
+```
 
-[PRE29]
+```py
+      "path": "brand",
+```
 
-[PRE30]
+```py
+      "type": "filter"
+```
 
-[PRE31]
+```py
+    },
+```
 
-[PRE32]
+```py
+    {
+```
 
-[PRE33]
+```py
+      "path": "subscription_type",
+```
 
-[PRE34]
+```py
+      "type": "filter"
+```
 
-[PRE35]
+```py
+    }
+```
 
-[PRE36]
+```py
+  ]
+```
 
-[PRE37]
+```py
+}
+```
 
 |
 
-[PRE38]
+```py
+{
+```
 
-[PRE39]
+```py
+  "fields": [
+```
 
-[PRE40]
+```py
+    {
+```
 
-[PRE41]
+```py
+      "numDimensions": 768,
+```
 
-[PRE42]
+```py
+      "path": "content_embedding",
+```
 
-[PRE43]
+```py
+      "similarity": "cosine",
+```
 
-[PRE44]
+```py
+      "type": "vector"
+```
 
-[PRE45]
+```py
+    },
+```
 
-[PRE46]
+```py
+    {
+```
 
-[PRE47]
+```py
+      "path": "brand",
+```
 
-[PRE48]
+```py
+      "type": "filter"
+```
 
-[PRE49]
+```py
+    },
+```
 
-[PRE50]
+```py
+    {
+```
 
-[PRE51]
+```py
+      "path": "subscription_type",
+```
 
-[PRE52]
+```py
+      "type": "filter"
+```
 
-[PRE53]
+```py
+    },
+```
 
-[PRE54]
+```py
+    {
+```
 
-[PRE55]
+```py
+      "path": "_id.article_id",
+```
 
-[PRE56]
+```py
+      "type": "filter"
+```
 
-[PRE57]
+```py
+    }
+```
 
-[PRE58]
+```py
+  ]
+```
 
-[PRE59]
+```py
+}
+```
 
 |
 
@@ -246,55 +366,105 @@ MDN将存储新闻文章、订阅者资料、账单信息等。为了简化，�
 
 |
 
-[PRE60]
+```py
+{
+```
 
-[PRE61]
+```py
+  "mappings": {
+```
 
-[PRE62]
+```py
+    "dynamic": false,
+```
 
-[PRE63]
+```py
+    "fields": {
+```
 
-[PRE64]
+```py
+      "brand": {
+```
 
-[PRE65]
+```py
+        "normalizer": "lowercase",
+```
 
-[PRE66]
+```py
+        "type": "token"
+```
 
-[PRE67]
+```py
+      },
+```
 
-[PRE68]
+```py
+      "subscription_type": {
+```
 
-[PRE69]
+```py
+        "normalizer": "lowercase",
+```
 
-[PRE70]
+```py
+        "type": "token"
+```
 
-[PRE71]
+```py
+      },
+```
 
-[PRE72]
+```py
+      "summary": {
+```
 
-[PRE73]
+```py
+        "type": "string"
+```
 
-[PRE74]
+```py
+      },
+```
 
-[PRE75]
+```py
+      "tags": {
+```
 
-[PRE76]
+```py
+        "normalizer": "lowercase",
+```
 
-[PRE77]
+```py
+        "type": "token"
+```
 
-[PRE78]
+```py
+      },
+```
 
-[PRE79]
+```py
+      "title": {
+```
 
-[PRE80]
+```py
+        "type": "string"
+```
 
-[PRE81]
+```py
+      }
+```
 
-[PRE82]
+```py
+    }
+```
 
-[PRE83]
+```py
+  }
+```
 
-[PRE84]
+```py
+}
+```
 
 |
 
@@ -419,9 +589,13 @@ MDN是一个低写入、高读取的使用案例。每天仅添加100篇文章�
 
 |
 
-[PRE85]
+```py
+{ "github_id" : "user1", "languages" : ["python", "csharp"], …}
+```
 
-[PRE86]
+```py
+{ "github_id" : "user2", "languages" : ["python", "cpp"], …}…
+```
 
 |
 
@@ -430,9 +604,13 @@ MDN是一个低写入、高读取的使用案例。每天仅添加100篇文章�
 
 |
 
-[PRE87]
+```py
+{ "_id" : ObjectId("669…ab8"), "github_id" : "user1", … }
+```
 
-[PRE88]
+```py
+{ "_id" : ObjectId("669…ab9"), "github_id" : "user2", … }…
+```
 
 |
 
@@ -441,13 +619,21 @@ MDN是一个低写入、高读取的使用案例。每天仅添加100篇文章�
 
 |
 
-[PRE89]
+```py
+mongoimport --uri=<connection string to Atlas cluster>
+```
 
-[PRE90]
+```py
+--db=mdn --collection=subscribers --mode=merge
+```
 
-[PRE91]
+```py
+--file=github-20240719.json --upsertFields=github_id
+```
 
-[PRE92]
+```py
+--numInsertionWorkers=4
+```
 
 |
 
@@ -456,9 +642,13 @@ MDN是一个低写入、高读取的使用案例。每天仅添加100篇文章�
 
 |
 
-[PRE93]
+```py
+{ "_id" : ObjectId("669…ab8"), "github_id" : "user1", "languages" : ["python", "csharp"], … }
+```
 
-[PRE94]
+```py
+{ "_id" : ObjectId("669…ab9"), "github_id" : "user2", "languages" : ["python", "cpp"], … }…
+```
 
 |
 
@@ -486,7 +676,90 @@ MDN是一个低写入、高读取的使用案例。每天仅添加100篇文章�
 
 由于本书是为 Python 开发者编写的，您将学习如何使用用 Python 编写的变更流。*表 6.9* 展示了使用 LangChain 和 OpenAI 将 MDN 文章的标题和摘要嵌入的 Python 3 变更流。它根据 *图 6**.3* 中的数据模型和 *表 6.3* 中的向量索引触发新文章或标题或摘要的更改。 
 
-[PRE95]
+```py
+import os
+from langchain_openai import OpenAIEmbeddings
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+# Set the OpenAI API key as an environment variable
+os.environ["OPENAI_API_KEY"] = "YOUR-OPENAI-API-KEY"
+# Define the MongoDB Atlas connection string
+ATLAS_CONNECTION_STRING = "YOUR-MONGODB_ATLAS-CONNSTRING"
+# Create a MongoClient instance to connect to MongoDB Atlas
+client = MongoClient(
+    ATLAS_CONNECTION_STRING, tls=True, tlsAllowInvalidCertificates=True
+)
+# Select the 'articles' collection from the 'mdn' database
+coll = client["mdn"]["articles"]
+# Instantiate the OpenAIEmbeddings model with specified parameters
+embedding_model = OpenAIEmbeddings(
+    model="text-embedding-3-large", dimensions=1024, disallowed_special=()
+)
+# Define a function to handle changes detected in the MongoDB collection
+def handle_changes(change):
+    # Extract the document ID from the change event
+    doc_id = change["documentKey"]["_id"]
+    # Create a filter to identify the document in the collection
+    doc_filter = {
+        "_id": doc_id
+    }
+    # Combine the title and summary of the document into a single text string
+    text = [change["fullDocument"]["title"] + " " + change["fullDocument"]["summary"]]
+    # Generate embeddings for the text
+    embeddings = embedding_model.embed_documents(text)
+    # Create an update document to set the 'semantic_embedding' field with the generated embeddings
+    set_fields = {
+        "$set": {
+            "semantic_embedding": embeddings[0]
+        }
+    }
+    # Update the document in the collection with the new embeddings
+    coll.update_one(doc_filter, set_fields)
+    print(f"Updated embeddings for document {doc_id}")
+# Start monitoring the MongoDB collection for changes
+try:
+    # Define a stream filter to match insert and update operations affecting the title or summary fields
+    stream_filter = [
+        {
+            "$match": {
+                "$or": [
+                    {"operationType": "insert"},
+                    {
+                        "$and": [
+                            {"operationType": "update"},
+                            {
+                                "$or": [
+                                    {
+                                        "updateDescription.updatedFields.title": {
+                                            "$exists": True
+                                        }
+                                    },
+                                    {
+                                        "updateDescription.updatedFields.summary": {
+                                            "$exists": True
+                                        }
+                                    },
+                                ]
+                            },
+                        ]
+                    },
+                ]
+            }
+        }
+    ]
+    # Open a change stream to watch for changes in the collection
+    with coll.watch(stream_filter, full_document="updateLookup") as stream:
+        print("Listening for changes...")
+        for change in stream:
+            print(f"Change detected: {change}. Processing")
+            handle_changes(change)
+except PyMongoError as e:
+    # Print an error message if a PyMongoError occurs
+    print(f"An error occurred: {e}")
+finally:
+    # Close the MongoDB client connection
+    client.close()
+```
 
 表 6.9：用于设置或更新嵌入的 Python 编写的变更流
 

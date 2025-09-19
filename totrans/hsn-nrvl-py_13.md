@@ -100,7 +100,20 @@ Frostbite游戏屏幕
 
 使用TensorFlow框架创建描述的网络图模型的源代码定义如下：
 
-[PRE0]
+```py
+class LargeModel(Model):
+    def _make_net(self, x, num_actions):
+        x = self.nonlin(self.conv(x, name='conv1', num_outputs=32, 
+                                  kernel_size=8, stride=4, std=1.0))
+        x = self.nonlin(self.conv(x, name='conv2', num_outputs=64, 
+                                  kernel_size=4, stride=2, std=1.0))
+        x = self.nonlin(self.conv(x, name='conv3', num_outputs=64, 
+                                  kernel_size=3, stride=1, std=1.0))
+        x = self.flattenallbut0(x)
+        x = self.nonlin(self.dense(x, 512, 'fc'))
+
+        return self.dense(x, num_actions, 'out', std=0.1)
+```
 
 由于这种架构，CNN包含大约**400万个可训练参数**。接下来，我们将讨论在我们的实验中如何进行RL训练。
 
@@ -136,11 +149,23 @@ Frostbite游戏屏幕
 
 下面的源代码实现了按前一小节中定义的公式（参见`compute_weights_from_seeds`函数）进行的ANN参数估计：
 
-[PRE1]
+```py
+    idx = seeds[0]
+    theta = noise.get(idx, self.num_params).copy() * self.scale_by
+
+    for mutation in seeds[1:]:
+        idx, power = mutation
+        theta = self.compute_mutation(noise, theta, idx, power)
+    return theta
+```
 
 `compute_mutation`函数实现了ANN参数估计的单步估计，如下所示：
 
-[PRE2]
+```py
+    def compute_mutation(self, noise, parent_theta, idx, mutation_power):
+        return parent_theta + mutation_power * noise.get(idx, 
+                                                        self.num_params)
+```
 
 上述代码将父代可训练参数的向量与由确定性伪随机生成器使用特定种子索引产生的随机向量相加。突变能力参数在将其添加到父代参数向量之前对生成的随机向量进行缩放。
 
@@ -164,7 +189,15 @@ Frostbite游戏屏幕
 
 父个体突变的具体实现如下：
 
-[PRE3]
+```py
+    def mutate(self, parent, rs, noise, mutation_power):
+        parent_theta, parent_seeds = parent
+        idx = noise.sample_index(rs, self.num_params)
+        seeds = parent_seeds + ((idx, mutation_power), )
+        theta = self.compute_mutation(noise, parent_theta, idx, 
+                                      mutation_power)
+        return theta, seeds
+```
 
 此函数接收父个体的表型和基因型、随机源、预计算的噪声表（2.5亿个向量）以及突变功率值。随机源生成随机种子数（`idx`），用作索引，以便我们可以从噪声表中选择适当的参数向量。之后，我们通过将父种子列表与新的种子结合来创建后代基因组。最后，我们通过将父个体的表型与从共享噪声表中使用先前获得的随机采样种子索引（`idx`）提取的高斯噪声相结合来创建后代的表型。在下一节中，我们将探讨我们可以进行的实验，以训练一个能够玩Frostbite Atari游戏的智能体。
 
@@ -186,7 +219,15 @@ AtariEnv 提供了函数，使我们能够执行单个游戏步骤、重置游�
 
 游戏步骤函数使用提供的动作执行单个游戏步骤。该函数的实现如下：
 
-[PRE4]
+```py
+    def step(self, action, indices=None, name=None):
+        if indices is None:
+            indices = np.arange(self.batch_size)
+        with tf.variable_scope(name, default_name='AtariStep'):
+            rew, done = gym_tensorflow_module.environment_step(
+                               self.instances, indices, action)
+            return rew, done
+```
 
 此函数将控制器 ANN 接收到的游戏动作应用于当前游戏环境。请注意，此函数可以在多个游戏实例中同时执行单个游戏步骤。`self.batch_size` 参数或 `indices` 输入张量的长度决定了我们将拥有的游戏实例数量。该函数返回两个张量：一个包含奖励（游戏得分）的张量，另一个包含标志，指示当前游戏评估在此步骤后是否完成（解决或失败）。这两个张量的长度等于 `self.batch_size` 或 `indices` 输入张量的长度。
 
@@ -196,7 +237,23 @@ AtariEnv 提供了函数，使我们能够执行单个游戏步骤、重置游�
 
 此函数从 Atari 环境获取当前游戏状态作为游戏屏幕缓冲区。此函数的实现如下：
 
-[PRE5]
+```py
+    def observation(self, indices=None, name=None):
+        if indices is None:
+            indices = np.arange(self.batch_size)
+        with tf.variable_scope(name, default_name='AtariObservation'):
+            with tf.device('/cpu:0'):
+                obs = gym_tensorflow_module.environment_observation(
+                                   self.instances, indices, T=tf.uint8)
+
+            obs = tf.gather(tf.constant(self.color_pallete), 
+                                                tf.cast(obs,tf.int32))
+            obs = tf.reduce_max(obs, axis=1)
+            obs = tf.image.resize_bilinear(obs, self.warp_size, 
+                                                   align_corners=True)
+            obs.set_shape((None,) + self.warp_size + (1,))
+            return obs
+```
 
 此函数从 Atari 环境获取屏幕截图，并将其包装在 TensorFlow 框架可以使用的张量中。游戏观察函数还允许我们通过 `self.batch_size` 参数或 `indices` 输入参数的长度接收来自多个游戏的州。该函数返回多个游戏的屏幕截图，包装在张量中。
 
@@ -206,7 +263,23 @@ AtariEnv 提供了函数，使我们能够执行单个游戏步骤、重置游�
 
 为了训练游戏智能体，我们需要实现一个函数，从特定的随机状态启动 Atari 环境。实现一个随机的 Atari 重置函数对于确保我们的智能体可以从任何初始状态玩游戏至关重要。该函数的实现如下：
 
-[PRE6]
+```py
+    def reset(self, indices=None, max_frames=None, name=None):
+        if indices is None:
+            indices = np.arange(self.batch_size)
+        with tf.variable_scope(name, default_name='AtariReset'):
+            noops = tf.random_uniform(tf.shape(indices), minval=1, 
+                                       maxval=31, dtype=tf.int32)
+            if max_frames is None:
+                max_frames = tf.ones_like(indices, dtype=tf.int32) * \
+                                         (100000 * self.frameskip)
+            import collections
+            if not isinstance(max_frames, collections.Sequence):
+                max_frames = tf.ones_like(indices, dtype=tf.int32) * \
+                                          max_frames
+            return gym_tensorflow_module.environment_reset(self.instances, 
+                             indices, noops=noops, max_frames=max_frames)
+```
 
 此函数使用 `indices` 输入参数同时重置多个 Atari 游戏实例的随机初始状态。此函数还定义了每个游戏实例的最大帧数。
 
@@ -230,19 +303,49 @@ TensorFlow 网络图是由 `make_net` 函数创建的，该函数接收 ANN 模�
 
 1.  我们将首先创建控制器 ANN 模型和游戏评估环境：
 
-[PRE7]
+```py
+    self.model = model_constructor()
+    …
+    with tf.variable_scope(None, default_name='model'):
+        with tf.device(‘/cpu:0'):
+            self.env = self.make_env_f(self.batch_size)
+```
 
 1.  接下来，我们将创建占位符，以便在网络图评估期间接收值。同时，我们还将创建一个操作员，在新游戏剧集开始前重置游戏：
 
-[PRE8]
+```py
+        self.placeholder_indices = tf.placeholder(tf.int32, 
+                                                    shape=(None, ))
+        self.placeholder_max_frames = tf.placeholder(
+                                          tf.int32, shape=(None, ))
+        self.reset_op = self.env.reset(
+                            indices=self.placeholder_indices, 
+                            max_frames=self.placeholder_max_frames)
+```
 
 1.  之后，使用提供的 GPU 设备的上下文，我们将创建两个操作员来接收游戏状态观察并评估后续的游戏动作：
 
-[PRE9]
+```py
+        with tf.device(device):
+            self.obs_op = self.env.observation(
+                            indices=self.placeholder_indices)
+            obs = tf.expand_dims(self.obs_op, axis=1)
+            self.action_op = self.model.make_net(obs, 
+                            self.env.action_space, 
+                            indices=self.placeholder_indices, 
+                            batch_size=self.batch_size, 
+                            ref_batch=ref_batch)
+```
 
 1.  `action` 操作符返回一个动作可能性值的数组，如果动作空间是离散的，则需要过滤：
 
-[PRE10]
+```py
+        if self.env.discrete_action:
+            self.action_op = tf.argmax(
+                        self.action_op[:tf.shape(
+                        self.placeholder_indices)[0]], 
+                        axis=-1, output_type=tf.int32)
+```
 
 代码检查当前游戏环境是否需要离散动作，并使用 TensorFlow 框架内置的 `tf.argmax` 操作符包装 `action` 操作符。`tf.argmax` 操作符返回具有最大值的动作的索引，可以用来指示应该执行特定的游戏动作。
 
@@ -250,7 +353,12 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 1.  最后，我们创建一个操作员来执行单个游戏步骤：
 
-[PRE11]
+```py
+        with tf.device(device):
+            self.rew_op, self.done_op = \
+                       self.env.step(self.action_op, 
+                       indices=self.placeholder_indices)
+```
 
 在这里，我们创建一个单个游戏步骤操作符，该操作符在执行单个游戏步骤后返回获取奖励的操作 `self.rew_op` 和游戏完成状态 `self.done_op`。
 
@@ -264,19 +372,52 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 1.  首先，我们从创建数组开始，这些数组用于存储多个连续游戏中的游戏评估值：
 
-[PRE12]
+```py
+running = np.zeros((self.batch_size,), dtype=np.bool)
+cumrews = np.zeros((self.batch_size, ), dtype=np.float32)
+cumlen = np.zeros((self.batch_size, ), dtype=np.int32)
+```
 
 1.  接下来，我们启动循环并将我们刚刚创建的运行数组的相应索引设置为 `True`：
 
-[PRE13]
+```py
+    while True:
+        # nothing loaded, block
+        if not any(running):
+            idx = self.queue.get()
+            if idx is None:
+               break
+            running[idx] = True
+        while not self.queue.empty():
+           idx = self.queue.get()
+           if idx is None:
+                 break
+           running[idx] = True
+```
 
 1.  使用索引数组，我们准备执行单个游戏步骤操作并收集结果：
 
-[PRE14]
+```py
+indices = np.nonzero(running)[0]
+rews, is_done, _ = self.sess.run(
+          [self.rew_op, self.done_op, self.incr_counter], 
+          {self.placeholder_indices: indices})
+cumrews[running] += rews
+cumlen[running] += 1
+```
 
 1.  最后，我们需要测试是否有任何评估过的游戏已完成，无论是通过获胜还是达到最大游戏帧数限制。对于所有完成的任务，我们应用一系列操作，如下：
 
-[PRE15]
+```py
+if any(is_done):
+    for idx in indices[is_done]:
+        self.sample_callback[idx](self, idx, 
+              (self.model.seeds[idx],cumrews[idx], 
+                                         cumlen[idx]))
+    cumrews[indices[is_done]] = 0.
+    cumlen[indices[is_done]] = 0.
+    running[indices[is_done]] = False
+```
 
 前面的代码使用所有已完成任务的索引并调用相应的注册回调，在特定索引重置收集器变量之前。
 
@@ -288,13 +429,23 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 1.  首先，它从任务对象中提取相应的数据并将其加载到当前 TensorFlow 会话中：
 
-[PRE16]
+```py
+    theta, extras, max_frames=task
+    self.model.load(self.sess, task_id, theta, extras)
+    if max_frames is None:
+        max_frames = self.env.env_default_timestep_cutoff
+```
 
 在这里，`theta` 是控制器 ANN 模型中所有连接权重的数组，`extras` 包含相应基因组的随机种子列表，而 `max_frames` 是游戏帧的截止值。
 
 1.  接下来，我们使用 `self.reset_op` 运行 TensorFlow 会话，该操作在指定索引重置特定的游戏环境：
 
-[PRE17]
+```py
+    self.sess.run(self.reset_op, {self.placeholder_indices:[task_id], 
+                  self.placeholder_max_frames:[max_frames]})
+    self.sample_callback[task_id] = callback
+    self.queue.put(task_id)
+```
 
 代码在 TensorFlow 会话中运行 `self.reset_op`。我们还使用 `reset` 操作符和给定任务的特定游戏帧的最大截止值注册当前任务标识符。任务标识符在评估循环中使用，以将网络图的评估结果与种群中特定的基因组相关联。接下来，我们将讨论如何维护并发异步工作器。
 
@@ -306,7 +457,16 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 `ConcurrentWorkers` 类的主要职责之一是创建和管理 `RLEvalutionWorker` 实例。这是在类构造函数中完成的，如下所示：
 
-[PRE18]
+```py
+    self.workers = [RLEvalutionWorker(make_env_f, *args, 
+         ref_batch=ref_batch, 
+         **dict(kwargs, device=gpus[i])) for i in range(len(gpus))]
+    self.model = self.workers[0].model
+    self.steps_counter = sum([w.steps_counter for w in self.workers])
+    self.async_hub = AsyncTaskHub()
+    self.hub = WorkerHub(self.workers, self.async_hub.input_queue, 
+                            self.async_hub)
+```
 
 在这里，我们创建与系统中可用的 GPU 设备数量相对应的 `RLEvalutionWorker` 实例数量。之后，我们初始化选定的 ANN 图模型，并创建辅助例程来管理异步任务的多次执行。接下来，我们将讨论工作任务是如何安排执行的。
 
@@ -316,19 +476,47 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 1.  首先，我们遍历列表中的所有基因组，创建异步工作任务，以便每个基因组都可以与 Atari 游戏环境进行评估：
 
-[PRE19]
+```py
+    tasks = []
+    for t in it:
+        tasks.append(self.eval_async(*t, max_frames=max_frames, 
+                                    error_callback=error_callback))
+        if time.time() - tstart > logging_interval:
+            cur_timesteps = self.sess.run(self.steps_counter)
+            tlogger.info('Num timesteps:', cur_timesteps, 
+             'per second:', 
+             (cur_timesteps-last_timesteps)//(time.time()-tstart),
+             'num episodes finished: {}/{}'.format(
+             sum([1 if t.ready() else 0 for t in tasks]), 
+             len(tasks)))
+            tstart = time.time()
+            last_timesteps = cur_timesteps
+```
 
 前面的代码为列表中的每个基因组安排异步评估，并为每个异步任务保存一个引用以供以后使用。此外，我们定期输出已安排任务的评估过程结果。现在，我们将讨论如何监控评估结果。
 
 1.  以下代码块正在等待异步任务的完成：
 
-[PRE20]
+```py
+    while not all([t.ready() for t in tasks]):
+        if time.time() - tstart > logging_interval:
+            cur_timesteps = self.sess.run(self.steps_counter)
+            tlogger.info('Num timesteps:', cur_timesteps, 'per second:', (cur_timesteps-last_timesteps)//(time.time()-tstart), 'num episodes:', sum([1 if t.ready() else 0 for t in tasks]))
+            tstart = time.time()
+            last_timesteps = cur_timesteps
+        time.sleep(0.1)
+```
 
 在这里，我们遍历所有对已安排的异步任务的引用，并等待它们的完成。同时，我们定期输出评估进度。接下来，我们将讨论如何收集任务评估结果。
 
 1.  最后，在所有任务完成后，我们收集结果，如下所示：
 
-[PRE21]
+```py
+    tlogger.info(
+       'Done evaluating {} episodes in {:.2f} seconds'.format(
+                          len(tasks), time.time()-tstart_all))
+    return [t.get() for t in tasks]
+```
 
 代码遍历所有对已安排的异步任务的引用，并创建一个评估结果列表。接下来，我们将讨论实验运行器的实现。
 
@@ -340,7 +528,20 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 这是提供实验运行器配置参数的文件。对于我们的实验，它包含以下内容：
 
-[PRE22]
+```py
+{
+    "game": "frostbite",
+    "model": "LargeModel",
+    "num_validation_episodes": 30,
+    "num_test_episodes": 200,
+    "population_size": 1000,
+    "episode_cutoff_mode": 5000,
+    "timesteps": 1.5e9,
+    "validation_threshold": 10,
+    "mutation_power": 0.002,
+    "selection_threshold": 20
+}
+```
 
 配置参数如下：
 
@@ -374,31 +575,109 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 1.  我们首先通过加载控制器ANN模型并创建并发工作者来设置评估环境以执行评估：
 
-[PRE23]
+```py
+    Model = neuroevolution.models.__dict__[config['model']]
+    all_tstart = time.time()
+    def make_env(b):
+        return gym_tensorflow.make(game=config["game"], 
+                                   batch_size=b)
+    worker = ConcurrentWorkers(make_env, Model, batch_size=64)
+```
 
 1.  接下来，我们创建一个包含随机噪声值的表格，这些值将用作随机种子，并定义用于创建下一代后代的函数：
 
-[PRE24]
+```py
+    noise = SharedNoiseTable()
+    rs = np.random.RandomState()
+
+    def make_offspring():
+        if len(cached_parents) == 0:
+            return worker.model.randomize(rs, noise)
+        else:
+            assert len(cached_parents) == config['selection_threshold']
+            parent = cached_parents[
+                    rs.randint(len(cached_parents))]
+            theta, seeds = worker.model.mutate( parent, rs, noise, 
+                   mutation_power=state.sample(
+                   state.mutation_power))
+            return theta, seeds
+```
 
 1.  然后，主进化循环开始。我们使用之前定义的函数来为当前代创建后代群体：
 
-[PRE25]
+```py
+    tasks = [make_offspring() for _ in range(
+                              config['population_size'])]
+    for seeds, episode_reward, episode_length in \
+        worker.monitor_eval(tasks, max_frames=state.tslimit * 4):
+        results.append(Offspring(seeds, 
+                       [episode_reward], [episode_length]))
+
+    state.num_frames += sess.run(worker.steps_counter) - \
+                                frames_computed_so_far
+```
 
 在这里，我们为群体中的每个后代创建工作任务，并为每个任务安排对游戏环境的评估。
 
 1.  当我们完成对种群中每个个体的评估后，我们开始评估顶级个体以选择精英：
 
-[PRE26]
+```py
+    state.population = sorted(results, 
+                  key=lambda x:x.fitness, reverse=True)
+    …
+    validation_population = state.\
+                   population[:config['validation_threshold']]
+    if state.elite is not None:
+        validation_population = [state.elite] + \
+                                    validation_population[:-1]
+
+    validation_tasks = [
+        (worker.model.compute_weights_from_seeds(noise, 
+        validation_population[x].seeds, cache=cached_parents), 
+        validation_population[x].seeds) for x in range(
+                             config['validation_threshold'])]
+    _,population_validation, population_validation_len =\ 
+        zip(*worker.monitor_eval_repeated(validation_tasks, 
+        max_frames=state.tslimit * 4, 
+        num_episodes=config['num_validation_episodes']))
+```
 
 1.  使用前 10 个顶级个体的评估结果，我们选择种群中的精英，并对其执行最终测试运行以评估其性能：
 
-[PRE27]
+```py
+    population_elite_idx = np.argmax(population_validation)
+    state.elite = validation_population[population_elite_idx]
+    elite_theta = worker.model.compute_weights_from_seeds(
+              noise, state.elite.seeds, cache=cached_parents)
+    _,population_elite_evals,population_elite_evals_timesteps=\
+                  worker.monitor_eval_repeated(
+                  [(elite_theta, state.elite.seeds)], 
+                  max_frames=None, 
+                  num_episodes=config[‘num_test_episodes’])[0]
+```
 
 精英个体将直接复制到下一代。
 
 1.  最后，我们从当前种群中选择顶级个体作为下一代的父母：
 
-[PRE28]
+```py
+    if config['selection_threshold'] > 0:
+        tlogger.info("Caching parents")
+        new_parents = []
+        if state.elite in \
+            state.population[:config['selection_threshold']]:
+            new_parents.extend([
+                 (worker.model.compute_weights_from_seeds(
+                  noise, o.seeds, cache=cached_parents), o.seeds) for o in state.population[:config['selection_threshold']]])
+        else:
+            new_parents.append(
+                (worker.model.compute_weights_from_seeds(
+                 noise, state.elite.seeds, cache=cached_parents), 
+                 state.elite.seeds))
+            new_parents.extend([
+                (worker.model.compute_weights_from_seeds(
+                 noise, o.seeds, cache=cached_parents), o.seeds) for o in state.population[:config[‘selection_threshold']-1]])
+```
 
 上述代码从种群中收集顶级个体成为下一代的父母。如果当前精英不在父母列表中，它还会将其附加到父母列表中。
 
@@ -420,25 +699,40 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 1.  现在，我们需要使用 Anaconda 创建一个新的 Python 环境，并安装实验实现中使用的所有依赖项：
 
-[PRE29]
+```py
+$ conda create -n deep_ne python=3.5
+$ conda activate deep_ne
+$ conda install -c anaconda tensorflow-gpu
+$ pip install gym
+$ pip install Pillow
+```
 
 这些命令创建并激活一个新的 Python 3.5 环境。接下来，它安装 TensorFlow、OpenAI Gym 和 Python 图像库作为依赖项。
 
 1.  之后，您需要克隆包含实验源代码的仓库：
 
-[PRE30]
+```py
+$ git clone https://github.com/PacktPublishing/Hands-on-Neuroevolution-with-Python.git
+$ cd Hands-on-Neuroevolution-with-Python/Chapter10
+```
 
 执行这些命令后，我们的当前工作目录变成了包含实验源代码的目录。
 
 1.  现在，我们需要构建 ALE 并将其集成到我们的实验中。我们需要将 ALE 仓库克隆到适当的目录，并使用以下命令进行构建：
 
-[PRE31]
+```py
+$ cd cd gym_tensorflow/atari/
+$ git clone https://github.com/yaricom/atari-py.git
+$ cd ./atari-py && make
+```
 
 现在，我们已经有一个与TensorFlow集成的可工作的ALE环境。我们可以用它来评估从基因组种群中产生的控制器ANN，与Atari游戏（在我们的实验中为Frostbite）进行对抗。
 
 1.  在ALE集成完成后，我们需要构建一个针对我们实验实现的特定于OpenAI Gym和TensorFlow的集成：
 
-[PRE32]
+```py
+$ cd ../..gym_tensorflow && make
+```
 
 现在，我们已经完全定义了工作环境，并准备好开始我们的实验。接下来，我们将讨论如何运行实验。
 
@@ -446,13 +740,30 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 在一个充分定义的工作环境中，我们准备好开始我们的实验。您可以通过执行以下命令从`Chapter10`目录启动实验：
 
-[PRE33]
+```py
+$ python ga.py -c configurations/ga_atari_config.json -o out
+```
 
 之前的命令使用提供的精英基因组启动了一个实验，该实验使用作为第一个参数提供的配置文件。实验的输出将存储在`out`目录中。
 
 实验完成后，控制台输出应类似于以下内容：
 
-[PRE34]
+```py
+...
+| PopulationEpRewMax                    | 3.47e+03  |
+| PopulationEpRewMean                   | 839       |
+| PopulationEpCount                     | 1e+03     |
+| PopulationTimesteps                   | 9.29e+05  |
+| NumSelectedIndividuals                | 20        |
+| TruncatedPopulationRewMean            | 3.24e+03  |
+| TruncatedPopulationValidationRewMean  | 2.36e+03  |
+| TruncatedPopulationEliteValidationRew | 3.1e+03   |
+| TruncatedPopulationEliteIndex         | 0         |
+...
+| TruncatedPopulationEliteTestRewMean   | 3.06e+03  |
+...
+ Current elite: (47236580, (101514609, 0.002), (147577692, 0.002), (67106649, 0.002), (202520553, 0.002), (230555280, 0.002), (38614601, 0.002), (133511446, 0.002), (27624159, 0.002), (233455358, 0.002), (73372122, 0.002), (32459655, 0.002), (181449271, 0.002), (205743718, 0.002), (114244841, 0.002), (129962094, 0.002), (24016384, 0.002), (77767788, 0.002), (90094370, 0.002), (14090622, 0.002), (171607709, 0.002), (147408008, 0.002), (150151615, 0.002), (224734414, 0.002), (138721819, 0.002), (154735910, 0.002), (172264633, 0.002)) 
+```
 
 在这里，我们有特定进化代次后的统计数据输出。您可以看到以下结果：
 
@@ -472,7 +783,9 @@ Atari 游戏环境是一个离散动作环境，这意味着在每一个时间�
 
 现在我们已经获得了游戏代理训练的结果，将很有趣地看到我们找到的解决方案如何在Atari环境中玩Frostbite。要运行模拟，您需要从输出中复制当前的精英基因组表示并将其粘贴到`display.py`文件的`seeds`字段中。之后，可以使用以下命令运行模拟：
 
-[PRE35]
+```py
+$ python display.py
+```
 
 之前的命令使用提供的精英基因组创建一个表型ANN，并将其用作Frostbite游戏代理的控制器。它将打开游戏窗口，您可以在其中看到控制器ANN的表现。游戏将继续进行，直到游戏角色没有剩余的生命。以下图像显示了在Ubuntu 16.04环境中执行`display.py`时捕获的几个游戏屏幕：
 
@@ -494,7 +807,12 @@ Frostbite截图，所有截图均来自精英基因组游戏会话
 
 要使用VINE工具，我们需要使用以下命令在我们的虚拟Python环境中安装额外的库：
 
-[PRE36]
+```py
+$ pip install click
+$ conda install matplotlib
+$ pip install colour
+$ conda install pandas
+```
 
 这些命令将所有必要的依赖项安装到我们为实验创建的虚拟Python环境中。接下来，我们将讨论如何使用VINE工具。
 
@@ -504,7 +822,10 @@ Frostbite截图，所有截图均来自精英基因组游戏会话
 
 现在，当我们在Python虚拟环境中安装了所有依赖项后，我们就可以使用VINE工具了。首先，你需要使用以下命令从Git仓库克隆它：
 
-[PRE37]
+```py
+$ git clone https://github.com/uber-research/deep-neuroevolution.git
+$ cd visual_inspector
+```
 
 在这里，我们将深度神经进化仓库克隆到当前目录，并将目录更改为包含VINE工具源代码的`visual_inspector`文件夹。
 
@@ -512,7 +833,9 @@ Frostbite截图，所有截图均来自精英基因组游戏会话
 
 现在，我们可以使用以下命令运行Mujoco Humanoid实验结果的可视化，这些结果包含在`sample_data`文件夹中：
 
-[PRE38]
+```py
+$ python -m main_mujoco 90 99 sample_data/mujoco/final_xy_bc/
+```
 
 前一个命令使用了Uber AI Lab从其实验中提供的用于训练类人行走的数据，并显示了以下图表：
 
