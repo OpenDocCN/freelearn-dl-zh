@@ -27,7 +27,6 @@
 +   [Caffe2 快速启动指南](docs/caffe2-qkstgd/README.md)
 +   [ChatGPT 和其它 LLM 的编程指南](docs/cd-cgpt-otr-llm/README.md)
 +   [KNIME 无代码深度学习](docs/cdls-dl-knime/README.md)
-+   [ChatGPT 网络安全秘籍](docs/cgpt-sec-cb/README.md)
 +   [大语言模型解码](docs/dec-llm/README.md)
 +   [深度学习架构手册](docs/dl-arch-hb/README.md)
 +   [深度学习初学者指南](docs/dl-bg/README.md)
