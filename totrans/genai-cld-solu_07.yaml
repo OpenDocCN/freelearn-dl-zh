@@ -1,0 +1,1114 @@
+- en: '7'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Deploying ChatGPT in the Cloud: Architecture Design and Scaling Strategies'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, you learned more about how to fine-tune LLMs and add
+    external data. You also gained a deep understanding of how prompts and responses
+    work under the covers. Then, you learned how to develop applications with GenAI
+    while using popular programming frameworks for the various LLMs. As we continue
+    building on our learning of GenAI/ChatGPT for cloud solutions, we will realize
+    that limits are placed on how these cloud services process tokens for prompts
+    and completions. As large-scale deployments need to be “enterprise-ready,” we
+    must take advantage of the cloud to provide the necessary services and support
+    to enable an enterprise solution, with less effort than creating a service from
+    the ground up, on our own. Services, such as security (this topic will be covered
+    in more detail in the next chapter) and identity, are pre-baked into a cloud service,
+    and thus in the cloud solution we are trying to build. However, limits are imposed
+    by a cloud provider and we must understand these limits and design around them
+    for a successful cloud solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll focus on understanding that GenAI can be scaled to support
+    many thousands of users, with a large number of concurrent connections, and submitting
+    prompts. This is not only limited to users of GenAI and can also include applications
+    and other LLMs, to name a few. The entire solution, from architecture design,
+    deployment, scaling, performance tuning, monitoring, and logging all combine to
+    make a robust, scalable cloud solution for ChatGPT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding limits
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud scaling, design patterns, and error handling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Monitoring, logging, and HTTP response codes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Costs, training and support
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 7.1 – Too many requests and too many tokens](img/B21443_07_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.1 – Too many requests and too many tokens
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding limits
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Any large-scale cloud deployment needs to be “enterprise-ready,” ensuring both
+    the end user experience is acceptable and the business objectives and requirements
+    are met. “Acceptable” is a loose term that can vary per user and workload. To
+    understand how to scale to meet any user or business requirements, as the appetite
+    for a service increases, we must first understand the basic limits, such as token
+    limits. We covered these limits for most of the common generative AI GPT models
+    in [*Chapter 5*](B21443_05.xhtml#_idTextAnchor098), however, we will quickly revisit
+    them here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As organizations scale up using an enterprise-ready service, such as Azure OpenAI,
+    there are rate limits on how fast tokens are processed in the prompt+completion
+    request. There is a limit to how many text prompts can be sent due to these token
+    limits for each model that can be consumed in a single prompt+completion. It is
+    important to note that the overall size of tokens for rate limiting includes *both*
+    the prompt (text sent to the AOAI model) size *plus* the return completion (response
+    back from the model) size, and depending on the model, the token limits on the
+    model will vary. That is, the number of maximum token numbers used per a single
+    prompt, will vary depending on the GenAI model used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can see your rate limits on the Azure OpenAI overview page or OpenAI account
+    page. You can also view important information about your rate limits, such as
+    the remaining requests, tokens, and other metadata in the headers of the HTTP
+    response. Please see the reference link at the end of this chapter for details
+    on what these header fields contain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are a few token limits for various GPT models:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Model** | **Token Limit** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-3.5-turbo 0301 | 4,096 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-3.5-turbo-16k | 16,385 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-3.5-turbo-0613 | 4,096 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-3.5-turbo-16k-0613 | 16,384 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4 | 8,192 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4-0613 | 32,768 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4-32K | 32,768 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4-32-0613 | 32,768 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4-Turbo | 128,000 (context) and 4,096 (output) |'
+  prefs: []
+  type: TYPE_TB
+- en: Figure 7.2 – Token limits for some GenAI models
+  prefs: []
+  type: TYPE_NORMAL
+- en: While we already discussed prompt optimization techniques earlier in this book,
+    in this chapter, we will look at some of the other ways to scale an enterprise-ready
+    cloud GenAI service for applications and services that can easily exceed the token
+    limits for a specific model and scale effectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud scaling and design patterns
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Since you learned about some of the limits imposed by Azure OpenAI and OpenAI
+    in the previous section, we will now look at how to overcome these limits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overcoming these limits through a well-designed architecture or design pattern
+    is critical for businesses to ensure they are meeting any internal **service-level
+    agreements** (**SLAs**) and are providing a robust service without a lot of latency,
+    or delay, in the user or application experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is scaling?
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we described earlier, limits are imposed on any cloud architecture, just
+    as there are hardware limits on your laptop (amount of RAM or disk space), on-premises
+    data centers, and so on. Resources are finite, so we have come to expect these
+    limits, even in cloud services. However, there are a few techniques we can use
+    to overcome limitations so that we can meet our business requirements or user
+    behavior and appetite.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding TPM, RPM, and PTUs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we scale, we will need to understand some additional terminology, such as
+    **tokens per minute** (**TPM**), **request per minute** (**RPM**), and **provisioned
+    throughput units** (**PTUs**), as well as other additional services, such as **Azure
+    API Management** (**APIM**), which support a cloud environment in Azure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TPMs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: With a cloud provider such as Microsoft Azure, Azure OpenAI’s quota management
+    service built into Azure AI Studio enables you to assign quota limits for your
+    deployments, up to whatever amount is the specified limit – that is, your “quota.”
+    You can assign a quota to an Azure subscription on a per-region, per-model basis
+    in units of TPM. The billing component of TPM is also known as pay-as-you-go,
+    where pricing will be based on the pay-as-you-go consumption model, with a price
+    per unit specific for each type of model deployed. Please refer to *Figure 7**.2*
+    for a list of some models and what their token limit is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you create an Azure OpenAI service within a subscription, you will receive
+    the default TPM quota size. You can then adjust the TPM to that deployment or
+    any additional deployment you create, at which point the overall **available**
+    quota for that model will be reduced by that amount. TPMs/pay-as-you-go are also
+    the default mechanism for billing within the Azure OpenAI (AOAI) service. We will
+    cover some of the costs a bit later, but for more details on AOAI quota management,
+    take a look at the link provided at the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using OpenAI directly, scaling works very similarly – in OpenAI models,
+    you can scale by adjusting the TPM bar to the “max” under the advanced options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s look at an example and deep dive into TPMs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the Microsoft Azure cloud, for example, there is an overall limit (quota)
+    of 240,000 TPMs for GPT-35-Turbo in the Azure East US region. This means you can
+    have a *single deployment of 240K TPM* per Azure OpenAI account, *two deployments
+    of 120K TPM each*, or any number of deployments in one or multiple deployments,
+    so long as the TPMs add up to 240K (or less) total in the East US region.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, *one way to scale up is by adding ADDITIONAL (Azure) OpenAI accounts*. With
+    additional AOAI accounts, you can stack or add limits together. So, in this example,
+    rather than having a single 240K GPT-35-Turbo limit, we can add an additional
+    240K times *X*, where *X* is 30 or less.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The maximum number of Azure OpenAI accounts (or resources) *per region per Azure
+    subscription* is *30* (at the time of writing) and is also dependent on regional
+    capacity *availability*. We expect this number to be increased over time as additional
+    GPU-based capacity continues to be made available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RPM
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Beyond the TPM limit, an RPM rate limit is also enforced, where the amount of
+    RPM available to a model is set proportionally to the TPM assignment using a ratio
+    of 6 RPM per 1,000 TPM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'RPM is not a direct billing component, but it is a component of rate limits.
+    It is important to note that while the billing for AOAI is token-based (TPM),
+    the actual two triggers in which rate limits occur are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On a per-second basis, not at the per-minute billing level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rate limit will occur at either **tokens per second** (**TPS**) or RPM evaluated
+    over a small period (1-10 seconds). That is, if you exceed the total TPS for a
+    specific model, then a rate limit applies. If you exceed the RPM over a short
+    period, then a rate limit will also apply, returning limit error codes (429).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The throttled rate limits can easily be managed using the scaling special sauce,
+    as well as following some of the best practices described later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can read more about quota management and the details on how TPM/RPM rate
+    limits apply in the *Manage Azure OpenAI Service* link at the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PTUs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The Microsoft Azure cloud recently introduced the ability to use reserved capacity,
+    or PTUs, for AOAI earlier this summer. Beyond the default TPMs described above,
+    this new Azure OpenAI service feature, PTUs, defines the model processing capacity,
+    using reserved resources, for processing prompts and generating completions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*PTUs are another way an enterprise can scale up to meet business requirements
+    as they can provide reserved capacity for your most demanding and complex* *prompt/completion
+    scenarios.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Different types of PTUs are available, where size of these PTUs is available
+    in smaller increments or larger increments of PTU units. For example, the first
+    version of PTUs, which we will call Classic PTUs, and newer PTU offerings, such
+    as “managed” PTUs, size offering differs to accommodate various size workloads
+    in a more predictable fashion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PTUs are purchased as a monthly commitment with an auto-renewal option, which
+    will *reserve* AOAI capacity within an Azure subscription, using a specific model,
+    in a specific Azure region. Let’s say you have 300 PTUs provisioned for GPT 3.5
+    Turbo. The PTUs are only provisioned for GPT 3.5 Turbo deployments, within a specific
+    Azure subscription, not for GPT 4\. You can have separate PTUs for GPT 4, with
+    the minimum PTUs described in the following table , for classic PTUs. There are
+    also managed PTUs, which can vary in min. size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Keep in mind that while having reserved capacity does *provide consistent latency,
+    predictable performance and throughput*, this throughput amount is highly dependent
+    on your scenario – that is, throughput will be affected by a few items, including
+    *the number and ratio of prompts and generation tokens, the number of simultaneous
+    requests, and the type and version of the model used*. The following table describes
+    the *approximate* TPMs expected concerning PTUs per model. Throughput can vary,
+    so an approximate range has been provided:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.3 – Approximate throughput range of Classic PTUs](img/B21443_07_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.3 – Approximate throughput range of Classic PTUs
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can scale by creating multiple (Azure) OpenAI accounts, you can *also
+    scale by increasing the number of PTUs*. For scaling purposes, you can multiply
+    the minimum number of PTUs required in terms of whatever your application or service
+    requires.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following table describes this scaling of classic PTUs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Model** | **Minimum Classic PTUs Required to** **Create Deployment** |
+    **Classic PTUs for Incrementally Scaling** **the Deployment** | **Example Deployment**
+    **Sizes (PTUs)** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-3.5-Turbo (4K) | 300 | 100 | 300, 400, 500… |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-3.5-Turbo (16K) | 600 | 200 | 600, 800, 1,000... |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4 (8K) | 900 | 300 | 900, 1,200, 1,500… |'
+  prefs: []
+  type: TYPE_TB
+- en: '| GPT-4 (32K) | 1,800 | 600 | 1,800, 2,400, 3,000… |'
+  prefs: []
+  type: TYPE_TB
+- en: Figure 7.4 – PTU minimums and incremental scaling (classic PTU)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The PTU size and type are continuously evolving. The two tables above are just
+    to give a sense about the approximate scale of the PTUs with respect to TPMs and
+    how it differs based on model and version. For more updated information, you can
+    visit the Provisioned Throughput Units (PTU) getting started guide.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we have understood the essential components for scaling purposes like TPM,
+    RPM and PTU. Now let’s delve into the scaling strategies and how to circumvent
+    these limits with our special scaling sauce for a large-scale and global enterprise-ready
+    application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scaling Design patterns
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One area we haven’t covered yet is how these multiple TPMs or PTU-based Azure
+    OpenAI accounts can work in unison. That is, once you have set up multiple AOAI
+    accounts, how would you send prompts to each? Or, if you are sending too many
+    prompts at once, how can you manage the error/response codes?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The answer is by using the Azure APIM service. APIs form the basis of an APIM
+    service instance. Each API consists of a group of operations that app developers
+    can use. Each API has a link to the backend service that provides the API, and
+    its operations correspond to backend operations. Operations in APIM have many
+    configuration options, with control over URL mapping, query and path parameters,
+    request and response content, and operation response caching. We won’t cover these
+    additional features, such as URL mapping and response caching, in this book, but
+    you can read more about APIM in the reference link at the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Using APIM is yet another way to help organizations scale up to meet business
+    and* *user requirements.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, you can also create a “spillover” scenario, where you may be sending
+    prompts to PTUs that have been enabled for deploying an AOAI account. Then, if
+    you exceed PTU limits, you can spill over to a TPM-enabled AOAI account that is
+    used in the pay-as-you-go model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following figure shows the basic setup, but this architecture can scale
+    and also include many other Azure cloud resources. However, for simplicity and
+    focus, only the relevant services are depicted here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.5 – AOAI and APIM in a single Azure region](img/Figure_7.5_-_AOAI_and_APIM_in_a_single_Azure_region.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.5 – AOAI and APIM in a single Azure region
+  prefs: []
+  type: TYPE_NORMAL
+- en: As described in the single region scenario, you can use APIM to queue and send
+    prompts to any AOAI endpoint, so long as those endpoints can be reached. In a
+    multi-region example, as shown in the following figure, we have two AOAI accounts
+    in one region (one PTU and another TPM), and then a third Azure OpenAI account
+    in another Azure region.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Thus, a single APIM service can easily scale and support many AOAI accounts,
+    even across multiple regions, as described here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.6 – Multi-region AOAI deployment using a single APIM service](img/Figure_7.6_-_Multi-region_AOAI_deployment_using_a_single_APIM_service.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.6 – Multi-region AOAI deployment using a single APIM service
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, a single APIM service can serve multiple AOAI accounts, both
+    in the same Azure region *and* also in multiple regions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we continue our “scaling” journey, it is a good time to mention that APIM
+    has three production-level tiers: Basic, Standard, and Premium. With the Premium
+    tier, you can use a single APIM instance in as many Azure regions as you need,
+    so long as APIM can access the AOAI endpoint in the other region(s). When you
+    make an APIM service, the instance has only one unit in a single Azure region
+    (the main region). What does this provide? If you have a multi-regional Azure
+    OpenAI deployment, does this mean you are required to also have a multi-region
+    (Premium) SKU of APIM? No, not necessarily. As shown in the preceding multi-region
+    architecture, a single APIM service instance can support multi-region, multi-AOAI
+    accounts. Having a single APIM service makes sense when an application using the
+    service is in the same region and you do not need **disaster** **recovery** (**DR**).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as this chapter is about scaling at an enterprise level, we recommend
+    multiple APIM service accounts to cover the DR scenario using the APIM Premium
+    SKU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Premium SKU allows you to have one region be the primary and any number
+    of regions as secondaries. In this case, you can use a secondary, or multiple
+    secondaries, in different scenarios – for example, if you are planning for any
+    DR scenarios, which is always recommended for any enterprise architecture. Note
+    that your enterprise applications should also be designed for data resiliency
+    using DR strategies. Another example is if you are monitoring the APIM services.
+    If you are seeing extremely heavy usage and can scale out your application(s)
+    across regions, then you may want to deploy APIM service instances across multiple
+    regions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: "For more information on how to deploy an APIM service instance to multiple\
+    \ Azure regions, please see How to deploy an Azure API Management service instance\
+    \ to multiple Azure regions: [https://](https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-deploy-multi-reg\uFEFF\
+    ion)https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-deploy-multi-region"
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retries with exponential backoff – the scaling special sauce
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: So, how do we control (or queue) messages when using multiple Azure OpenAI instances
+    (accounts)? How do we manage return error codes highly efficiently to optimize
+    the AOAI experience?
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a best practice, Microsoft, and any other cloud vendor, will recommend the
+    use of “retry logic” or a “retry pattern” whenever using a cloud service. This
+    retry pattern, when used in cloud applications, helps the applications deal with
+    temporary (transient) failures while then attempting to re-establish a connection,
+    or reconnect, to a service to perform requests on that service, thus automatically
+    repeating a failed operation without additional user intervention. As cloud services
+    are cloud-based and applications or users are remote to the cloud-based service,
+    this retry pattern is paramount. This retry logic can improve the stability of
+    the application and provide a better end user experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a cloud-based service, such as ChatGPT on Azure OpenAI, especially at
+    scale via an application, is no exception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While you can add some retry logic directly to your application, you are quite
+    limited as you scale across the enterprise. Are you now using the retry logic
+    again and again with every application? What if the application was written by
+    a third party? In that scenario, you can’t (usually) edit code directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead, to achieve stability and high scalability, using the APIM service described
+    previously will provide the necessary retry pattern/logic. For example, if your
+    application sends prompt and if the server is too busy or some other error occurs,
+    APIM will be able to resend the same prompt again, without any additional end
+    user interaction. This will all happen seamlessly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: APIM allows us to do this easily using the scaling special sauce – the concept
+    of *retries with exponential backoff*, which allows for extremely high, concurrent
+    user loads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retries with exponential backoff is a method that tries an operation again,
+    with a wait time that grows exponentially, until it reaches a maximum number of
+    retries (the exponential backoff). This technique accepts the fact that cloud
+    resources may sometimes be unreachable for more than a few seconds for any reason,
+    known as a transient error, or if an error is returned due to too many tokens
+    per second being processed in a large-scale deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This can be accomplished via APIM’s retry policy. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, the error is specific to an HTTP response status code equal
+    to 429, which is the return code for “server busy.” This states that *too many
+    concurrent requests* were sent to a particular model, measured at *a per-second
+    rate*. This can occur as an enterprise organization is scaling to a large number
+    of users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the detailed values and explanation of the APIM policy statement:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The format and what each value means is fairly evident, however for a deeper
+    dive, you can learn more about the parameters by reading the link to the documentation
+    provided at the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main and extremely important point to understand is that when the APIM’s
+    interval, max interval, and delta parameters are specified, as they are in the
+    preceding example, then an *exponential interval retry* algorithm is automatically
+    applied by APIM. This is what we call the *scaling special sauce* – that is, the
+    exponential interval retry special sauce needed to scale using any combination
+    of multiple AOAI accounts to meet the most demanding business/user requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For those interested in the mathematical logic behind this, here is the calculation
+    that’s used by APIM for the exponential interval retry formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Without the scaling special sauce (APIM using retries with exponential backoff),
+    once the initial rate limit is hit, say due to too many concurrent users sending
+    too many prompts, then a 429 error return code (server busy) response code is
+    sent back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, as additional subsequent prompts/completions are sent, the issue
+    can be compounded quickly as more 429 errors are returned, and the error rates
+    increase further and further. It is with the retries with exponential backoff
+    that you are then able to scale many thousands of concurrent users with very low
+    error responses, providing scalability to the AOAI service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to using retries with exponential backoff, APIM also supports content-based
+    routing. This is where the message routing endpoint is determined by the content
+    of the message at runtime. You can leverage this to send AOAI prompts to multiple
+    AOAI accounts, including both PTUs and TPMs, to meet further scaling requirements.
+    For example, if your model API request states a specific version, say gpt-35-turbo-16k,
+    you can route this request to your GPT 3.5 Turbo (16K) PTUs deployment. This is
+    true whether you’re in the same region or a multi-region deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We could write an entire book on all the wonderful scaling features APIM provides,
+    but for additional details on APIM, please check out the APIM link at the end
+    of this chapter. Alternatively, you can refer to the great book *Enterprise API
+    Management*, by Luis Weir, published by Packt Publishing
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rate Limiting Policy in Azure API Management
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Rate limiting in Azure API Management is a policy that restricts the number
+    of requests a user can make to an API within a certain timeframe, ensuring cost
+    control, fair usage and protecting the API from overuse and abuse. Just as we
+    have rate limits at the OpenAI API level discussed above with TPM and RPM, we
+    can also set rate limiting policies in Azure API management too. This has several
+    benefits as mentioned below –
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Prevents Overuse**: Ensures no single user can monopolize API resources by
+    making too many requests.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Manages Resources**: Helps in evenly distributing server resources to maintain
+    service reliability.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Controls Costs**: Avoids unexpected spikes in usage that could lead to higher
+    operational costs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Enhances Security**: Acts as a defense layer against attacks, such as Denial
+    of Service (DoS), by limiting request rates.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Ensures Quality of Service**: Guarantees fair resource distribution among
+    all users to maintain expected service levels.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Promotes Operational Stability**: Contributes to the API’s stability and
+    predictability by allowing for effective resource planning.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we have a good grasp on fundamental components of scaling and strategies
+    with our special scaling sauce on Azure API Management, let’s turn our attention
+    to Monitoring and Logging capabilities that can help build telemetry on our Gen
+    AI application that can help you measure critical metrics to determine the performance
+    and availability of your application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring, logging, and HTTP return codes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we have learned in the previous sections, both limits and how we manage these
+    limits using various scaling techniques can help us provide a robust, enterprise-class,
+    highly scalable cloud GenAI service to many thousands of users/demanding enterprise
+    applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But as with any good enterprise-class service, it’s important to configure and
+    deploy the basic telemetry data provided by monitoring and logging to ensure optimal
+    performance and timely notifications in case of issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring and logging
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the most critical operational categories that is required for any robust
+    enterprise service or solution that’s designed to be enterprise-ready are monitoring/instrumentation/observability
+    and logging of the solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These components are required for any enterprise-level service, and you may
+    already be familiar with the concepts or have a lot of experience in these areas,
+    so we will not cover this extensively, only how monitoring and logging pertain
+    to running a GenAI/ChatGPT-based cloud service, as well as some best practices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Any enterprise monitoring solution can be used for health-checking applications
+    and services, as well as setting up alerts to be notified if certain thresholds
+    are reached or exceeded, such as protection against automated and high volume
+    misuse or other anomalies related to unusual usage patterns. Two very well and
+    broadly used services, Azure Monitoring and DataDog, both have operational modules
+    for use with OpenAI/Azure OpenAI. These enterprise tools know which metrics are
+    important to collect, display, and alert on for the success and optimal health
+    of your cloud GenAI service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Monitoring transactional events, such as **TokenTransaction**, **Latency**,
+    or **TotalError** to name a few, can provide valuable insight into how your Cloud
+    ChatGPT service is operating, or alert you if settings or conditions are not within
+    your ideal parameters. The alerting and notification of these available metrics
+    are highly configurable. You can find the complete list of metrics here: [https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/monitoring#azure-openai-metrics](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/monitoring#azure-openai-metrics).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For more information about OpenAI monitoring by Datadog, check out [https://www.datadoghq.com/solutions/openai/](https://www.datadoghq.com/solutions/openai/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: On a related note, application logging is critical to the success of reviewing
+    events either in real time or after they have occurred. All metrics described
+    previously can be collected and stored, reported in real-time for historical analysis,
+    and output to visualization tools such as Fabric (Power BI) using Log Analytics
+    Workspace in Azure, for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every cloud GenAI application will have different logging requirements defined
+    by the business/organization. As such, Microsoft has created a monitoring and
+    logging AOAI best practices guide, a link to which you can find at the end of
+    this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: HTTP return codes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: HTTP return codes, sometimes generically called “error codes” and briefly mentioned
+    in the previous section, provide a way to validate. This is a standard web pattern
+    many web developers will easily recognize.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember that when your application is sending prompts, it does so via HTTP
+    API calls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As described in the *Retries with exponential backoff – the scaling special
+    sauce* section, you can use retries with exponential backoff for any 429 errors
+    based on the APIM retry policy document.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, as a best practice, you should always configure error checking regarding
+    the size of the prompt against the model this prompt is intended for first. For
+    example, for GPT-4 (8k), this model supports a maximum request token limit of
+    8,192 tokens for each prompt+completion. If your prompt has a 10K token size,
+    then this will cause the entire prompt to fail due to the token size being too
+    large. You can continue retrying but the result will be the same – any subsequent
+    retries would fail as well as the token limit size has already been exceeded.
+    As a best practice, ensure the size of the prompt does not exceed the maximum
+    request token limit immediately, before sending the prompt across the wire to
+    the AOAI service. Again, here are the token size limits for each model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **HTTP** **Response Code** | **Cause** | **Remediation** | **Notes** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 200 | Processed the prompt. Completion without error. | N/A | Successful
+    completion |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 429 (v0613 AOAI Models) | Server busy (rate limit reached for requests).
+    | APIM – retries with exponential backoff | When the APIM’s interval, max interval,
+    and delta are specified, an exponential interval retry algorithm is automatically
+    applied |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 424 (v0301 AOAI Models) | Server busy (rate limit reached for requests) |
+    APIM – retries with exponential backoff | Same as above |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 408 | Request timeout | APIM retry with interval | There are many reasons
+    why a timeout could occur, such as a network connection/transient error |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 50x | Internal server error due to transient backend service error. | APIM
+    retry with an interval | Retry policy: [https://learn.microsoft.com/en-us/azure/api-management/retry-policy](https://learn.microsoft.com/en-us/azure/api-management/retry-policy)
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 400 | Another issue with the prompt itself, such as the prompt size being
+    too large for the model type | Use APIM logic or application logic to return a
+    custom error immediately, without sending it to the model for further processing
+    | After immediately evaluating the prompt, a response is sent back, so no further
+    processing is needed |'
+  prefs: []
+  type: TYPE_TB
+- en: Figure 7.7 – HTTP return codes
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding table lists the most common HTTP return codes so that you can
+    programmatically manage and handle each return code accordingly, based on the
+    response. Together with monitoring and logging, your application and services
+    can better handle most scaling aspects of generative AI service behaviors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will learn about some additional considerations you should account
+    for in your generative AI scaling journey.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Costs, training and support
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To round off this chapter on deploying ChatGPT in the cloud with architecture
+    design and scaling strategies, three additional areas are associated with a scaled
+    enterprise service: costs, training and support.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Costs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Throughout this chapter, we discussed many services for a robust, enterprise-ready
+    cloud ChatGPT service. While we wanted to focus on technical aspects of architecture
+    design and scaling strategies, the topic of costs will (and should) be discussed,
+    a critical factor from an ROI perspective that executives invariably weigh. Recognizing
+    its significance, this section is dedicated to understanding the various elements
+    that influence costs, alongside discussing strategies for cost optimization across
+    different architectural layers – namely, the Model, Data, Application, and Infrastructure
+    Layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are variations in costs and these costs also change over time for any
+    service. That is the nature of any business, not only a technology-based solution
+    such as ChatGPT. We won’t list exact pricing here as it will have already changed
+    once this book has been published, if not sooner! Instead, we wanted to mention
+    some of the categories to consider when pricing the solution. This varies by vendor,
+    how large or small your enterprise solution is, and a dozen other factors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You must understand that there is not only the pricing of the GenAI/LLM models
+    themselves to consider, each with its versions and types, but also how quickly
+    you want those processed and also cost varies depending on the cost model – Pay-As-You-Go
+    or PTU, as we described when we covered the TPMs and PTUs topic earlier this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, there is the cost of any ancillary services to support your enterprise-ready
+    GenAI deployment, and the costs of training and support, as described earlier
+    in this section, as well as the cost of staff who design, deploy, manage, and
+    operate the robust enterprise cloud solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Below, we list cost considerations and some optimization best practices to
+    help lower cost or reduce resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Model and Data Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Model selection**: Choose a pre-trained model that closely aligns with your
+    task requirements. This can reduce the need for extensive fine-tuning and data
+    collection, saving time and resources. Use popular benchmarks discussed in [*Chapter
+    3*](B21443_03.xhtml#_idTextAnchor052) to shortlist your models for a particular
+    task. Consider small language models and open source models for low-impact, internal
+    (non-client) facing applications and batch tasks to reduce costs where quality
+    and performance is not of the highest importance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data efficiency**: Utilize data augmentation techniques to create more training
+    data from your existing dataset. This can help you achieve better results with
+    less data, reducing storage and processing costs. Textbook quality data can help
+    you achieve more high performing models with less tokens. For example, Phi-2 a
+    2.7B parameter model was created using textbook quality synthetic datasets. It
+    outperforms models 25x its size on complex benchmarks.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Early stopping**: Implement early stopping during training to prevent overfitting
+    and reduce training time. This helps you find a good model without wasting resources
+    on unnecessary iterations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model optimization**: Prune or quantize your model to reduce its size and
+    computational requirements. This can lead to faster training and inference, lowering
+    cloud costs. Model quantization leads to reduced memory, faster computation, energy
+    efficiency, network efficiency and hence leading to reduced costs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Application Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**API Parameters**: These are configurable settings or values used to customize
+    the behavior of an API, allowing users to control aspects such as data processing,
+    request format, and response content. Setting appropriate parameters ensures efficient
+    utilization of resources and optimal interaction with the API.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Token Size**: Always set the max_tokens parameter to control the token size
+    per API call.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Batch requests**: Instead of individual requests consider sending batch requests
+    to reduce the overall costs.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Caching**: For applications where the same inputs might result in the same
+    outputs frequently, implement caching mechanisms to save on compute costs by serving
+    cached results instead of regenerating them.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Prompt Guide**: Offer users guidance on crafting effective prompts with a
+    sample prompt guide/collection. This approach ensures users can achieve their
+    desired outcomes.with minimal iterations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context Window**: Despite the rise of context window lengths up to a million
+    in LLMs, it’s crucial not to default to utilizing the full extent in every instance.
+    Especially in RAG applications, strategically optimizing to use only a minimal
+    number of tokens is key for cost efficiency.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Infrastructure Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Cloud infrastructure**: Leverage cloud platforms that offer flexible pricing
+    options and pay-as-you-go models. This allows you to scale your resources up or
+    down based on your needs, avoiding unnecessary costs. Consider using managed services
+    like Autoscaling and terminate compute instances when idle.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Spot VMs or Preemptimble VMs**: If not using PaaS services, then look for
+    Spot or Low Priority VMs for model training or fine-tuning to benefit from lower
+    pricing.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Reserved Instances**: If you have predictable, steady-state workloads, purchasing
+    reserved instances can offer significant savings over on-demand pricing in exchange
+    for committing to a one-year or three-year term. This is beneficial for customer
+    facing workloads where predictable performance is important. E.g Azure PTUs'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Rate Limiting**: Rate limiting in Azure API Management is a policy to control
+    the number of processed requests by a client within a specified time period, ensuring
+    fair usage and preventing abuse of the API. This can help control costs too.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Monitoring and logging**: Continuously monitor your model’s performance and
+    resource usage. This helps you identify areas for optimization and potential cost
+    savings. You can build this telemetry using Azure API Management and Azure Cost
+    Monitor.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Note:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We advise implementing a telemetry solution early to monitor your application’s
+    token usage for prompts and completions. This allows for informed decisions between
+    PTU and Pay-As-You-Go as your workload grows. Gradually scaling your solution
+    to production through a ramp-up approach is recommended for cost-effective management.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Data Transfer Costs/Egress Costs**: In a multi-cloud and/or a multi-region
+    setup, monitoring egress usage and fees is crucial to managing total solution
+    costs effectively. The traditional observability'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data Storage**: Store your training datasets or files generated from AI applications
+    in lower cost object storage like Azure Blob, S3 or Google Cloud Storage when
+    possible. Utilize compression techniques to reduce storage costs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You have already started your journey of training for ChatGPT and OpenAI, especially
+    if you have read this book thus far. There are many forms of learning and training
+    that we already know about, but the key point here is that it is important to
+    be knowledgeable or have staff/colleagues trained in not only the ChatGPT services
+    themselves but other related services as well. We mentioned a few of these other
+    services in the previous chapter, such as the APIM service, enterprise monitoring,
+    instrumentation, logging, application and web development and management, and
+    data science and analytics to name a few.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another aspect of training may include database management training, especially
+    a NoSQL type of enterprise service such as Azure CosmosDB. Why? Typically, a large
+    organization would want to save their prompt and completion history, for example,
+    so that they can retrieve it later or search without having to resend the same
+    prompts again. This does make for a highly efficient and optimized ChatGPT cloud
+    service, with all the benefits a NoSQL database, such as CosmosDB, can provide
+    – such as being highly performant, having lower costs, and being a globally scalable
+    service. **Based on our experience, we have found that CosmosDB can be beneficial
+    for Caching and Session Management of Conversational generative** **AI applications.**
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, no one person can run an enterprise solution, so you are not expected
+    to know the intricate details and job tasks for every service – this is what an
+    enterprise cloud team does… and does it as a team! However, identifying training
+    requirements for the enterprise services you will run and identifying any gaps
+    early in the service planning life cycle is highly recommended and a best practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Support
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Just like training is a critical part of designing and scaling a ChatGPT for
+    cloud solutions, so is supporting this enterprise solution/service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Many aspects of support need to be considered: internal technical support for
+    the end users who may be using your enterprise-ready service and the internal
+    support provided by various workload owners, including both primary and ancillary
+    services, as described earlier.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, this is not only internal support, but also any external, third-party,
+    and vendor cloud support you will need to consider. Both OpenAI and Azure provide
+    many tiers of support, whether it is free-to-low-cost self-service forums, where
+    communities support each other, or paid support by trained personnel who can quickly
+    resolve an enterprise issue, and they have personnel trained in all aspects (components)
+    of the service. These paid support services can have many tiers of support, depending
+    on how quickly you want the solution to be resolved based on your internal SLAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When designing and scaling a ChatGPT for cloud solutions, ensure “support” is
+    on your checklist of items for a successful, robust deployment. This category
+    cannot be overlooked or skipped.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter on deploying GenAI in the cloud, we learned how to design and
+    scale a robust, enterprise ready GenAI cloud solution. We covered what limits
+    exist within each of the models and how to overcome these limits either by adding
+    additional (Azure) OpenAI accounts and/or using an Azure APIM service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: APIM, with its very important exponential interval retry setting, is yet another
+    way to help organizations scale up to meet business and user requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reserved capacity, known as PTUs in Microsoft Azure, is another way an enterprise
+    can scale up to meet business requirements. We described how additional PTUs can
+    be added and scaled by increasing the number of PTUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During our cloud scaling journey, we learned how to scale across multiple geographies,
+    or multi-regions, to support broader scale globally, while also supporting our
+    enterprise DR scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We now understand how to handle various response and error codes when making
+    API calls against our generative AI models, and we also know about best practices
+    such as always configuring error checking the size of the prompt against the model
+    this prompt is intended for first for a more optimized experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, you learned about the scaling special sauce, an insightful technique that
+    ensures both a large-scale and seamless experience by using a retry pattern known
+    as retries with exponential backoff. With this technique, scaling at extremely
+    large user and prompt counts can be achieved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we wrapped up, we described how monitoring/instrumentation/observability
+    plays a critical part in the overall solution by providing alerting notifications
+    and deeper insights into the operational side of the service. Logging further
+    supports the operational requirements for the enterprise, such as using logs for
+    real-time analytics or historical data, so that it can be presented in reports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we covered categories that will require further investigation as you
+    design a scalable and robust enterprise ChatGPT cloud solution – training, support,
+    and costs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next chapter, we will learn about another important aspect for enterprises
+    that want to scale and deploy ChatGPT in the cloud: security. We will look at
+    some of the critical security considerations or concerns for deploying ChatGPT
+    for cloud solutions, as well as how to best address them for a continued robust,
+    enterprise-ready cloud solution.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Manage Azure OpenAI Service Quota: [https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/quota?tabs=rest](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/quota?tabs=rest)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'OpenAI rate limits in headers: [https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers](https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'What is Azure API Management?: [https://learn.microsoft.com/en-us/azure/api-management/api-management-key-concepts](https://learn.microsoft.com/en-us/azure/api-management/api-management-key-concepts)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Azure API Management retry policy: [https://learn.microsoft.com/en-us/azure/api-management/retry-policy](https://learn.microsoft.com/en-us/azure/api-management/retry-policy)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'How to deploy an Azure API Management service instance to multiple Azure regions:
+    [https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-deploy-multi-region](https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-deploy-multi-region)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Token size limits for each model in Azure OpenAI: [https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Provisioned Throughput Units (PTU) getting started guide: [https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/provisioned-get-started](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/provisioned-get-started)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Azure OpenAI monitoring and logging best practices guide: [https://techcommunity.microsoft.com/t5/fasttrack-for-azure/optimizing-azure-openai-a-guide-to-limits-quotas-and-best/ba-p/4076268](https://techcommunity.microsoft.com/t5/fasttrack-for-azure/optimizing-azure-openai-a-guide-to-limits-quotas-and-best/ba-p/4076268)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Azure OpenAI pricing: [https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Part 4: Building Safe and Secure AI – Security and Ethical Considerations'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This part will cover everything you need to know about creating AI applications
+    that are not only safe and secure but also built with a responsible AI-first mindset.
+    We’ll look into the security risks associated with generative AI, including the
+    dangers of deepfakes, and discuss strategies to counter these issues, such as
+    Red Teaming. We’ll introduce the principles of Responsible AI, highlight the emerging
+    start-up ecosystem in this field, and examine the current global regulations surrounding
+    AI. Additionally, we’ll explore how organizations can best prepare for these regulatory
+    environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part contains the following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 8*](B21443_08.xhtml#_idTextAnchor163), *Security and Privacy Considerations
+    for Generative AI: Building Safe and Secure LLMs*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 9*](B21443_09.xhtml#_idTextAnchor184), *Responsible Development of
+    AI Solutions: Building with Integrity and Care*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

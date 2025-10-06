@@ -1,0 +1,1139 @@
+- en: '7'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Real-World Use Case – Retrieval-Augmented Generation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, we learned how to augment our kernel with memories,
+    which enables our applications to be much more personalized. Cloud-based AI models,
+    such as OpenAI’s GPT, usually have knowledge cut-offs that are a few months old.
+    They also usually don’t have domain-specific knowledge, such as the user manuals
+    of the products your company makes, and don’t know the preferences of your users,
+    such as their favorite programming language or their favorite city. The previous
+    chapter taught you ways to augment the knowledge of models by keeping small pieces
+    of knowledge in memory and retrieving them as needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we’re going to show you how to expand the data that’s available
+    to your AI application. Instead of using a small amount of data that fits in the
+    prompt, we’re going to use a large amount of data with a **retrieval-augmented
+    generation** (**RAG**) application that combines the latest generative AI models
+    with recent specialized information to answer questions about a specific topic
+    – in our case, academic articles about AI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RAG takes advantage of the fact that lots of institutions have useful data that
+    wasn’t part of the data that was used to train OpenAI’s GPT. This gives these
+    institutions a way of putting this data to use while still taking advantage of
+    the generative power of GPT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll be covering the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a document index with the Azure AI Search service
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Loading a large number of documents to the index
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating an application that searches the index and uses AI to write an answer
+    based on the data it found
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will have created an application that uses a
+    large amount of recent data and uses AI to find and combine the data in a user-friendly
+    way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To complete this chapter, you will need to have a recent, supported version
+    of your preferred Python or C# development environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For Python, the minimum supported version is Python 3.10, and the recommended
+    version is Python 3.11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For C#, the minimum supported version is .NET 8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we will call OpenAI services. Given the amount that companies
+    spend on training these LLMs, it’s no surprise that using these services is not
+    free. You will need an **OpenAI API** key, obtained either directly through **OpenAI**
+    or **Microsoft**, via the **Azure** **OpenAI** service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using .NET, the code for this chapter is at [https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/dotnet/ch7](https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/dotnet/ch7).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using Python, the code for this chapter is at [https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/python/ch7](https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/python/ch7).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To create a document index, you will need a free trial of Microsoft Azure AI
+    Search.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can install the required packages by going to the GitHub repository and
+    using the following: `pip install -``r requirements.txt`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why would you need to customize GPT models?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'GPT models are already very useful without any customizations. When your user
+    types a request, you, as a programmer, could simply forward the request to the
+    GPT model (such as GPT-3.5 or GPT-4), and, in many cases, the unaltered response
+    from the model is good enough. However, in many cases, the responses aren’t good
+    enough. There are three categories of problems with responses:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Non-text functionality**: In some cases, the response you want is not text-based.
+    For example, you may want to allow your user to turn a light on or off, perform
+    complex math, or insert records into a database.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Lack of context**: Models can’t accurately answer questions if they haven’t
+    been exposed to the data that contains the answer. Despite being trained with
+    immense amounts of data, there’s a lot of data that LLMs haven’t been exposed
+    to. At the time of writing, the cut-off date for data used to train GPT 3.5 and
+    GPT-4 is September 2021, although there is a preview version of GPT-4 called GPT-4
+    Turbo with a cut-off date of December 2023 (you can see the cut-off dates of models
+    at [https://platform.openai.com/docs/models/](https://platform.openai.com/docs/models/).)
+    In addition, models don’t have access to proprietary data, such as the internal
+    documents of your company.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Answer only with Y or N` to your prompt, but some requests return responses
+    such as `Yes` (instead of *Y*) or `The answer is yes`, which requires adding code
+    to validate the answer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We showed you how to solve the first issue (non-text functionality) using Semantic
+    Kernel via native functions, as shown in [*Chapter 3*](B21826_03.xhtml#_idTextAnchor071).
+    However, if the problem with the responses you’re getting is a lack of context
+    or format, you can use the techniques depicted in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.1 – Techniques to improve responses](img/B21826_07_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.1 – Techniques to improve responses
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first technique you should always try is **prompt engineering**, something
+    we covered in detail in [*Chapter 2*](B21826_02.xhtml#_idTextAnchor045). Prompt
+    engineering is easy to do and test: it can be used both to give new data to the
+    LLM (improving context) and to provide some examples of how you want the answer
+    to look (improving format).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, let’s say you’re building an application that gives your team suggestions
+    of places to go for lunch, something that’s always a challenge among teams of
+    developers. Instead of simply asking `Where should we go for lunch?`, you will
+    get much better results by adding context and format specifications, such as `We
+    are a team of six developers aged 25-38, two of us are vegetarians, and we are
+    looking for places to have lunch near the Eiffel Tower on a Friday. We want to
+    spend less than 20 euro per person and we don't want to spend more than 90 minutes
+    having lunch. Please provide your answer with the name of the place, their website,
+    their average price, and their street address`. The format specification is the
+    last sentence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main downside is that the more data you want to provide and the more complex
+    the instructions, the larger your prompts will become, resulting in additional
+    costs and latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides providing examples through prompt engineering, another technique you
+    can use to improve the format of your answer is to fine-tune your model. Fine-tuning
+    allows you to provide hundreds or thousands of examples of questions and answers
+    to an existing model (for example, GPT-3.5) and save a new, fine-tuned model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One example of successful fine-tuning is to show thousands of examples of the
+    way you expect JSON output to look. Since you are providing thousands of examples,
+    you can’t pass this on to every prompt because the prompt will become too large.
+    You can create a file that contains thousands of questions and JSON answers and
+    use the OpenAI fine-tuning API or fine-tuning UI to create a custom GPT model
+    that has been trained with your additional examples. The result will be a model
+    that is a lot better at providing JSON answers, and worse at everything else.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If your application only needs to provide JSON answers, that’s exactly what
+    you need. Microsoft Semantic Kernel does not help with fine-tuning, so techniques
+    for fine-tuning are outside the scope of this book. If you want to learn more
+    about fine-tuning, this online article from Sebastian Raschka, a Packt author,
+    can help: [https://magazine.sebastianraschka.com/p/finetuning-large-language-models](https://magazine.sebastianraschka.com/p/finetuning-large-language-models).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In practice, one of the most common problems is that the LLM will not have
+    enough context to provide the answers you want. This can happen even if the data
+    that’s required to provide the answer has been used to train the model: since
+    LLMs are trained with a lot of data, you may need to add relevant data to your
+    request to help the model recall the data that’s relevant to your request from
+    the large amount of data it was trained with. For example, if you simply ask GPT
+    `Who is the best football player of all time?`, it may not know whether you mean
+    association football (soccer) or NFL (American) football.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In some other cases, as discussed previously when we mentioned the cut-off date
+    and private data examples, the model has never seen the data required to answer
+    the question, and you need to show it to the model as you are making the request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To an extent, you can solve both problems with prompt engineering:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can tell the model to play a role. For example, you can add `you are a Python
+    software engineer` to prime the model to respond more technically, or `you are
+    a five-year-old child` to prime the model to respond more simply.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can give the model some data examples. For example, you can add `If the
+    user says 'the earth is flat', reply with 'misinformation'; if the user says 'the
+    moon landing was fake', reply with 'misinformation'; if the user says 'birds are
+    real', reply with "true"` to your prompt, either directly or by using prompt templates
+    in semantic functions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can add some fields to your prompt template and fill them in real time.
+    For example, you can get today’s date from the system and create a prompt that
+    states `the difference between $today and July 4th, 1776, in days is…"`, replacing
+    `$today` dynamically, and therefore passing recent information to the model.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first downside of prompt engineering is that the more data you need to pass,
+    the larger your prompts will get, which will make the prompts more expensive.
+    It will also increase latency as it will take longer for the LLM to process long
+    prompts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even if your budget can support the additional cost and your users are extremely
+    patient and don’t mind waiting for the answers, there are still two problems.
+    The first is that the accuracy of LLMs decreases [1] as prompts get larger. The
+    second is that at some point, you may run out of space in the context window of
+    the model. For example, let’s say you work for a company that manufactures cars,
+    and you want to help a user find the answer to a question about their car in the
+    user manual, but it’s 300 pages long. Even if you were to solve all previous problems,
+    you can’t pass the whole manual in the prompt because it doesn’t fit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution that works best is to break your user manual into several chunks
+    and save these chunks to an index. When the user asks a question, you can use
+    a search algorithm to return the most relevant chunks by using something such
+    as cosine similarity, as shown in [*Chapter 6*](B21826_06.xhtml#_idTextAnchor120).
+    Then, you only need to pass the relevant chunks to the prompt. The name of this
+    technique is RAG and it’s widely used. Semantic Kernel makes it easy to implement
+    it, but you also need an index. Let’s delve into the details.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retrieval-augmented generation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: RAG is an approach that combines the powers of pre-trained language models with
+    information retrieval to generate responses based on a large corpus of documents.
+    This is particularly useful for generating informed responses that rely on external
+    knowledge not contained within the model’s training dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'RAG involves three steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Retrieval**: Given an input query (for example, a question or a prompt),
+    you use a system to retrieve relevant documents or passages from your data sources.
+    This is typically done using embeddings.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Augmentation**: The retrieved documents are then used to augment the input
+    prompt. Usually, this means creating a prompt that incorporates the data from
+    the retrieval step and adds some prompt engineering.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Generation**: The augmented prompt is then fed into a generative model, usually
+    GPT, which generates the output. Because the prompt contains relevant information
+    from the retrieved documents, the model can generate responses that are informed
+    by that external knowledge.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition to providing additional and more recent information to an AI service,
+    RAG can help with **grounding**. Grounding is the process of tying the language
+    model’s responses to accurate, reliable, and contextually appropriate knowledge
+    or data. This can be particularly important in scenarios where factual accuracy
+    and relevance are crucial, such as answering questions about science, history,
+    or current events. Grounding helps ensure that the information provided by the
+    model is not only plausible but also correct and applicable to the real world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you use RAG, you give the LLM the data that you want it to use to generate
+    your responses. If your data is accurate, reliable, and contextually appropriate,
+    the text that’s generated by the LLM using this data has a very high likelihood
+    of also being accurate, reliable, and contextually appropriate. You can even ask
+    the generator step to provide links to the documents it used. We will see this
+    in our example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s say you want to summarize the latest discoveries in models with large
+    context windows. First, you need to retrieve information about the latest discoveries
+    by doing a web search or using a database of academic papers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To implement RAG, you need a few extra components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`numpy`, which have the advantage of being free.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Retrieval system**: The software that’s used to find the most relevant documents
+    from the document store based on the input query.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Most vector database vendors provide algorithms that work well with their service,
+    and lately, most solutions have been using vector comparisons such as cosine similarity.
+    For example, services such as Pinecone and Azure AI Search provide document and
+    embedding storage and retrieval algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our example, we will create an application that allows you to search for
+    and ask questions about AI papers from the ArXiV database. We downloaded the list
+    of ArXiV IDs, authors, titles, and abstracts for all papers in the *Computation
+    and Language* category that were submitted in 2021 and after. This dataset is
+    available in this book’s GitHub repository: [https://github.com/PacktPublishing/Microsoft-Semantic-Kernel/blob/b1187f88f46589f14a768e3ee7b89bef733f1263/data/papers/ai_arxiv_202101.json](https://github.com/PacktPublishing/Microsoft-Semantic-Kernel/blob/b1187f88f46589f14a768e3ee7b89bef733f1263/data/papers/ai_arxiv_202101.json).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The dataset contains a total of 36,908 scientific articles. The summaries of
+    their contents are in the `abstract` field and contain over 40 million characters,
+    which would require approximately 10 million tokens, something that’s too large
+    for even the largest AI models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We are going to load all this data into an Azure AI Search index. But before
+    we load the articles, we must create the index.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an index
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To store and retrieve large amounts of data, we will need to create an index.
+    To do so, you must have an Azure account and must create an Azure AI Search service.
+    Just search for `Azure AI Search` and click **Create**; you will be asked for
+    a name. You will need the endpoint of the service, which you can find in the **Configuration**
+    tab, shown in *Figure 7**.2*. or the Azure AI Search service you created. *Figure
+    7**.2* shows the endpoint for the service you created in the **Url** field, marked
+    in green:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.2 – Azure AI Search configuration screen](img/B21826_07_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.2 – Azure AI Search configuration screen
+  prefs: []
+  type: TYPE_NORMAL
+- en: You will also need an admin key, which you can find under the **Keys** tab for
+    your Azure AI Search service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Creating a service is just the first step: the service is just a place to store
+    one or more indexes, which are the places where we will store the data. Now that
+    we have a service, we need to write code to create the index.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The field names deserve mentioning. Your life will be a lot easier if you can
+    use some standard names – that is, `Id`, `AdditionalMetadata`, `Text`, `Description`,
+    `ExternalSourceName`, `IsReference`, and `Embedding`. The field names should use
+    that specific capitalization. If you use these names, you can easily use the preview
+    version of the Azure AI Search Semantic Kernel connection, which will make your
+    code much smaller. The text you’ll use for searching (abstracts, in our case)
+    should be `Text`. In the following code, I’ll map these fields to what we need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, let’s see how to do that in Python. Later, we’ll learn how to do this in
+    C#.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the index with Python
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Write the following code in a Python script to create an index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, you need to import the `AzureKeyCredential` function to read your admin
+    key and `SearchIndexClient` to create an object that will allow you to interact
+    with the Azure AI Search service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we will import several classes for the types we will be using in our
+    index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: For fields that we want to search using embeddings, we use the `SearchField`
+    type. For other fields, we use the `SimpleField` type if we don’t intend to search
+    for content inside of them, and `SearchableField` if we want them to be searchable
+    by string comparisons.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let’s create an API client that will add a new index to the index collection
+    with the `SearchIndexClient` class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: When you are in the development phase, it’s not uncommon to have to redesign
+    your index by adding or dropping fields, changing the size of the embeddings,
+    and so on. Therefore, we usually drop and recreate the fields in the script. To
+    drop a field in the preceding snippet, we used the `delete_index` method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code specifies the fields and their properties to help describe
+    which fields the index will contain:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we are adding the same fields we have in our dataset to the index: `id`,
+    `authors`, `title`, and `abstract`. In addition, we’re adding a field called `Embedding`,
+    where we will put the embedding vectors of the articles’ abstracts. For that field,
+    we need to specify a vector search algorithm profile and a vector search dimension.
+    The dimension is the size of the embeddings. Since we’re using the new `OpenAI
+    text-embeddings-3-small`, the embeddings’ size is 1,536.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These embeddings are used in search algorithms. Azure AI Search uses an algorithm
+    called **Hierarchical Navigable Small World** (**HNSW**), a flexible algorithm
+    that’s closely related to nearest neighbors for high-dimensional spaces, such
+    as the number of dimensions of our embeddings. We’ll use this algorithm later
+    to search for items in our index and bring the ones that are more closely related.
+    Let’s add it to our embedding field:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding snippet, we used cosine similarity as the metric that determines
+    the items in the index that are more closely related to what the user searched
+    for. For now, we’ve used the default parameters of `m=10`, `ef_construction=400`,
+    and `ef_search=500`. `ef` in the parameters stands for *exploration factor*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `m` parameter controls the density of the index – in the index, each record
+    will have `m` neighbors. The `ef_construction` parameter increases the number
+    of candidates being used to find neighbors for each record: the higher this parameter,
+    the more thorough the search is going to be. The `ef_search` parameter controls
+    the depth of the search during runtime – that is, when a search is executed, how
+    many results are retrieved from the index for comparison.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Increasing `ef_construction` causes the index construction to take longer, whereas
+    increasing `ef_search` causes runtime searches to take longer. In most cases,
+    the numbers can be close to each other, but if you are planning to update the
+    index frequently and don’t want the construction time to take longer, you may
+    increase `ef_search`. On the other hand, if your searches are already taking long
+    enough at runtime and you want to improve their quality, you may increase `ef_construction`
+    as it will make the results better and only increase the time it takes to build
+    the index, but not the time it takes to execute a search.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Higher values for these parameters make the index better at finding records,
+    but they also make it take longer to build and search through. The parameters
+    we used here work well for this example, but when you are using your own dataset
+    for your application, be sure to experiment with the parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we simply call `create_or_update_index` with all the parameters we
+    specified. This command is what will create the index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have an index, we can upload the records (each record is called
+    a document) from our dataset into it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll learn how to create the index with C#.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the index using C#
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'It’s a lot simpler to create the index using C#. First, we must define the
+    fields in a class, which I chose to call `SearchModel`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we are using the same field names that we used for Python. Note that we
+    didn’t create an `Embedding` field like in Python. This will be created later,
+    dynamically, when we load the documents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s see how to create an index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The code is straightforward: first, we create a list of fields in `SearchModel`
+    using the `FieldBuilder` class; then, we create an `index` object with the `SearchIndex`
+    class; and finally, we call `CreateOrUpdateIndex` to create the index in the cloud
+    service.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uploading documents to the index
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: While loading documents to the index is also straightforward, there are a couple
+    of details that we need to pay attention to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first detail is the unique identifier of the document. In our case, that
+    is the `Id` field. In an ideal case, the data that you want to load will have
+    a unique and immutable identifier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Luckily, that is the case for the ArXiV database: the `Id` field in the ArXiV
+    database is unique and immutable and can always be used to search for articles
+    online. For example, the article with an ID of `2309.12288` will always be the
+    latest version of the *The Reversal Curse: LLMs trained on “A is B” fail to learn
+    “B is A”* article [2], which talks about a quirk in LLMs: when asked who Tom Cruise’s
+    mother is, it will give the correct answer, Mary Lee Pfeiffer, 79% of the time.
+    When asked who Mary Lee Pfeiffer’s famous actor son is, it will give the correct
+    answer, Tom Cruise, only 33% of the time.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The uniqueness and immutability of the `Id` field allow us to update the index
+    with new information as needed. However, there’s one caveat: in the index, the
+    `Id` field can only contain numbers, letters, and underscores, so we will need
+    to replace the dot with an underscore.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second detail is that we need to load the embeddings. For Python, at the
+    time of writing, this will require us to calculate the embeddings manually, as
+    we did in [*Chapter 6*](B21826_06.xhtml#_idTextAnchor120). Different embedding
+    models produce data vectors with different meanings, and usually different sizes,
+    but even if the sizes are the same, the embeddings are incompatible unless explicitly
+    stated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, you can’t create your embeddings with a model and later use another
+    embedding model to do your searches. Also, this means that whoever is writing
+    the code to perform searches needs to know the exact embedding model that was
+    used to load the data in the index. In C#, we can use a connector called `Microsoft.SemanticKernel.Connectors.AzureAISearch`.
+    That connector, while still in preview, will greatly simplify things. This should
+    be available for Python soon but isn’t at the time of writing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know about these two details, let’s write some code that will load
+    the documents into the index.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uploading documents with Python
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We start by importing several packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first set of packages is for connecting to the Azure AI Search index. The
+    packages are similar to the ones we used when creating the index, but note that
+    we’re using a different class, `SearchClient`, instead of `SearchIndexClient`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s load the Semantic Kernel packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: These Semantic Kernel packages are going to be used to connect to the OpenAI
+    service and generate the embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we’re going to import some packages to help us control the flow of
+    the program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `tenacity` library is helpful when you need to call functions that may fail
+    as it provides you with functionality that allows you to automatically retry.
+    The `pandas` library is used to load a CSV file. It’s not strictly necessary;
+    you can manipulate CSVs directly without it, but the `pandas` library makes it
+    easier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let’s define a helper function to generate embeddings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function assumes we have a kernel with a service named `emb` that can generate
+    embeddings for a given text. We used the `retry` decorator to try to generate
+    embeddings three times before giving up, waiting between `1` and `5` seconds between
+    each try, increasing the interval as the number of tries increased.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the OpenAI service that we’re going to use for generating embeddings is
+    an online service and we have more than 30,000 articles to generate embeddings
+    for, we are going to call it more than 30,000 times. With so many calls, it’s
+    not uncommon for some of them to occasionally fail due to network connectivity
+    or the service being too busy. Therefore, adding the `retry` functionality can
+    help so that you don’t get an error on call number 29,000 that breaks your program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important – Using the OpenAI services is not free
+  prefs: []
+  type: TYPE_NORMAL
+- en: To generate embeddings, we must call the OpenAI API. These calls require a paid
+    subscription, and each call will incur a cost. The costs are usually small per
+    request —version 3 of the embedding models costs $0.02 per million tokens at the
+    time of writing this book, but costs can add up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenAI pricing details can be found at [https://openai.com/pricing](https://openai.com/pricing).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Azure OpenAI pricing details can be found at [https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The process we’ll follow to create the index search client for loading documents
+    is very similar to what we did when creating the index. The `SearchClient` class
+    has one more parameter than `SearchIndexClient`, which we used to create the index:
+    the `index_name` property that we created before:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s load the data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we read the data file into a `pandas` DataFrame, and for each record,
+    we create a dictionary called `document`. Note that we must replace periods with
+    underscores in the `Id` field because Azure AI Search requires key fields to only
+    contain numbers, letters, dashes, and underscores.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we have the data in the dictionary, we are ready to upload it, which
+    we will do in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The fields in the document dictionary match the fields that we used when we
+    created the index: `Id`, `Text`, `Description`, and `Embedding`. The value for
+    the `Embedding` field is generated by calling the `generate_embeddings` function
+    we created earlier.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, note the additional field, `@search.action`. This field contains instructions
+    on what’s going to happen with that item when it’s submitted to the index. `upload`
+    is a good default as it creates the record with that ID if it doesn’t exist and
+    updates its contents in the index if it does.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lastly, once we’ve created the `document` dictionary item, we append it to the
+    `documents` list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we are ready to upload it to the index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: When uploading data to the index, there’s a limit of 16 MB per operation. Therefore,
+    we can only upload a few records at a time. In the preceding code, I limited the
+    number of records uploaded to `100`. However, any small enough number works since
+    we are going to insert records into the index just once. The upload operation
+    doesn’t take very long, and it’s better to upload a few records at a time and
+    have a slightly longer upload duration than trying to upload many records at a
+    time and risk getting an error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The final step is to call the `main` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that before calling the `main` function, we called `load_dotenv` to get
+    the values of the environment variables that contain the index name, the service
+    name, the admin key, and the OpenAI key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running this program will cost approximately $1.50 as it will generate the embeddings.
+    It will take about two and a half hours to run since we are generating dozens
+    of thousands of embeddings. If you want to reduce the cost or time for your experiment,
+    you can simply load just a fraction of the documents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the program finishes running, you will see the following printed message:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, we can use the index to find articles. Later, we will use it to answer
+    questions about AI papers. But before we do that, let’s learn how to upload the
+    documents to the index using C#.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uploading documents with C#
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The `Microsoft.SemanticKernel.Connectors.AzureAISearch` package, which is in
+    preview at the time of writing, makes it a lot easier to upload documents with
+    C#. To use it, we must install it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Also, add the OpenAI connectors package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we are going to use these packages to load the following documents into
+    the index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Since the package is in prerelease form, we need to add a few `pragma` directives
+    to let C# know that we know that we are using prerelease functionality:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At this point, we can get our environment variables. I’ve modified the `Settings.cs`
+    file to allow for the additional Azure AI Search variables to be stored and read
+    from `config/settings.json`. For brevity, I won’t put the file here, but you can
+    check out this chapter’s GitHub repository to see it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we must create a `Memory` object with `MemoryBuilder`. We will use the
+    `AzureAISearchMemoryStore` class to connect to Azure AI Search:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is to read the data from the `ai_arxiv.json` file. Despite its
+    extension, it’s not a JSON file; it’s a text file with one JSON object per line,
+    so we will parse each line one at a time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is to use the `SaveInformationAsync` method of the `MemoryStore`
+    object to upload the document into the index:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we’ve loaded the documents into the index, we can learn how to use
+    the index to run a simple search. Later, we will use the results of the search
+    and Semantic Kernel to assemble an answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the index to find academic articles
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This subsection assumes that the index was loaded in the previous step. The
+    index now contains titles, abstracts, and embeddings for thousands of academic
+    papers about LLMs from ArXiV. Note that the papers in ArXiV are not necessarily
+    peer-reviewed, which means that some articles may contain incorrect information.
+    Regardless, ArXiV is generally a reputable data source for academic articles about
+    AI, and many classic papers can be found there, including *Attention is All You
+    Need* [3], the academic article that introduced GPT to the world. That article
+    is not part of our dataset because our dataset starts in 2021, and that article
+    is from 2017.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’re going to use this index to help us find papers for a given search string.
+    This will ensure that the search is working and that we’re comfortable with the
+    results. In the next subsection, we’re going to use GPT to combine the search
+    results and summarize the findings. Let’s see how to do this in Python and C#.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Searching for articles in Python
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The first thing we must do is load the required libraries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are no new libraries, and we’re using the same `generate_embeddings` function
+    as we did before. The function that’s used to generate embeddings when searching
+    must be compatible with the function that was used to store embeddings in the
+    vector database. If you use the same model, the function is going to be compatible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following code, we’re creating a kernel and loading the embedding model
+    into it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Besides loading the kernel with the embeddings model, we’ve also loaded all
+    the environment variables with the configuration of our OpenAI connection and
+    our Azure AI Search connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can execute the query:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Executing this query consists of a few steps. First, we calculate the embeddings
+    from our query string. This is done with the `generate_embeddings` function. Then,
+    we create `VectorizedQuery` with the embeddings before executing the query using
+    the `search` method of `SearchClient`. The `k_nearest_neighbors` parameter of
+    our query determines how many results we want to bring back. In this case, I’m
+    bringing back the first `5`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The results come in a dictionary with the columns in the index. We’ll also
+    retrieve an additional special column called `@search.score` that’s created dynamically
+    during the search and shows the cosine similarity of each result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: The values of the `@search.score` field may be used to sort results by order
+    of similarity, and also to drop results that are below a cut-off point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s print the results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the preceding code, I’m loading the results into a `pandas` DataFrame before
+    printing them as this makes it easier to sort and filter results when you have
+    too many. This isn’t required, though – you can simply use a dictionary. In this
+    case, we’re limiting our results to only five, so we could also print them directly
+    from the `pd_results` dictionary list we created. For example, let’s say we have
+    the following query:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: We’ll look at the results after we’ve learned how to implement the search in
+    C#.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Searching for articles with C#
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We can create our `memoryWithCustomDb` object in the same way we did to load
+    the documents. Up to that point, the code is the same. However, instead of loading
+    documents, we will now search for them. We can do that with the `SearchAsync`
+    method of the `memoryWithCustomDb` object. All we need to do is pass the name
+    of our index, which is stored in the `searchIndexName` variable from the configuration,
+    the query we want to make, which we specified in `query_string`, and the number
+    of articles we want to retrieve, which we specified in `limit`. We set `minRelevanceScore`
+    to `0.0` so that we always retrieve the top five results. You can set it to a
+    higher number if you only want to return results that exceed a minimum cosine
+    similarity:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: With the dedicated `memoryWithCustomDb` C# object, querying the memory is very
+    simple, and we can get our results with a single `SearchAsync` call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s check out the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Search results
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For both Python and C#, the results we get are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have seen that the search works in C# and Python, we can use RAG
+    to automatically generate a summary of several papers based on a search we’ll
+    make.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using RAG to create a summary of several articles on a topic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We’re going to use the search results from the previous step and add them to
+    a prompt by using the usual semantic function prompt template. The prompt will
+    instruct a model – in our case, GPT-4 – to summarize the papers our search returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start with the semantic function, which we will call `summarize_abstracts`.
+    Here’s its metaprompt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: skprompt.txt
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The key part of the prompt is that when we ask for the summarization, I ask
+    GPT to refer to the number of the abstract. For that to work, we will generate
+    a list that has a number and an abstract, which is very similar to the results
+    we generated in the *Using the index to find academic articles* section. The difference
+    is that instead of having a number and the article title, we will have a number
+    and the article abstract. Let’s see the configuration file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: config.json
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the most important thing you must do is make sure that you have enough
+    tokens in the `max_tokens` field. You’re going to be sending five abstracts, which
+    might easily get to 200 tokens per abstract, so you need at least 1,000 tokens
+    just for the abstracts and more for the instructions and the response.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retrieving the data with Python and calling the semantic function
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The first thing we need to do is add a generative model to our kernel. I’ve
+    modified the `create_kernel` function so that it adds a `gpt-4-turbo` model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can use any model you want, but I decided on gpt-4-turbo because it provides
+    a good balance between cost and performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next step is to create a function to summarize documents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first part of the function creates a string that specifies a numbered list
+    of documents and their URLs. Because of the way Azure AI Search stores IDs, remember
+    that we had to convert dots into underscores. To generate the proper URL, we must
+    convert it back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second part of the function generates a list of abstracts with the same
+    numbers as the papers. When we write the prompt, we can ask the model to refer
+    to the numbers, which, in turn, refer to the articles’ titles and URLs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is to load the semantic function from its configuration directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The final step is to combine the list of papers and URLs with the generated
+    summary and return it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we know how to do the retrieval with Python, let’s see how to do it
+    with C#. We’ll look at the results after.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retrieving the data with C# and calling the semantic function
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To retrieve the data, we’ll start with the same code we used in the *Using
+    the index to find academic articles* section until we fill the `memories` variable:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I’ve started the response by listing the documents that were retrieved, their
+    numbers, and their URLs, all of which were built from the `Id` field. There’s
+    no need to use an AI model for this step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, instead of creating a string with all the titles, as we did in the *Using
+    the index to find academic articles* section, we are going to create a string
+    named `input` with the five abstracts, identified by a number in the `i` variable.
+    This will be used as the input parameter for our semantic function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can create a Semantic Kernel named `kernel`, add an AI service to it,
+    and load the semantic function defined in the previous subsection, which I decided
+    to call `rag`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: Let’s run our programs and see the results we get when we use the same `query_string`
+    value that we used for the test in the previous subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RAG results
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The query that we will use here is `"models with long context windows lose information
+    in` `the middle"`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The results aren’t deterministic, but you should get something similar to the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the summary is comprehensive, captures the main idea of each
+    paper, and shows how the papers relate to one another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we learned how to use an external database to help an LLM work
+    with a lot more information than the model can handle with its context window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One advantage of this method is that the generative model primarily uses the
+    search data that you supplied to it to generate a response. If you only supply
+    it with real, well-curated data, you will substantially lower the chance that
+    it will *hallucinate* – that is, generate information that doesn’t exist. If you
+    did not use RAG, there’s a possibility that the generative model will make up
+    non-existent papers and references just to try to answer the questions and generate
+    the summaries we’re asking for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Blocking hallucinations completely is theoretically impossible, but using RAG
+    can make the chance of hallucinating so low that, in practice, your users may
+    never see fake data being generated by your model. This is the reason RAG models
+    are used extensively in production applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we greatly expanded the data that’s available to our AI models
+    by using the RAG methodology. Besides allowing AI models to use large amounts
+    of data when building prompts, the RAG methodology also improves the accuracy
+    of the model: since the prompt contains a lot of the data that’s required to generate
+    the answer, models tend to hallucinate less.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: RAG also allows AI to provide references to the material it used to generate
+    a response. Many real-world use cases require models to manipulate large quantities
+    of data, require references to be provided, and are sensitive to hallucinations.
+    RAG can help overcome these issues easily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will change gears and learn how to integrate a Semantic
+    Kernel application with ChatGPT, making it available to hundreds of millions of
+    users. In our example, we will use the application we built in [*Chapter 5*](B21826_05.xhtml#_idTextAnchor106)
+    for home automation, but you can use the same techniques to do that with your
+    own applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[1] N. F. Liu et al., “Lost in the Middle: How Language Models Use Long Contexts.”
+    arXiv, Nov. 20, 2023\. doi: 10.48550/arXiv.2307.03172.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[2] L. Berglund et al., “The Reversal Curse: LLMs trained on ‘A is B’ fail
+    to learn ‘B is A.’” arXiv, Sep. 22, 2023\. doi: 10.48550/arXiv.2309.12288.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[3] A. Vaswani et al., “Attention Is All You Need,” Jun. 2017.'
+  prefs: []
+  type: TYPE_NORMAL

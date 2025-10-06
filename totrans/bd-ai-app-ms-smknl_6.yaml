@@ -1,0 +1,814 @@
+- en: '6'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Adding Memories to Your AI Application
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, we learned how to use planners to give our users the
+    ability to ask our application to perform actions that we did not program explicitly.
+    In this chapter, we are going to learn how to use external data, so that we can
+    bring recent information and keep information between user sessions. For now,
+    we are going to use small amounts of external data that our users may have given
+    us by saving it to **memory**. Learning how to use memory will enable us to greatly
+    expand the capabilities of AI models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a building block for the next chapter, in which we are going to learn
+    techniques to use amounts of data that vastly exceed the context window of existing
+    models. As you may remember, a *context window* is the maximum size of the input
+    you can send to an AI service. By using memory, you can save a large amount of
+    data and only send portions of the data in each call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start by understanding how LLMs convert words into meaning by using
+    **embeddings** and then compare phrases with similar meanings to recall data from
+    memory. Later in the chapter, we will see how to keep historical data in a chat
+    application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll be covering the following topics :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating embeddings for text data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Storing data in memory and recovering it to use in your prompts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a plugin to keep track of a chat that your user is having with your application
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using summarization to keep track of long chats
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of the chapter, you will have learned how to help your application
+    remember information entered by the user and retrieve it when needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To complete this chapter, you will need to have a recent, supported version
+    of your preferred Python or C# development environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For Python, the minimum supported version is Python 3.10, and the recommended
+    version is Python 3.11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For C#, the minimum supported version is .NET 8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we will call OpenAI services. Given the amount that companies
+    spend on training these LLMs, it’s no surprise that using these services is not
+    free. You will need an **OpenAI API** key, either directly through **OpenAI**
+    or **Microsoft**, via the **Azure** **OpenAI** service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using .NET, the code for this chapter is at [https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/dotnet/ch6](https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/dotnet/ch6).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using Python, the code for this chapter is at [https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/python/ch6](https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/python/ch6).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can install the required packages by going to the GitHub repository and
+    using the following: `pip install -``r requirements.txt`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining memory and embeddings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: LLMs provided by AI services such as OpenAI are **stateless**, meaning they
+    don’t retain any memory of previous interactions. When you submit a request, the
+    request itself contains all the information the model will use to respond. Any
+    previous requests you submitted have already been forgotten by the model. While
+    this stateless nature allows for many useful applications, some situations require
+    the model to consider more context across multiple requests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite their immense computing power, most LLMs can only work with small amounts
+    of text, about one page at a time, although this has been increasing recently
+    — the new GPT-4 Turbo, released in November 2023, can receive 128,000 tokens as
+    input, which is about 200 pages of text. Sometimes, however, there are applications
+    that require a model to consider more than 200 pages of text — for example, a
+    model that answers questions about a large collection of academic papers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Memories are a powerful way to help Semantic Kernel work by providing more context
+    for your requests. We add memory to Semantic Kernel by using a concept called
+    **semantic memory search**, where textual information is represented by vectors
+    of numbers called **embeddings**. Since the inception of computing, text has been
+    converted into numbers to help computers compare different texts. For example,
+    the ASCII table that converts letters into numbers was first published in 1963\.
+    LLMs convert much more than a single character at a time, using embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embeddings take words and phrases as inputs and output a long list of numbers
+    to represent them. The length of the list varies depending on the embedding model.
+    Importantly, words and phrases with similar meanings are close to each other in
+    a numerical sense; if one were to calculate a distance between the numeric components
+    of the embeddings of two similar phrases, it would be smaller than the distance
+    between two sentences with very different meanings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will see a complete example in the *Embeddings in action* section, but for
+    a quick example, the difference between the one-word phrases “*queen*” and “*king*”
+    is much smaller than the difference between the one-word phrases “*camera*” and
+    “*dog.*”
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s take a deeper look.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How does semantic memory work?
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Embeddings are a way of representing words or other data as vectors in a high-dimensional
+    space. Embeddings are useful for AI models because they can capture the meaning
+    and context of words or data in a way that computers can process. An embedding
+    model takes a sentence, paragraph, or even some pages of text and outputs the
+    corresponding embedding vector:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1 – Embedding model](img/B21826_06_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.1 – Embedding model
+  prefs: []
+  type: TYPE_NORMAL
+- en: The current highest-performing embedding model that OpenAI makes available to
+    users is called `text-embedding-3-large` and can convert an input of up to 8,191
+    tokens (about 12 pages of text) into a vector of 3,072 dimensions represented
+    by real numbers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenAI also makes additional embedding models available at different prices
+    and performance points, such as `text-embedding-3-small` and `text-embedding-ada-2`.
+    At the time of writing, the `text-embedding-3-small` model offers better performance
+    than the `text-embedding-ada-2` model, and it’s five times cheaper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You, as a developer, can store text data (including user requests and responses
+    provided by the AI service) as embedding vectors. It’s important to know that
+    this will not necessarily make the data smaller. For a given embedding model,
+    embedding vectors will always be the same length. For example, for the `text-embedding-3-large`
+    model, the embedding vector length is always 3,072\. If you store the word “*No*”
+    using this model, it will use a vector of 3,072 real numbers that would take 12,228
+    bytes of memory, a lot more than the string “`No`”, which can usually be stored
+    in two bytes. On the other hand, if you embed 12 pages of text, their embedding
+    vector length will also be 3,072 and take 12,228 bytes of memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can use embeddings to recall context that has been given to your application
+    long before a request is made. For example, you could store all the chats you
+    have had with a user in a database. If the user told you months ago that their
+    favorite city is Paris in France, this information can be saved. Later, when the
+    user asks what the biggest attraction is in the city they like the most, you can
+    search for their favorite city in the database you created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How are vector databases different from KernelContext?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In previous chapters, we used variables of the type `KernelContext` to pass
+    information to functions. A `KernelContext` variable can be serialized to disk,
+    and therefore, you could use it to store and remember things that your application
+    has already been told.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The difference is that a `KernelContext` variable is a collection of key/value
+    pairs. For each piece of information you store, you have to provide a key, and
+    later, you have to use the same key to retrieve it. Vector databases, on the other
+    hand, retrieve information by similarity, so you can retrieve a piece of information
+    even if you don’t know the key used to store it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another difference is that, if you want, a vector database can return just the
+    subset of information that is similar to the information you requested, while
+    if you have a `KernelContext` variable, you need to keep all information available
+    all the time, which may cause performance and capacity issues when you have a
+    lot of information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the user chats with your application, you can store each command the user
+    types in the chat as an embedding, its numerical representation. Then, when the
+    user enters a new command, you can search through everything the user has ever
+    typed before by comparing the embeddings of what the user just entered to things
+    that they have entered before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because the application is using embedding representations that encode meaning,
+    the user may have said “*my favorite city is Paris*” months ago and may ask “*what’s
+    the biggest attraction in the city I like the most*” now. A string search would
+    not find a match between “*city I like the most*” and “*favorite city*,” but these
+    two sentences will have embedding vectors that are close to each other, and a
+    semantic search would return “*favorite city*” as a close match for “*city I like
+    the most*.” In this case, a close match is exactly what you need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s see how to create embeddings with an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embeddings in action
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This subsection only has Python code, because OpenAI does not provide a C# API
+    and we would need to call the REST API directly. This subsection will show embedding
+    values to help you understand the embedding concepts, but you don’t need to implement
+    the code to understand it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To start, we will need to import some libraries. In Python, linear algebra
+    calculations are in the `numpy` library, so we need to import that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we will generate embeddings for three sentences and compare them to one
+    another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we will write a function (`get_embedding`) that generates the embeddings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding function is a straightforward function call, simply instantiating
+    a connection to OpenAI and calling the `embeddings.create` method, using the `text-embedding-3-small`
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, to compare how similar one embedding is to another, we will use a `0.0`
+    and `1.0`, with `1.0` meaning they are very similar.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The last step is to call the functions with the phrases we want to check:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The three phrases are `"The king has been crowned"`, `"The queen has been crowned"`,
+    and `"LinkedIn is a social media platform for professionals"`. We expect the first
+    and second phrases to be similar, and both to be different from the third phrase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As expected, this is what we get, remembering that the numbers go between `0.0`
+    and `1.0`, with `0.0` meaning dissimilar and `1.0` meaning perfect match:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you want to see the embeddings themselves, you can print them, remembering
+    that they use 1,536 real numbers for the `text-embedding-3-small` model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code prints the first 10 embedding values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s the result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we understand a little more about how embeddings work, let’s see how
+    to use them with LLMs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using memory within chats and LLMs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we have seen before, models have a size limit called a context window. The
+    size limit includes both the prompt with the user request and the response. The
+    default context window for a model such as GPT-3.5, for example, is 4,096 bytes,
+    meaning that both your prompt, including the user request, and the answer that
+    GPT-3.5 provides can have at most 4,096 bytes; otherwise, you will get an error,
+    or the response will cut off in the middle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your application uses a lot of text data, for example, a 10,000-page operating
+    manual, or allows people to search and ask questions about a database of hundreds
+    of documents with each one having 50 pages, you need to find a way of including
+    just the relevant portion of this large dataset with your prompt. Otherwise, the
+    prompt alone could be larger than the context window, resulting in an error, or
+    the remaining context window could be so short that there would be no space for
+    the model to provide a good answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One way in which you could work around this problem is by summarizing each page
+    into a shorter paragraph and then generating an embedding vector for each summary.
+    Instead of including all the pages in your prompt, you can use something such
+    as cosine similarity to search for the relevant pages by comparing their embeddings
+    with the request embeddings, and then include only the summaries of the relevant
+    pages in the prompt, saving a lot of space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another reason to use memory is to keep data between sessions, or even between
+    prompts. For example, as we suggested in the *How does semantic memory work?*
+    section, your user may have told you that their favorite city is Paris, and when
+    they ask for a guide for their favorite city, you don’t need to ask again; you
+    just need to search for their favorite city.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To find the data in the memory that is relevant to our prompt, we could use
+    something such as the cosine distance shown in the previous section. In practice,
+    the Semantic Kernel SDK already provides you with a search function, so you don’t
+    need to implement it yourself. In addition, you can use several third-party vector
+    databases, each with its own search functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a list of all databases that you can use out of the box:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Database name** | **Python** | **C#** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Azure Cosmos DB for MongoDB vCore |  | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Azure AI Search | ✅ | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Azure PostgreSQL Server | ✅ |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Chroma | ✅ | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| DuckDB | ✅ |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Milvus |  | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| MongoDB Atlas Vector Search | ✅ | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Pinecone | ✅ | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PostgreSQL | ✅ | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Qdrant | ✅ |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Redis | ✅ |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '| SQLite | ✅ |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Weaviate | ✅ | ✅ |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 6.1 — Vector databases and compatibility with Semantic Kernel
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to the databases listed, there’s another one, called `VolatileMemoryStore`,
+    which represents the RAM of the machine you’re running your code on. That database
+    is not persistent, and its contents are discarded when the code finishes running,
+    but it’s fast and free and can be easily used during development.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using memory with Microsoft Semantic Kernel
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the following example, we will store some information about the user and
+    then use the `TextMemorySkill` core skill to retrieve it directly inside a prompt.
+    Core skills are skills that come out of the box with Semantic Kernel. `TextMemorySkill`
+    has functions to put text into memory and retrieve it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following example, our use case will be of a user who tells us their
+    favorite city and favorite activity. We will save those to memory and then we
+    will retrieve them and provide an itinerary based on the saved information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We start by importing the libraries that we usually import, plus a few memory
+    libraries that will be described later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the memory functions in Python are asynchronous, so we must include
+    the `asyncio` library. Also, at the time of writing, the memory functions in C#
+    are marked as experimental, so you have to disable the experimental warnings with
+    the `#``pragma` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s create a kernel:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that we added three items to our kernel:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An embedding model, which will help us load things into memory. For C#, we can
+    use `text-embedding-3-small`, but at the time of writing, even though Python can
+    use `text-embedding-3-small` as we did in the previous section, the core Python
+    plugins only work with model `text-embedding-ada-002`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Memory storage; in this case, `VolatileMemoryStore`, which just stores data
+    temporarily in your computer’s RAM.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A GPT model to generate the itinerary; we’re using GPT-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Also, note that in C#, the memory and the kernel are built in separate commands,
+    while in Python, they are all built together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s create a function that adds data to the memory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The function to add data to memory simply calls `memory.save_information` in
+    Python and `memory.SaveInformationAsync` in C#. You can keep different groups
+    of information separate by using collections, but in our simple case, we’re just
+    going to use `"generic"` for Python and `"default"` for C#, as those are the default
+    collections for the plugins. The `id` parameter does not have to mean anything,
+    but it must be unique by item. If you save multiple items using the same `id`
+    parameter, the last saved item will overwrite the previous ones. It’s common to
+    generate GUIDs to ensure some level of uniqueness, but if you are just going to
+    add a few items manually, you can manually ensure that the ids are different.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now create a function that generates a travel itinerary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`TextMemoryPlugin` gives the ability to use `{{recall $question}}` to retrieve
+    the contents of the memory inside a prompt without you needing to write any code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, assume that we loaded `My favorite city is Paris` in our memory.
+    When we load the `$city` variable with `"What's my favorite city"` and write `{{$city}}
+    {{recall $city}}` inside the prompt, Semantic Kernel will replace that line with
+    `"What's my favorite city? My favorite city is Paris"` inside the prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storing data in memory
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that we didn’t use a meaningful key name when storing the data in memory
+    (we used `"1"` and `"2"`). You also don’t need to classify the information before
+    storing it. Some applications simply store everything as they comes, while others
+    use a semantic function to ask Semantic Kernel whether the user input contains
+    personalization information and store it in cases where it does.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s load the memory and call the prompt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the code, we load the information to memory using the `add_to_memory` function
+    and immediately call our semantic function `f`. If you are using any memory store
+    other than `VolatileMemoryStore`, you don’t need to implement these two steps
+    in the same session. We will see an example of persisting memory in our **RAG**
+    (**retrieval-augmented generation**) example in [*Chapter 7*](B21826_07.xhtml#_idTextAnchor132).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Results
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that the model recalled that the user’s favorite city is Paris and that
+    their favorite activity is going to museums:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that if you pay for a subscription to any of the vector database providers
+    listed in *Table 6.1*, you can simply replace the `VolatileMemoryStore` constructor
+    with their constructor; for example, if you are using Pinecone, you will use `Pinecone(apiKey)`,
+    and the memory will be persisted in that database and available to the user the
+    next time they run your application. We will see an example with Azure AI Search
+    in [*Chapter 7*](B21826_07.xhtml#_idTextAnchor132).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s see how we can use memory in a chat with a user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using memory in chats
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Memory is typically used in chat-based applications. All the applications that
+    we built in earlier chapters were *one-shot* — all the information required to
+    complete a task is part of the request submitted by the user plus whatever modifications
+    we make to the prompt in our own code, for example, by including the user-submitted
+    prompt inside a variable in `skprompt.txt`, or modifying their prompt using string
+    manipulation. All questions and answers that happened before are ignored. We say
+    that the AI service is *stateless*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes, however, we want the AI service to remember requests that have been
+    made before. For example, if I ask the app about the largest city in India by
+    population, the application will respond that it is *Mumbai*. If I then ask “*how
+    is the temperature there in the summer*,” I would expect the application to realize
+    that I’m asking about the temperature in Mumbai, even though my second prompt
+    does not include the name of the city.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we mentioned in [*Chapter 1*](B21826_01.xhtml#_idTextAnchor014), the brute-force
+    solution is to simply repeat the whole history of the chat with every new request.
+    Therefore, when the second request is submitted by the user, we could silently
+    attach their first request and the response our AI service provided to it and
+    then submit everything together again to the AI service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s see how to do this next. We start with the usual imports:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that in C#, since several components of the Semantic Kernel package are
+    still in pre-release, you need to disable the experimental warnings using a `#``pragma`
+    directive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After importing the libraries, we create the kernel:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our kernel just needs a chat completion service. I’m using GPT-4, but GPT-3.5
+    also works. I am also adding `ConversationSummaryPlugin`, which will be used in
+    the last subsection of this chapter, *Reducing history size with summarization*.
+    We will explain it in detail later, but as the name implies, it summarizes conversations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s create the main chat function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, let’s write the main loop of our program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The main loop of our program runs until the user enters the word `"exit"`. Otherwise,
+    we submit the user request to the AI service, collect its answer, and add both
+    to the `history` variable, which we also submit as part of our request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this solves the problem of always having the whole history, it becomes
+    prohibitively expensive as prompts start to get larger and larger. When the user
+    submits their request number *N*, the `history` variable contains their requests
+    `1`, …, *N*-`1`, and the chatbot answers `1`, …, *N*-`1` along with it. For large
+    *N*, in addition to being expensive, this can exceed the context window of the
+    AI service and you will get an error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution is to only pass a summary of the history to the AI service. It’s
+    fortunate that summarizing conversations is something that even older models can
+    do very well. Let’s see how to easily do it with Semantic Kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reducing history size with summarization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you want to reduce the prompt without losing much context, you can use the
+    AI service to summarize what has already happened in the conversation. To do so,
+    you can use the `SummarizeConversation` function of `ConversationSummaryPlugin`
+    that we imported when creating the kernel. Now, instead of repeating the whole
+    history in the prompt, the summary will have up to 1,000 tokens regardless of
+    the conversation size, which should be plenty for most use cases. To summarize
+    the history in the `$history` variable, simply call `{{ConversationSummaryPlugin.SummarizeConversation
+    $history}}` in your prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is still possible to lose details after too much summarization. If you try
+    to summarize 1,000 pages in 1,000 words, something will be lost. To prevent this
+    problem, most applications have limits on how long conversations can go. For example,
+    at the time of writing, Microsoft Copilot conversations have a limit of 20 interactions,
+    and you must restart the conversation (with an empty memory) after that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The change to the code is shown as follows; you just need to change the contents
+    of the `prompt` variable. The change will add a conversation summary to the prompt,
+    which will remind the LLM of everything that went on before. The summary will
+    not be displayed to the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: C#
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Results
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that in the next question, I’ll use the word `there` to mean London. Since
+    the history summary is included as part of the conversation, even though my next
+    question doesn’t explicitly name London, the prompt that goes to the AI contains
+    that information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that the answer to the previous question was correct. Shakespeare, Dickens,
+    and Churchill all lived in London. Now, I’ll refer to Shakespeare just by its
+    position on the list and to London simply as `that city`, and because we’re keeping
+    track of history, the kernel will know that I mean Shakespeare and London:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, the AI gets the answer correct. The `Henry V` play is actually set in
+    London.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s exit the chat:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned how to add and retrieve information from memory,
+    and how to easily include the memory in your prompts. LLMs are stateless and limited
+    by their prompt sizes, and in this chapter, we learned techniques to save information
+    between sessions and reduce prompt sizes while still including relevant portions
+    of the conversation in the prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will see how to use a vector database to retrieve a
+    lot more information from memory and use a technique called **retrieval-augmented
+    generation** (**RAG**) to organize and present that information in a useful way.
+    This technique is often used in enterprise applications, as you trade off a little
+    bit of the creativity offered by LLMs, but get back additional precision, the
+    ability to show references, and the ability to use a lot of data that you own
+    and have control over.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our application, we are going to load thousands of academic articles into
+    a vector database and have Semantic Kernel search for a topic and summarize the
+    research for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Part 3: Real-World Use Cases'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this part, we see how Semantic Kernel can be used in real-world problems.
+    We learn how using the retrieval-augmented generation (RAG) technique can allow
+    AI models to use large amounts of data, including very recent data that was not
+    available when the AI service was trained. We conclude by learning how to use
+    ChatGPT to distribute an application we wrote to hundreds of millions of users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part includes the following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 7*](B21826_07.xhtml#_idTextAnchor132), *Real-World Use Case – Retrieval-Augmented
+    Generation*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 8*](B21826_08.xhtml#_idTextAnchor143), *Real-World Use Case – Making
+    Your Application Available on ChatGPT*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

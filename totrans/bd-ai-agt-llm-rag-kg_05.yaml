@@ -1,0 +1,1453 @@
+- en: '5'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Extending Your Agent with RAG to Prevent Hallucinations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In earlier chapters, we saw what an LLM is, and in the previous chapter, we
+    saw how it can control different tools to succeed at completing a task. However,
+    some of the limitations of LLMs prevent their deployment in sensitive fields such
+    as medicine. For example, LLMs crystallize their knowledge at the time of training,
+    and rapidly developing fields such as medical sciences cause this knowledge to
+    be outdated in a short time. Another problem that has emerged with the use of
+    LLMs is that they can often hallucinate (produce answers that contain factual
+    or conceptual errors). To overcome these limitations, a new paradigm has emerged:
+    **retrieval-augmented generation** (**RAG**). RAG, as we will see in this chapter,
+    allows for the LLM to refer to memory that is external to the model; thus, it
+    allows knowledge to be found and kept updated. Similarly, providing contextual
+    guidance to the model’s response allows for the reduction of hallucinations. Therefore,
+    RAG is widely used today and is considered a promising system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will discuss how this system has evolved, starting with
+    how a transformer can be used to find information. We will discuss in detail the
+    various components of the system (embedding, vector database, and generation).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll be covering the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring naïve RAG
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Retrieval, optimization, and augmentation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluating the output
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Comparison between RAG and fine-tuning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using RAG to build a movie recommendation agent
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Most of this code can be run on a CPU, but it is preferable to be run on a
+    GPU. The code is written in PyTorch and uses standard libraries for the most part
+    (PyTorch, Hugging Face Transformers, LangChain, SentencePiece, Datasets, and scikit-learn).
+    The code can be found on GitHub: [https://github.com/PacktPublishing/Modern-AI-Agents/tree/main/chr5](https://github.com/PacktPublishing/Modern-AI-Agents/tree/main/chr5).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring naïve RAG
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Information retrieval** is the name of the scientific field that deals with
+    finding information in media (often textual but also multimodal). For example,
+    the user may be interested in finding whole documents or chunks in documents;
+    this task is key to question answering, where a model has to find the steps needed
+    to answer a user’s questions. At the heart of the system is a search engine. In
+    the case of RAG, the search engine is a transformer (or at least a language model),
+    and in this chapter, we will focus on that. We will discuss a system in which
+    we have a **collection** of documents (textual, but could also be web pages, images,
+    videos, or even code or short text passages) that have corresponding indexes in
+    the database. These documents can be associated with metadata (attributes describing
+    author, size, topic, and keywords). By convention, a **term** is defined as a
+    word present in the text but also a passage that can answer the search. A user
+    produces a **query** that can be expressed as terms. The purpose of the retrieval
+    system is to best match the query with the relevant documents in the collection.
+    These are then returned in order of relevance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1 – Workflow diagram showing how a query is processed by a search](img/B21257_05_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.1 – Workflow diagram showing how a query is processed by a search
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s break down what we can see in *Figure 5**.1*. A collection of documents
+    (**A**) is indexed (**B**) and is entered in an orderly manner into a database
+    (**C**). Each document is assigned metadata and indexes. A user query (**D**)
+    is processed (**E**) to obtain a vector representation (**F**). The resulting
+    vector is used during the search to find the documents that are most relevant
+    (**G**). The system returns the documents in order of relevance (**H**)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can observe, the system uses a search in a vector space. In the simplest
+    form, this can be bag-of-words or the TF-IDF we saw in the first chapter. For
+    example, we can take a set of documents and calculate the TF-IDF. Once we’ve done
+    that, we can calculate a score (usually cosine similarity) between each of the
+    documents and conduct rank based on the score. For a document d and a query q
+    in vector form, we use the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>cos</mi><mfenced close=")" open="("><mrow><mi mathvariant="bold-italic">q</mi><mo>,</mo><mi
+    mathvariant="bold-italic">d</mi></mrow></mfenced><mo>=</mo><mfrac><mrow><mi mathvariant="bold-italic">q</mi><mo>∙</mo><mi
+    mathvariant="bold-italic">d</mi></mrow><mrow><mfenced close="|" open="|"><mi mathvariant="bold-italic">q</mi></mfenced><mfenced
+    close="|" open="|"><mi mathvariant="bold-italic">d</mi></mfenced></mrow></mfrac></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can see an example of this process here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2 – Example of retrieving the most relevant documents with TF-IDF](img/B21257_05_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.2 – Example of retrieving the most relevant documents with TF-IDF
+  prefs: []
+  type: TYPE_NORMAL
+- en: This type of research also requires data storage facilities that are suitable.
+    For example, for TF-IDF (or derivative algorithms), an inverted index is used
+    as the data structure. The inverted index is a data structure designed specifically
+    to make it efficient to search for terms in a set of documents. It is a structure
+    composed of a dictionary and postings. The dictionary indicates the frequency
+    of terms and the posting in which document they are found. In this way, given
+    a set of terms in the query, we can efficiently find the documents that contain
+    them and calculate the similarity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.3 – Example of an inverted index](img/B21257_05_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.3 – Example of an inverted index
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**BM25** is a variant of TF-IDF where two parameters are added: *b*, which
+    controls the importance of document length normalization, and *k*, which controls
+    the relationship between **term frequency** (**TF**) and **inverse document**
+    **frequency** (**IDF**).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>B</mi><mi>M</mi><mn>25</mn><mi>s</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mo>=</mo><mrow><munder><mo>∑</mo><mrow><mi>t</mi><mi
+    mathvariant="normal">ϵ</mi><mi>q</mi></mrow></munder><mover><mover><mrow><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mfrac><mi>N</mi><msub><mrow><mi>d</mi><mi>f</mi></mrow><mi>t</mi></msub></mfrac><mo>)</mo></mrow><mo
+    stretchy="true">⏞</mo></mover><mrow><mi>I</mi><mi>D</mi><mi>F</mi></mrow></mover></mrow><mover><mover><mfrac><msub><mrow><mi>t</mi><mi>f</mi></mrow><mrow><mi>t</mi><mo>,</mo><mi>d</mi></mrow></msub><mrow><mi>k</mi><mo>(</mo><mn>1</mn><mo>−</mo><mi>b</mi><mo>+</mo><mi>b</mi><mo>(</mo><mstyle
+    scriptlevel="+1"><mfrac><mrow><mo>|</mo><mi>d</mi><mo>|</mo></mrow><mrow><mo>|</mo><msub><mi>d</mi><mrow><mi>a</mi><mi>v</mi><mi>g</mi></mrow></msub><mo>|</mo></mrow></mfrac></mstyle><mo>)</mo><mo>)</mo><mo>+</mo><msub><mrow><mi>t</mi><mi>f</mi></mrow><mrow><mi>t</mi><mo>,</mo><mi>d</mi></mrow></msub></mrow></mfrac><mo
+    stretchy="true">⏞</mo></mover><mrow><mi>T</mi><mi>F</mi></mrow></mover></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding equation is a variation of TF-IDF for a document *d* and a query
+    *q* (*d avg* represents the average length of a document).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4 – Effect of k and b parameters on the BM25 score](img/B21257_05_04.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.4 – Effect of k and b parameters on the BM25 score
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can see some interesting points:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By selecting *k* equal to zero, no TF is used in the score. The TF component
+    becomes irrelevant; the score does not consider how often a term appears in a
+    document, only whether it appears at all. Higher *k* values give greater weight
+    to TF. *k* is used to adjust TF saturation – in other words, how much a single
+    query term impacts the score of a single document. *b=1* means normalize for document
+    length, while 0 means eliminate normalization.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The system is sensitive to both TF and document length without adding too many
+    parameters. The usually recommended values are *b=0.75* and *k* between 1.2 and
+    2\. BM25 is much more flexible than TF-IDF and can be adapted to different scenarios.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not much more complex than TF-IDF and is therefore scalable to large datasets,
+    and more robust to sparse matrices.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not always easy to find the optimal parameters for a precise dataset.
+    The model is sensitive to the choice of hyperparameters. BM25 has a limited understanding
+    of semantics since it is based on term frequency, not capturing the meaning of
+    a document. Also, many terms are polysemous (with multiple meanings) and BM25
+    does not capture the context of a term. Another serious problem is a vocabulary
+    mismatch problem – that is, when there is no complete overlap between terms in
+    the query and documents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution to these problems is to use dense vectors that include contextual
+    information. This is done by using a transformer and extracting the representation
+    for a document. More formally, given a sequence of tokens, we use the representation
+    *z*, obtained from the final layer. This allows us to obtain a high-dimensional
+    representation that we can use to disambiguate the meaning of a word. This is
+    called the **z-score**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.5 – Contextual embeddings for the word “bank”](img/B21257_05_05.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.5 – Contextual embeddings for the word “bank”
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.5* shows a **t-distributed stochastic neighbor embedding** (**t-SNE**)
+    **visualization** of the contextual embedding for the word “bank” in different
+    contexts (both money and river-related meanings). The t-SNE is conducted on the
+    BERT embedding of the word for each sentence.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are several ways to retrieve this representation from the model. For convenience,
+    the last layer is used, but it is generally proposed to conduct an average pool
+    of the representation of multiple layers (each block learns a different text representation
+    due to self-attention). As we saw in [*Chapter 1*](B21257_01.xhtml#_idTextAnchor014),
+    these vectors have geometric properties and can be used for operations (clustering,
+    similarity computation, and so on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generally, some transformation is conducted to optimize the use of embedding.
+    For example, a normalization of vectors (z-score or other methods) is conducted.
+    In fact, the vectors of many words are similar due to anisotropy. In fact, taking
+    random words, the cosine similarity is higher than it should be. This is due to
+    rogue dimensions, a small number of dimensions (1–5) that dominate contextual
+    embedding because they have high magnitude and disproportionately high variance.
+    This causes similarity to be calculated on reduced embedding space. These rogue
+    dimensions are highly correlated with absolute position and punctuation and are
+    therefore uninformative. Transformations such as z-score can reduce the problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.6 – Relative contribution of each dimension to cosine similarity
+    (https://aclanthology.org/2021.emnlp-main.372.pdf)](img/B21257_05_06.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.6 – Relative contribution of each dimension to cosine similarity ([https://aclanthology.org/2021.emnlp-main.372.pdf](https://aclanthology.org/2021.emnlp-main.372.pdf))
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition, retrieving the embedding for each word in the embedding is unnecessarily
+    laborious. For bidirectional encoders, we can use two main strategies: use a single
+    encoder or a bi-encoder. In the first case, we provide the model with both query
+    and document, thus allowing bidirectional self-attention to attend all tokens.
+    The representation will be representative of both the query and the document.
+    The format used is [CLS]-query-[SEP]-document. The representation for the [CLS]
+    token is then fed to a linear layer to produce the similarity score (this layer
+    is fine-tuned). Normally, this process is done not for the whole document but
+    for a series of chunks (non-overlapping fragments of the document), because documents
+    are usually longer than the context length (for BERT, this is 512 tokens, so the
+    sum of query and document must be no more than 512 tokens).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This system is expensive because it requires that we have to pass a query along
+    with the entire corpus of documents. To reduce the cost, a more efficient architecture
+    known as a bi-encoder was implemented. One encoder is used to extract the representation
+    for the query, [CLS]q, and another to extract the representation for each document
+    (or chunk), [CLS]d. Basically, taking a corpus, we compute the embedding for each
+    document in the corpus and store this representation in a database. After that,
+    we compute the cosine similarity between the representation for the query and
+    all the vectors in the database. This system is much faster but less accurate
+    because part of the interactions there are between the terms in the query and
+    in the documents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.7 – Two different approaches for contextual embedding](img/B21257_05_07.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.7 – Two different approaches for contextual embedding
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s examine *Figure 5**.7* in more detail. `[CLS]` representation. `[CLS]`
+    representation is generated for the query and all the vectors. We calculate cosine
+    similarity using both representations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we can conduct embedding of the whole corpus and index the documents in
+    a database and then, when a query comes, calculate the similarity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.8 – Cosine similarities between a set of documents and two queries
+    where the meaning of the word “bank” is different](img/B21257_05_08.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.8 – Cosine similarities between a set of documents and two queries
+    where the meaning of the word “bank” is different
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we mentioned earlier, generative models can produce hallucinations. Given
+    a query, LLMs can generate output that contains erroneous information. This stems
+    from the fact that LLMs are good at explaining concepts but have problems retaining
+    specific information. During training, knowledge of a concept is reinforced by
+    the repetition of similar pieces of information. This works well for concepts
+    but less so for specific pieces of information such as dates, numerical values,
+    and rare pieces of information. In addition, datasets contain both correct and
+    incorrect information, often conflicting. When a model generates a response, it
+    samples from a distribution and must choose from the information it has learned,
+    thus leading to hallucinations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition, incorrect architecture, overfitting, or misalignment during training
+    can also promote hallucinations. Fine-tuning the model or over-optimization for
+    some tasks can be an additional cause. For example, optimizing the model to write
+    long text outputs promotes the model to become verbose and generate hallucinations.
+    Similarly, raising the temperature increases the stochasticity of sampling, leading
+    to sample tokens that are less likely and thus hallucinate more. Incorrect prompting
+    can also promote this behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hallucinations are most evident when using a model in a specific domain (healthcare,
+    finance, and so on). The model lacks the context to best understand the query.
+    This is because the model has been trained on a huge number of tokens, and they
+    have not been restricted to specialized topics. The loss is calculated on the
+    set of texts and thus more on general knowledge than on particular information.
+    Therefore, the model favors a generalist function but performs less well when
+    applied to a particular domain. This is a common factor, irrespective of the number
+    of model parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Several possible solutions have been tested to reduce or prevent hallucinations.
+    One approach is to provide context as part of the LLM prompt (when it is possible
+    to add all this context to the prompt). However, this means that the user has
+    to find the relevant context again. When you have many different documents, this
+    becomes a complex and laborious task. Alternatively, fine-tuning, in which the
+    model is trained further on specific documents, has been proposed. This has a
+    computational cost, though, and should be conducted repeatedly if new documents
+    arrive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In 2020, Meta proposed an alternative approach: RAG for LLMs. This approach
+    assumes augmenting the generation of an LLM by finding the context in an external
+    source (such as a database). This database can be domain-specific and continuously
+    updated. In other words, we find the documents needed to answer the query and
+    take advantage of the fact that an LLM has powerful abilities for in-context learning.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.9 – Diagram showing the process of RAG](img/B21257_05_09.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.9 – Diagram showing the process of RAG
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 5**.9*, the ranked documents are incorporated in the prompt (query,
+    retrieved documents, and additional information), which is presented to the LLM.
+    The LLM uses the additional context to respond to the query of the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We define the knowledge from the LLM as parametric memory and that obtained
+    from the RAG as external or nonparametric. More formally, RAG is a system that,
+    in its most basic form, consists of three parts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Indexing**: Indexing deals with the entire process from raw data to storage
+    in a vector database. It begins with ingesting data in various formats (PDF, HTML,
+    Markdown, or XML) that must be converted to text. The text is processed according
+    to the embedding model chosen (it is divided into chunks that must be smaller
+    in size than the context length of the model). The chunks are then embedded (transformed
+    into a vector representation), assigned an identifier, and stored in a vector
+    database.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Retrieval**: When a query arrives, the most relevant chunks must be found.
+    The same encoder used for document embedding is used to obtain a vector for the
+    query. The similarity score between the query vector and the vectors stored in
+    the database is then calculated. Top *K* chunks are selected based on the similarity
+    score.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Generation**: The chunks found together with the query are incorporated into
+    a consistent prompt for LLM used for generation. Different LLMs may require different
+    elements in the prompt to work best; similarly, we can have prompts that are tailored
+    for specific tasks. In addition, we can also add elements from the previous conversation
+    (history).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For an autoregressive model, we can modify the equation seen in [*Chapter 2*](B21257_02.xhtml#_idTextAnchor032),
+    where we defined that an LLM computes the probability of a sequence of tokens
+    given the previous tokens:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>p</mi><mfenced close=")" open="("><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub></mrow></mfenced><mo>=</mo><mrow><munderover><mo>∏</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mrow><mi>p</mi><mo>(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>|</mo><msub><mi>x</mi><mrow><mo><</mo><mi>i</mi></mrow></msub><mo>)</mo></mrow></mrow></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a question-answering task, given a question (or query) q, we can rewrite
+    the equation as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>p</mi><mfenced close=")" open="("><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub></mrow></mfenced><mo>=</mo><mrow><munderover><mo>∏</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mrow><mi>p</mi><mo>(</mo><mi>q</mi><mo>;</mo><msub><mi>x</mi><mrow><mo><</mo><mi>i</mi></mrow></msub><mo>)</mo></mrow></mrow></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In RAG, we have additional elements: the prompt Pr, the context retrieved R,
+    and the question q, which are all concatenated:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>p</mi><mfenced close=")" open="("><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub></mrow></mfenced><mo>=</mo><mrow><munderover><mo>∏</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mrow><mi>p</mi><mo>(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>|</mo><mi>P</mi><mi>r</mi><mo>;</mo><mi>R</mi><mo>;</mo><mi>q</mi><mo>;</mo><msub><mi>x</mi><mrow><mo><</mo><mi>i</mi></mrow></msub><mo>)</mo></mrow></mrow></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This process is shown in *Figure 5**.10*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.10 – Representative instance of the RAG process and its steps (https://arxiv.org/pdf/2312.10997)](img/B21257_05_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.10 – Representative instance of the RAG process and its steps ([https://arxiv.org/pdf/2312.10997](https://arxiv.org/pdf/2312.10997))
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the general architecture, but there are also more complex variations
+    (which we will discuss in detail in the next chapter). For completeness, an alternative
+    to this architecture is **span extraction**. In this case, instead of finding
+    the most appropriate chunks, we have a language model (usually also derived from
+    BERT) that is used to find passages in the text that answer a query (**span labeling**).
+    For example, if our corpus is Wikipedia and our query is “*Who is the president
+    of France?*”, the extractor will label the passage on the page that answers the
+    question (in RAG, we retrieve the text chunks that are relevant instead). RAG
+    (or **span extractor**) has shown interesting abilities in reducing hallucinations
+    and improving the abilities of LLMs in open-domain question answering (also called
+    open-book QA).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will go on to discuss these steps in more detail and
+    what choices we need to make in order to optimize the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retrieval, optimization, and augmentation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous section, we discussed the high-level RAG paradigm. In this section,
+    we are going to look at the components in detail and analyze the possible choices
+    a practitioner can make when they want to implement a RAG system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chunking strategies
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have stated that text is divided into chunks before being embedded in the
+    database. Dividing into chunks has a very important impact on what information
+    is included in the vector and then found during the search. Chunks that are too
+    small lose the context of the data, while chunks that are too large are non-specific
+    (and present irrelevant information that also impacts response generation). This
+    then impacts the retrieval of query-specific information. The larger the chunking
+    size, the larger the amount of tokens that will be introduced into the prompt
+    and thus an increase in the inference cost (but the computational cost of the
+    database also increases with the number of chunks per document). Excessive context
+    can also lead to hallucinations and detract from LLM performance. In addition,
+    the chunk size must not exceed the context length of the embedder, or we will
+    lose information (this is known as truncation). In other words, chunk size is
+    an important factor that affects both the quality of retrieval and generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simplest strategies are those based on a fixed length of chunking. Character
+    chunking divides the document into chunks based on a predetermined number of characters
+    or tokens (common choices are 100 or 256 tokens or 500 characters). The size should
+    be chosen according to the type of document. This is the cheapest and easiest
+    system to implement. One variation is a random chunk size where the size of the
+    chunks is variable. This variant can be used when the collection is non-homogenous
+    and potentially captures more semantic context. Separation into chunks can be
+    with or without overlap. Chunking without overlap (*Figure 5**.11*) works well
+    if there are clear boundaries between chunks (such as if the context changes drastically
+    between adjacent chunks). This is rarely the case, though, and the lack of overlap
+    destroys context. One can then use a sliding window that maintains an overlap
+    between chunks. This system maintains contextual information at the chunk boundaries,
+    allowing better semantic content and increasing the chance that relevant information
+    will be found if it spans across multiple chunks. This strategy is more expensive,
+    though, because we need to divide it into more chunks, so we will have a database
+    with many more entries. Also, some of the information is redundant, so the overlap
+    should be no more than a small percentage of the entire chunk size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.11 – Effect of different chunking strategies used on an extract
+    from Hamlet](img/B21257_05_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.11 – Effect of different chunking strategies used on an extract from
+    Hamlet
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 5**.11*, we can see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A)**: Simple chunking based on the number of tokens and without overlap'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**B)**: Simple chunking based on the number of tokens and with overlap'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**C)**: Simple chunking based on the number of tokens and the presence of the
+    new line in the text (character-based)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context-aware chunking** is a strategy in which we divide text into chunks
+    using a **regular expression** (**regex**). For example, we can divide based on
+    periods, commas, or paragraph breaks. Variants of this strategy are based on the
+    type of text we are splitting (for example, HTML tags, Markdown information, XML,
+    domain-specific signs, and so on). This system is not without its drawbacks; it
+    can sometimes be difficult to determine boundaries (for example, for compound
+    sentences, dirty text, and so on). You can therefore have chunks that are of varying
+    sizes. A more sophisticated variant is called **recursive chunking**, in which
+    the chunk is split similarly to context-aware chunks. After that, the chunks are
+    joined up to a predetermined number of tokens (for example, the maximum context
+    length of the embedder). This approach tries to keep all information that is contextually
+    related in the same chunk and maintain semantic consistency (for example, if possible,
+    all chunks belonging to a paragraph are merged). Alternatively, the text is iteratively
+    split until the chunks reach the desired size. **Hierarchical clustering** is
+    a similar method that seeks to respect the structure of the text. By examining
+    relationships in the text, it tries to divide it into segments that respect its
+    hierarchy (sections, subsections, paragraphs, and sentences). This system is useful
+    for documents that have a complex and known structure (business reports, scientific
+    articles, and websites). This method also makes it possible to inspect the structure
+    obtained and to understand the relationship between the various chunks. This system
+    works poorly when dealing with documents that are poorly formatted.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.12 – Demonstration of hierarchical chunking](img/B21257_05_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.12 – Demonstration of hierarchical chunking
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.12* shows the same document in Markdown (**A**) or LaTex (**B**).
+    Using a specific chunker, we can split respecting the language structure. LangChain
+    uses hierarchical clustering to achieve that.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another family of methods is **semantic chunking**. The purpose of these techniques
+    is to take into account the context and meaning of words. These methods try to
+    group chunks that would otherwise be distant in the text (presence of digression
+    or other elements). **K-means chunking** is an approach in which we conduct an
+    embedding of the various sentences, then use *k*-means clustering to group sentences
+    that are similar into various clusters. This approach requires setting the optimal
+    number of clusters (hyperparameters) to choose and can lead to loss of sentence
+    order (with potential risk to chronological order or contextual relationships).
+    Instead of considering division on sentences, **propositions-based chunking**
+    divides on contextual understanding. So-called “propositions” are identified as
+    atomic expressions that contain factoids (sentences that are self-contained and
+    describe a piece of knowledge, such as “*The capital of France is Paris*”). These
+    propositions are then evaluated by an LLM that groups them according to semantic
+    coherence. This approach can give optimal results but is computationally expensive
+    and depends on the choice of LLM used. **Statistical merging**, on the other hand,
+    evaluates similarities and differences in the embedding of sentences to decide
+    whether to merge (or split) them. For example, after embedding, the difference
+    in statistical properties (standard deviation, percentile, or interquartile difference)
+    is evaluated, and if it exceeds a predefined threshold, the sentences are separated.
+    This system creates chunks of different sizes and has a higher computational cost
+    but can give better results when contextual boundaries between sentences are unclear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, a multimodal chunk may be needed. For example, a PDF file may contain
+    both text and images. In this case, it will be necessary for our chunking pipeline
+    to be able to extract both images and text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is no universal best chunker – the best chunker is the one most suited
+    to our specific case. We can establish guidelines though, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Align chunking with document structure**: Text structure heavily influences
+    the chunk size and chunk strategy. In cases where we have documents of the same
+    type (HTML, LaTex, Markdown, and so on), a specific chunk might be the best choice.
+    If they are a heterogeneous collection, we could create a pipeline that conducts
+    chunking according to the file types.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Optimize for performance and resources**: If we have space and computational
+    cost limitations, a simple fixed-size chunker might be an optimal choice. Semantic
+    chunking is slightly less performant but better respects information integrity
+    and improves the relevance and accuracy of found chunks. It requires knowledge
+    of the text, though, and might not be the optimal choice for a system that is
+    used by general users. Contextual chunking may have better performance but has
+    a high computational cost.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Respect model context limitations**: Chunk size should respect the dimension
+    of the context length. We must take into account both the size of the embedding
+    model and the LLM that we will then use to generate it.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Match chunking strategy to user query patterns**: Consider the type of question
+    we expect our potential users to ask the system (the RAG). For example, if the
+    user is going to ask questions that require the model to find multiple facts,
+    it is better to have a strategy with small chunks but containing a direct answer.
+    Or if the system is more discursive, it would be better to have chunks that give
+    more context.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In conclusion, a developer has to inspect the text and the output delivered
+    when testing different chunking strategies for the RAG system. In any case, each
+    strategy should then be evaluated (in later sections, we will discuss how to evaluate
+    them).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embedding strategies
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As we saw earlier, an embedding is a dense vector representation of a text
+    (representation lying in a multidimensional space). We exploit these vectors to
+    find the appropriate context for our query. We can have encoders that produce
+    scattered vectors (such as TF-IDF or BM25) or encoders that generate dense encoders.
+    As mentioned earlier, dense encoders are transformers that produce vectors. The
+    advantage is that these models are trainable and thus can be adapted to the similarity
+    task between queries and chunks. BERT-based backbone is one of the most widely
+    used; the approach is to create two parallel BERT encoders (two streams: one for
+    the query and the other for the chunk) called the bi-encoder approach. In the
+    first RAG approaches, these weights are identical (frozen), and we only have one
+    layer that is trained to generate the embedding vector. Having the same weights
+    allows us to be able to pass the query first and then the documents and then calculate
+    similarity. Later models, on the other hand, conduct fine-tuning of the weights
+    to improve the model’s ability to generate better embedding vectors.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.13 – Bi-encoder for generating embedding vectors](img/B21257_05_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.13 – Bi-encoder for generating embedding vectors
+  prefs: []
+  type: TYPE_NORMAL
+- en: The bi-encoder shown in *Figure 5**.13* generates a query vector and a document
+    vector. On these two vectors, we can calculate the similarity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternatively, a model can be trained from scratch for this task. Typically,
+    it is better to take an LLM that has been trained unsupervised and then adapt
+    it for embedding and retrieval. Normally, this model is adapted using contrastive
+    learning. As we saw in[*Chapter 3*](B21257_03.xhtml#_idTextAnchor042), contrastive
+    learning is a technique used to learn semantic representations in the form of
+    embedding. In [*Chapter 3*](B21257_03.xhtml#_idTextAnchor042), we used CLIP, which
+    was trained using images and captions. In this case, we want to train a model
+    that generates embeddings that allow us to find the documents that are most akin
+    to our query. One of the most used datasets is the Multi-Genre Natural Language
+    Inference (MultiNLI) corpus, which contains 433,000 sentence pairs annotated with
+    textual entailment information. Given a hypothesis, a second sentence represents
+    an entailment, a contradiction, or neither (neutral).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In contrastive learning, we need positive and negative examples. Having taken
+    a sentence, we want the embedding of our sentence to be as close to a positive
+    example as possible and as dissimilar from a negative example. In this case, we
+    can derive positive and negative examples for one of our sentences from MultiNLI.
+    In fact, an entailment sentence represents a positive example while a contradiction
+    is a negative example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.14 – Example of sentences that are in entailment or contradiction
+    and can be used for training an encoder](img/B21257_05_14.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.14 – Example of sentences that are in entailment or contradiction and
+    can be used for training an encoder
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once we have the dataset, these models are trained with a loss function that
+    is suitable for the task:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`1` for sentences that are similar (original sentence and positive example)
+    and `0` for sentences that are dissimilar (original sentence and negative example).
+    As a loss, we calculate the similarity between the two sentences, and then it
+    is compared with the predicted label.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Multiple negatives ranking loss**: This is another popular alternative (also
+    called **InfoNCE**). Only positive examples are used for this type of loss. In
+    this case, we have the original sentence and the corresponding positive example
+    (the entailment sentence). For negative examples, we take our original sentence
+    and a sentence that is in entailment for another sentence. After that, we calculate
+    embedding and similarity. The idea is to maximize the similarity between a sentence
+    and one that is related (its positive example) while minimizing the similarity
+    with examples that are unrelated (our negative examples). In this way, this task
+    becomes a classification task, and we can use cross-entropy. However, the negative
+    examples are completely unrelated, and thus the task can be too easy for the model
+    (instead, it is better to add negative sentences that are related but not the
+    right answer).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The choice of embedder is a critical decision that will strongly impact the
+    performance of our system. A poor embedder will lead to poor retrieval and context
+    not relevant to the query, which, paradoxically, could increase the risk of hallucinations.
+    The encoder choice impacts the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cost**: An embedder is a transformer. The bigger it is, the higher the computational
+    cost. A closed-source encoder, on the other hand, has a cost relative to the API,
+    so the more it is used, the greater the cost. In addition, there are computational
+    costs associated with embedding documents and also with each query.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Storage cost**: The larger the size of the embedded vectors, the higher the
+    storage cost of our vectors.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Latency**: Larger models have higher latency.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Performance**: The cost of some choices is justified if our major concern
+    is performance. Often, larger models have better performance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Domain requirements**: There are now specialized encoders for some domains
+    (finance, medicine, science, programming, and so on) and some are multilingual
+    (most support only English but others support up to a hundred languages). Some
+    domains have different text granularity and require models that are specialized
+    for long text.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Deciding which encoder model to use is not easy and depends on various factors.
+    A good way to start is the **MTEB leaderboard** on Hugging Face ([https://huggingface.co/spaces/mteb/leaderboard](https://huggingface.co/spaces/mteb/leaderboard)),
+    which is an up-to-date list of encoding models and their performance on different
+    benchmarks and tasks. Often, though, these results are self-reported and are obtained
+    on standard benchmarks (some of this benchmark data may be leaked in the training
+    data and thus overestimate the model’s capabilities). Thus, we should not choose
+    just one model but test several on one’s dataset. The leaderboard, however, provides
+    some important information that allows us to guide our choice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Retrieval average**: Calculates **normalized discounted cumulative gain**
+    (**NDCG**) across several datasets (an evaluation metric used for ranking retrieval
+    systems)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model size**: This gives us an insight into the computational cost and resources
+    we need to use it'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Max tokens**: The number of tokens that can be used in the context length'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Embedding dimensions**: Considers the size of the vectors after embedding'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 5.15 – MTEB leaderboard dedicated to embedding models and their performance](img/B21257_05_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.15 – MTEB leaderboard dedicated to embedding models and their performance
+  prefs: []
+  type: TYPE_NORMAL
+- en: It should also be noted that the leaderboard measures on generic domains. This
+    means it measures general performance, which could result in poor performance
+    in our domain or task of interest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once we have selected an encoder, we can reduce this cost without affecting
+    the performance. Regarding cost and scalability, for each dimension of the vector
+    embedding, we need 4 bytes of memory if they are in a float format. This can lead
+    to exorbitant costs in storage. In [*Chapter 3*](B21257_03.xhtml#_idTextAnchor042),
+    we discussed quantization – this can also be applied to embedding models. **Binary
+    quantization** (which reduces models to 1 bit per dimension) can lead to a reduction
+    in memory and storage of up to 32 times. The simplest binary quantization is to
+    use a zero threshold:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>f</mi><mfenced close=")" open="("><mi>x</mi></mfenced><mo>=</mo><mfenced
+    close="" open="{"><mtable columnalign="center" columnwidth="auto" rowalign="baseline
+    baseline" rowspacing="1.0000ex"><mtr><mtd><mrow><mn>0</mn><mi>i</mi><mi>f</mi><mi>x</mi><mo>≤</mo><mn>0</mn></mrow></mtd></mtr><mtr><mtd><mrow><mn>1</mn><mi>i</mi><mi>f</mi><mi>x</mi><mo>></mo><mn>0</mn></mrow></mtd></mtr></mtable></mfenced></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can then use the `float32` format to `int8` (a format in which we represent
+    values using 256 distinct levels). As we described earlier, this is done by recalibrating
+    the vectors during the transformation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.16 – Graph showing memory deduction after quantization](img/B21257_05_16.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.16 – Graph showing memory deduction after quantization
+  prefs: []
+  type: TYPE_NORMAL
+- en: An alternative technique is Matryoshka Representation Learning. Deep learning
+    models tend to spread the information over the entire vector; this technique attempts
+    to compress the information over several representations with fewer dimensions
+    instead. In other words, it progressively reduces the divisions of vector embeddings
+    without losing too much performance. In a Matryoshka embedding, smaller embeddings
+    are obtained that can be used as larger embeddings. This is because the system
+    tries to force storage of the most important information in early dimensions and
+    less important information in later dimensions (in this way, we can truncate the
+    vector while maintaining performance in downstream tasks). To train an encoder,
+    we produce embeddings for a batch of text and then compute the loss. For Matryoshka
+    embedding models, the loss also takes into account the quality of the embedding
+    at different dimensionalities. These values are summed in the final loss. Thus,
+    the model tries to optimize the model weights in a way that the most important
+    information (for the embedding vectors) is located in the first dimensions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.17 – Benchmark of Matryoshka versus original embedding quality over
+    number dimensions](img/B21257_05_17.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.17 – Benchmark of Matryoshka versus original embedding quality over
+    number dimensions
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once we have our vectors, we need to store them. In the next section, we will
+    discuss where to store them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embedding databases
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A vector database is a specialized database for the storage of high-dimensional
+    vectors. This database is therefore optimized for handling unstructured and semi-structured
+    data such as vectors. The function of this database is to allow efficient storing,
+    indexing, and searching. The vector database we choose also has a big impact on
+    RAG performance. Today, there are dozens of possible vector databases, so choosing
+    the best solution can be a daunting task. Fortunately, there are sites that conduct
+    a comparison of possible systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.18 – Vector DB leaderboard, a practical source to address the vector
+    database choice (https://superlinked.com/vector-db-comparison)](img/B21257_05_18.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.18 – Vector DB leaderboard, a practical source to address the vector
+    database choice ([https://superlinked.com/vector-db-comparison](https://superlinked.com/vector-db-comparison))
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is probably no best vector database, but there will be one that is suitable
+    for our project. Some criteria that can guide our choice are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Open source or private source**: Open source databases offer transparency
+    and the ability to customize the system. They usually have an active community
+    and no associated costs. Private source databases, on the contrary, can be an
+    expensive solution but often have dedicated support. Similarly, it is important
+    to check the license; it may not be compatible with your product.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Language support**: Vector databases are generally compatible with major
+    programming languages (Python, Java, and C), but for our project, we may need
+    a database compatible with another language (Rust, Go, Scala, and so on). Also,
+    not all databases are compatible with all libraries. So, it is good to make sure
+    that the system is compatible with our project.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Maturity**: Especially for projects that are production-oriented, it is important
+    that the system is stable, scalable, and reliable. Likewise, the system must be
+    supported, adopted by industry, and maintained frequently.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Performance**: This is influenced by two parameters:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Insertion speed**: the rate at which vectors can be added to a database (which
+    affects latency). This especially impacts applications that are in real time or
+    have a large user base. Some databases implement techniques such as batch processing
+    (efficient partitioning of various data packets), parallelization (distribution
+    of tasks across various nodes, especially important for the cloud), or data partitioning
+    (the dataset is divided into segments in order to conduct insertions and deletions
+    at the same time).'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Query speed**: this refers to the time it takes to find vectors in response
+    to a query. This directly affects the latency time.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There are optimization techniques such as index structures (structuring indexes
+    to make the search faster), caching systems (data that is accessed frequently
+    is saved separately), or specific algorithms. Then there are performance issues
+    related to the specific products, such as the number of concurrent requests that
+    can be made to the dataset. Regulatory compliance and privacy issues are also
+    key. The database should be able to allow differential access (access authorization)
+    and protect vectors from access by unauthorized users.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Component integration**: Our system can have several components besides the
+    LLM and embedder (we will see this in more detail in the next chapter). We need
+    to be sure that the database can be integrated with our encoder (and the library
+    we use for the encoder). Also, not all databases accept other components such
+    as a re-ranker, hybrid search, and so on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Cost**: Cloud solutions can have very high costs, so it is recommended to
+    decide in advance what budget you have. The cost could also be associated with
+    the maintenance and support needed to keep the system operational. For example,
+    vectors are valuable data and the cost of backup can grow very quickly.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For example, there are vector libraries that are static (the index data is immutable);
+    this makes it difficult to add new data. Libraries such as **FAISS** (**Facebook
+    AI Similarity Search**) are not designed for **create, read, update, and delete**
+    (**CRUD**) operations, so they are not a good choice for dynamic systems where
+    there are multiple users accessing and conducting operations. In contrast, if
+    our database is immutable and we only grant access, FAISS can be a good solution.
+    There are SQL databases that allow support for vectors (an extension of the classic
+    database). These databases allow for efficient indexing of associated metadata.
+    However, these databases are not scalable and often have limitations for vector
+    size (maximum number of dimensions), and performance is lower. SQL databases are
+    a good choice for internal projects that need to be connected to existing enterprise
+    databases (which will probably already be in SQL) but are not a good choice when
+    scalability and performance are important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vector-dedicated databases are usually the best solution, especially for performance.
+    In fact, they usually have implemented dedicated and efficient algorithms for
+    searching and indexing vectors. Several of these algorithms are variations of
+    the **approximate nearest neighbors** (**ANN**) algorithm. ANN usually allows
+    for a good trade-off between efficiency, storage, and accuracy. Approximate search
+    speeds up the search while trying to maintain accuracy (HNSW (Hierarchical Navigable
+    Small World) sacrifices some accuracy but is much faster than an accurate algorithm
+    such as Flat indexing). These databases are also compatible with major languages
+    and libraries (LlamaIndex, LangChain, and so on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once we have our vector database populated with our vectors, we need to evaluate
+    how good our system is. Now, we’ll see how we can do that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating the output
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In information retrieval, we are interested in measuring whether a found document
+    is either relevant or irrelevant. Therefore, the most commonly used valuation
+    metrics are precision and recall. Precision is the fraction of retrieved documents
+    that are relevant, while recall is the fraction of relevant documents that are
+    successfully retrieved. Consider a query in which *R* represents all relevant
+    documents and *NR* represents the irrelevant ones in a corpus of documents *D*.
+    *Rq* represents the relevant documents found and *Dq* is the documents returned
+    by the system. We can define the two metrics as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>p</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>=</mo><mfrac><mrow><mi>R</mi><mi>q</mi></mrow><mrow><mi>D</mi><mi>q</mi></mrow></mfrac><mi>r</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi><mo>=</mo><mfrac><mrow><mi>R</mi><mi>q</mi></mrow><mi>R</mi></mfrac></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem with these two metrics is that they do not return goodness of ranking,
+    only whether we are finding all relevant documents or the percentage of relevant
+    documents in the total. Usually, when we use a retriever, we select a number (*k*)
+    of documents that we use for context (top-k), so we need a metric that takes ranking
+    into account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.19 – Rank-specific precision and recall calculated assuming we have
+    five relevant documents in a corpus](img/B21257_05_19.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.19 – Rank-specific precision and recall calculated assuming we have
+    five relevant documents in a corpus
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can use the precision-recall curve for this purpose. Whenever we find a
+    relevant document in the rank, recall increases. Precision, on the other hand,
+    increases with documents but decreases with each irrelevant document. By plotting
+    a graph with a curve, we can see this behavior:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.20 – Graph showing the precision and recall curve for the data shown
+    in Figure 5.19](img/B21257_05_20.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.20 – Graph showing the precision and recall curve for the data shown
+    in Figure 5.19
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because the precision goes up and down, we can use an interpolated curve. This
+    curve is less precise but allows us to better understand the behavior of the system
+    (and to be able to compare different systems by comparing their curves).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another metric that is used is **mean average precision** (**MAP**). We calculate
+    precision values at the points where a relevant item is retrieved (**average precision**
+    or **AP**) and then average these AP values. Suppose we have retrieved the following
+    list of documents: *[1, 0, 1, 0, 1]*, where *1* means relevant and *0* means not
+    relevant. The precision for each relevant item is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first relevant document is in position 1: Precision (*N* relevant document
+    retrieved / total of document retrieved) = 1/1 = 1'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Second relevant document (position 3): Precision = 2/3 ≈ 0.67'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Third relevant item (position 5): Precision = 3/5 = 0.6'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The average precision (AP) value for a single query is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>A</mi><mi>P</mi><mo>=</mo><mfrac><mrow><mo>∑</mo><mi>p</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>a</mi><mi>t</mi><mi>e</mi><mi>a</mi><mi>c</mi><mi>h</mi><mi>r</mi><mi>e</mi><mi>l</mi><mi>e</mi><mi>v</mi><mi>a</mi><mi>n</mi><mi>t</mi><mi>i</mi><mi>t</mi><mi>e</mi><mi>m</mi></mrow><mrow><mi>T</mi><mi>o</mi><mi>t</mi><mi>a</mi><mi>l</mi><mi>n</mi><mi>u</mi><mi>m</mi><mi>b</mi><mi>e</mi><mi>r</mi><mi>o</mi><mi>f</mi><mi>r</mi><mi>e</mi><mi>l</mi><mi>e</mi><mi>v</mi><mi>a</mi><mi>n</mi><mi>t</mi><mi>i</mi><mi>t</mi><mi>e</mi><mi>m</mi><mi>s</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mo>∑</mo><mrow><mrow><mo>(</mo><mn>1</mn><mo>+</mo><mn>0.67</mn><mo>+</mo><mn>0.6</mn><mo>)</mo></mrow></mrow></mrow><mn>3</mn></mfrac><mo>=</mo><mn>0.76</mn></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The MAP is the average of all AP values across all the queries. Here, we suppose
+    we have 3 queries – *0.76*, *0.5*, and *0.67*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>M</mi><mi>A</mi><mi>P</mi><mo>=</mo><mfrac><mrow><mo>∑</mo><mi>a</mi><mi>v</mi><mi>e</mi><mi>r</mi><mi>a</mi><mi>g</mi><mi>e</mi><mi>p</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>f</mi><mi>o</mi><mi>r</mi><mi>e</mi><mi>a</mi><mi>c</mi><mi>h</mi><mi>q</mi><mi>u</mi><mi>e</mi><mi>r</mi><mi>y</mi></mrow><mrow><mi>T</mi><mi>o</mi><mi>t</mi><mi>a</mi><mi>l</mi><mi>n</mi><mi>u</mi><mi>m</mi><mi>b</mi><mi>e</mi><mi>r</mi><mi>o</mi><mi>f</mi><mi>q</mi><mi>u</mi><mi>e</mi><mi>r</mi><mi>i</mi><mi>e</mi><mi>s</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mo>∑</mo><mrow><mrow><mo>(</mo><mn>0.76</mn><mo>+</mo><mn>0.5</mn><mo>+</mo><mn>0.67</mn><mo>)</mo></mrow></mrow></mrow><mn>3</mn></mfrac><mo>=</mo><mn>0.64</mn></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One metric that is specific to question answering is **mean reciprocal rank**
+    (**MRR**). MRR is designed to assess the quality of a short-ranked list having
+    the correct answer (usually of human labels). The reciprocal rank is the reciprocal
+    of the rank of the first item relevant to the question. For a set of queries *Q*,
+    we take the reciprocal ranks and conduct the average:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <mrow><mrow><mi>M</mi><mi>R</mi><mi>R</mi><mo>=</mo><mfrac><mn>1</mn><mi>Q</mi></mfrac><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>Q</mi></munderover><mfrac><mn>1</mn><msub><mrow><mi>r</mi><mi>a</mi><mi>n</mi><mi>k</mi></mrow><mi>i</mi></msub></mfrac></mrow></mrow></mrow>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternatively, we can evaluate the response after generation as if it were a
+    classification task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Recently, another way to evaluate RAG pipelines is to use an LLM as a judge
+    of the pipeline. Typically, we must have a dataset that contains ground truth
+    so that LLM evaluates whether the RAG pipeline has found both the necessary steps
+    and the generation is correct. For example, there are different metrics that leverage
+    an LLM as a judge:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Faithfulness**: This metric (also called groundedness) measures the factual
+    consistency of the generated answer (range between 0 and 1). An answer is faithful
+    if the claims that are produced in the answer can be inferred from the context.
+    Faithfulness is the ratio of the number of claims in the generated answer that
+    can be inferred from the context to the total number of claims in the generated
+    answer. To find the claims, we need an LLM that evaluates the claims in both the
+    response and the context.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context recall**: This metric refers to how much context is found relative
+    to the ground truth (range of 0 to 1). Ideally, the system should find all the
+    sentences in the ground truth.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context precision**: This metric measures ground-truth relevant items in
+    the context, which are ranked higher (relevant chunks should find themselves higher
+    after retrieval).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context relevancy**: This metric measures the relevance of context to the
+    query. Ideally, our system should only find information that is relevant to the
+    query.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context entities recall**: This metric provides a measure of context recall
+    by specifically analyzing the entities that are found. In other words, it measures
+    the fraction of entities in the ground truth that are found in the context. This
+    metric is useful when we are interested in the system specifically finding entities
+    (for example, the context needs to find medical entities such as diseases, drugs,
+    or other parameters).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Answer correctness**: This metric focuses on critically evaluating whether
+    the answer is correct. To have a high value, the system must generate answers
+    that are semantically similar to ground truth but also factually correct.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Summarization score**: This metric assesses how well a summary captures the
+    important information that is present in the context. The answer is a kind of
+    summary of the context, and a good summary must contain the important information.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Answer relevance**: This metric calculates how relevant the generated response
+    is in response to a prompt. A low score means that the response is incomplete
+    or contains redundant information.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Fluency**: This metric assesses the quality of individual sentences generated.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Coherence**: This metric assesses whether the entire response is a cohesive
+    corpus (avoids the response being a group of unconnected sentences).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These metrics require that there be an evaluator who is either human or an LLM.
+    They are not simply statistical values but require that the response (and/or the
+    found context) be evaluated critically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RAG is also often discussed as an alternative to fine-tuning; thus, it is important
+    to compare them, which we’ll do next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparison between RAG and fine-tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RAG and fine-tuning are often compared and considered techniques in opposition.
+    Both fine-tuning and RAG have a similar purpose, which is to provide the model
+    with knowledge it did not acquire during training. In general, we can say that
+    there are two types of fine-tuning: one directed at adapting a model to a specific
+    domain (such as medicine, finance, or other) and one directed at improving the
+    LLM’s ability to perform a particular task or class of tasks (math problem solving,
+    question answering, and so on).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are several differences between fine-tuning and RAG:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Knowledge updates**: RAG allows a direct knowledge update (of both structured
+    and unstructured information). This update can be dynamic for RAG (information
+    can be saved and deleted in real time). In contrast, fine-tuning requires retraining
+    because the update is static (impractical for frequent changes).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data processing**: Data processing is minimal for RAG, while fine-tuning
+    requires quality datasets (datasets with not enough examples will not be able
+    to help with noticeable improvements).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model customization**: RAG provides additional information to the LLM but
+    does not change its behavior or writing style. Fine-tuning allows changes in model
+    behavior, writing style, and even new skills.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Interpretability**: RAG increases the interpretability of the system and
+    allows tracking of responses and sources used. Fine-tuning makes the model less
+    interpretable and makes it more difficult to track whether a behavior comes from
+    fine-tuning or the original model.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Computational resources**: RAG has an additional cost associated with the
+    encoder and databases (finding information, embedding data, storing information,
+    and so on). This can increase latency cost (you have to add retrieval time to
+    generation time). Fine-tuning requires preparing and curating quality datasets
+    (acquiring certain datasets can be expensive and labor-intensive). In addition,
+    fine-tuning has computational costs associated with model retraining, but it provides
+    lower latency. Moreover, RAG requires less technical expertise than fine-tuning.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Reducing hallucinations**: RAG is inherently less prone to hallucinations
+    and allows the tracking of which context is used. Fine-tuning can reduce hallucinations
+    (but, often, fine-tuned LLMs do still exhibit hallucinations).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Ethical and privacy issues**: In the case of RAG, we must be careful how
+    the information stored in the database is saved. The database must be protected
+    against potential intrusions and prevent leakage. For fine-tuning, it is important
+    to take care of the training dataset and prevent it from containing sensitive
+    data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: RAG is the best system when we need a dynamic system that can adapt to real-time
+    data or we have large amounts of internal data that are not well structured, though.
+    Likewise, RAG is preferred when it is important to minimize hallucinations, as
+    we need to track the sources of the response when transparency is vital. Fine-tuning
+    is a priority choice when we need to have the model develop specific skills or
+    want to align the model with a particular style of writing or vocabulary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some practical examples show where it is best to choose fine-tuning or RAG:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Summarization** is important, especially for cases where the domain is highly
+    specialized. It is more critical that the model best understands the context,
+    so fine-tuning is more appropriate.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Question answering** is an extremely relevant task that is often used in
+    different domains (questions about documentation, products, and so on). In this
+    case, reducing hallucinations and transparency are critical aspects but customization
+    is much less important. RAG is therefore a better choice.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Code generation** is a task that requires that the code base be dynamic;
+    at the same time, it is important to reduce hallucinations and errors. On the
+    other hand, we need the model to be adapted as much as possible to the task. So,
+    both RAG and fine-tuning would be of benefit.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As the last example shows, there are cases where both fine-tuning and RAG would
+    be beneficial. The two systems are not necessarily in opposition to each other.
+    We can conduct fine-tuning of both the LLM and the embedder. So, having a system
+    built with RAG *plus* fine-tuning the LLM (or even the RAG encoder) would be beneficial.
+    Targeted fine-tuning to improve capabilities for specific tasks in the domain
+    of our data can lead to better performance. This allows for a dynamic information
+    system (where we conduct the RAG update) but adapts the style of the LLM to the
+    domain. The LLM will also be more able to understand and use the context that
+    is provided by RAG. Another case where fine-tuning the model is beneficial is
+    when the found data is in a specific format (code, tables, XML, or other formats)
+    – we can then use an LLM that is adapted to these specific formats (instead of
+    a naive LLM). Additionally, we can optimize our LLM for the task of generating
+    answers by exploiting the provided context. In this case, the LLM can be pushed
+    to make the best use of the found context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The encoder can also be fine-tuned. Fine-tuning the embedder with a specific
+    dataset increases the contextual understanding of the model (remember that the
+    encoder is a language model that has some contextual understanding of the data).
+    This allows the LLM to better understand the domain-specific nuances of the data,
+    leading to better contextual retrieval (chunks that are more relevant to the query).
+    Of course, it is not always possible to obtain datasets for this task. However,
+    there are approaches in which synthetic data is generated or large LLMs are used
+    to create datasets appropriate for the encoder fine-tuning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fine-tuning an embedder is much cheaper than training it from scratch. Today,
+    many models are available, and libraries such as Sentence Transformer facilitate
+    the process of fine-tuning. These models have been pre-trained as embedders, but
+    during fine-tuning, we want to better fit them to our particular data type or
+    domain. Typically, this fine-tuning is conducted with supervised learning using
+    datasets similar to those used for embedder training (with positive and negative
+    examples).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have seen the main components, in the next section, we will assemble
+    the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using RAG to build a movie recommendation agent
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous sections, we discussed what RAG is and how this system can
+    be used to reduce hallucinations or extend model knowledge. As we mentioned, this
+    system is composed of the following components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An LLM to generate the answer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An encoder/retriever that transforms queries and documents into vectors
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A vector database where we save our vectors
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We have, in this case, a dataset of movies and their description, and we want
+    to create a system that, by asking a natural language question, will suggest the
+    most suitable movies based on the information we’ve provided. Our LLM has no specific
+    knowledge of the movies, and its parametric memory does not contain information
+    about the latest releases. Therefore, RAG is a good system to supplement its knowledge.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first step is to obtain a corpus of chunks. Having taken a corpus of documents,
+    we have to reduce it into chunks. A good compromise is to use a text splitter
+    that preserves semantic information (without the need to use an LLM). In this
+    case, we use a chunker with a size of 1,500 characters. We apply it to the column
+    of our data frame:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Next, we need to transform our chunks into vectors. In this case, we are using
+    `all-MiniLM-L6-v2` as an embedder. `all-MiniLM-L6-v2` is a small model that has
+    a good balance between embedding quality and speed. In fact, the model has only
+    22.7 million parameters, which makes it extremely fast and a good initial choice
+    for testing one’s RAG pipeline.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In this case, we do the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Load the model (the embedder)
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Create a function to conduct the embedding
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Conduct the embedding of the various vectors
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'At this point, we need to save the vectors we have created to a database. A
+    popular choice as a vector database is Chroma. In this case, we need to do the
+    following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Start the Chroma client
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Create a new collection
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Insert the chunks
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that we can add metadata (in this case, the title of the film).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have now implemented only the first part of the pipeline we described earlier.
+    At present, we have a database with the RAG vectors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.21 – Vector database pipeline](img/B21257_05_21.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.21 – Vector database pipeline
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we need to create a pipeline when a query arrives (in inference). In this
+    case, we want to create a vector for the query and search the top *k* similar
+    vectors in our vector database. This will return the text to an LLM and then generate
+    an answer to our query.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We use the same embedder model we used to find the chunks, though, so we need
+    a function that does the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Creates a vector for the query
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finds the most similar documents
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns the associated text
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'At this point, we need to generate the answers, so we need an LLM. The idea
+    is to provide the LLM with clear instructions, so we create a simple prompt that
+    explains the task to the model. We also provide the model with both the context
+    and the question:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can test it. We can ask the system a question and see whether it generates
+    a response:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: We now have a complete system. The principle applies to any corpus of documents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RAG is one of the fastest-growing paradigms in the field of LLMs. Eliminating
+    hallucinations is one of the most important challenges and one of the most problematic
+    constraints for LLMs and agents to be put into production. RAG is also a flexible
+    system that has several advantages over fine-tuning. As we have seen, this system
+    can be updated frequently with minimal cost and is compatible with different types
+    of data. The naïve RAG is the basic system, consisting of three main components:
+    an LLM, an embedder, and a vector database.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will see how this system is evolving. There are now
+    many new additional components, which we will also look at. Despite RAG, sometimes
+    the model still hallucinates as if it ignores the context. This is why sophisticated
+    components have evolved, which we will look at in detail. We will also discuss
+    the subtle interplay between parametric memory and context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Lewis, *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*, 2020,
+    [https://arxiv.org/abs/2005.11401](https://arxiv.org/abs/2005.11401 )
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*ANN-Benchmarks*, 2024, [https://ann-benchmarks.com/index.html](https://ann-benchmarks.com/index.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Hamming Distance between* *Two* *Strings*: [https://www.geeksforgeeks.org/hamming-distance-two-strings/](https://www.geeksforgeeks.org/hamming-distance-two-strings/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
