@@ -1,4 +1,4 @@
-# 2
+
 
 # 使用 Deep Lake 和 OpenAI 构建 RAG 嵌入向量存储
 

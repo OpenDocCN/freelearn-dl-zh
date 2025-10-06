@@ -1,4 +1,4 @@
-# 1
+
 
 # 介绍微软语义内核
 
@@ -402,7 +402,7 @@ OPENAI_ORG_ID="org-xxxxxxxxxxxxxxxxxxxxxxxx"
             }
             try
             {
-                var config = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(configFile));
+                var config = JsonSerializer.Deserialize<Dictionary>(File.ReadAllText(configFile));
                 // check whether config is null
                 if (config == null)
                 {
@@ -654,7 +654,7 @@ public class ShowManager
     [KernelFunction, Description("Take the square root of a number")]
     public string RandomTheme()
     {
-        var list = new List<string> { "boo", "dishes", "art", "needle", "tank", "police"};
+        var list = new List { "boo", "dishes", "art", "needle", "tank", "police"};
         return list[new Random().Next(0, list.Count)];
     }
 }

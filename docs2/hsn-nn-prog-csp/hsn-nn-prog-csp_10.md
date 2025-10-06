@@ -198,7 +198,7 @@ session.Differentiate(cost);
 float currentCost;
 do
 {
- var dico = new Dictionary<string, Volume<float>> { { "x", -2.0f }, { "y", 1.0f } };
+ var dico = new Dictionary> { { "x", -2.0f }, { "y", 1.0f } };
 currentCost = session.Run(cost, dico);
 Console.WriteLine($"cost: {currentCost}");
 var result = session.Run(fun, dico);

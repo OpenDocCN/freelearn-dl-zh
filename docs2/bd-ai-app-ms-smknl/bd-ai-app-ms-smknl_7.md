@@ -1,4 +1,4 @@
-# 7
+
 
 # 真实世界用例 - 检索增强生成
 
@@ -505,7 +505,7 @@ int i = 0;
 foreach (string line in data.Split('\n'))
 {
     i++;
-    var paper = JsonSerializer.Deserialize<Dictionary<string, object>>(line);
+    var paper = JsonSerializer.Deserialize<Dictionary>(line);
     if (paper == null)
     {
         continue;

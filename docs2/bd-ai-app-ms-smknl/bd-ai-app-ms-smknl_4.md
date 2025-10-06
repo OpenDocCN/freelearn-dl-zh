@@ -1,4 +1,4 @@
-# 4
+
 
 # 通过链式连接函数执行复杂操作
 
@@ -149,7 +149,7 @@ namespace Plugins;
 public class Dalle3
 {
     [KernelFunction, Description("Generate an image from a prompt")]
-    async public Task<string> ImageFromPrompt([Description("Prompt describing the image you want to generate")] string prompt)
+    async public Task ImageFromPrompt([Description("Prompt describing the image you want to generate")] string prompt)
     {
 ```
 
@@ -209,7 +209,7 @@ var builder = Kernel.CreateBuilder();
 builder.Plugins.AddFromType<Dalle3>();
 var kernel = builder.Build();
 string prompt = "A cat sitting on a couch in the style of Monet";
-string? url = await kernel.InvokeAsync<string>(
+string? url = await kernel.InvokeAsync(
     "Dalle3", "ImageFromPrompt", new() {{ "prompt", prompt }}
 );
 Console.Write(url);
@@ -893,7 +893,7 @@ foreach (var proposal in proposals)
     string absolutePath = Path.GetFullPath(proposal);
     Console.WriteLine($"Processing {absolutePath}");
     KernelArguments context = new() { { "folderPath", absolutePath } };
-    string result = await pipeline.InvokeAsync<string>(kernel, context);
+    string result = await pipeline.InvokeAsync(kernel, context);
     Console.WriteLine(result);
     if (result == absolutePath)
     {

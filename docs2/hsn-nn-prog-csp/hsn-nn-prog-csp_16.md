@@ -280,7 +280,7 @@ Task.Run(() => TrainNetwork(DataSet, hiDim, cellDim, iteration, batchSize, Repor
 在每个神经网络中，我们必须训练网络，以便它能够识别我们提供给它的任何内容。我们的`TrainNetwork()`函数正是如此：
 
 ```py
-private void TrainNetwork(Dictionary<string, (float[][] train, float[][] valid, float[][] test)> dataSet, int hiDim, int cellDim, int iteration, int batchSize, Action<Trainer, Function, int, DeviceDescriptor> progressReport)
+private void TrainNetwork(Dictionary dataSet, int hiDim, int cellDim, int iteration, int batchSize, Action<Trainer, Function, int, DeviceDescriptor> progressReport)
 {
 Split the dataset on TrainNetwork into validate and test parts
 var featureSet = dataSet["features"];

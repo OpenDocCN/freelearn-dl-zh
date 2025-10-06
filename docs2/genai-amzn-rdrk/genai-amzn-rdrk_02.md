@@ -1,4 +1,4 @@
-# 2
+
 
 # 访问和利用 Amazon Bedrock 中的模型
 

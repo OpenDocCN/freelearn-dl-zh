@@ -1,4 +1,4 @@
-# 10
+
 
 # 展示你的商业就绪生成式 AI 系统
 
@@ -87,7 +87,7 @@ def display_interface(filename):
 
 在本节中，我们将仔细分析`01.html`的代码。目标是确保您清楚地理解界面的结构和逻辑。这种清晰度对于在演示过程中迅速响应潜在客户请求至关重要。
 
-代码从标准的`<head>`部分开始，其中包含元数据（如`<meta charset="UTF-8">`和`<title>`）。CSS，视觉样式，嵌入在`<style>`标签中：
+代码从标准的`<head>`部分开始，其中包含元数据（如`<meta charset="UTF-8">`和`<title>`）。CSS，视觉样式，嵌入在``标签中：
 
 ```py
 <!DOCTYPE html>
@@ -95,14 +95,14 @@ def display_interface(filename):
 <head>
   <meta charset="UTF-8">
   <title>Generative AI Chat Interface</title>
-  <style>
+  
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
       background: #f4f4f4;
     }
 ….
-  </style>
+  
 </head> 
 ```
 
@@ -624,7 +624,7 @@ display_interface("/content/04.html")
 ```py
 <!-- Place this alert banner near the top of your container -->
 <div id="securityAlert" style="display:none; background-color: #ffdddd; color: #a94442; padding: 15px; border: 1px solid #ebccd1; border-radius: 4px; margin-bottom: 20px;">
-  <strong>Security Alert:</strong> Suspicious activity detected.
+  Security Alert: Suspicious activity detected.
 </div> 
 ```
 

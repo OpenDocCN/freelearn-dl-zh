@@ -119,7 +119,7 @@ using System.Collections.Generic;
 using UnityEngine;
 public class GoblinWriter : MonoBehaviour {
     public TMPro.TextMeshProUGUI textMesh;
-    public List<string> goblinJobs;
+    public List goblinJobs;
     public int goblinMaxAge = 200;
     void Start() {
         UpdateString();

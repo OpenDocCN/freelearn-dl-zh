@@ -1,4 +1,4 @@
-# 6
+
 
 # 使用 Amazon Bedrock 生成和总结文本
 

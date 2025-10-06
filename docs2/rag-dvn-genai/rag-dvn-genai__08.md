@@ -1,4 +1,4 @@
-# 8
+
 
 # 基于 Chroma 和 Hugging Face Llama 的动态 RAG
 

@@ -1,4 +1,4 @@
-# 4
+
 
 # 构建 AI 控制器编排界面
 
@@ -328,7 +328,7 @@ clear_output(wait=True)
 退出过程继续，显示一条消息，表示对话结束，并指示正在保存对话历史记录：
 
 ```py
-display(HTML("<div style='color: red;'><strong>Conversation ended. Saving history...</strong></div>")) 
+display(HTML("<div style='color: red;'>Conversation ended. Saving history...</div>")) 
 ```
 
 通过调用对话的 *save* 函数结束退出过程，该函数将保存所有历史记录到文件中（见 *图 4.2* 的节点 **7**）：
@@ -345,7 +345,7 @@ def save_conversation_history():
     filename = "conversation_history.json"  # Define the filename
     with open(filename, 'w') as file:
         json.dump(user_histories, file, indent=4)  # Write the user histories dictionary to the file in JSON format
-    display(HTML(f"<div style='color: green;'><strong>Conversation history saved to {filename}.</strong></div>")) 
+    display(HTML(f"<div style='color: green;'>Conversation history saved to {filename}.</div>")) 
 ```
 
 现在，让我们通过用户（们）选择继续对话的过程来进行分析。
@@ -416,9 +416,9 @@ def update_display():
 ```py
  for entry in user_histories[active_user]:  # Show only the active user's history
         if entry['role'] == 'user':
-            display(HTML(f"<div style='text-align: left; margin-left: 20px; color: blue;'><strong>{active_user}:</strong> {entry['content']}</div>"))
+            display(HTML(f"<div style='text-align: left; margin-left: 20px; color: blue;'>{active_user}: {entry['content']}</div>"))
         elif entry['role'] == 'assistant':
-            display(HTML(f"<div style='text-align: left; margin-left: 20px; color: green;'><strong>Agent:</strong> {entry['content']}</div>")) 
+            display(HTML(f"<div style='text-align: left; margin-left: 20px; color: green;'>Agent: {entry['content']}</div>")) 
 ```
 
 如果会话是活跃的，UI `VBox`将显示，同时显示小部件的状态：

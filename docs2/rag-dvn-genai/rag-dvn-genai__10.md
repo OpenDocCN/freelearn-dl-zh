@@ -1,4 +1,4 @@
-# 10
+
 
 # 使用 Pinecone 和 OpenAI 进行视频库存生产的 RAG
 

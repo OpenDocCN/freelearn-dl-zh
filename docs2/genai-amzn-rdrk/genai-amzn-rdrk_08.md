@@ -1,4 +1,4 @@
-# 8
+
 
 # 使用 Amazon Bedrock 提取实体和生成代码
 
