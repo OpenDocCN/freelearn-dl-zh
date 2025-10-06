@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 大语言模型、检索增强生成和知识图谱的人工智能体构建指南
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/7f895f3dd97095da095ae95fcffc355d`](https://zh.annas-archive.org/md5/7f895f3dd97095da095ae95fcffc355d)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

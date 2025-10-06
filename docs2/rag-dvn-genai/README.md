@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 检索增强生成驱动的生成式人工智能
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/b4b6bedca769c638801d1df05d720b23`](https://zh.annas-archive.org/md5/b4b6bedca769c638801d1df05d720b23)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

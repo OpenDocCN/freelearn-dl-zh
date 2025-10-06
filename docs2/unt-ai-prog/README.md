@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# Unity 人工智能编程
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/2e5d707b292a7af04f675fd8cf182896`](https://zh.annas-archive.org/md5/2e5d707b292a7af04f675fd8cf182896)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
