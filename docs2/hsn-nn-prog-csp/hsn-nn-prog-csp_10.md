@@ -1,4 +1,4 @@
-# 使用 ConvNetSharp 训练 CNN
+# 第十章：使用 ConvNetSharp 训练 CNN
 
 在本章中，我们将使用 Cédric Bovar 的杰出开源包**ConvNetSharp**，来展示如何训练我们的**卷积神经网络**（**CNN**）。在本章中，我们将探讨以下主题：
 

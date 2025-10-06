@@ -1,6 +1,6 @@
 
 
-# 访问和利用 Amazon Bedrock 中的模型
+# 第二章：访问和利用 Amazon Bedrock 中的模型
 
 本章提供了一本实用的指南，用于访问 Amazon Bedrock 并揭示其生成式 AI 功能。我们将从介绍调用 Bedrock 模型的不同接口开始，包括控制台游乐场、**命令行界面**（**CLI**）和**软件开发工具包**（**SDK**）。然后，我们将揭示一些核心的 Bedrock API，以及您可以在您的环境中运行的代码片段。最后，我们将展示如何在 LangChain Python 框架中利用 Bedrock 来构建定制化的管道，这些管道将连接多个模型，并深入了解 PartyRock，这是 Amazon Bedrock 的一个强大游乐场。
 

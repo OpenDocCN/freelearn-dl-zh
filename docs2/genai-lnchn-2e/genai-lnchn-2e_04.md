@@ -1,6 +1,6 @@
 
 
-# 使用 LangGraph 构建工作流程
+# 第四章：使用 LangGraph 构建工作流程
 
 到目前为止，我们已经了解了 LLMs、LangChain 作为框架，以及如何在纯模式（仅基于提示生成文本输出）下使用 LangChain 与 LLMs 结合。在本章中，我们将从 LangGraph 作为框架的快速介绍开始，并探讨如何通过连接多个步骤来使用 LangChain 和 LangGraph 开发更复杂的工作流程。作为一个例子，我们将讨论解析 LLM 输出，并使用 LangChain 和 LangGraph 探讨错误处理模式。然后，我们将继续探讨开发提示的更高级方法，并探索 LangChain 为少样本提示和其他技术提供的构建块。
 

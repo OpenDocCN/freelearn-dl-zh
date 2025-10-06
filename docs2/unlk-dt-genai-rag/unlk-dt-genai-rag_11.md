@@ -1,4 +1,4 @@
-# 11（11）
+# 第十一章：11（11）
 
 # 使用 LangChain 从 RAG 中获得更多（Using LangChain to Get More from RAG）
 

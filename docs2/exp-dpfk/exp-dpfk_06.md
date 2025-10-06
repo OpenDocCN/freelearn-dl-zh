@@ -1,6 +1,6 @@
 
 
-# 训练 Deepfake 模型
+# 第六章：训练 Deepfake 模型
 
 训练 deepfake 模型是创建 deepfake 最重要的部分。这是 AI 从你的数据中学习面部的地方，也是最有趣的神经网络操作发生的地方。
 

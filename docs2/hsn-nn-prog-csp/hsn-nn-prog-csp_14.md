@@ -1,4 +1,4 @@
-# 寻找最优参数
+# 第十四章：寻找最优参数
 
 在本章中，我们将使用开源软件包 SwarmOps，版本 4.0，帮助您更好地理解如何使用此工具为您函数找到最优参数。您可以从以下位置获取 SwarmOps 的最新版本：[`github.com/mattcolefla/SwarmOps`](https://github.com/mattcolefla/SwarmOps).
 

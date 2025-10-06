@@ -1,6 +1,6 @@
 
 
-# OpenAI 和 ChatGPT：超越市场炒作
+# 第二章：OpenAI 和 ChatGPT：超越市场炒作
 
 本章概述了 OpenAI 及其最显著的发展——ChatGPT，突出了其历史、技术和能力。
 

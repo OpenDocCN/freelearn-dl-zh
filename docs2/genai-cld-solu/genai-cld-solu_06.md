@@ -1,6 +1,6 @@
 
 
-# 基于 LLM 的应用的开发与实施：探索开发框架和 LLMOps
+# 第六章：基于 LLM 的应用的开发与实施：探索开发框架和 LLMOps
 
 你听说过 GitHub Copilot、Anthropic 的 Claude 还是 Jasper 吗？
 

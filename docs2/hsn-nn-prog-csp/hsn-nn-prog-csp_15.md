@@ -1,4 +1,4 @@
-# 使用 TensorFlowSharp 进行对象检测
+# 第十五章：使用 TensorFlowSharp 进行对象检测
 
 在本章中，我们将向您介绍一个名为 TensorFlowSharp 的开源软件包。更具体地说，我们将使用 TensorFlow[1] 对象检测 API，这是一个基于 TensorFlow 的开源框架，它使得构建、训练和部署各种形式的对象检测模型变得容易。
 
