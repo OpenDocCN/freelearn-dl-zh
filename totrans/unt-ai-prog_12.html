@@ -1,0 +1,272 @@
+<html><head></head><body>
+		<div id="_idContainer131">
+			<h1 id="_idParaDest-128"><em class="italic"><a id="_idTextAnchor487"/>Chapter <a id="_idTextAnchor488"/>9</em>: Behavior Trees</h1>
+			<p>In a preceding chapter, we saw a basic but effective way to implement and manage character states and<a id="_idIndexMarker430"/> behaviors: <strong class="bold">finite state machines</strong> (<strong class="bold">FSMs</strong>). FSMs are simple to implement and intuitive, but they have a fatal flaw: it is tough to make them scale once there are many states and transitions. For example, imagine a character that behaves differently depending on its health and mana (high, medium, or low). We have a state in which both health and mana are high, one in which health is medium and mana is high, one in which they are both medium, and so on. In total, we have nine states just for those. If we add other conditions (such as player proximity, time of day, equipment, player's score, or whatever you may imagine), the number of states grows exponentially.</p>
+			<p>Luckily, we have a <a id="_idIndexMarker431"/>solution: <strong class="bold">behavior trees</strong> (<strong class="bold">BTs</strong>). In essence, BTs are just another way to visualize complex FSMs, but they are fast, provide reusability, and are easy to maintain. After their introduction in 2004 with <em class="italic">Halo 2</em>, they quickly became the preferred decision-making technique in games.</p>
+			<p>In this chapter, we will be doing the following:</p>
+			<ul>
+				<li>Exploring the basic principles of BTs, knowledge that you will be able to transfer to any BT plugin available for Unity (or other game engines)</li>
+				<li>Implementing a small demo based on a popular free Unity plugin for BTs: <strong class="bold">Behavior Brick<a id="_idTextAnchor489"/><a id="_idTextAnchor490"/>s</strong></li>
+			</ul>
+			<h1 id="_idParaDest-129"><a id="_idTextAnchor491"/>Technical requirements</h1>
+			<p>For this chapter, you need Unity3D 2022 and the free plugin for Unity, <em class="italic">Behavior Bricks</em>. Don't worry, we will see how to install this plugin together. You can find the example project described in this chapter in the <strong class="source-inline">Chapter 9</strong> folder in the book repository here<a id="_idTextAnchor492"/><a id="_idTextAnchor493"/>: <a href="https://github.com/PacktPublishing/Unity-Artificial-Intelligence-Programming-Fifth-Edition/tree/main/Chapter09">https://github.com/PacktPublishing/Unity-Artificial-Intelligence-Programming-Fifth-Edition/tree/main/Chapter09</a>.</p>
+			<h1 id="_idParaDest-130"><a id="_idTextAnchor494"/>Introduction to BTs</h1>
+			<p>A BT is a<a id="_idIndexMarker432"/> hierarchical tree of nodes that controls the AI character's behavior flow. It can also be used to coordinate groups of characters (for example, to model the attack pattern of a small platoon), or even disembodied agents such as an AI story director. </p>
+			<p>When we execute a BT's node, the node can return <a id="_idIndexMarker433"/>three states: <strong class="bold">success</strong>, <strong class="bold">failure</strong>, or <strong class="bold">running</strong> (if the node's execution is spread over multiple frames, for instance, if it plays an animation). When the BT executor runs a tree, it starts from the root and executes every node in order, according to rules written in the nodes themselves.</p>
+			<p>A node<a id="_idIndexMarker434"/> can be of three types:</p>
+			<ul>
+				<li>A <strong class="bold">task</strong> (a node without children), also<a id="_idIndexMarker435"/> called a <strong class="bold">leaf</strong>.</li>
+				<li>A <strong class="bold">decorator</strong> (a node with a single child)</li>
+				<li>A <strong class="bold">composite</strong> (a node with multiple children)</li>
+			</ul>
+			<p>In general, leaves represent the <em class="italic">Action</em> that the characters can do or know (that is why they are <a id="_idIndexMarker436"/>commonly<a id="_idIndexMarker437"/> called an <strong class="bold">Action</strong> or <strong class="bold">Task</strong>); they may be actions such as <strong class="bold">GoToTarget</strong>, <strong class="bold">OpenDoor</strong>, <strong class="bold">Jump</strong>, or <strong class="bold">TakeCover</strong>, but also things like <strong class="bold">IsObjectNear?</strong> or <strong class="bold">IsHealthLow?</strong>. These actions depend on the character, the game, and the general game implementation.</p>
+			<p>A <strong class="bold">decorator</strong> is a node <a id="_idIndexMarker438"/>that modifies (decorates) the sub-tree under it (therefore, it can decorate both composite and task nodes). For example, a standard decorator is<a id="_idIndexMarker439"/> the <strong class="bold">Negate</strong> node. The node inverts the return value of the sub-tree; for instance, if the sub-tree returns <em class="italic">Success</em>, the decorator returns <em class="italic">Failure</em> and vice versa (of course, if the sub-tree returns <em class="italic">Running</em>, the decorator returns <em class="italic">Running</em> as well). Another everyday decorator is <strong class="bold">Repeat</strong>, a node that repeats its sub-tree a certain number of times.</p>
+			<p>Instead, a <strong class="bold">composite</strong> node <a id="_idIndexMarker440"/>represents a node with multiple children, and it is the most interesting case. There are two common composite nodes: <strong class="bold">Sequence</strong>, which runs all its children in order and returns <em class="italic">Success</em> if—and only if—all its children return <em class="italic">Success</em>, and <strong class="bold">Selector</strong>, which tries to execute all its children in order but returns <em class="italic">Success</em> as soon as one of its children returns <em class="italic">Success</em>. However, many BT implementations contain many more composite nodes (such as nodes that run their children in parallel or according to some dynamic priority value; we will see an example of such a node in the demo).</p>
+			<p>Of course, this tree structure is not enough. Nodes need to exchange information with each other or with the game world. For instance, a <strong class="bold">GoToTarget</strong> node needs to know the target and its location; an <strong class="bold">IsObjectClose?</strong> node needs to know which object we are referring to and what distance we consider close. Naturally, we could write a <strong class="bold">GoToX</strong> node for each object in the game (such as <strong class="bold">GoToTree01</strong> and <strong class="bold">GoToDoor23</strong>), but you can easily imagine that this becomes messy very quickly.</p>
+			<p>For this reason, all the BT implementations contain a<a id="_idIndexMarker441"/> data structure called <strong class="bold">Blackboard</strong>. As in a <a id="_idIndexMarker442"/>real-life physical blackboard, every node can write and read data into it; we just need to specify where to look fo<a id="_idTextAnchor495"/><a id="_idTextAnchor496"/><a id="_idTextAnchor497"/>r each node.</p>
+			<h2 id="_idParaDest-131"><a id="_idTextAnchor498"/>A simple example – a patrolling robot</h2>
+			<p>Let's look<a id="_idIndexMarker443"/> at this example (which we will later implement in Unity). Imagine a patrolling robot that shoots anything that gets near it but works only during the daytime. We show the possible BT for this kind of agent in the following diagram:</p>
+			<div>
+				<div id="_idContainer121" class="IMG---Figure">
+					<img src="image/B17984_09_1.jpg" alt="Figure 9.1 – Example BT for a simplified day-only patrolling robot&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.1 – Example BT for a simplified day-only patrolling robot</p>
+			<p>Let's run this BT, assuming that the target is close and it is not night:</p>
+			<ol>
+				<li>The first node is a <strong class="bold">Repeat</strong> decorator; it does nothing but cycle the BTs, therefore, we can ignore it for now.</li>
+				<li>The <strong class="bold">SELECTOR</strong> node starts executing its first child; we go down to the left.</li>
+				<li>We are now at the first <strong class="bold">Sequence</strong> node; again, we execute the first node. <strong class="bold">IsNight?</strong> returns <em class="italic">Failure</em> (because it is not night!). Whenever one node returns <em class="italic">Failure</em>, the<a id="_idIndexMarker444"/> whole <strong class="bold">Sequence</strong> node returns <em class="italic">Failure</em>.</li>
+				<li>We traverse back up the tree to the <strong class="bold">SELECTOR</strong> node; now, we go to the second branch.</li>
+				<li>Again, we execute <strong class="bold">Sequence</strong>.</li>
+				<li>This time, however, <strong class="bold">IsTargetClose?</strong> returns <em class="italic">Success</em>, so we can proceed to the next node, <strong class="bold">Shoot</strong>, which runs a game function spawning an in-game projectile.</li>
+			</ol>
+			<p>The pattern of <strong class="bold">Sequence</strong> | <strong class="bold">Condition</strong> | <strong class="bold">Action</strong> is equivalent to if <em class="italic">Condition</em> is <em class="italic">Success</em> then <em class="italic">Action</em>. This pattern is so common that many BT implementations allow you to stack the <em class="italic">Condition</em> and the <em class="italic">Action</em> together. Therefore, we can rewrite the tree as follows:</p>
+			<div>
+				<div id="_idContainer122" class="IMG---Figure">
+					<img src="image/B17984_09_2.jpg" alt="Figure 9.2 – A simplified BT&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.2 – A simplified BT</p>
+			<p>This tree is the<a id="_idIndexMarker445"/> same as the previous one but with a simplified Sequ<a id="_idTextAnchor499"/><a id="_idTextAnchor500"/>ence pattern.</p>
+			<h1 id="_idParaDest-132"><a id="_idTextAnchor501"/>Implementing a BT in Unity with Behavior Bricks</h1>
+			<p><strong class="bold">Behavior Bricks</strong> is <a id="_idIndexMarker446"/>a <a id="_idIndexMarker447"/>robust but free BT implementation<a id="_idIndexMarker448"/> for Unity developed by the Complutense University of Madrid in Spain. Using Behavior Bricks, you can start using BTs in your projects without implementing BTs from scratch. It also has a visual editor where you can drop and connect nodes without any additional code.</p>
+			<p>Follow these steps to install Behavior Bricks:</p>
+			<ol>
+				<li value="1">We need to go to the <em class="italic">Unity Asset Store</em> by going on the website https://assetstore.unity.com/.</li>
+				<li>Search for <strong class="source-inline">Behavior Bricks</strong>.</li>
+				<li>Click<a id="_idIndexMarker449"/> on <strong class="bold">Add to My Assets</strong>. Once <a id="_idIndexMarker450"/>it's done, we <a id="_idIndexMarker451"/>can import it into our project.</li>
+			</ol>
+			<div>
+				<div id="_idContainer123" class="IMG---Figure">
+					<img src="image/B17984_09_3.jpg" alt="Figure 9.3 – Behavior Bricks Asset Store main page&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.3 – Behavior Bricks Asset Store main page</p>
+			<ol>
+				<li value="4">Go to <strong class="bold">Package Manager</strong> (<strong class="bold">Window</strong> | <strong class="bold">Package Manager</strong>).</li>
+				<li>Go to <strong class="bold">My Assets</strong>.</li>
+			</ol>
+			<div>
+				<div id="_idContainer124" class="IMG---Figure">
+					<img src="image/B17984_09_4.jpg" alt="Figure 9.4 – The Package Manager window&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.4 – The Package Manager window</p>
+			<ol>
+				<li value="6">Import <a id="_idIndexMarker452"/>the <strong class="bold">Behavior Bricks</strong> package<a id="_idIndexMarker453"/> by<a id="_idIndexMarker454"/> clicking on the <strong class="bold">Import</strong> button.</li>
+			</ol>
+			<div>
+				<div id="_idContainer125" class="IMG---Figure">
+					<img src="image/B17984_09_5.jpg" alt="Figure 9.5 – Behavior Bricks in Package Manager&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.5 – Behavior Bricks in Package Manager</p>
+			<p>At <a id="_idIndexMarker455"/>this <a id="_idIndexMarker456"/>point, Behavior <a id="_idIndexMarker457"/>Bricks is ready to go, and we can proceed with our demo. The following steps give you a brief idea of the steps to follow:</p>
+			<ol>
+				<li value="1">Set up the scene.</li>
+				<li>Implement a day/night cycle.</li>
+				<li>Design the enemy behavior.</li>
+				<li>Implement the nodes.</li>
+				<li>Build the tree.</li>
+				<li>Attach the BT to the enemy.</li>
+			</ol>
+			<p>Now, let's<a id="_idIndexMarker458"/> take a <a id="_idIndexMarker459"/>look<a id="_idIndexMarker460"/> at each of <a id="_idTextAnchor502"/><a id="_idTextAnchor503"/>these steps individually.</p>
+			<h2 id="_idParaDest-133"><a id="_idTextAnchor504"/>Set up the scene</h2>
+			<p>Let's follow<a id="_idIndexMarker461"/> a<a id="_idIndexMarker462"/> step-by-step process to do this:</p>
+			<ol>
+				<li value="1">We start by adding the game objects to the scene. We add a big plane to the scene, we add a <strong class="source-inline">Box Collider</strong> that encloses the entire plane, and we call it <strong class="source-inline">Floor</strong> (you may also add a texture if you like; be creative as it helps to have fun with these simple demos).</li>
+			</ol>
+			<div>
+				<div id="_idContainer126" class="IMG---Figure">
+					<img src="image/B17984_09_6.jpg" alt="Figure 9.6 – Example of the Floor Box Collider&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.6 – Example of the Floor Box Collider</p>
+			<ol>
+				<li value="2">We add a sphere and a cube; we call the sphere <em class="italic">Player</em> and the cube <em class="italic">Enemy</em>. In the <em class="italic">Enemy</em>, we add another empty object and move it just outside the cube. We call it <strong class="source-inline">shootPoint</strong>, and it represents the placeholder for where the enemy shoots.</li>
+				<li>Then, place all these objects on the floor; you should have something similar to the following:</li>
+			</ol>
+			<div>
+				<div id="_idContainer127" class="IMG---Figure">
+					<img src="image/B17984_09_7.jpg" alt="Figure 9.7 – The scene of our demo&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.7 – The scene of our demo</p>
+			<ol>
+				<li value="4">Now, because we want the player and the enemy to move around, we need to create a <a id="_idIndexMarker463"/>NavMesh<a id="_idIndexMarker464"/> as described in <a href="B17984_08_Epub.xhtml#_idTextAnchor447"><em class="italic">Chapter 8</em></a>, <em class="italic">Navigation Mesh</em>. Remember to add the <strong class="bold">NavMesh Agent</strong> component to both <em class="italic">Player</em> and <em class="italic">Enemy</em>!</li>
+				<li>Finally, if it is not present, add the <strong class="bold">MainLight</strong> tag <a id="_idTextAnchor505"/><a id="_idTextAnchor506"/>to the <em class="italic">Direct Light</em> object.</li>
+			</ol>
+			<h2 id="_idParaDest-134"><a id="_idTextAnchor507"/>Implement a day/night cycle</h2>
+			<p>In <a id="_idIndexMarker465"/>this <a id="_idIndexMarker466"/>demo, we want to implement a basic day/night cycle. To do that, we attach the script <strong class="source-inline">DayNightCycle.cs</strong> to the <em class="italic">Direct Light</em> object. As with many scripts in this demo, we adapt the code from the <em class="italic">Quick Start Guide</em> provided by Behavior Bricks:</p>
+			<p class="source-code">using UnityEngine;</p>
+			<p class="source-code">public class DayNightCycle : MonoBehaviour {</p>
+			<p class="source-code">    public event System.EventHandler OnChanged;</p>
+			<p class="source-code">    public float dayDuration = 10.0f;</p>
+			<p class="source-code">    public bool IsNight { get; private set; }</p>
+			<p class="source-code">    public Color nightColor = Color.white * 0.1f;</p>
+			<p class="source-code">    private Color dayColor;</p>
+			<p class="source-code">    private Light lightComponent;</p>
+			<p class="source-code">    void Start() {</p>
+			<p class="source-code">        lightComponent = GetComponent&lt;Light&gt;();</p>
+			<p class="source-code">        dayColor = lightComponent.color;</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    void Update() {</p>
+			<p class="source-code">        float lightIntensity = 0.5f + Mathf.Sin(Time.time *</p>
+			<p class="source-code">          2.0f * Mathf.PI / dayDuration) / 2.0f;</p>
+			<p class="source-code">        bool shouldBeNight = lightIntensity &lt; 0.3f;</p>
+			<p class="source-code">        if (IsNight != shouldBeNight) {</p>
+			<p class="source-code">            IsNight = shouldBeNight;</p>
+			<p class="source-code">            // Invoke event handler (if set).</p>
+			<p class="source-code">            OnChanged?.Invoke(this,</p>
+			<p class="source-code">              System.EventArgs.Empty); </p>
+			<p class="source-code">        }</p>
+			<p class="source-code">        lightComponent.color = Color.Lerp(nightColor,</p>
+			<p class="source-code">          dayColor, lightIntensity);    }</p>
+			<p class="source-code">}</p>
+			<p>This script implements a typical day/night cycle. The way it works is quite intuitive. Let's have a look:</p>
+			<ul>
+				<li>At each <strong class="source-inline">Update</strong> step, we update the <strong class="source-inline">lightIntensity</strong> variable according to a sinusoidal wave.</li>
+				<li>The variable cycles from <strong class="source-inline">0</strong> to <strong class="source-inline">1</strong> and, when the value is smaller than <strong class="source-inline">0.3</strong>, we decide that it is nighttime.</li>
+				<li>Finally, we update the light color according to the <strong class="source-inline">lightIntensity</strong> value, interpolating <a id="_idIndexMarker467"/>the<a id="_idIndexMarker468"/> day and night colors.</li>
+				<li>Note the <strong class="source-inline">onChanged</strong> event. We call it every time we switch from daytime to nighttime, and from nighttime to daytime. Later, we use this event to cr<a id="_idTextAnchor508"/><a id="_idTextAnchor509"/>eate an <strong class="bold">IsNight</strong> node in the BT.</li>
+			</ul>
+			<h2 id="_idParaDest-135"><a id="_idTextAnchor510"/>Design the enemy behavior</h2>
+			<p>Now, it is time <a id="_idIndexMarker469"/>to <a id="_idIndexMarker470"/>design the enemy behavior. We need to do this before writing a single line of code. For this demo, we will adapt the code and assets provided by the examp<a id="_idTextAnchor511"/><a id="_idTextAnchor512"/>le project in the Behavior Bricks <em class="italic">Quick Start Guide</em>. For more information, you can refer to it at this URL: <a href="http://bb.padaonegames.com/doku.php?id=quick:program">http://bb.padaonegames.com/doku.php?id=quick:program</a>.</p>
+			<div>
+				<div id="_idContainer128" class="IMG---Figure">
+					<img src="image/B17984_09_8.jpg" alt="Figure 9.8 – The target BT we want to implement&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.8 – The target BT we want to implement</p>
+			<p>The BT in <em class="italic">Figure 9.8</em> describes<a id="_idIndexMarker471"/> the <a id="_idIndexMarker472"/>following behavior:</p>
+			<ul>
+				<li>If it is night, the enemy is deactivated.</li>
+				<li>If the target is very close, the enemy shoots at the target.</li>
+				<li>If the target is further away, the enemy chases the target.</li>
+				<li>Otherwise, the enemy just wanders around.</li>
+			</ul>
+			<p>There are two important things to note:</p>
+			<ul>
+				<li>First, the two <strong class="bold">IsTargetClose?</strong> nodes differ in the value we consider close. In particular, we want to shoot the target only if we are close to it; otherwise, we just start chasing it.</li>
+				<li>Second, and most importantly, the order of the nodes matters. Because the <strong class="bold">Selector</strong> works from left to right and stops at the first <em class="italic">Success</em>, we cannot put <strong class="bold">ChaseTarget</strong> before <strong class="bold">Shoot</strong>. Otherwise, the enemy will never shoot!</li>
+			</ul>
+			<p>As a rule of thumb, we need to order conditions from the highest to the lowest priority. In fact, in the example, we put at the very end the action to execute when everything else fails (<strong class="bold">AlwaysTrue</strong> is a condition that always succeeds and works like the <em class="italic">else</em> branch of an <em class="italic">if</em> condition).</p>
+			<p>Note that <strong class="bold">Wander</strong> is in a different color because it is not a node but another BT. The lovely property of BTs is that you can reuse common BTs as nodes inside more complex BTs. The <a id="_idIndexMarker473"/>Wander BT <a id="_idIndexMarker474"/>simply makes the enemy move randomly on the map; fortunately, Behavior Bricks alre<a id="_idTextAnchor513"/>ady includes i<a id="_idTextAnchor514"/>t, so we don't need to implement it!</p>
+			<h1 id="_idParaDest-136"><a id="_idTextAnchor515"/>Implementing the nodes</h1>
+			<p>After we have <a id="_idIndexMarker475"/>made a plan for our BT, the next step is to check whether our BT implementation of choice (in our case, Behavior Bricks) already includes some of the nodes we need. Of course, we want to reuse as many pre-made nodes as possible. Reading the Behavior Bricks documentation, we can see that it already includes nodes such as <strong class="bold">IsTargetClose</strong>, <strong class="bold">MoveToGameObject</strong>, <strong class="bold">Wander</strong>, and <strong class="bold">AlwaysTrue</strong>, plus, of course, <strong class="bold">Repeat</strong> and <strong class="bold">Selector</strong>.</p>
+			<p>Therefore, we need to write all the other tasks. Note that Behavior Bricks tasks are not MonoBehaviors; therefore, we do not need to attach them to some object in the scene. We only need to put the scripts in any folder in our project's assets, and we are good. Let's look at a step-by-step process to do this:</p>
+			<ol>
+				<li value="1">Let's start with the <strong class="bold">ShootOnce</strong> action by creating a <strong class="source-inline">ShootOnce.cs</strong> file in the project assets. First, we create a simple <strong class="source-inline">Action</strong> attribute called <strong class="source-inline">ShootOnce</strong> that, as the name says, shoots a single bullet:<p class="source-code">using UnityEngine;</p><p class="source-code">using Pada1.BBCore;</p><p class="source-code">using Pada1.BBCore.Tasks;</p><p class="source-code">using BBUnity.Actions;</p><p class="source-code">[Action("Chapter09/ShootOnce")]</p><p class="source-code">[Help("Clone a 'bullet' and shoots it through the Forward axis with the specified velocity.")] </p><p class="source-code">public class ShootOnce : GOAction {</p><p class="source-code">    // ….</p><p class="source-code">}</p></li>
+			</ol>
+			<p>In the beginning, we import Behavior Bricks modules. Then, we create the <strong class="source-inline">ShootOnce</strong> class by extending the generic <strong class="source-inline">GOAction</strong> class.</p>
+			<p>Note the class attributes; Behavior Bricks uses them to populate the BT visual editor. In <a id="_idIndexMarker476"/>the <strong class="source-inline">Action</strong> attribute, we specify that <strong class="source-inline">Action</strong> is an action, and we put it in the <strong class="source-inline">Chapter09</strong> collection with the name <strong class="source-inline">ShootOnce</strong>. The <strong class="source-inline">Help</strong> attribute is just a documentation string describing the action's purpose.</p>
+			<ol>
+				<li value="2">We describe the class attributes as usual. The only difference is that we decorate each attribute with the <strong class="source-inline">InParam</strong> attribute, which specifies that the BT executor needs to retrieve the following value from the blackboard:<p class="source-code">[InParam("shootPoint")] </p><p class="source-code">public Transform shootPoint;</p><p class="source-code">[InParam("bullet")] </p><p class="source-code">public GameObject bullet;</p><p class="source-code">[InParam("velocity", DefaultValue = 30f)] </p><p class="source-code">public float velocity;</p></li>
+			</ol>
+			<p>For this action, we need a <strong class="source-inline">Bullet</strong> prefab, a place to instantiate the bullet (<strong class="source-inline">shootPoint</strong>) and the bullet velocity. Later, we will see how to set them up from the visual interface.</p>
+			<ol>
+				<li value="3">Now, it is<a id="_idIndexMarker477"/> time to write the real meat:<p class="source-code">public override void OnStart() {</p><p class="source-code">    if (shootPoint == null) {</p><p class="source-code">        shootPoint = </p><p class="source-code">          gameObject.transform.Find("shootPoint");</p><p class="source-code">        if (shootPoint == null) {</p><p class="source-code">            Debug.LogWarning("Shoot point not </p><p class="source-code">              specified. ShootOnce will not work for "</p><p class="source-code">              + gameObject.name);</p><p class="source-code">        }</p><p class="source-code">    }</p><p class="source-code">    base.OnStart();</p><p class="source-code">}</p><p class="source-code">public override TaskStatus OnUpdate() {</p><p class="source-code">    if (shootPoint == null || bullet == null) {</p><p class="source-code">        return TaskStatus.FAILED;</p><p class="source-code">    }</p><p class="source-code">    GameObject newBullet = Object.Instantiate(</p><p class="source-code">        bullet, shootPoint.position, </p><p class="source-code">        shootPoint.rotation *</p><p class="source-code">        bullet.transform.rotation );</p><p class="source-code">    if (newBullet.GetComponent&lt;Rigidbody&gt;() == null) {</p><p class="source-code">        newBullet.AddComponent&lt;Rigidbody&gt;();</p><p class="source-code">    }</p><p class="source-code">    newBullet.GetComponent&lt;Rigidbody&gt;().velocity = </p><p class="source-code">      velocity * shootPoint.forward;</p><p class="source-code">    return TaskStatus.COMPLETED;</p><p class="source-code">}</p></li>
+			</ol>
+			<p>Every Behavior Bricks node contains some default method called during the BT execution. We can overwrite them in our custom implementations. In this example, we see two of <a id="_idIndexMarker478"/>them: <strong class="source-inline">OnStart</strong> and <strong class="source-inline">OnUpdate</strong>. They are used very similarly to how we use <strong class="source-inline">Start</strong> and <strong class="source-inline">Update</strong> in <strong class="source-inline">MonoBehavior</strong>:</p>
+			<ul>
+				<li>The BT executor calls <strong class="source-inline">OnStart</strong> when the game creates the BT. In it, we initialize all the references we need. In this case, we get a reference to the <strong class="source-inline">shootPoint</strong> object. Note also that we must call <strong class="source-inline">base.Onstart()</strong> to initialize the base class.</li>
+				<li>In <strong class="source-inline">OnUpdate</strong>, we write the intended action for the node, that is, what we want this node to do when the BT executor invokes it. In this case, the code is self-explanatory: we create a bullet and shoot it at the velocity stored in the settings.</li>
+			</ul>
+			<p>If there is no problem, we mark the node as complete (so that the BT knows that it is a <em class="italic">Success</em>); otherwise (for example, if there is no <strong class="source-inline">shootPoint</strong> value), we mark the node as <em class="italic">Failed</em>.</p>
+			<ol>
+				<li value="4">Now that we have a base class for shooting once, we can create a new <strong class="source-inline">Action</strong> attribute for shooting continuously. Let's create a <strong class="source-inline">Shoot.cs</strong> file with the following content:<p class="source-code">Using UnityEngine;</p><p class="source-code">using Pada1.BBCore</p><p class="source-code">using Pada1.BBCore.Tasks;</p><p class="source-code">[Action("Chapter09/Shoot")]</p><p class="source-code">[Help("Periodically clones a 'bullet' and shoots it through the Forward axis with the specified velocity. This action never ends.")]</p><p class="source-code">public class Shoot : ShootOnce {</p><p class="source-code">    [InParam("delay", DefaultValue = 1.0f)]</p><p class="source-code">    public float delay;</p><p class="source-code">    // Time since the last shoot.</p><p class="source-code">    private float elapsedTime = 0;</p><p class="source-code">    public override TaskStatus OnUpdate() {</p><p class="source-code">        if (delay &gt; 0) {</p><p class="source-code">            elapsedTime += Time.deltaTime;</p><p class="source-code">            if (elapsedTime &gt;= delay) {</p><p class="source-code">                elapsedTime = 0;</p><p class="source-code">                return TaskStatus.RUNNING;</p><p class="source-code">            }</p><p class="source-code">        }</p><p class="source-code">        base.OnUpdate();</p><p class="source-code">        return TaskStatus.RUNNING;    }</p><p class="source-code">}</p></li>
+			</ol>
+			<p>This class simply extends the <strong class="source-inline">ShootOnce</strong> class, adds a <strong class="source-inline">delay</strong> attribute (the time between consecutive shots), and then continuously reruns its parent class (<strong class="source-inline">ShootOnce</strong>). Note that this <strong class="source-inline">Action</strong> always returns <strong class="source-inline">RUNNING</strong>, meaning that it never completes as long as the BT selects it.</p>
+			<ol>
+				<li value="5">In the same way, we can create the remaining <strong class="source-inline">Action</strong> attribute. For instance, the <strong class="source-inline">SleepForever</strong> action is very straightforward: it just does nothing and suspends the execution of the BTs. Note that the class extends <strong class="source-inline">BasePrimitiveAction</strong>, which <a id="_idIndexMarker479"/>is the most basic form of <strong class="source-inline">Action</strong> in Behavior Bricks:<p class="source-code">using Pada1.BBCore;</p><p class="source-code">using Pada1.BBCore.Framework;</p><p class="source-code">using Pada1.BBCore.Tasks;</p><p class="source-code">[Action("Chapter09/SleepForever")]</p><p class="source-code">[Help("Low-cost infinite action that never ends. It does not consume CPU at all.")]</p><p class="source-code">public class SleepForever : BasePrimitiveAction {</p><p class="source-code">    public override TaskStatus OnUpdate() {</p><p class="source-code">        return TaskStatus.SUSPENDED;</p><p class="source-code">    }</p><p class="source-code">}</p></li>
+				<li>Finally, we need to implement <strong class="source-inline">IsNightCondition</strong>. We show the <strong class="source-inline">IsNightCondition</strong> code in the following listing:<p class="source-code">using Pada1.BBCore;</p><p class="source-code">using Pada1.BBCore.Framework;</p><p class="source-code">using Pada1.BBCore.Tasks;</p><p class="source-code">using UnityEngine;</p><p class="source-code">[Condition("Chapter09/IsNight")]</p><p class="source-code">[Help("Checks whether it is night time.")] </p><p class="source-code">public class IsNightCondition : ConditionBase {</p><p class="source-code">    private DayNightCycle light;</p><p class="source-code">    public override bool Check() {</p><p class="source-code">        return SearchLight() &amp;&amp; light.IsNight;</p><p class="source-code">    }</p><p class="source-code">    public override TaskStatus </p><p class="source-code">      MonitorCompleteWhenTrue() {</p><p class="source-code">        if (Check()) {</p><p class="source-code">            return TaskStatus.COMPLETED;</p><p class="source-code">        }</p><p class="source-code">        if (light != null) {</p><p class="source-code">            light.OnChanged += OnSunset;</p><p class="source-code">        }</p><p class="source-code">        return TaskStatus.SUSPENDED;</p><p class="source-code">    }</p><p class="source-code">    public override TaskStatus MonitorFailWhenFalse()</p><p class="source-code">    {</p><p class="source-code">        if (!Check()) {</p><p class="source-code">            return TaskStatus.FAILED;</p><p class="source-code">        }</p><p class="source-code">        light.OnChanged += OnSunrise;</p><p class="source-code">        return TaskStatus.SUSPENDED;</p><p class="source-code">    }</p><p class="source-code">/// ...</p><p class="source-code">    private bool searchLight() {</p><p class="source-code">        if (light != null) {</p><p class="source-code">            return true;</p><p class="source-code">        }</p><p class="source-code">        GameObject lightGO = </p><p class="source-code">          GameObject.FindGameObjectWithTag(</p><p class="source-code">          "MainLight");</p><p class="source-code">        if (lightGO == null) {</p><p class="source-code">            return false;</p><p class="source-code">        }</p><p class="source-code">        light = lightGO.GetComponent&lt;DayNightCycle&gt;();</p><p class="source-code">         return light != null;</p><p class="source-code">    }</p><p class="source-code">}</p></li>
+			</ol>
+			<p>This class is more <a id="_idIndexMarker480"/>complex than the others, so let's go slow. First of all, <strong class="source-inline">IsNightCondition</strong> extends <strong class="source-inline">ConditionBase</strong>, which is a basic condition template in Behavior Bricks. This class does a simple job: on start, it searches for a light with the <strong class="source-inline">MainLight</strong> tag. If that exists, it takes its <strong class="source-inline">DayNightCycle</strong> reference, stores it in the <strong class="source-inline">light</strong> variable, and registers with the <strong class="source-inline">OnChanged</strong> event. Then, every time we ask for this condition, we check whether the <strong class="source-inline">isNight</strong> variable in <strong class="source-inline">light</strong> is <strong class="source-inline">true</strong> or <strong class="source-inline">false</strong> (see the <strong class="source-inline">Check</strong> method).</p>
+			<p>However, checking this every time would be very inefficient, in general. So, the <strong class="source-inline">BaseCondition</strong> class contains two helpful functions:</p>
+			<ul>
+				<li><strong class="source-inline">MonitorCompleteWhenTrue</strong> is a function that is called by the BT executor when the last returned value is <strong class="source-inline">false</strong> and, in practice, sets up a system that suspends BT execution until the variable becomes <strong class="source-inline">true</strong> again.</li>
+				<li><strong class="source-inline">MonitorFailWhenFalse</strong> is a dual function: it is called when the monitored value is <strong class="source-inline">true</strong> and suspends BT execution until the variable switches to <strong class="source-inline">false</strong>.</li>
+			</ul>
+			<p>For<a id="_idIndexMarker481"/> instance, let's look at <strong class="source-inline">MonitorCompleteWhenTrue</strong>. If <strong class="source-inline">Check</strong> is <strong class="source-inline">true</strong> (so it is night), we simply return <strong class="source-inline">Complete</strong>; otherwise, we register the <strong class="source-inline">OnSunset</strong> function with the <strong class="source-inline">OnChanged</strong> event. When the day/night cycle switches from day to night, <strong class="source-inline">OnSunset</strong> is called and, in turn, <strong class="source-inline">EndMonitorWithSuccess</strong> is called. <strong class="source-inline">MonitorFailWhenFalse</strong> works in the same way but in the opposite direction (monitoring when we pass from night to day):</p>
+			<p class="source-code">    public void OnSunset(object sender, </p>
+			<p class="source-code">                         System.EventArgs night) {</p>
+			<p class="source-code">        light.OnChanged -= OnSunset;</p>
+			<p class="source-code">        EndMonitorWithSuccess();</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    public void OnSunrise(object sender, </p>
+			<p class="source-code">                          System.EventArgs e) {</p>
+			<p class="source-code">        light.OnChanged -= OnSunrise;</p>
+			<p class="source-code">        EndMonitorWithFailure();</p>
+			<p class="source-code">    }</p>
+			<p>In the preceding code block, there are the two <strong class="source-inline">OnSunset</strong> and <strong class="source-inline">OnSunrise</strong> event handlers included in the class. As usual, you can find the comple<a id="_idTextAnchor516"/><a id="_idTextAnchor517"/>te commented code in the book's <a id="_idIndexMarker482"/>repository.</p>
+			<h2 id="_idParaDest-137"><a id="_idTextAnchor518"/>Building the tree</h2>
+			<p>Now that <a id="_idIndexMarker483"/>we have our nodes, we need to assemble the tree. To do that, follow these steps:</p>
+			<ol>
+				<li value="1">Right-click in the <strong class="bold">Inspector</strong> and go to the <strong class="bold">Create</strong> sub-menu.</li>
+				<li>Then, select <strong class="bold">Behavior Tree</strong>.</li>
+				<li>Choose a location and save.</li>
+				<li>An empty editor window should show onscreen; this is the tree editor.</li>
+				<li>You can right-click anywhere and start adding and connecting nodes.</li>
+				<li>To implement our tree, you need to recreate the tree shown in the following screenshot:</li>
+			</ol>
+			<div>
+				<div id="_idContainer129" class="IMG---Figure">
+					<img src="image/B17984_09_9.jpg" alt="Figure 9.9 – The enemy BT in the Behavior Bricks editor&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.9 – The enemy BT in the Behavior Bricks editor</p>
+			<ol>
+				<li value="7">Select all the nodes, one at a time, and look for the input parameters; these are the parameters we specified in our classes. These parameters may be <strong class="bold">CONSTANT</strong>, meaning that we directly write a value for them, or a <strong class="bold">BLACKBOARD</strong> reference.</li>
+				<li>We need to set up the parameters with the following values:<ul><li>In the first <strong class="source-inline">IsTargetClose</strong>, we specify the blackboard player as <strong class="source-inline">target</strong> and the constant <strong class="source-inline">7</strong> as <strong class="source-inline">closeDistance</strong> (if the player is not listed, click on <strong class="bold">New Parameter</strong>).</li><li>In the second <strong class="source-inline">IsTargetClose</strong>, we specify the blackboard player as <strong class="source-inline">target</strong> and the <a id="_idIndexMarker484"/>constant <strong class="source-inline">20</strong> as <strong class="source-inline">closeDistance</strong>.</li><li>In <strong class="source-inline">Shoot</strong>, we need to set <strong class="source-inline">30</strong> as the delay, the blackboard <strong class="source-inline">shootPoint</strong> as <strong class="source-inline">shootPoint</strong> (you probably need to create it with <strong class="bold">New Parameter</strong>), the blackboard bullet as the <strong class="source-inline">bullet</strong> prefab, and the constant <strong class="source-inline">30</strong> as velocity.</li><li>In <strong class="source-inline">MoveToGameObject</strong>, the target is the player value in the blackboard.</li></ul></li>
+				<li>In <strong class="source-inline">Wander</strong>, we set a ne<a id="_idTextAnchor519"/><a id="_idTextAnchor520"/>w blackboard parameter (<strong class="source-inline">floor</strong>) as <strong class="source-inline">wanderArea</strong>.</li>
+			</ol>
+			<h2 id="_idParaDest-138"><a id="_idTextAnchor521"/>Attach the BT to the enemy</h2>
+			<p>Now, it is time<a id="_idIndexMarker485"/> to attach this BT to the enemy's BT <a id="_idIndexMarker486"/>executor. For that, follow these steps:</p>
+			<ol>
+				<li value="1">Select the <strong class="bold">Enemy</strong> game object and add the <strong class="bold">Behavior Executor</strong> component to it.</li>
+				<li>In the <strong class="bold">Behavior</strong> field, drag and drop the BT we created before.</li>
+				<li>In <strong class="bold">Behavior Parameters</strong>, a list of all the blackboard parameters we defined in the previous step (<strong class="source-inline">player</strong>, <strong class="source-inline">floor</strong>, the enemy <strong class="source-inline">shootPoint</strong> firing location, and <strong class="source-inline">bullet</strong>) should appear.</li>
+				<li>Fill <a id="_idIndexMarker487"/>them <a id="_idIndexMarker488"/>with the appropriate objects, as shown in <em class="italic">Figure 9.10</em>:</li>
+			</ol>
+			<div>
+				<div id="_idContainer130" class="IMG---Figure">
+					<img src="image/B17984_09_10.jpg" alt="Figure 9.10 – The behavior executor component&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.10 – The behavior executor component</p>
+			<p>At this point, the enemy should be ready to go. Click <strong class="bold">Play</strong> and you should see the enemy wandering around and, when close enough to the player, start chasing and shooting at it. Note that we did not implement a controller for the player, therefore, to change its position you need to edit the player in the Scene view (or attach one of the control scripts we developed in the previous chapters). For more details, look at the code included in this book.</p>
+			<p>Now that <a id="_idIndexMarker489"/>we<a id="_idIndexMarker490"/> have completed our first BT, what if we want to replicate with Behavior Bricks the same AI that we developed in <a href="B17984_02_Epub.xhtml#_idTextAnchor100"><em class="italic">Chapter 2</em></a>, <em class="italic">Finite Stat<a id="_idTextAnchor522"/>e Machines</em>, using an FSM? Try that as an exercise.</p>
+			<h1 id="_idParaDest-139"><a id="_idTextAnchor523"/>Summary</h1>
+			<p>In this chapter, we explored the general background behind any BT implementation. We saw what a BT is, what its basic components are, and how can we use a BT to describe game character behavior. Then, we implemented a demo using a free plugin called Behavior Bricks. In the demo, we created the behavior for a simple scenario: the player and a patrolling robot. We also implemented a day/night cycle to spice up the scenario.</p>
+			<p>BTs are the cornerstones of modern AI for game characters. Implementation details and deeper examples would require a fu<a id="_idTextAnchor524"/>ll book to explain them fully. Luckily, the web is full of resources for the curious reader.</p>
+			<p>Now, we will take a break from AI character design by looking at a different application of AI in games. In the next chapter, we will look at the f<a id="_idTextAnchor525"/>ascinating field of procedural content generation.</p>
+			<h1 id="_idParaDest-140"><a id="_idTextAnchor526"/>Further reading</h1>
+			<ul>
+				<li>The official Behavior Bricks project page from the Complutense University of Madrid in Spain: <a href="http://gaia.fdi.ucm.es/research/bb/">http://gaia.fdi.ucm.es/research/bb/</a>.</li>
+				<li>Behavior Bricks official documentation: <a href="http://bb.padaonegames.com/doku.php">http://bb.padaonegames.com/doku.php</a>. </li>
+				<li>Chris Simpson (the developer of <em class="italic">Project Zomboid</em>) wrote a nice explanation of BTs on Gamasutra: <a href="https://www.gamasutra.com/blogs/ChrisSimpson/20140717/221339/Behavior_trees_for_AI_How_they_work.php">https://www.gamasutra.com/blogs/ChrisSimpson/20140717/221339/Behavior_trees_for_AI_How_they_work.php</a>.</li>
+				<li><a href="B17984_06_Epub.xhtml#_idTextAnchor375"><em class="italic">Chapter 6</em></a> of <em class="italic">GameAI Pro</em>, which explores many implementation details of BTs (in C++), is free and available at the following link: <a href="https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter06_The_Behavior_Tree_Starter_Kit.pdf">https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter06_The_Behavior_Tree_Starter_Kit.pdf</a>.</li>
+			</ul>
+		</div>
+	</body></html>

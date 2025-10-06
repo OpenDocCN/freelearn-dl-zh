@@ -1,0 +1,814 @@
+<html><head></head><body>
+  <div class="Basic-Text-Frame" id="_idContainer216">
+    <h1 class="chapterNumber"><a id="_idTextAnchor227"/>8</h1>
+    <h1 class="chapterTitle" id="_idParaDest-219"><a id="_idTextAnchor228"/>GenAISys for Trajectory Simulation and Prediction</h1>
+    <p class="normal">As AI’s role continues to expand, trajectory analysis has permeated all human activity, from pizza deliveries to genome sequencing. This chapter introduces city-scale mobility prediction, highlighting how missing or noisy coordinates can undermine real-world applications in deliveries, disaster management, urban planning, and epidemic forecasting. The architecture of our mobility system draws inspiration from the innovative work of Tang et al. (2024).</p>
+    <p class="normal">We will first build and integrate an advanced trajectory simulation and prediction pipeline into our GenAISys using the <code class="inlineCode">1_Trajectory_simulation_and_prediction.ipynb</code> notebook. The main objective is to address the challenge of modeling human mobility, both short- and long-term, by leveraging synthetic data <a id="_idIndexMarker535"/>generation and <strong class="keyWord">large language models</strong> (<strong class="keyWord">LLMs</strong>). We then demonstrate how to build upon this idea using Python-based solutions, complete with a custom synthetic grid generator that simulates random trajectories through a two-dimensional city map, deliberately inserting missing data for testing. These random trajectories could represent deliveries or other sequences, such as travel packages (custom bags or booklets) for an online travel agency.</p>
+    <p class="normal">Next, we will build a multistep orchestrator function that merges user instructions, the synthetic dataset, and domain-specific messages before passing them to an LLM-driven reasoning thread. The model will detect and predict unknown positions marked by placeholder values (such as <code class="inlineCode">999, 999</code>), filling these gaps through contextual interpolation. This approach demonstrates the interpretability of text-based predictions while maintaining a systematic chain of thought, including debugging steps such as logging missing points before producing the final JSON output.</p>
+    <p class="normal">To support robust user interaction, we will integrate the trajectory pipeline into the GenAISys multihandler environment we’ve built, allowing requests for “mobility” instructions to trigger the creation and analysis of trajectories. We will implement a trajectory simulation and prediction interface. Visualization components are incorporated, automatically producing and displaying the resulting path (including direction arrows, missing data markers, and coordinate fixes) as a static image. The synergy between data generation, LLM inference, and the user interface showcases the end-to-end viability of our method, empowering users to apply trajectory simulation and prediction across different domains as needed.</p>
+    <p class="normal">This chapter provides a blueprint for coupling synthetic trajectory datasets with a prompt-driven LLM approach in the GenAISys. By following the design patterns described by Tang et al., we will explore how purely text-oriented models can excel at spatial-temporal reasoning with minimal structural modifications. Bridging mobility simulation and user-friendly interfaces can provide highly interpretable, fine-grained predictions for a variety of mobility analytics scenarios.</p>
+    <p class="normal">This chapter covers the following topics:</p>
+    <ul>
+      <li class="bulletList">Trajectory simulations and predictions</li>
+      <li class="bulletList">Building a trajectory simulation and prediction function</li>
+      <li class="bulletList">Adding mobility intelligence to the GenAISys</li>
+      <li class="bulletList">Running the mobility-enhanced GenAISys</li>
+    </ul>
+    <p class="normal">Let’s begin by defining the scope of the trajectory simulation and prediction framework.</p>
+    <h1 class="heading-1" id="_idParaDest-220"><a id="_idTextAnchor229"/>Trajectory simulations and predictions</h1>
+    <p class="normal">This section is inspired by <em class="italic">Instruction-Tuning Llama-3-8B Excels in City-Scale Mobility Prediction</em> by Tang et al. (2024). We will explore the <a id="_idIndexMarker536"/>essential background on the challenges of human mobility prediction, the paper’s key contributions, and how these ideas can be translated into practical Python implementations.</p>
+    <p class="normal">Human mobility prediction focuses on forecasting where and when individuals (or groups) will travel, and it plays a critical role in an expanding set of domains, including the following:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Disaster response</strong>, for predicting the paths of wildfires, population movements during crises, or the impacts of earthquakes</li>
+      <li class="bulletList"><strong class="keyWord">Urban planning</strong>, for modeling short- and long-term mobility patterns to help city planners optimize public transport and infrastructure</li>
+      <li class="bulletList"><strong class="keyWord">Epidemic forecasting</strong>, for simulating and predicting the spread of infectious diseases in a region</li>
+    </ul>
+    <p class="normal">In our case, we will first apply mobility prediction to the delivery of customized products (e.g., bags, T-shirts, and booklets) for an online travel agency’s customers.</p>
+    <p class="normal">Traditionally, these predictions relied on specialized machine learning models, such as <strong class="keyWord">recurrent neural networks</strong> (<strong class="keyWord">RNNs</strong>) with <a id="_idIndexMarker537"/>attention mechanisms or <strong class="keyWord">graph neural networks</strong> (<strong class="keyWord">GNNs</strong>). While these<a id="_idIndexMarker538"/> techniques can be effective, they often require labor-intensive feature engineering and are not easily generalizable across diverse locations or time horizons (e.g., short-term versus long-term predictions).</p>
+    <p class="normal">Let’s now examine the key challenges motivating the use of LLMs to address these issues.</p>
+    <h2 class="heading-2" id="_idParaDest-221"><a id="_idTextAnchor230"/>Challenges in large-scale mobility forecasting</h2>
+    <p class="normal">Cutting-edge LLMs offer <a id="_idIndexMarker539"/>promising solutions to several challenges that have historically plagued traditional mobility analysis and prediction systems:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Long-term versus short-term forecasts</strong>: Predicting the next few steps (short-term) often relies on temporal recurrences and immediate contextual information. However, extending this to multi-day, city-scale horizons introduces additional complexities, such as changes in user behavior, variations in daily routines, holidays, or unexpected events.</li>
+      <li class="bulletList"><strong class="keyWord">Generalization across cities</strong>: A model trained on data from City A may fail when exposed to the unique geography, population density, or cultural travel habits of City B. True city-scale mobility solutions must be robust enough to handle these differences.</li>
+      <li class="bulletList"><strong class="keyWord">Computational constraints</strong>: Real-world mobility datasets, especially those representing entire metropolitan areas, can be enormous. Training sophisticated deep learning models or LLMs can become computationally expensive.</li>
+      <li class="bulletList"><strong class="keyWord">Data quality and missing data</strong>: Large-scale mobility datasets often have noise or missing coordinates. Handling “gaps” in user trajectories (e.g., from GPS dropout or anonymization processes) is a significant challenge.</li>
+    </ul>
+    <p class="normal">While LLMs are not perfect, they provide an effective alternative to traditional models by addressing these key obstacles with minimal manual feature engineering. Let’s see how.</p>
+    <h2 class="heading-2" id="_idParaDest-222"><a id="_idTextAnchor231"/>From traditional models to LLMs</h2>
+    <p class="normal">The journey from traditional approaches to LLMs can be traced through a few groundbreaking shifts. Traditional approaches consumed <a id="_idIndexMarker540"/>extensive human resources to design heuristics, engineer features, and implement complex domain-specific solutions. In contrast, recent breakthroughs in generative AI—such as Llama 3, GPT-4o, Grok 3, DeepSeek-V3, and DeepSeek-R1—have opened exciting new avenues in reasoning and multimodal machine intelligence. And make no mistake—this is just the beginning! Recent research highlights how these models can generalize well beyond text-based tasks, excelling in the following:</p>
+    <ul>
+      <li class="bulletList">Time-series prediction</li>
+      <li class="bulletList">Zero-shot or few-shot adaptation to new tasks</li>
+      <li class="bulletList">Data preprocessing</li>
+    </ul>
+    <p class="normal">Recent research has shown that LLMs, when guided by carefully crafted prompts or lightweight fine-tuning, can even surpass specialized models in city-scale, long-horizon trajectory prediction. In this chapter, we’ll demonstrate effective results with zero-shot prompting—without any additional fine-tuning—using GPT-4o.</p>
+    <p class="normal">To understand this promising direction clearly, however, let’s first examine the key contributions of the paper that <a id="_idIndexMarker541"/>served as a basis for this chapter.</p>
+    <h2 class="heading-2" id="_idParaDest-223"><a id="_idTextAnchor232"/>Key contributions of the paper</h2>
+    <p class="normal">It took a team consisting of Tang, P., Yang, C., Xing, T., Xu, X., Jiang, R., and Sezaki, K. (2024) to take LLMs to the next level through three<a id="_idIndexMarker542"/> pivotal innovations.</p>
+    <h3 class="heading-3" id="_idParaDest-224"><a id="_idTextAnchor233"/>Reformulating trajectory prediction as a Q&amp;A</h3>
+    <p class="normal">Instead of passing raw coordinate sequences into a standard regression or classification model, the authors transform the input into a <a id="_idIndexMarker543"/>question that includes the following:</p>
+    <ul>
+      <li class="bulletList">An <strong class="keyWord">instruction block</strong> clarifying the <a id="_idIndexMarker544"/>domain context (city grid, coordinate definitions, day/time indexing)</li>
+      <li class="bulletList">A <strong class="keyWord">question block</strong> providing <a id="_idIndexMarker545"/>historical mobility data with placeholders for missing locations</li>
+      <li class="bulletList">A request to generate the prediction results in a predefined, structured JSON format</li>
+    </ul>
+    <p class="normal">This Q&amp;A style leverages the LLM’s inherent ability to read instructions and produce structured outputs.</p>
+    <p class="normal">Then, they fine-tuned the LLM.</p>
+    <h3 class="heading-3" id="_idParaDest-225"><a id="_idTextAnchor234"/>Instruction tuning for domain adaptation</h3>
+    <p class="normal"><strong class="keyWord">Instruction tuning</strong> is a technique where the LLM is fine-tuned with carefully designed prompts and answers, teaching it to <a id="_idIndexMarker546"/>produce domain-specific outputs while still retaining its general language reasoning capabilities. The authors showcase that even if you use only a fraction of the mobility dataset for <a id="_idIndexMarker547"/>fine-tuning, the model can still generalize to new users or new cities. In our case, we attained acceptable results without a dataset.</p>
+    <p class="normal">Surprisingly enough, as we will see when we build the Python program in the <em class="italic">Building the trajectory simulation and prediction function</em> section, we achieve strong results even with a zero-shot, no-fine-tuning approach, leveraging GPT-4o’s exceptional reasoning capability without needing any domain-specific fine-tuning data.</p>
+    <p class="normal">The mobility research team then solved the issue of missing data.</p>
+    <h3 class="heading-3" id="_idParaDest-226"><a id="_idTextAnchor235"/>Handling missing data</h3>
+    <p class="normal">A common challenge in mobility <a id="_idIndexMarker548"/>datasets is the presence of missing coordinates, typically marked with placeholder values such as <code class="inlineCode">999</code>. The LLM-based system is tasked explicitly with filling in these gaps, effectively performing spatiotemporal imputation. Naturally, this approach is not without limitations, which we’ll clearly illustrate through practical examples when we run our mobility simulation. But before exploring these boundaries, let’s first dive into building our solution.</p>
+    <p class="normal">In the next section, we will develop a trajectory (mobility) simulation and analysis component using OpenAI models. We will then integrate this mobility function into <strong class="keyWord">Layer 3</strong> of our GenAISys, as illustrated in <em class="italic">Figure 8.1</em> with function <strong class="keyWord">F4.1</strong>. We will also update <strong class="keyWord">Layer 2</strong> to register the handler and ensure it can be activated at the IPython interface level in <strong class="keyWord">Layer 1</strong>.</p>
+    <figure class="mediaobject"><img alt="Figure 8.1: Integrating trajectory simulations and predictions" src="../Images/B32304_08_1.png"/></figure>
+    <p class="packt_figref">Figure 8.1: Integrating trajectory simulations and predictions</p>
+    <p class="normal">Once the trajectory simulation <a id="_idIndexMarker549"/>and prediction component is integrated into our GenAISys, it can be applied to deliveries and a wide range of mobility-related tasks. We will start by modeling the delivery of customized goodies—such as branded bags, T-shirts, and booklets—for customers of an online travel agency, and then explore other potential applications. For now, let’s build our trajectory simulation!</p>
+    <h1 class="heading-1" id="_idParaDest-227"><a id="_idTextAnchor236"/>Building the trajectory simulation and prediction function</h1>
+    <p class="normal">The goal of this<a id="_idIndexMarker550"/> section is to create a robust trajectory simulation, prepare the predictive functions, and run an OpenAI LLM to analyze synthetic trajectory data and predict missing coordinates. Later, in the <em class="italic">Adding mobility intelligence to the GenAISys</em> section, we’ll integrate this into our comprehensive GenAISys framework.</p>
+    <p class="normal">Open the <code class="inlineCode">1_Trajectory_simulation_and_prediction.ipynb</code> notebook within the Chapter08 directory on GitHub (<a href="https://github.com/Denis2054/Building-Business-Ready-Generative-AI-Systems/tree/main"><span class="url">https://github.com/Denis2054/Building-Business-Ready-Generative-AI-Systems/tree/main</span></a>). The initial setup mirrors the environment configuration in <code class="inlineCode">Chapter07/GenAISys_DeepSeek.ipynb</code> and includes the following:</p>
+    <ul>
+      <li class="bulletList">File downloading script</li>
+      <li class="bulletList">OpenAI setup</li>
+      <li class="bulletList">Chain-of-thought environment setup</li>
+    </ul>
+    <p class="normal">We will build the program in three main steps, as shown in <em class="italic">Figure 8.2</em>:</p>
+    <ul>
+      <li class="bulletList">Creating the grid and trajectory simulation to generate real-time synthetic data</li>
+      <li class="bulletList">Creating a mobility orchestrator that will call the trajectory simulation, import the messages for the OpenAI model, and call the analysis and prediction messages for the OpenAI model</li>
+      <li class="bulletList">Leveraging OpenAI’s model for trajectory analysis and predictions, called via the mobility orchestrator</li>
+    </ul>
+    <p class="normal">The mobility orchestrator will be added to the handlers registry in our GenAISys in the <em class="italic">Adding mobility intelligence to the GenAISys</em> section and managed by the handler selection mechanism when activated by the IPython interface. In this section, we will call the mobility orchestrator directly.</p>
+    <p class="normal"><em class="italic">Figure 8.2</em> articulates the<a id="_idIndexMarker551"/> relationship between the mobility orchestrator, the trajectory simulator, and the generative AI predictor. This mixture of agents maintains close alignment with the framework of trajectory analysis and predictions.</p>
+    <figure class="mediaobject"><img alt="Figure 8.2: The functions of the mobility orchestrator" src="../Images/B32304_08_2.png"/></figure>
+    <p class="packt_figref">Figure 8.2: The functions of the mobility orchestrator</p>
+    <p class="normal">We will first begin by creating the trajectory simulation.</p>
+    <h2 class="heading-2" id="_idParaDest-228"><a id="_idTextAnchor237"/>Creating the trajectory simulation</h2>
+    <p class="normal">The reference paper by Tang et al. demonstrates how an LLM can be instruction-tuned to fill missing trajectory coordinates<a id="_idIndexMarker552"/> and predict future positions in a grid-based city map. Note that in our case, we will leverage the power of the OpenAI API message object to achieve an effective result with zero-shot prompts in real time, within the framework of the paper.</p>
+    <p class="normal">One important step in their methodology involves having <em class="italic">(day, timeslot, x, y)</em> records, with some coordinates possibly missing (e.g., <code class="inlineCode">999, 999</code>) to indicate unknown positions.</p>
+    <p class="normal">The function that we will write, <code class="inlineCode">create_grid_with_trajectory()</code>, essentially simulates a smaller-scale version of this<a id="_idIndexMarker553"/> scenario by doing the following:</p>
+    <ol>
+      <li class="numberedList" value="1">Generate a two-dimensional grid representing a city (default: 200×200).</li>
+      <li class="numberedList">Create random agent trajectories within the grid over a certain number of points.</li>
+      <li class="numberedList">Intentionally insert missing coordinates (marked as <code class="inlineCode">(999, 999)</code>) to simulate real-world data gaps.</li>
+      <li class="numberedList">Plot and save the trajectory visualization, highlighting direction with arrows and labels for missing data.</li>
+    </ol>
+    <p class="normal">This kind of synthetic generation is useful for testing or proof-of-concept demos, echoing the spirit of the paper:</p>
+    <ul>
+      <li class="bulletList">You have grid-based data, like the 200×200 city model used in the article</li>
+      <li class="bulletList">You inject missing values (<code class="inlineCode">999, 999</code>), which the LLM or another model can later attempt to fill in</li>
+    </ul>
+    <p class="normal">Let’s now go through the trajectory simulation function step by step:</p>
+    <ol>
+      <li class="numberedList" value="1">Let’s first initialize the function with its parameters:
+        <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">create_grid_with_trajectory</span>(
+<span class="hljs-params">    grid_size=</span><span class="hljs-number">200</span><span class="hljs-params">, num_points=</span><span class="hljs-number">50</span><span class="hljs-params">, missing_count=</span><span class="hljs-number">5</span>
+):
+    grid = np.zeros((grid_size, grid_size), dtype=<span class="hljs-built_in">int</span>)
+    trajectory = []
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">The parameters are as follows:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">grid_size=200</code>: The size of the grid along one axis (so the grid is 200×200)</li>
+      <li class="bulletList"><code class="inlineCode">num_points=50</code>: How many trajectory points (or steps) will be generated</li>
+      <li class="bulletList"><code class="inlineCode">missing_count=5</code>: How many of those points will be deliberately turned into missing coordinates (<code class="inlineCode">999, 999</code>)</li>
+    </ul>
+    <ol>
+      <li class="numberedList" value="2">We now create the grid:<ul>
+          <li class="bulletList"><code class="inlineCode">grid = np.zeros((grid_size, grid_size), dtype=int)</code> creates a two-dimensional array of zeros (of the <code class="inlineCode">int</code> type). Think of <code class="inlineCode">grid[x][y]</code> as the status of that cell, initially 0.</li>
+          <li class="bulletList"><code class="inlineCode">trajectory = []:</code> will hold tuples of the form <em class="italic">(day, timeslot, x, y)</em>.</li>
+        </ul>
+      </li>
+    </ol>
+    <p class="normal">This mirrors the discretized city concept in the paper, where each <em class="italic">(x, y)</em> cell might represent a zone within the city.</p>
+    <ol>
+      <li class="numberedList" value="3">We can now set the initial state of the agent:
+        <pre class="programlisting code"><code class="hljs-code">    x = random.randint(<span class="hljs-number">0</span>, grid_size - <span class="hljs-number">1</span>)
+    y = random.randint(<span class="hljs-number">0</span>, grid_size - <span class="hljs-number">1</span>)
+    day = random.randint(<span class="hljs-number">1</span>, <span class="hljs-number">365</span>)
+    timeslot = random.randint(<span class="hljs-number">0</span>, <span class="hljs-number">47</span>)
+</code></pre>
+        <ul>
+          <li class="bulletList"><strong class="keyWord">Random start</strong>: The agent’s initial location <em class="italic">(x, y)</em> is chosen randomly anywhere on the grid.</li>
+          <li class="bulletList"><strong class="keyWord">Time setup</strong>: A random day between 1 and 365 and a random timeslot between 0 and 47 is selected, aligning with the paper’s time-slicing approach, where each <a id="_idIndexMarker554"/>day is divided into multiple discrete time slots.</li>
+        </ul>
+      </li>
+      <li class="numberedList">We now determine the movement directions and turn probability:
+        <pre class="programlisting code"><code class="hljs-code">    directions = [(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>), (<span class="hljs-number">1</span>, <span class="hljs-number">0</span>), (<span class="hljs-number">0</span>, -<span class="hljs-number">1</span>), (-<span class="hljs-number">1</span>, <span class="hljs-number">0</span>)]
+    current_dir_index = random.randint(<span class="hljs-number">0</span>, <span class="hljs-number">3</span>)
+    turn_weights = {-<span class="hljs-number">1</span>: <span class="hljs-number">0.15</span>, <span class="hljs-number">0</span>: <span class="hljs-number">0.70</span>, <span class="hljs-number">1</span>: <span class="hljs-number">0.15</span>}
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">This structure is a classical mobility agent framework:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">directions</code>: Represents four possible directions—up, right, down, and left.</li>
+      <li class="bulletList"><code class="inlineCode">current_dir_index</code>: Picks which of the four directions the agent faces initially.</li>
+      <li class="bulletList"><code class="inlineCode">turn_weights</code>: Probability distribution dictating how likely the agent is to turn left (<code class="inlineCode">-1</code>), go straight (<code class="inlineCode">0</code>), or turn right (<code class="inlineCode">1</code>) at each step. In our case, there is a 15% chance of turning left, a 70% chance of continuing, and a 15% chance of turning right. This introduces randomness in how the agent moves and is a simple approximation of human or agent-like mobility patterns.</li>
+    </ul>
+    <ol>
+      <li class="numberedList" value="5">We are ready to generate the trajectory:
+        <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-keyword">for</span> _ <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(num_points):
+        turn = random.choices(<span class="hljs-built_in">list</span>(turn_weights.keys()),
+            weights=<span class="hljs-built_in">list</span>(turn_weights.values()))[<span class="hljs-number">0</span>]
+        current_dir_index = (current_dir_index + turn) % \
+            <span class="hljs-built_in">len</span>(directions)
+        dx, dy = directions[current_dir_index]
+        new_x = x + dx
+        new_y = y + dy
+        ...
+        trajectory.append((day, timeslot, x, y))
+        grid[x, y] = <span class="hljs-number">1</span>
+        timeslot = (timeslot + random.randint(<span class="hljs-number">1</span>, <span class="hljs-number">3</span>)) % <span class="hljs-number">48</span>
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">Let’s go through the actions of our virtual agent:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Choosing a turn</strong>: Based on <code class="inlineCode">turn_weights</code>, the agent randomly decides whether to continue in the same direction, turn left, or turn right.</li>
+      <li class="bulletList"><strong class="keyWord">Updating the coordinates</strong>:<ol>
+          <li class="numberedList" value="1"><code class="inlineCode">dx</code>, <code class="inlineCode">dy</code> are the increments along <em class="italic">x</em> and <em class="italic">y</em> for the chosen direction.</li>
+          <li class="numberedList">The new location, <code class="inlineCode">(new_x, new_y)</code>, is computed.<ul>
+              <li class="bulletList"><strong class="keyWord">Checking the boundary conditions</strong>: If <code class="inlineCode">(new_x, new_y)</code> is outside <code class="inlineCode">[0, grid_size-1]</code>, the code <a id="_idIndexMarker555"/>finds a valid direction or reverts to the old position to keep the agent inside the grid.</li>
+              <li class="bulletList"><strong class="keyWord">Recording the trajectory</strong>:</li>
+            </ul>
+          </li>
+          <li class="numberedList"><code class="inlineCode">(day, timeslot, x, y)</code> is appended to <code class="inlineCode">trajectory</code>.</li>
+          <li class="numberedList">Mark <code class="inlineCode">grid[x, y]</code> as <code class="inlineCode">1</code>, signifying a visited cell.</li>
+        </ol>
+      </li>
+      <li class="bulletList"><strong class="keyWord">Updating the time</strong>: <code class="inlineCode">timeslot = (timeslot + random.randint(1, 3)) % 48</code>: The timeslot jumps from 1 to 3 steps, staying in <code class="inlineCode">[0, 47]</code>.</li>
+    </ul>
+    <ol>
+      <li class="numberedList" value="6">We now need to introduce the missing data, which will be the basis for the generative AI predictions:
+        <pre class="programlisting code"><code class="hljs-code">    missing_indices = random.sample(<span class="hljs-built_in">range</span>(<span class="hljs-built_in">len</span>(trajectory)),
+                                    <span class="hljs-built_in">min</span>(missing_count, 
+                                    <span class="hljs-built_in">len</span>(trajectory)))
+    <span class="hljs-keyword">for</span> idx <span class="hljs-keyword">in</span> missing_indices:
+        d, t, _, _ = trajectory[idx]
+        trajectory[idx] = (d, t, <span class="hljs-number">999</span>, <span class="hljs-number">999</span>)
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">The missing points are determined in two steps:</p>
+    <ol>
+      <li class="numberedList" value="1"><strong class="keyWord">Selecting the missing points</strong>: Randomly choose <code class="inlineCode">missing_count</code> points from the total <code class="inlineCode">num_points</code> of the trajectory.</li>
+      <li class="numberedList"><strong class="keyWord">Replacing the missing points with 999, 999</strong>: For each chosen index, replace the valid <code class="inlineCode">(x, y)</code> with <code class="inlineCode">999, 999</code>.</li>
+    </ol>
+    <p class="normal">In the paper, the authors define <code class="inlineCode">999, 999</code> as the signal for unknown or missing coordinates that the LLM must later fill in. This code snippet simulates exactly that scenario—some coordinates go missing, requiring an imputation or prediction step.</p>
+    <p class="normal">We want to add a visualization function next that will help the user to see the trajectory and its missing points.</p>
+    <h3 class="heading-3" id="_idParaDest-229"><a id="_idTextAnchor238"/>Visualizing the trajectory simulator</h3>
+    <p class="normal">We will plot the grid <a id="_idIndexMarker556"/>and trajectory in Matplotlib:</p>
+    <pre class="programlisting code"><code class="hljs-code">    x_coords = [x <span class="hljs-keyword">if</span> x != <span class="hljs-number">999</span> <span class="hljs-keyword">else</span> np.nan <span class="hljs-keyword">for</span> _, _, x, y <span class="hljs-keyword">in</span> trajectory]
+    y_coords = [y <span class="hljs-keyword">if</span> y != <span class="hljs-number">999</span> <span class="hljs-keyword">else</span> np.nan <span class="hljs-keyword">for</span> _, _, x, y <span class="hljs-keyword">in</span> trajectory]
+    plt.figure(figsize=(<span class="hljs-number">8</span>, <span class="hljs-number">8</span>))
+    plt.plot(x_coords, y_coords, marker=<span class="hljs-string">'o'</span>, linestyle=<span class="hljs-string">'-'</span>,
+             color=<span class="hljs-string">'blue'</span>, label=<span class="hljs-string">"Agent Trajectory"</span>)
+    ...
+    plt.quiver(...)
+    ...
+    plt.title(<span class="hljs-string">"Agent Trajectory with Direction Arrows and Missing Data"</span>)
+    plt.xlabel(<span class="hljs-string">"X coordinate"</span>)
+    plt.ylabel(<span class="hljs-string">"Y coordinate"</span>)
+    plt.grid(<span class="hljs-literal">True</span>)
+    plt.legend()
+    plt.savefig(<span class="hljs-string">"mobility.png"</span>)
+    plt.close()
+</code></pre>
+    <p class="normal">Let’s go through the visualization <a id="_idIndexMarker557"/>process:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Coordinates for plotting</strong>: Converts missing <code class="inlineCode">999, 999</code> values into <code class="inlineCode">np.nan</code> so that Matplotlib will break the line and not connect them visually</li>
+      <li class="bulletList"><strong class="keyWord">Plotting with colors, arrows, and text</strong>:<ol>
+          <li class="numberedList" value="1">The trajectory line is drawn in blue.</li>
+          <li class="numberedList">Quiver arrows (<code class="inlineCode">plt.quiver</code>) show the direction from each point to the next.</li>
+          <li class="numberedList">Missing data points are highlighted with an <code class="inlineCode">'X'</code> marker in magenta.</li>
+        </ol>
+      </li>
+      <li class="bulletList"><strong class="keyWord">Titles and axes</strong>: Labeling and legend for clarity</li>
+      <li class="bulletList"><strong class="keyWord">Save and close</strong>: Saves the figure as <code class="inlineCode">mobility.png</code></li>
+    </ul>
+    <p class="normal">Such plotting mirrors the style in the paper’s <em class="italic">Case Study</em> section (<em class="italic">Section 4.4</em>), where the authors compare real versus predicted trajectories. Here, you’re simply illustrating the synthetic path as well as the visual indications of missing data.</p>
+    <h3 class="heading-3" id="_idParaDest-230"><a id="_idTextAnchor239"/>Output of the simulation function</h3>
+    <p class="normal">The output of the function that we<a id="_idIndexMarker558"/> will process contains the grid and the trajectory:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-keyword">return</span> grid, trajectory
+</code></pre>
+    <p class="normal">These two variables will contain what our generative AI model needs to make a prediction:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">grid</code>: A two-dimensional array marking the visited path</li>
+      <li class="bulletList"><code class="inlineCode">trajectory</code>: A list of <em class="italic">(day, timeslot, x, y)</em> tuples, with some replaced with <code class="inlineCode">999, 999</code></li>
+    </ul>
+    <p class="normal">This final result will be fed into an LLM-based approach (such as the one described in the paper) with an OpenAI generative AI model that can produce an acceptable output in a zero-shot process. We will now begin to process the trajectory simulation.</p>
+    <h2 class="heading-2" id="_idParaDest-231"><a id="_idTextAnchor240"/>Creating the mobility orchestrator</h2>
+    <p class="normal">The trajectory simulation has <a id="_idIndexMarker559"/>generated the grid, the trajectory, and the missing coordinates in the trajectory. We will now develop the orchestrator function that integrates both the trajectory simulation and the predictive capabilities of the OpenAI model. We’ll call this orchestrator <code class="inlineCode">handle_mobility_orchestrator()</code>.</p>
+    <p class="normal">This orchestrator aligns with the method outlined by Tang et al. (2024) in their paper <em class="italic">Instruction-Tuning Llama-3-8B Excels in City-Scale Mobility Prediction</em>. Its purpose is straightforward yet powerful, performing three critical functions:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Generating synthetic mobility data</strong>: It invokes the <code class="inlineCode">create_grid_with_trajectory ()</code> function to simulate a trajectory with possible missing points</li>
+      <li class="bulletList"><strong class="keyWord">Preparing data for an LLM call</strong>: It formats the new trajectory data into a JSON string, appends it to the user’s message, and then calls the reasoning function—presumably the LLM-based solution or orchestration logic (<code class="inlineCode">reason.mobility_agent_reasoning_thread()</code>)</li>
+      <li class="bulletList"><strong class="keyWord">Returning a structured response</strong>: It returns the final results clearly (<code class="inlineCode">reasoning_steps</code>), to include both the newly generated trajectory data and the LLM reasoning steps</li>
+    </ul>
+    <p class="normal">This approach remains true to the <em class="italic">Instruction-Tuning Llama-3-8B Excels in City-Scale Mobility Prediction</em> paper, where the authors emphasize creating structured input data—such as trajectories with missing points—and then passing it to an LLM for completion or prediction.</p>
+    <p class="normal">Let’s now go through the orchestrator step by step:</p>
+    <ol>
+      <li class="numberedList" value="1">First, the orchestrator function is initialized with the necessary parameters:
+        <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">handle_mobility_orchestrator</span>(
+<span class="hljs-params">    muser_message1, msystem_message_s1, mgeneration, </span>
+<span class="hljs-params">    mimcontent4, mimcontent4b</span>
+):
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">Immediately, it invokes the trajectory simulation function we built previously:</p>
+    <pre class="programlisting code"><code class="hljs-code">grid, trajectory = create_grid_with_trajectory(
+    grid_size=<span class="hljs-number">200</span>, num_points=<span class="hljs-number">50</span>, missing_count=<span class="hljs-number">5</span>
+)
+</code></pre>
+    <ol>
+      <li class="numberedList" value="2">We now convert and process the trajectory in JSON:
+        <pre class="programlisting code"><code class="hljs-code">trajectory_json = json.dumps({<span class="hljs-string">"trajectory"</span>: trajectory}, indent=<span class="hljs-number">2</span>)
+    <span class="hljs-comment">#print("Trajectory Data (JSON):\n", trajectory_json)</span>
+    muser_message = <span class="hljs-string">f"</span><span class="hljs-subst">{muser_message1}</span><span class="hljs-string">\n\nHere is the trajectory data:\n</span><span class="hljs-subst">{trajectory_json}</span><span class="hljs-string">"</span>
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">This code takes care of converting the trajectory and augmenting the user message:</p>
+    <ul>
+      <li class="bulletList">Converting the trajectory to JSON:<ol>
+          <li class="numberedList" value="1"><code class="inlineCode">trajectory_json</code> becomes a serialized version of the data so it can be embedded in text messages or API calls.</li>
+          <li class="numberedList">Under the hood, it’s just <code class="inlineCode">{"trajectory": [...list of (day, timeslot, x, y)...]}</code>.</li>
+        </ol>
+      </li>
+      <li class="bulletList">Augmenting the user message:<ol>
+          <li class="numberedList" value="1">The function takes the original user message, <code class="inlineCode">(muser_message1)</code>, and appends the newly generated trajectory data to it.</li>
+          <li class="numberedList">This ensures the model (or reasoning thread) sees the complete context—<em class="italic">both the user’s original query and the synthetic data</em>—when generating predictions or completions.</li>
+        </ol>
+      </li>
+    </ul>
+    <p class="normal">This step closely<a id="_idIndexMarker560"/> mirrors the Q&amp;A-style interaction presented by Tang et al. (2024), where the trajectory data—marked clearly by placeholders (<code class="inlineCode">999, 999</code>)—is delivered directly to the model.</p>
+    <ol>
+      <li class="numberedList" value="3">With the context clearly defined, the orchestrator calls the mobility reasoning function (which we’ll build next):
+        <pre class="programlisting code"><code class="hljs-code">    reasoning_steps = reason.mobility_agent_reasoning_thread(
+        muser_message, msystem_message_s1, mgeneration, 
+        mimcontent4, mimcontent4b
+    )
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">Here’s what happens behind the scenes:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">reason.mobility_agent_reasoning_thread(...)</code> processes the mobility prediction logic through the selected LLM (such as GPT-4o)</li>
+      <li class="bulletList">The provided arguments (<code class="inlineCode">msystem_message_s1</code>, <code class="inlineCode">mgeneration</code>, <code class="inlineCode">mimcontent4</code>, and <code class="inlineCode">mimcontent4b</code>) represent clear instructions and specific context for the generative AI model, guiding its reasoning and predictions</li>
+    </ul>
+    <p class="normal">This mirrors the approach described in Tang et al.’s paper, where the model receives structured input data and is prompted to infer missing trajectories or forecast next movements.</p>
+    <ol>
+      <li class="numberedList" value="4">Finally, the trajectory is added to the reasoning steps to provide a complete response:
+        <pre class="programlisting code"><code class="hljs-code">    reasoning_steps.insert(
+        <span class="hljs-number">0</span>, (<span class="hljs-string">"Generated Trajectory Data:"</span>, trajectory)
+    )
+    <span class="hljs-keyword">return</span> reasoning_steps
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">Next, let’s develop the AI reasoning function that the handler registry will call upon.</p>
+    <h2 class="heading-2" id="_idParaDest-232"><a id="_idTextAnchor241"/>Preparing prediction instructions and the OpenAI function</h2>
+    <p class="normal">In this section, we’ll<a id="_idIndexMarker561"/> develop the function that allows our GenAISys to process mobility-related user messages. Specifically, we’ll implement a function named <code class="inlineCode">handle_mobility(user_message)</code> that integrates seamlessly into the AI functions of our<a id="_idIndexMarker562"/> GenAISys.</p>
+    <p class="normal">We’ll approach this task in two main parts:</p>
+    <ol>
+      <li class="numberedList" value="1"><strong class="keyWord">Message preparation:</strong> Clearly structuring the messages that guide the generative AI model</li>
+      <li class="numberedList"><strong class="keyWord">Implementing these messages in the OpenAI API call:</strong> Leveraging the structured messages in the AI reasoning thread</li>
+    </ol>
+    <p class="normal">This aligns closely with the trajectory completion methodology described in <em class="italic">Instruction-Tuning Llama-3-8B Excels in City-Scale Mobility Prediction</em>, where structured prompts significantly enhance predictive accuracy.</p>
+    <h3 class="heading-3" id="_idParaDest-233"><a id="_idTextAnchor242"/>Message preparation</h3>
+    <p class="normal">We have four main message variables to<a id="_idIndexMarker563"/> send to the OpenAI function:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">msystem_message_s1</code>: System message</li>
+      <li class="bulletList"><code class="inlineCode">mgeneration</code>: Generation message</li>
+      <li class="bulletList"><code class="inlineCode">mimcontent4</code>: Additional context</li>
+      <li class="bulletList"><code class="inlineCode">muser_message1</code>: User message</li>
+    </ul>
+    <p class="normal">They each serve a distinct purpose in the final prompt that goes to the LLM (GPT-4o or similar) for the prediction task. The system message will set the stage for the task.</p>
+    <h4 class="heading-4">System message</h4>
+    <p class="normal">The system message <a id="_idIndexMarker564"/>sets the overall context and constraints for the LLM, ensuring the model clearly understands its main objectives. The system message is stored in <code class="inlineCode">msystem_message_s1</code>. We first specify the role of the model:</p>
+    <pre class="programlisting con"><code class="hljs-con">msystem_message_s1 = """
+You are GPT-4o, an expert in grid-based mobility analysis. Your task is to analyze the provided trajectory dataset and **identify missing coordinates** flagged as `999,999`, then predict their correct values.
+</code></pre>
+    <p class="normal">Now, we clearly detail the tasks expected in explicit natural language:</p>
+    <pre class="programlisting con"><code class="hljs-con">**Task:**
+1. **Process only the dataset provided in the user input. Do not generate or use your own sample data.**
+2. Identify **every single** instance where `x` or `y` is `999`, including consecutive and scattered occurrences.
+3. Predict the missing coordinate values based on the trajectory pattern.
+4. **Do not modify, reorder, or filter the data in any way**—your response must reflect the dataset exactly as given except for replacing missing values.
+5. Before responding, **validate your output** against the original dataset to confirm completeness and accuracy.
+6. Maintain the exact order of missing values as they appear in the dataset.
+7. Include a debugging step: **first print the list of detected missing values before structuring the final JSON output**.
+</code></pre>
+    <p class="normal">The output format is specified:</p>
+    <pre class="programlisting con"><code class="hljs-con">**Output Format:**
+```json
+{"predicted_coordinates": [[day, timeslot, x, y], ...]}
+```
+</code></pre>
+    <p class="normal">These instructions mirror<a id="_idIndexMarker565"/> the approach of the<em class="italic"> </em>paper we are implementing—the system message clarifies the <em class="italic">role</em> of the model and the <em class="italic">task instructions</em>, effectively reducing confusion or <em class="italic">hallucination</em>. The paper shows how a well-structured instruction block significantly boosts accuracy. Now, we can build the generation message.</p>
+    <h4 class="heading-4">Generation message</h4>
+    <p class="normal">This secondary prompt provides<a id="_idIndexMarker566"/> generation instructions that will reinforce how the model should handle the data:</p>
+    <pre class="programlisting con"><code class="hljs-con">mgeneration = """
+Scan the user-provided trajectory data and extract **every** point where either `x` or `y` equals `999`.
+You must process only the given dataset and not generate new data.
+Ensure that all missing values are explicitly listed in the output without skipping consecutive values, isolated values, or any part of the dataset. **Before responding, verify that all occurrences match the input data exactly.**
+Then, predict the missing values based on detected trajectory movement patterns. **Provide a corrected trajectory with inferred missing values.**
+To assist debugging, **first print the detected missing values list as a pre-response validation step**, then return the structured JSON output.
+"""
+</code></pre>
+    <p class="normal">This prompt focuses on scanning for missing values, ensuring none are skipped. Then, it addresses the next step: provide <a id="_idIndexMarker567"/>the corrected trajectory with inferred missing values.</p>
+    <h4 class="heading-4">Additional context</h4>
+    <p class="normal">To make sure we obtain what <a id="_idIndexMarker568"/>we wish, we will now add additional context. The role of this additional context is to supplement the system/generation messages with domain-specific context:</p>
+    <pre class="programlisting con"><code class="hljs-con">mimcontent4 = """
+This dataset contains spatial-temporal trajectories where some coordinate values are missing and represented as `999,999`. Your goal is to **identify these missing coordinates from the user-provided dataset only**, then predict their correct values based on movement patterns. Ensure that consecutive, isolated, and scattered missing values are not omitted. **Before generating the final response, validate your results and confirm that every missing value is properly predicted.**
+"""
+</code></pre>
+    <p class="normal">This additional context further guides the generative AI model toward precise predictions. We will now engineer a user message to further instruct the model.</p>
+    <h4 class="heading-4">User message</h4>
+    <p class="normal">It’s time to emphasize the instructions further to make sure we provide even more context to the input. The user message <a id="_idIndexMarker569"/>expresses the user’s <em class="italic">explicit</em> request. It references the actual dataset with missing points. Realistically, in your code, you’ll append or embed the actual trajectory data (with <code class="inlineCode">999, 999</code> placeholders) <em class="italic">before</em> passing it to the generative AI model:</p>
+    <pre class="programlisting con"><code class="hljs-con">muser_message1 = """
+Here is a dataset of trajectory points. Some entries have missing coordinates represented by `999,999`.
+You must process only this dataset and **strictly avoid generating your own sample data**.
+Please identify **all occurrences** of missing coordinates and return their positions in JSON format, ensuring that no values are skipped, omitted, or restructured. Then, **predict and replace** the missing values using trajectory movement patterns.
+Before returning the response, **first output the raw missing coordinates detected** as a validation step, then structure them into the final JSON output with predicted values.
+"""
+</code></pre>
+    <p class="normal">Let’s fit the message together.</p>
+    <h3 class="heading-3" id="_idParaDest-234"><a id="_idTextAnchor243"/>Fitting the messages together</h3>
+    <p class="normal">The four messages converge to<a id="_idIndexMarker570"/> direct the generative AI model:</p>
+    <ul>
+      <li class="bulletList">The system message (<code class="inlineCode">msystem_message_s1</code>) sets the stage and enforces top-level policies</li>
+      <li class="bulletList">The generation message (<code class="inlineCode">mgeneration</code>) clarifies the approach for scanning, verifying, and predicting</li>
+      <li class="bulletList">The additional content (<code class="inlineCode">mimcontent4</code>) ensures domain clarity</li>
+      <li class="bulletList">Finally, the user’s message (<code class="inlineCode">muser_message1</code>) includes the data that needs to be processed (the partial or missing trajectory)</li>
+    </ul>
+    <p class="normal">Together, they form the structure of a zero-shot advanced generative model’s prediction.</p>
+    <p class="normal">Now, let’s fit the message into the OpenAI API function. These messages are stored in <code class="inlineCode">commons/cot_messages_c6.py</code> to be imported by the OpenAI API function.</p>
+    <h2 class="heading-2" id="_idParaDest-235"><a id="_idTextAnchor244"/>Implementing the messages into the OpenAI API function</h2>
+    <p class="normal">We will now create an AI <a id="_idIndexMarker571"/>mobility function for the <em class="italic">AI function</em> section in our GenAISys when we integrate it:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">handle_mobility</span>(<span class="hljs-params">user_message</span>):
+</code></pre>
+    <p class="normal">We will now import the messages we stored in <code class="inlineCode">cot_messages_c6.py</code>:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-keyword">from</span> cot_messages_c6 <span class="hljs-keyword">import</span> (
+        msystem_message_s1, mgeneration, mimcontent4,muser_message1
+    )
+</code></pre>
+    <p class="normal">We’ll now complete the function so that we can call it further in this program by plugging the messages in the generative AI call and return the reasoning steps:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-comment">#call Generic Synthetic Trajectory Simulation and Predictive System</span>
+    reasoning_steps = handle_mobility_orchestrator(
+        muser_message1, msystem_message_s1, mgeneration, 
+        mimcontent4, mimcontent4b
+    )
+    <span class="hljs-keyword">return</span> reasoning_steps
+    mimcontent4b=mimcontent4
+</code></pre>
+    <p class="normal">We can now call the mobility orchestrator and return its reasoning steps:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-comment">#call Generic Synthetic Trajectory Simulation and Predictive System</span>
+    reasoning_steps = handle_mobility_orchestrator(
+        muser_message1, msystem_message_s1, mgeneration, 
+        mimcontent4, mimcontent4b)
+    <span class="hljs-keyword">return</span> reasoning_steps
+</code></pre>
+    <p class="normal">We then create the <code class="inlineCode">handle_mobility_orchestrator</code> function in the <code class="inlineCode">reason.py</code> library we have been implementing in the previous chapters of this book. We first create the function:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Implemented in Chapter08</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">mobility_agent_reasoning_thread</span>(
+<span class="hljs-params">    input1,msystem_message_s1,mumessage4,mimcontent4,mimcontent4b</span>
+):
+</code></pre>
+    <p class="normal">Then, we initialize the reasoning steps to display them in <code class="inlineCode">VBox</code>:</p>
+    <pre class="programlisting code"><code class="hljs-code">    steps = []
+   
+    <span class="hljs-comment"># Display the VBox in the interface</span>
+    display(reasoning_output)
+    <span class="hljs-comment">#Step 1: Mobility agent</span>
+    steps.append(<span class="hljs-string">"Process: the mobility agent is thinking\n"</span>)
+    <span class="hljs-keyword">with</span> reasoning_output:
+        reasoning_output.clear_output(wait=<span class="hljs-literal">True</span>)
+        <span class="hljs-built_in">print</span>(steps[-<span class="hljs-number">1</span>])  <span class="hljs-comment"># Print the current step</span>
+</code></pre>
+    <p class="normal">We then plug the messages <a id="_idIndexMarker572"/>received into the standard <code class="inlineCode">make_openai_call</code> that we have been using in the previous chapters and return the steps:</p>
+    <pre class="programlisting code"><code class="hljs-code">    mugeneration=msystem_message_s1 + input1
+    mrole4 = <span class="hljs-string">"system"</span>
+    mcontent4 = mimcontent4
+    user_role = <span class="hljs-string">"user"</span>
+    create_response = make_openai_api_call(
+        mugeneration,mrole4,mcontent4,user_role
+    )
+    steps.append(<span class="hljs-string">f"Customer message: </span><span class="hljs-subst">{create_response}</span><span class="hljs-string">"</span>)
+    <span class="hljs-keyword">return</span> steps
+</code></pre>
+    <p class="normal">We are now ready to run the trajectory simulation and prediction.</p>
+    <h2 class="heading-2" id="_idParaDest-236"><a id="_idTextAnchor245"/>Trajectory simulation, analysis, and prediction</h2>
+    <p class="normal">With our mobility functions<a id="_idIndexMarker573"/> built and clearly defined, we can now run the complete trajectory pipeline—generating synthetic trajectory data, identifying missing coordinates, and predicting them with a zero-shot LLM. This section will demonstrate the end-to-end execution and interpretation of results.</p>
+    <p class="normal">We’ll use a simple, generic prompt to initiate the mobility analysis:</p>
+    <pre class="programlisting code"><code class="hljs-code">user_message=<span class="hljs-string">"</span><span class="hljs-string">Check the delivery path"</span>
+output=handle_mobility(user_message)
+</code></pre>
+    <p class="normal">This triggers the entire pipeline we set up previously, from synthetic data generation to coordinate predictions.</p>
+    <p class="normal">To clearly illustrate the trajectory and missing points, the system generates a visual plot (<code class="inlineCode">mobility.png</code>). We can display this image directly:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Display mobility.png if it exists and the "Mobility" instruction is selected</span>
+<span class="hljs-keyword">if</span> os.path.exists(<span class="hljs-string">"mobility.png"</span>):
+    original_image = PILImage.<span class="hljs-built_in">open</span>(<span class="hljs-string">"mobility.png"</span>)
+    display(original_image)
+</code></pre>
+    <p class="normal">The output contains the <a id="_idIndexMarker574"/>grid, the trajectory, and the missing data, as shown in <em class="italic">Figure 8.3</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 8.3: Trajectory and missing data" src="../Images/B32304_08_3.png"/></figure>
+    <p class="packt_figref">Figure 8.3: Trajectory and missing data</p>
+    <p class="normal">The output is plotted with colors, arrows, and text as designs:</p>
+    <ul>
+      <li class="bulletList">Green is the starting point</li>
+      <li class="bulletList">The trajectory line is drawn in blue</li>
+      <li class="bulletList">Quiver arrows (<code class="inlineCode">plt.quiver</code>) in red show the direction from each point to the next</li>
+      <li class="bulletList">Missing data points are highlighted with an <strong class="screenText">x</strong> marker in magenta</li>
+    </ul>
+    <p class="normal">Then, we print the raw <a id="_idIndexMarker575"/>output:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-built_in">print</span>(output)
+</code></pre>
+    <p class="normal">The output displayed is a single, unstructured line containing trajectory data and predictions:</p>
+    <pre class="programlisting con"><code class="hljs-con">[('Generated Trajectory Data:', [(50, 28, 999, 999), (50, ….
+</code></pre>
+    <p class="normal">Clearly, we need to present this data more intuitively. Let’s create a function to display a nice, formatted response:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">transform_openai_output</span>(<span class="hljs-params">output</span>):
+    <span class="hljs-string">"""</span>
+<span class="hljs-string">    Takes the 'output' (a list/tuple returned by OpenAI) and transforms</span>
+<span class="hljs-string">    it into a nicely formatted multiline string.</span>
+<span class="hljs-string">    """</span>
+</code></pre>
+    <p class="normal">The code breaks the output into well-presented lines:</p>
+    <pre class="programlisting code"><code class="hljs-code">    …
+    lines = []
+    …
+    <span class="hljs-comment"># Join all lines into one neatly formatted string</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"\n"</span>.join(lines)
+</code></pre>
+    <p class="normal">We then call the function to obtain the formatted output:</p>
+    <pre class="programlisting code"><code class="hljs-code">pretty_response = transform_openai_output(output)
+<span class="hljs-built_in">print</span>(pretty_response)
+</code></pre>
+    <p class="normal">The output contains the three-step process we built:</p>
+    <ol>
+      <li class="numberedList" value="1">Display the trajectory.</li>
+      <li class="numberedList">Isolate the missing data.</li>
+      <li class="numberedList">Make predictions for the missing data.</li>
+    </ol>
+    <p class="normal">The output first contains the trajectory:</p>
+    <pre class="programlisting con"><code class="hljs-con">Generated Trajectory Data:
+  (228, 6, 999, 999)
+  (228, 7, 69, 79)
+  (228, 9, 70, 79)
+  (228, 11, 71, 79)
+  (228, 13, 71, 78)
+  (228, 16, 71, 77)
+  (228, 18, 71, 76)
+  (228, 21, 71, 75)
+  (228, 24, 71, 74)
+  (228, 26, 70, 74)
+  (228, 27, 70, 73)
+  (228, 29, 70, 72)
+  (228, 32, 999, 999)
+  …
+</code></pre>
+    <p class="normal">Note the records with missing data containing <code class="inlineCode">999</code> for <em class="italic">x,y</em> coordinates. Take the following example:</p>
+    <pre class="programlisting con"><code class="hljs-con">(228, 6, 999, 999)
+</code></pre>
+    <p class="normal">The second step is the <a id="_idIndexMarker576"/>OpenAI GPT-4o thinking through the problem to isolate the missing data and display it:</p>
+    <pre class="programlisting con"><code class="hljs-con">Process: the mobility agent is thinking
+Customer message: **Detected Missing Coordinates:**
+1. [228, 6, 999, 999]
+2. [228, 32, 999, 999]
+3. [228, 9, 999, 999]
+4. [228, 45, 999, 999]
+5. [228, 47, 999, 999]
+</code></pre>
+    <p class="normal">The third step is for the OpenAI generative AI to predict the missing data:</p>
+    <pre class="programlisting con"><code class="hljs-con">**Predicted Missing Coordinates:**
+</code></pre>
+    <p class="normal">The output is displayed and the predictions with explanations:</p>
+    <pre class="programlisting con"><code class="hljs-con">1. [228, 6, 69, 79] - Based on the trajectory pattern, the missing values at timeslot 6 are likely to be the same as the next known values at timeslot 7.
+2. [228, 32, 69, 72] - Interpolating between timeslot 29 (70, 72) and timeslot 33 (68, 72), the missing values at timeslot 32 are predicted to be (69, 72).
+3. [228, 9, 64, 72] - The missing values at timeslot 9 are interpolated between timeslot 7 (64, 71) and timeslot 10 (64, 73), resulting in (64, 72).
+4. [228, 45, 58, 81] - Interpolating between timeslot 43 (58, 82) and timeslot 46 (58, 80), the missing values at timeslot 45 are predicted to be (58, 81).
+5. [228, 47, 58, 79] - The missing values at timeslot 47 are interpolated between timeslot 46 (58, 80) and timeslot 1 (58, 78), resulting in (58, 79).
+</code></pre>
+    <p class="normal">The output also contains the predictions in JSON:</p>
+    <pre class="programlisting con"><code class="hljs-con">```json
+{
+  "predicted_coordinates": [
+    [228, 6, 69, 79],
+    [228, 32, 69, 72],
+    [228, 9, 64, 72],
+    [228, 45, 58, 81],
+    [228, 47, 58, 79]
+  ]
+}
+```
+</code></pre>
+    <p class="normal">The results are acceptable and show that recent generative AI models have zero-shot capabilities to make predictions on missing data in sequences.</p>
+    <p class="normal">However, the real power lies in extending these predictions to a wide range of real-world applications. The next<a id="_idIndexMarker577"/> logical step is to integrate this functionality into our GenAISys interface, allowing users to customize prompts easily to suit diverse trajectory-related use cases.</p>
+    <p class="normal">Let’s move forward to implement this user-friendly integration.</p>
+    <h1 class="heading-1" id="_idParaDest-237"><a id="_idTextAnchor246"/>Adding mobility intelligence to the GenAISys</h1>
+    <p class="normal">We will now integrate the trajectory simulation and prediction component into our GenAISys, allowing users to design domain-specific prompts. At the user interface level, we’ll simplify the terminology from “trajectory <a id="_idIndexMarker578"/>simulation and prediction” to the user-friendly term “<strong class="keyWord">mobility</strong>.” This shorter label is more intuitive<a id="_idIndexMarker579"/> for users, though technical documentation can maintain detailed terminology as required. Then it will be up to the users to decide what domain-specific terminology they wish to see in the interface.</p>
+    <p class="normal">We will add the mobility function we built in <code class="inlineCode">1_Trajectory_simulation_and_prediction.ipynb</code> to the GenAISys at three levels, as shown in <em class="italic">Figure 8.4</em>:</p>
+    <ol>
+      <li class="numberedList" value="1"><strong class="keyWord">IPython interface</strong>: Adding the mobility feature to the user interface</li>
+      <li class="numberedList"><strong class="keyWord">Handler selection mechanism</strong>: Adding the mobility handler to the handler registry</li>
+      <li class="numberedList"><strong class="keyWord">AI functions</strong>: Implementing the mobility feature in the AI functions library</li>
+    </ol>
+    <figure class="mediaobject"><img alt="Figure 8.4: Integrating the trajectory simulation and prediction pipeline into the GenAISys" src="../Images/B32304_08_4.png"/></figure>
+    <p class="packt_figref">Figure 8.4: Integrating the trajectory simulation and prediction pipeline into the GenAISys</p>
+    <div class="note">
+      <p class="normal"> Open the <code class="inlineCode">2_GenAISys_Mobility.ipynb</code> notebook. If needed, review the handler selection mechanism described in <a href="Chapter_7.xhtml#_idTextAnchor191"><em class="italic">Chapter 7</em></a> before continuing here. The notebook is not designed for voice outputs of lists of coordinates. As such, gTTS is best deactivated by default with <code class="inlineCode">use_gtts = False</code> at the top of the notebook.</p>
+    </div>
+    <p class="normal">Let’s first enhance the IPython<a id="_idIndexMarker580"/> interface.</p>
+    <h2 class="heading-2" id="_idParaDest-238"><a id="_idTextAnchor247"/>IPython interface</h2>
+    <p class="normal">The mobility option is primarily added<a id="_idIndexMarker581"/> to these parts of the IPython interface:</p>
+    <ul>
+      <li class="bulletList">To the <code class="inlineCode">instruct_selector</code> dropdown with <strong class="screenText">Mobility</strong> as one of its possible values</li>
+      <li class="bulletList">To the display logic inside <code class="inlineCode">update_display()</code>, which checks whether the user selected <strong class="screenText">Mobility</strong> and, if so, displays the <code class="inlineCode">mobility.png</code> file</li>
+      <li class="bulletList">To the handling logic in <code class="inlineCode">handle_submission()</code>, where the code prints <code class="inlineCode">"Thinking..."</code> if <code class="inlineCode">instruct_selector.value</code> is <code class="inlineCode">"Analysis"</code>, <code class="inlineCode">"Generation"</code>, or <code class="inlineCode">"Mobility"</code></li>
+      <li class="bulletList">The mobility image (i.e., <code class="inlineCode">mobility.png</code>) is only displayed when the <strong class="screenText">Files</strong> widget is checked</li>
+    </ul>
+    <p class="normal">We will begin by adding the option to the interface. We will create and add an option to <code class="inlineCode">instruct_selector</code> and then handle the trajectory image display and submission code. Let’s begin with the option in the interface.</p>
+    <h3 class="heading-3" id="_idParaDest-239"><a id="_idTextAnchor248"/>Creating the option in instruct_selector</h3>
+    <p class="normal">We will first add the <strong class="screenText">Mobility</strong> option<a id="_idIndexMarker582"/> to the <strong class="screenText">Reasoning</strong> drop-down list, as illustrated in <em class="italic">Figure 8.5</em>:</p>
+    <pre class="programlisting code"><code class="hljs-code">instruct_selector = Dropdown(
+    options=[<span class="hljs-string">"None"</span>, <span class="hljs-string">"Analysis"</span>, <span class="hljs-string">"Generation"</span>,<span class="hljs-string">"Mobility"</span>],
+    value=<span class="hljs-string">"None"</span>,
+    description=<span class="hljs-string">'Reasoning:'</span>,
+    layout=Layout(width=<span class="hljs-string">'50%'</span>)
+)
+instruct_selector.observe(on_instruct_change, names=<span class="hljs-string">'value'</span>)
+</code></pre>
+    <p class="packt_figref"><img alt="A screenshot of a computer  AI-generated content may be incorrect." src="../Images/B32304_08_5.png"/></p>
+    <p class="packt_figref">Figure 8.5: Adding Mobility to the dropdown</p>
+    <p class="normal">We can then <a id="_idIndexMarker583"/>select <strong class="screenText">Mobility</strong>, as shown in <em class="italic">Figure 8.6</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 8.6: Selecting Mobility to activate the pipeline" src="../Images/B32304_08_6.png"/></figure>
+    <p class="packt_figref">Figure 8.6: Selecting Mobility to activate the pipeline</p>
+    <p class="normal"><strong class="screenText">Mobility</strong> is now selected. Notice the default model is set to <strong class="screenText">OpenAI</strong>; however, you may extend this to other models, such as DeepSeek, during later phases, depending on your project needs.</p>
+    <p class="normal">Let’s now handle the “mobility” value when we update the display.</p>
+    <h3 class="heading-3" id="_idParaDest-240"><a id="_idTextAnchor249"/>Handling the “mobility” value in update_display()</h3>
+    <p class="normal">We must ensure the generated <a id="_idIndexMarker584"/>trajectory visualization (<code class="inlineCode">mobility.png</code>) is automatically shown when the <strong class="screenText">Mobility</strong> option is selected and the <strong class="screenText">Files</strong> checkbox is enabled:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">update_display</span>():
+    clear_output(wait=<span class="hljs-literal">True</span>)
+    ...
+    <span class="hljs-comment"># Display c_image.png if it exists</span>
+    <span class="hljs-keyword">if</span> files_checkbox.value == <span class="hljs-literal">True</span>:
+    …
+        <span class="hljs-comment"># Display mobility.png if "Mobility" is selected</span>
+        <span class="hljs-keyword">if</span> (
+            os.path.exists(<span class="hljs-string">"mobility.png"</span>)
+            <span class="hljs-keyword">and</span> instruct_selector.value == <span class="hljs-string">"Mobility"</span>
+        ):
+            original_image = PILImage.<span class="hljs-built_in">open</span>(<span class="hljs-string">"mobility.png"</span>)
+            display(original_image)
+</code></pre>
+    <p class="normal">The image created by the trajectory<a id="_idIndexMarker585"/> simulation will be displayed. We now need to enhance the submission logic outputs to run the AI functions.</p>
+    <h3 class="heading-3" id="_idParaDest-241"><a id="_idTextAnchor250"/>handle_submission() logic</h3>
+    <p class="normal">The <code class="inlineCode">chat_with_gpt</code> function<a id="_idIndexMarker586"/> is called as before but it interacts directly with the handler selection mechanism (described in the next section<em class="italic">)</em>:</p>
+    <pre class="programlisting code"><code class="hljs-code">The response = chat_with_gpt(
+    user_histories[active_user], user_message, pfiles, 
+    active_instruct, models=selected_model
+)
+</code></pre>
+    <p class="normal">However, we will add the mobility functionality to the submission handling function:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">handle_submission</span>():
+    user_message = input_box.value.strip()
+…
+        <span class="hljs-keyword">if</span> instruct_selector.value <span class="hljs-keyword">in</span> [
+            <span class="hljs-string">"Analysis"</span>, <span class="hljs-string">"Generation"</span>,<span class="hljs-string">"Mobility"</span>
+        ]:
+            <span class="hljs-keyword">with</span> reasoning_output:
+                reasoning_output.clear_output(wait=<span class="hljs-literal">True</span>)
+                …
+</code></pre>
+    <p class="normal">We will now add the mobility function to the handler selection mechanism.</p>
+    <h2 class="heading-2" id="_idParaDest-242"><a id="_idTextAnchor251"/>Handler selection mechanism</h2>
+    <p class="normal">The handler selection mechanism <a id="_idIndexMarker587"/>contains two main parts. The first component, <code class="inlineCode">chat_with_gpt</code>, remains unchanged from previous chapters and is directly called by the IPython interface:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">chat_with_gpt</span>(
+<span class="hljs-params">    messages, user_message, files_status, active_instruct, models</span>
+):
+</code></pre>
+    <p class="normal">The second component is the handler registry, to which we’ll now add the newly developed mobility handler:</p>
+    <pre class="programlisting code"><code class="hljs-code">handlers = [
+…
+<span class="hljs-comment"># Mobility handler: determined by the instruct flag</span>
+    (
+        <span class="hljs-keyword">lambda</span> msg, instruct, mem, models, user_message, **kwargs: 
+            instruct == <span class="hljs-string">"Mobility"</span>,
+        <span class="hljs-keyword">lambda</span> msg, instruct, mem, models, user_message, **kwargs: 
+            handle_mobility(user_message, models=models)
+    ),
+…
+</code></pre>
+    <p class="normal">This ensures that when users select <strong class="screenText">Mobility</strong> from the <strong class="screenText">Reasoning</strong> dropdown in the interface, the appropriate handler is activated automatically. We can see that the handler selection mechanism can be seamlessly <a id="_idIndexMarker588"/>scaled. Let’s now add the functions we developed for this mobility function to the AI functions library.</p>
+    <h2 class="heading-2" id="_idParaDest-243"><a id="_idTextAnchor252"/>AI functions</h2>
+    <p class="normal">Next, we’ll integrate the trajectory<a id="_idIndexMarker589"/> simulation and prediction functions—previously developed in the <em class="italic">Building the trajectory simulation and prediction</em> section—into the AI functions library within the notebook:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">create_grid_with_trajectory</span>(
+<span class="hljs-params">    grid_size=</span><span class="hljs-number">200</span><span class="hljs-params">, num_points=</span><span class="hljs-number">50</span><span class="hljs-params">, missing_count=</span><span class="hljs-number">5</span>
+):
+… 
+</code></pre>
+    <p class="normal">This function is added just above the beginning of the functions called by the handler selection mechanism.</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">handle_mobility_orchestrator</span>(
+<span class="hljs-params">    muser_message1, msystem_message_s1, mgeneration, </span>
+<span class="hljs-params">    mimcontent4, mimcontent4b</span>
+):
+…
+</code></pre>
+    <p class="normal">This function is also added just above the beginning of the functions called by the handler selection mechanism.</p>
+    <p class="normal">We now add the <code class="inlineCode">handle_mobility</code> function we developed as well, and add <code class="inlineCode">**kwargs</code> to process the arguments sent by the handler mechanism selection function:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">handle_mobility</span>(<span class="hljs-params">user_message, **kwargs</span>):
+    <span class="hljs-keyword">from</span> cot_messages_c6 <span class="hljs-keyword">import</span> (
+        msystem_message_s1, mgeneration, mimcontent4,muser_message1
+    )
+    mimcontent4b=mimcontent4
+    <span class="hljs-comment">#call Generic Synthetic Trajectory Simulation and Predictive System</span>
+    reasoning_steps = handle_mobility_orchestrator(
+        muser_message1, msystem_message_s1, mgeneration, 
+        mimcontent4, mimcontent4b
+    )
+    <span class="hljs-keyword">return</span> reasoning_steps
+</code></pre>
+    <p class="normal">The code will run exactly like in the <em class="italic">Building the trajectory simulation and prediction function </em>section. With this setup, the<a id="_idIndexMarker590"/> mobility functionality is fully integrated into the GenAISys ecosystem, ready to be triggered via the intuitive IPython interface. Let’s now get the user involved.</p>
+    <h1 class="heading-1" id="_idParaDest-244"><a id="_idTextAnchor253"/>Running the mobility-enhanced GenAISys</h1>
+    <p class="normal">In this section, we will demonstrate the mobility-enhanced GenAISys by running two distinct scenarios—a delivery use <a id="_idIndexMarker591"/>case and a fire disaster scenario—to illustrate the versatility of trajectory simulations and predictions, inspired by the work of Tang et al. (2024).</p>
+    <p class="normal">Open the <code class="inlineCode">2_GenAISys_Mobility.ipynb</code> notebook. First, deactivate DeepSeek in the initial setup cell (you will only need a CPU):</p>
+    <pre class="programlisting code"><code class="hljs-code">deepseek=<span class="hljs-literal">False</span>
+HF=<span class="hljs-literal">False</span>
+Togetheragents=<span class="hljs-literal">False</span>
+</code></pre>
+    <p class="normal">Then run the whole notebook. When it’s finished, go to the <em class="italic">Running the interface</em> section in the notebook. We need to activate <strong class="screenText">Agent</strong>, <strong class="screenText">Files</strong>, and <strong class="screenText">Mobility</strong>, and leave the default model as <strong class="screenText">OpenAI</strong>.</p>
+    <figure class="mediaobject"><img alt="Figure 8.7: Running a delivery check with the mobility function" src="../Images/B32304_08_7.png"/></figure>
+    <p class="packt_figref">Figure 8.7: Running a delivery check with the mobility function</p>
+    <div class="note">
+      <p class="normal"> The synthetic trajectory simulates real-world input data and generates new data each time it runs. The explanations in this section reflect just one of these runs. When you execute the program, you’ll obtain a new output every time, simulating real-time data.</p>
+      <p class="normal"><strong class="keyWord">Limit</strong>: Currently, the trajectory file is overwritten whenever a new trajectory is generated. If required, this functionality can be expanded during a project to save multiple files instead.</p>
+    </div>
+    <p class="normal">Let’s first explore the mobility<a id="_idIndexMarker592"/> function with a delivery example.</p>
+    <h2 class="heading-2" id="_idParaDest-245"><a id="_idTextAnchor254"/>Production-delivery verification scenario</h2>
+    <p class="normal">To run the production-delivery <a id="_idIndexMarker593"/>verification, we simply need to activate <strong class="screenText">Agent</strong> and <strong class="screenText">Files</strong>, <strong class="screenText">Mobility</strong> as the reasoning function, and <strong class="screenText">OpenAI</strong> as the model. Then, click on <strong class="screenText">SEND</strong> and let the AI do the work. In this case, we can imagine that an online travel agency wants to deliver customized goodies to its customers before a trip, such as a personalized travel bag with their name printed on it, a tourist guide, and a discount booklet to visit museums.</p>
+    <p class="normal">The GenAISys will begin to think, as displayed at the bottom of the interface, as shown in <em class="italic">Figure 8.8</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 8.8: The GenAISys has begun to think" src="../Images/B32304_08_8.png"/></figure>
+    <p class="packt_figref">Figure 8.8: The GenAISys has begun to think</p>
+    <p class="normal">The output first displays the synthetic trajectory, which can come from any source, such as real-time data, databases, and <a id="_idIndexMarker594"/>sensors. The synthetic trajectory, in this case, is displayed under the user message that indicates the title of the discussion since the mobility function itself is autonomous:</p>
+    <pre class="programlisting con"><code class="hljs-con"><span class="code-highlight"><strong class="hljs-con-slc">User01</strong></span>: Check deliveries
+Agent: ('Generated Trajectory Data:', [(145, 20, 999, 999), (145, 22, 189, 125), (145, 25, 190, 125), (145, 28, 190, 124), (145, 29, 190, 123), (145, 31, 999, 999),
+</code></pre>
+    <p class="normal">Then, the generative AI function takes over and indicates that it is processing the missing data in the trajectory:</p>
+    <pre class="programlisting con"><code class="hljs-con">Process: The mobility agent is thinking
+</code></pre>
+    <p class="normal">When it is finished thinking, it provides the list of missing data:</p>
+    <pre class="programlisting con"><code class="hljs-con">Customer message: <span class="code-highlight"><strong class="hljs-con-slc">Detected Missing Coordinates:</strong></span>
+1. [145, 20, 999, 999]
+2. [145, 31, 999, 999]
+3. [145, 34, 999, 999]
+4. [145, 42, 999, 999]
+5. [145, 3, 999, 999]
+</code></pre>
+    <p class="normal">The GenAISys then provides its prediction:</p>
+    <pre class="programlisting con"><code class="hljs-con"><span class="code-highlight"><strong class="hljs-con-slc">Predicted Missing Coordinates: </strong></span>To predict the missing coordinates, we will analyze the trajectory pattern before and after each missing value:
+<span class="code-highlight"><strong class="hljs-con-slc">Predicted Coordinates:</strong></span>
+1. [145, 20, 189, 125] - Based on the pattern before and after the missing value.
+2. [145, 31, 189, 122] - Interpolated from the surrounding points.
+3. [145, 34, 189, 121] - Interpolated from the surrounding points.
+4. [145, 42, 191, 128] - Based on the pattern before and after the missing value.
+5. [145, 3, 190, 124] - Interpolated from the surrounding points.
+</code></pre>
+    <p class="normal">A structured JSON output is provided for integration with other systems or further processing:</p>
+    <pre class="programlisting con"><code class="hljs-con">json&lt;br&gt;{&lt;br&gt; "predicted_coordinates": [&lt;br&gt; [145, 20, 189, 125],&lt;br&gt; [145, 31, 189, 122],&lt;br&gt; [145, 34, 189, 121],&lt;br&gt; [145, 42, 191, 128],&lt;br&gt; [145, 3, 190, 124]&lt;br&gt; ]&lt;br&gt;}&lt;br&gt;
+</code></pre>
+    <p class="normal">The original trajectory is <a id="_idIndexMarker595"/>also displayed for the user to make decisions, as shown in <em class="italic">Figure 8.9</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 8.9: The original trajectory with missing data" src="../Images/B32304_08_9.png"/></figure>
+    <p class="packt_figref">Figure 8.9: The original trajectory with missing data</p>
+    <p class="normal">Now, three <strong class="keyWord">subject-matter expert</strong> (<strong class="keyWord">SME</strong>) agents can intervene:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Human user</strong>: A person <a id="_idIndexMarker596"/>evaluates the data, validates predictions, or provides feedback</li>
+      <li class="bulletList"><strong class="keyWord">AI agent</strong>: An additional function can be added. The trajectory grid can be labeled, and instructions can be provided to an AI function. The instructions will rely on the coordinate sections of the grid to generate further functions or messages.</li>
+      <li class="bulletList"><strong class="keyWord">Hybrid (human-user + AI-agent)</strong>: Once a human user has created a number of prompts successfully, it<a id="_idIndexMarker597"/> may be beneficial to automate some of them to alleviate the human user’s workload if accepted within the scope of the project.</li>
+    </ul>
+    <p class="normal">Let’s now deactivate the <strong class="screenText">Mobility</strong> function and <strong class="screenText">Files</strong> display to put the cutting-edge generative AI to work, as shown in <em class="italic">Figure 8.10</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 8.10: Generative AI takes over and generates messages" src="../Images/B32304_08_10.png"/></figure>
+    <p class="packt_figref">Figure 8.10: Generative AI takes over and generates messages</p>
+    <p class="normal">At this stage, a human user can interpret the AI’s output and craft a tailored prompt. For instance, consider this scenario:</p>
+    <pre class="programlisting con"><code class="hljs-con">The missing x,y coordinates with 999,999 respectively in this dialog are deliveries that were not made! The predicted x,y coordinates are inference from the coordinates before and after.
+</code></pre>
+    <p class="normal">Here’s an example of a domain-specific prompt to address the issue:</p>
+    <pre class="programlisting con"><code class="hljs-con">Write an email to SUPPLIER COMPANY specifying that the missing coordinates from x values 20 to 40 are located in the Midtown mall area. Provide the missing coordinates and their predictions to inform the SUPPLIER COMPANY. Be as precise and explicit as possible.
+</code></pre>
+    <p class="normal">As demonstrated, such a <a id="_idIndexMarker598"/>prompt could easily be adapted to various domains. By simply adjusting the labeling of the coordinates and the intended recipient, you could generate a diverse array of messages. The exact scope and application depend entirely on the requirements of your specific project.</p>
+    <p class="normal">The generative AI’s response to the preceding prompt was acceptable and detailed:</p>
+    <pre class="programlisting con"><code class="hljs-con">Dear [Supplier Company Contact Name],
+I hope this message finds you well. I am writing to inform you about certain discrepancies identified in the delivery data for the Midtown Mall area. Specifically, there are missing coordinates in the trajectory data, which indicate deliveries that were not completed. These missing coordinates are represented by the values 999,999.
+Below, I have detailed the missing coordinates along with their predicted values, which have been inferred based on the surrounding data points:
+1. Missing Coordinate: [145, 20, 999, 999]
+- Predicted Coordinate: [145, 20, 189, 125]
+2. Missing Coordinate: [145, 31, 999, 999]
+- Predicted Coordinate: [145, 31, 189, 122]
+3. Missing Coordinate: [145, 34, 999, 999]
+- Predicted Coordinate: [145, 34, 189, 121]
+4. Missing Coordinate: [145, 42, 999, 999]
+- Predicted Coordinate: [145, 42, 191, 128]
+5. Missing Coordinate: [145, 3, 999, 999]
+- Predicted Coordinate: [145, 3, 190, 124]
+These missing deliveries occurred within the x-value range of 20 to 40, specifically in the Midtown Mall area. The predicted coordinates have been calculated by analyzing the trajectory data pattern before and after the missing points.
+We kindly request that you review this information and take the necessary actions to address these unfulfilled deliveries. Your prompt attention to this matter will help ensure that our delivery operations continue to run smoothly and efficiently.
+Please feel free to reach out if you require further details or clarification regarding this issue.
+Thank you for your cooperation.
+Best regards,
+[Your Full Name]
+[Your Position]
+[Your Company Name]
+[Your Contact Information]
+</code></pre>
+    <p class="normal">Next, without restarting the session, let’s ask our GenAISys how this methodology could be applied to a fire disaster<a id="_idIndexMarker599"/> scenario.</p>
+    <h2 class="heading-2" id="_idParaDest-246"><a id="_idTextAnchor255"/>Fire disaster scenario</h2>
+    <p class="normal">Now, let’s explore how the concepts of trajectory analysis, missing coordinates, and predicted coordinates can be leveraged in <a id="_idIndexMarker600"/>disaster prediction scenarios, specifically in cases such as forest fires. We’ll submit this scenario to the GenAISys and analyze its insights:</p>
+    <pre class="programlisting con"><code class="hljs-con"><span class="code-highlight"><strong class="hljs-con-slc">User01:</strong></span> How could the trajectory, missing coordinates, and predicted coordinates be used for disaster prediction such as fires? Explain and create an output for this use case.
+<span class="code-highlight"><strong class="hljs-con-slc">Agent:</strong></span> Trajectory data, missing coordinates, and predicted coordinates can be valuable tools in disaster prediction and management, such as for fires, in the following ways:
+1. <span class="code-highlight"><strong class="hljs-con-slc">Trajectory Analysis</strong></span>: By analyzing the movement patterns of vehicles, drones, or other mobile units, authorities can identify areas that are frequently visited or monitored. This can help in understanding the normal patterns of activity and detecting anomalies that might indicate a disaster, such as a sudden deviation from a typical route due to a fire.
+2. <span class="code-highlight"><strong class="hljs-con-slc">Missing Coordinates</strong></span>: Missing data points can indicate areas where monitoring or data collection was interrupted, possibly due to a disaster like a fire. Identifying these gaps can help in pinpointing locations that need immediate attention or further investigation.
+3. <span class="code-highlight"><strong class="hljs-con-slc">Predicted Coordinates</strong></span>: By predicting the missing coordinates, authorities can fill in the gaps in the data to maintain a continuous monitoring system. This can help in reconstructing the events leading up to a disaster and in planning the response by understanding the spread and impact of the fire.
+### Use Case Output for Disaster Prediction (Fires)
+<span class="code-highlight"><strong class="hljs-con-slc">Scenario</strong></span>: A fire has been reported in a forest area, and trajectory data from drones monitoring the region is being analyzed to assess the situation.
+<span class="code-highlight"><strong class="hljs-con-slc">Output</strong></span>:
+json&lt;br&gt;{&lt;br&gt; "fire_prediction_analysis": {&lt;br&gt; "trajectory_analysis": "Drones deviated from their usual path at coordinates [145, 20] to [145, 40], indicating potential fire activity.",&lt;br&gt; "missing_coordinates": [&lt;br&gt; {"missing_coordinate": [145, 25, 999, 999], "predicted_coordinate": [145, 25, 190, 130]},&lt;br&gt; {"missing_coordinate": [145, 30, 999, 999], "predicted_coordinate": [145, 30, 191, 128]}&lt;br&gt; ],&lt;br&gt; "predicted_fire_area": [&lt;br&gt; {"coordinate": [145, 25, 190, 130]},&lt;br&gt; {"coordinate": [145, 30, 191, 128]}&lt;br&gt; ],&lt;br&gt; "actionable_insights": "Immediate investigation and firefighting efforts are recommended in the predicted fire area to prevent further spread."&lt;br&gt; }&lt;br&gt;}&lt;br&gt;
+This output provides a structured analysis of the situation, helping disaster management teams to quickly identify and respond to potential fire threats based on trajectory data and inferred information.
+</code></pre>
+    <p class="normal">This structured output offers valuable insights, enabling disaster response teams to swiftly identify and respond to potential threats based on trajectory analysis, pinpointed data gaps, and predictive coordinates.</p>
+    <p class="normal">This methodology demonstrates<a id="_idIndexMarker601"/> that we can craft numerous specialized prompts across domains. Despite inevitable limitations, the era of GenAISys is just beginning, continually expanding into new, uncharted applications.</p>
+    <h1 class="heading-1" id="_idParaDest-247"><a id="_idTextAnchor256"/>Summary</h1>
+    <p class="normal">In this chapter, we began by recognizing that robust trajectory analysis is essential for applications ranging from deliveries and epidemic forecasting to city-scale planning. Guided by the innovative approach outlined in Tang, P., Yang, C., Xing, T., Xu, X., Jiang, R., and Sezaki, K. (2024), we emphasized the transformative potential of text-based LLMs for mobility prediction. Their framework directed our design of a method capable of intelligently filling gaps in real-time synthetic datasets through carefully structured prompts.</p>
+    <p class="normal">We then built a Python-based trajectory simulator that randomizes movement on a grid, mirroring typical user paths. It assigns day and timeslot indices, which enabled us to capture the temporal aspect of mobility. Critically, we inserted synthetic gaps marked as <code class="inlineCode">999, 999</code>, approximating real-world data dropouts or missing logs. Next, we integrated an orchestrator function that adds instructions with this synthetic data before directing them to an LLM, in this case, an OpenAI GPT-4o model. The orchestrator composes prompts that accurately reflect the trajectory dataset, focusing the model’s attention on flagged gaps. It employs a chain-of-thought routine, noting missing points for debugging prior to generating final JSON outputs.</p>
+    <p class="normal">We then merged this pipeline into the GenAISys environment by adding a dedicated mobility handler in the multihandler system. This handler streamlines the full process: trajectory generation, model inference, and visualization all in one place. Users can prompt the system to evaluate missing coordinates and instantly see the updated paths superimposed on a static city grid. Ultimately, we demonstrated that robust GenAISys forecasting need not remain abstract when grounded in purposeful, prompt design.</p>
+    <p class="normal">In the next chapter, we will open the GenAISys to the world with an external service that will lead us to enhance our system with security and moderation functionality.</p>
+    <h1 class="heading-1" id="_idParaDest-248"><a id="_idTextAnchor257"/>Questions</h1>
+    <ol>
+      <li class="numberedList" value="1">A trajectory can only be a physical path in a city. (True or False)</li>
+      <li class="numberedList">Synthetic data can accelerate GenAISys simulation design (True or False)</li>
+      <li class="numberedList">Generative AI cannot go beyond natural language sequences. (True or False)</li>
+      <li class="numberedList">Only AI experts can run GenAISys. (True or False)</li>
+      <li class="numberedList">Generative AI can now help us with prompt design. (True or False)</li>
+      <li class="numberedList">Trajectory simulation and prediction cannot help with fire disasters. (True or False)</li>
+      <li class="numberedList">GenAISys’s potential is expanding at full speed and can be applied to a growing number of domains and tasks. (True or False)</li>
+    </ol>
+    <h1 class="heading-1" id="_idParaDest-249"><a id="_idTextAnchor258"/>References</h1>
+    <ul>
+      <li class="bulletList">P. Tang, C. Yang, T. Xing, X. Xu, R. Jiang, and K. Sezaki. 2024. “Instruction-Tuning Llama-3-8B Excels in City-Scale Mobility Prediction.” <em class="italic">arXiv</em>, October 2024. <a href="https://arxiv.org/abs/2410.23692"><span class="url">https://arxiv.org/abs/2410.23692</span></a>.</li>
+      <li class="bulletList">Renhe Jiang, Xuan Song, Zipei Fan, Tianqi Xia, Quanjun Chen, Satoshi Miyazawa, and Ryosuke Shibasaki. 2018. “DeepUrbanMomentum: An Online Deep-Learning System for Short-Term Urban Mobility Prediction.” <em class="italic">Proceedings of the AAAI Conference on Artificial Intelligence</em> 32, no. 1: 784–791. <a href="https://ojs.aaai.org/index.php/AAAI/article/view/11338"><span class="url">https://ojs.aaai.org/index.php/AAAI/article/view/11338</span></a>.</li>
+      <li class="bulletList">Jie Feng, Yong Li, Chao Zhang, Funing Sun, Fanchao Meng, Ang Guo, and Depeng Jin. 2018. “DeepMove: Predicting Human Mobility with Attentional Recurrent Networks.” <em class="italic">Proceedings of the 2018 World Wide Web Conference</em>, Lyon, France, April 23–27, 2018, 1459–1468. <a href="https://doi.org/10.1145/3178876.3186058"><span class="url">https://doi.org/10.1145/3178876.3186058</span></a>.</li>
+    </ul>
+    <h1 class="heading-1" id="_idParaDest-250"><a id="_idTextAnchor259"/>Further reading</h1>
+    <ul>
+      <li class="bulletList">Haru Terashima, Naoki Tamura, Kazuyuki Shoji, Shin Katayama, Kenta Urano, Takuro Yonezawa, and Nobuo Kawaguchi. 2023. “Human Mobility Prediction Challenge: Next Location Prediction Using Spatiotemporal BERT.” <em class="italic">Proceedings of the 1st International Workshop on the Human Mobility Prediction Challenge</em>, Tokyo, Japan, September 18–21, 2023, 1–6. <a href="https://dl.acm.org/doi/10.1145/3615894.3628498"><span class="url">https://dl.acm.org/doi/10.1145/3615894.3628498</span></a>.</li>
+    </ul>
+    <h1 class="heading-1" id="_idParaDest-251"><a id="_idTextAnchor260"/>Subscribe for a Free eBook</h1>
+    <p class="normal">New frameworks, evolving architectures, research drops, production breakdowns—<em class="italic">AI_Distilled</em> filters the noise into a weekly briefing for engineers and researchers working hands-on with LLMs and GenAI systems. Subscribe now and receive a free eBook, along with weekly insights that help you stay focused and informed.</p>
+    <p class="normal">Subscribe at <a href="Chapter_8.xhtml"><span class="url">https://packt.link/TRO5B</span></a> or scan the QR code below.</p>
+    <p class="normal"><img alt="" src="../Images/Newsletter_QR_Code1.png"/></p>
+  </div>
+</body></html>

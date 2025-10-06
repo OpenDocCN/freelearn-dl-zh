@@ -1,0 +1,834 @@
+<html><head></head><body>
+  <div class="Basic-Text-Frame" id="_idContainer104">
+    <h1 class="chapterNumber"><a id="_idTextAnchor085"/>3</h1>
+    <h1 class="chapterTitle" id="_idParaDest-82"><a id="_idTextAnchor086"/>Integrating Dynamic RAG into the GenAISys</h1>
+    <p class="normal">A business-ready <strong class="keyWord">generative AI system</strong> (<strong class="keyWord">GenAISys</strong>) needs to be flexible and ready to face the rapidly evolving landscape of the AI market. The AI controller acts as an adaptive orchestrator for e-marketing, production, storage, distribution, and support, but to satisfy such a range of tasks, we <a id="_idIndexMarker201"/>need a <strong class="keyWord">retrieval-augmented generation</strong> (<strong class="keyWord">RAG</strong>) framework. In the previous chapter, we built a conversational AI agent and a function for similarity search for instruction scenarios (AI orchestrator) for a generative AI model. In this chapter, we will enhance that foundation and build a scalable RAG in a Pinecone index to integrate both instruction scenarios and classical data, which the generative AI model will connect to.</p>
+    <div class="note">
+      <p class="normal"> We make a clear distinction in this chapter between <strong class="keyWord">instruction scenarios</strong>—expert-crafted prompt fragments (or <em class="italic">task tags</em>, as explained in the previous chapter) that tell the model <em class="italic">how</em> to reason or act—and <strong class="keyWord">classical data</strong>—the reference material the RAG system retrieves to ground its answers.</p>
+    </div>
+    <p class="normal">Why do we need this dynamic and adaptive RAG framework with vectorized scenarios of instructions on top of classical data? Because the global market affects entities internally and externally. For example, a hurricane can cause electricity shortages, putting the supply chain of businesses in peril. Businesses might have to relocate supply routes, production, or distribution. General-purpose AI cloud platforms might do some of the job. But more often than not, we will need to provide custom, domain-specific functionality. For that reason, we need a dynamic set of instructions in a vector store repository as we do for RAG data.</p>
+    <p class="normal">We will begin by defining the architecture scenario-driven task executions for a generative AI model, in this case, GPT-4o, through a Pinecone index. We will carefully go through the cost-benefits of investing in intelligent scenarios for the generative model through similarity search and retrieval. We will introduce a dynamic framework to produce ChatGPT-like capabilities that we will progressively introduce in the following chapters.</p>
+    <p class="normal">Once the architecture is defined, we will first build a Pinecone index to chunk, embed, and upsert instruction scenarios. We will make sure the GenAISys vector store can embed a query and find a relevant instruction scenario. This capability will be a key component in <a href="Chapter_4.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a>,<em class="italic"> Building the AI Controller Orchestration Interface</em>, when we design the conversational agent’s interface and orchestrator. Finally, we will write a program to upsert classical data in a RAG environment to the same Pinecone index alongside the instruction scenarios. Differentiation between scenarios and classical data will be maintained using distinct namespaces. By the end of this chapter, we will have built the main components to link instructions to a generative AI model. We will be ready to design a user interface and AI controller orchestrator in <a href="Chapter_4.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a>.</p>
+    <p class="normal">This chapter covers the following topics:</p>
+    <ul>
+      <li class="bulletList">Architecting RAG for the dynamic retrieval of instructions and data</li>
+      <li class="bulletList">The law of diminishing returns when developing similarity searches</li>
+      <li class="bulletList">Examining the architecture of a hybrid GenAISys CoT</li>
+      <li class="bulletList">Creating a Pinecone index by chunking, embedding, and upserting instruction scenarios</li>
+      <li class="bulletList">Enhancing a Pinecone index with classical data</li>
+      <li class="bulletList">Querying the Pinecone index</li>
+    </ul>
+    <p class="normal">Our first task is to architect a RAG framework for dynamic retrieval.</p>
+    <h1 class="heading-1" id="_idParaDest-83"><a id="_idTextAnchor087"/>Architecting RAG for dynamic retrieval</h1>
+    <p class="normal">In this<a id="_idIndexMarker202"/> section, we will define a Pinecone index that stores both instruction scenarios and classical data. This structure gives GenAISys dynamic, cost-effective retrieval: the instruction scenarios steer the generative AI model (GPT-4o in our example), while the classical data supplies the factual context used by the RAG pipeline.</p>
+    <p class="normal">We will go through the<a id="_idIndexMarker203"/> following components:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Scenario-driven task execution</strong>: Designing optimized instructional prompts (“scenarios”) that we will upsert to the Pinecone index.</li>
+      <li class="bulletList"><strong class="keyWord">Cost-benefit strategies</strong>: Considering the law of diminishing returns to avoid overinvesting in automation.</li>
+      <li class="bulletList"><strong class="keyWord">Partitioning Pinecone with namespaces</strong>: Using Pinecone index namespaces to clearly differentiate instruction scenarios from classical data.</li>
+      <li class="bulletList"><strong class="keyWord">Hybrid retrieval framework</strong>: Implementing implicit vector similarity searches but also triggering explicit instructions for the generative AI model (more on this in the <em class="italic">Scenario-driven task execution</em> section).</li>
+      <li class="bulletList"><strong class="keyWord">CoT loops</strong>: Explaining how the flexibility of the scenario selection process will lead to loops <a id="_idIndexMarker204"/>of generative AI functions before finally producing an output.</li>
+      <li class="bulletList"><strong class="keyWord">GenAISys framework</strong>: Laying the groundwork for the advanced GenAISys framework we are building throughout the book.</li>
+    </ul>
+    <p class="normal">Let’s first dive deeper into scenario-driven task execution.</p>
+    <h2 class="heading-2" id="_idParaDest-84"><a id="_idTextAnchor088"/>Scenario-driven task execution</h2>
+    <p class="normal">In the<a id="_idIndexMarker205"/> previous chapter, we saw two complementary ways the AI controller can pick what to do next:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Implicit selection</strong>: The controller embeds the user’s prompt, runs a semantic similarity search across its scenario library, and chooses the closest match without any task tag. This gave us flexible, code-free orchestration (e.g., it automatically chose a sentiment-analysis scenario for the <em class="italic">Gladiator II</em> review).</li>
+      <li class="bulletList"><strong class="keyWord">Explicit selection</strong>: The desired task is spelled out, either as a task tag in the prompt or as a user interface action, such as “Run web search.” Here, the controller skips the similarity search and jumps straight to the requested tool or workflow.</li>
+    </ul>
+    <p class="normal">That same pattern continues in this chapter, but at a larger scale. Instead of a few hand-picked prompts, we manage hundreds or even thousands of expert-authored instruction scenarios stored in a vector database; instead of single-user experiments, we support many concurrent users and workflows. This scenario-driven (implicit) approach has three advantages:</p>
+    <ul>
+      <li class="bulletList">Professional experts typically create these advanced prompts/instruction scenarios, often surpassing the expertise level of mainstream users.</li>
+      <li class="bulletList">The scenarios can be co-designed by AI specialists and subject-matter experts, covering a wide range of activities in a corporation, from sales to delivery.</li>
+      <li class="bulletList">The order of execution of the scenarios is prompt-driven, flexible, and unordered. This dynamic approach avoids hardcoding the order of the tasks, increasing adaptability as much as possible.</li>
+    </ul>
+    <p class="normal">However, while implicit task planning maximizes flexibility, as we move toward building business-ready systems, we must balance flexibility with cost-efficiency. In some cases, therefore, <em class="italic">explicit</em> instructions, such as triggering a web search by selecting the option in the user interface, can significantly reduce the potential costs, as shown in <em class="italic">Figure 3.1</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 3.1: Diminishing returns as costs increase" src="../Images/B32304_03_1.png"/></figure>
+    <p class="packt_figref">Figure 3.1: Diminishing returns as costs increase</p>
+    <p class="normal">The more <a id="_idIndexMarker206"/>we automate implicit scenarios that the generative AI model will select with vector similarity searches in the Pinecone index, the higher the cost. To manage this, we must carefully consider the law of diminishing returns:</p>
+    <p class="center"><a id="_idIndexMarker207"/><img alt="" src="../Images/B32304_03_001.png"/></p>
+    <p class="normal">In this equation, as illustrated in <em class="italic">Figure 3.1</em>, in theoretical units, we have the following:</p>
+    <ul>
+      <li class="bulletList"><a id="_idIndexMarker208"/><img alt="" src="../Images/B32304_03_002.png"/> represents the overall benefit, which is represented by roughly 15 when the cost reaches 50.</li>
+      <li class="bulletList"><a id="_idIndexMarker209"/><img alt="" src="../Images/B32304_03_003.png"/> represents the initial benefit of storing instruction scenarios in the Pinecone index and asking the generative AI model to select one through vector similarity with the user input. In this case, it is nearly 1 benefit unit for 1 cost unit.</li>
+      <li class="bulletList"><a id="_idIndexMarker210"/><img alt="" src="../Images/B32304_03_004.png"/> is the rate at which the benefit begins to increase as we increase the cost.</li>
+      <li class="bulletList"><a id="_idIndexMarker211"/><img alt="" src="../Images/B32304_03_005.png"/> represents the cost measured in theoretical units (currency, human resources, or computational resources).</li>
+      <li class="bulletList"><a id="_idIndexMarker212"/><img alt="" src="../Images/B32304_03_006.png"/> denotes the rate at which returns diminish as cost increases.</li>
+    </ul>
+    <p class="normal">For example, when the cost reaches 7 theoretical units, the benefit reaches 7 theoretical units. This 1 <a id="_idIndexMarker213"/>unit of cost generating 1 unit of benefit is reasonable. However, when the benefit reaches 10 units, the cost could double to 14 units, which signals that something is going wrong.</p>
+    <p class="normal">The diminishing <a id="_idIndexMarker214"/><img alt="" src="../Images/B32304_03_006.png"/> factor has a strong negative impact <a id="_idIndexMarker215"/><img alt="" src="../Images/B32304_03_008.png"/> on the benefits through squared costs:</p>
+    <p class="center"><a id="_idIndexMarker216"/><img alt="" src="../Images/B32304_03_009.png"/></p>
+    <div class="note">
+      <p class="normal"> We will carefully monitor the factor <a id="_idIndexMarker217"/><img alt="" src="../Images/B32304_03_010.png"/> as we move through the use cases in this book. We will have to make choices between running implicit automated scenario selections through the Pinecone index and explicitly triggering actions through predefined instructions in the prompt itself.</p>
+    </div>
+    <p class="normal">Let’s now explore how we<a id="_idIndexMarker218"/> identify instruction scenarios within a Pinecone index.</p>
+    <h2 class="heading-2" id="_idParaDest-85"><a id="_idTextAnchor089"/>Hybrid retrieval and CoT</h2>
+    <p class="normal">Our <a id="_idIndexMarker219"/>first step is teaching the GenAISys framework to distinguish clearly between classical data and instruction scenarios. To achieve this, we will separate the instruction scenarios and the data with two namespaces within the same Pinecone index, named <code class="inlineCode">genai-v1</code>:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">genaisys</code> will contain instruction vectors of information</li>
+      <li class="bulletList"><code class="inlineCode">data01</code> will contain data vectors of information<div class="note">
+          <p class="normal"> We will implement <code class="inlineCode">genai-v1</code> in code with additional explanations in the <em class="italic">Creating the</em> <em class="italic">Pinecone index</em> section of this chapter.</p>
+        </div>
+      </li>
+    </ul>
+    <p class="normal">Once the Pinecone index has been partitioned into scenarios and data, we can take the GenAISys to another level with hybrid retrieval, as shown in <em class="italic">Figure 3.2</em>.</p>
+    <figure class="mediaobject"><img alt="Figure 3.2: AI controller orchestrating GenAISys" src="../Images/B32304_03_2.png"/></figure>
+    <p class="packt_figref">Figure 3.2: AI controller orchestrating GenAISys</p>
+    <p class="normal">The <a id="_idIndexMarker220"/>hybrid retrieval framework<a id="_idIndexMarker221"/> depicted in the preceding figure will <a id="_idIndexMarker222"/>enable GenAISys to do the following:</p>
+    <ul>
+      <li class="bulletList">Run the generative AI model using processed, chunked, and embedded data memory (see <strong class="keyWord">1</strong>–<strong class="keyWord">3</strong> in <em class="italic">Figure 3.2</em>) directly without going through the Pinecone index (see <strong class="keyWord">3B</strong>). This will reduce costs for ephemeral data, for example.</li>
+      <li class="bulletList">Run the generative AI model after the chunked and embedded data is upserted to the Pinecone index either as a set of instructions in a scenario or as classical data.</li>
+      <li class="bulletList">Create a CoT loop between the Pinecone index (see <strong class="keyWord">3B</strong>) and the generative AI model controller as an orchestrator. For example, the output of the model can serve as input for another CoT cycle that will retrieve scenarios or data from the Pinecone index. ChatGPT-like copilots often present their output and then finish by asking whether you’d like to explore further—sometimes even suggesting ready-made follow-up prompts you can click on.</li>
+    </ul>
+    <div class="note">
+      <p class="normal"> CoT loops<a id="_idIndexMarker223"/> can operate implicitly via vector similarity search or explicitly via direct instruction triggers or task tags (such as “Run a web search”). For example, ChatGPT-like copilots can trigger web searches directly through the user interface or rules in the AI controller.</p>
+    </div>
+    <p class="normal">We’ll begin building our GenAISys in this chapter and continue refining it over the next few chapters. Starting from <a href="Chapter_4.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a>, <em class="italic">Building the AI Controller Orchestration Interface</em>, we’ll use the RAG foundations introduced here to develop the hybrid retrieval framework shown in <em class="italic">Figure 3.2</em>. The GenAISys we’re building will include dynamic process management—a requisite for keeping pace with the <a id="_idIndexMarker224"/>shifting market conditions. Specifically, our GenAISys will do the following:</p>
+    <ul>
+      <li class="bulletList">Leverage Pinecone’s vector database or in-memory chunked and embedded information with similarity searches to optimize retrieval (instructions or data)</li>
+      <li class="bulletList">Explicitly trigger direct instructions, such as a web search, and include them in a CoT loop for summarization, sentiment analysis, or semantic analysis</li>
+      <li class="bulletList">Break down complex sets of instructions and data retrieval into manageable steps</li>
+      <li class="bulletList">Iteratively refine solutions in a human-like thought process before producing an output</li>
+      <li class="bulletList">Get the best out of generative AI models, including OpenAI’s reasoning models such as o3, by providing them with an optimized instruction scenario</li>
+    </ul>
+    <p class="normal">Our initial <a id="_idIndexMarker225"/>step in this chapter is building the <code class="inlineCode">genai-v1</code> Pinecone index, which the AI controller will use to manage instruction scenarios within the <code class="inlineCode">genaisys</code> namespace. Then, we’ll demonstrate how to chunk, embed, and upsert classical data into the <code class="inlineCode">data01</code> namespace. Let’s get moving!</p>
+    <h1 class="heading-1" id="_idParaDest-86"><a id="_idTextAnchor090"/>Building a dynamic Pinecone index</h1>
+    <p class="normal">We’ll focus <a id="_idIndexMarker226"/>on creating a Pinecone index designed to manage both instruction scenarios and classical data. In the upcoming sections, we’ll begin upserting the instruction scenarios as well as classical data. The workflow breaks down into three straightforward stages:</p>
+    <ul>
+      <li class="bulletList">Setting up the environment for OpenAI and Pinecone</li>
+      <li class="bulletList">Processing the data, chunking it, and then embedding it</li>
+      <li class="bulletList">Initializing the Pinecone index</li>
+    </ul>
+    <p class="normal">Open the <code class="inlineCode">Pinecone_instruction_scenarios.ipynb</code> notebook within the Chapter03 directory on GitHub (<a href="https://github.com/Denis2054/Building-Business-Ready-Generative-AI-Systems/tree/main"><span class="url">https://github.com/Denis2054/Building-Business-Ready-Generative-AI-Systems/tree/main</span></a>). Our first task is to set up the environment.</p>
+    <h2 class="heading-2" id="_idParaDest-87"><a id="_idTextAnchor091"/>Setting up the environment</h2>
+    <p class="normal">As <a id="_idIndexMarker227"/>we move through the book, we will continually reuse functions and features implemented in <em class="italic">Chapters 1</em> and <em class="italic">2</em>, add new ones for Pinecone, and organize the installations into two parts:</p>
+    <ul>
+      <li class="bulletList">Installing OpenAI using the same process as in <a href="Chapter_1.xhtml#_idTextAnchor021"><em class="italic">Chapter 1</em></a>. Refer back to that chapter if needed.</li>
+      <li class="bulletList">Installing Pinecone for this and following chapters.</li>
+    </ul>
+    <p class="normal">To begin, download <a id="_idIndexMarker228"/>the files we need by retrieving <code class="inlineCode">grequests.py</code> from the GitHub repository:</p>
+    <pre class="programlisting code"><code class="hljs-code">!curl -L https://raw.githubusercontent.com/Denis2054/Building-Business-Ready-Generative-AI-Systems/master/commons/grequests.py --output grequests.py
+</code></pre>
+    <p class="normal">To install OpenAI, follow the same steps as in <a href="Chapter_1.xhtml#_idTextAnchor021"><em class="italic">Chapter 1</em></a>. We’ll move on to install Pinecone now, which we will refer to in upcoming chapters throughout the book.</p>
+    <h3 class="heading-3" id="_idParaDest-88"><a id="_idTextAnchor092"/>Installing Pinecone</h3>
+    <p class="normal">Download <a id="_idIndexMarker229"/>the Pinecone requirements file that contains the instructions for the Pinecone version we want to use throughout the book. If another version is required, this will be the only file that needs to be updated:</p>
+    <pre class="programlisting code"><code class="hljs-code">download(<span class="hljs-string">"commons"</span>,<span class="hljs-string">"requirements02.py"</span>)
+</code></pre>
+    <div class="packt_tip">
+      <p class="normal"><img alt="" src="../Images/3-PPMUMLAP0325.png"/><strong class="keyWord">Quick tip</strong>: Enhance your coding experience with the <strong class="keyWord">AI Code Explainer</strong> and <strong class="keyWord">Quick Copy</strong> features. Open this book in the next-gen Packt Reader. Click the <strong class="keyWord">Copy</strong> button</p>
+      <p class="normal">(<strong class="keyWord">1</strong>) to quickly copy code into your coding environment, or click the <strong class="keyWord">Explain</strong> button</p>
+      <p class="normal">(<strong class="keyWord">2</strong>) to get the AI assistant to explain a block of code to you.</p>
+      <p class="normal"><img alt="A white background with a black text  AI-generated content may be incorrect." src="../Images/image_%282%29.png"/></p>
+      <p class="normal"><img alt="" src="../Images/4.png"/><strong class="keyWord">The next-gen Packt Reader </strong>is included for free with the purchase of this book. Scan the QR code OR visit <a href="http://packtpub.com/unlock"><span class="url">packtpub.com/unlock</span></a>, then use the search bar to find this book by name. Double-check the edition shown to make sure you get the right one.</p>
+      <p class="normal"><img alt="A qr code on a white background  AI-generated content may be incorrect." src="../Images/Unlock_Code1.png"/></p>
+    </div>
+    <p class="normal">The file contains the installation function, which we will call with the following command:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Run the setup script to install and import dependencies</span>
+%run requirements02
+</code></pre>
+    <p class="normal">The script is the same as the one for OpenAI described in <a href="Chapter_1.xhtml#_idTextAnchor021"><em class="italic">Chapter 1</em></a>, but adapted to Pinecone. We first uninstall Pinecone and then install the version we need:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> subprocess
+<span class="hljs-keyword">import</span> sys
+<span class="hljs-keyword">def</span> <span class="hljs-title">run_command</span>(<span class="hljs-params">command</span>):
+    <span class="hljs-keyword">try</span>:
+        subprocess.check_call(command)
+    <span class="hljs-keyword">except</span> subprocess.CalledProcessError <span class="hljs-keyword">as</span> e:
+        <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Command failed: </span><span class="hljs-subst">{</span><span class="hljs-string">' '</span><span class="hljs-subst">.join(command)}</span><span class="hljs-string">\nError: </span><span class="hljs-subst">{e}</span><span class="hljs-string">"</span>)
+        sys.exit(<span class="hljs-number">1</span>)
+<span class="hljs-comment"># Uninstall the 'pinecone-client' package</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Uninstalling 'pinecone-client'..."</span>)
+run_command(
+    [sys.executable, <span class="hljs-string">"-m"</span>, <span class="hljs-string">"pip"</span>, <span class="hljs-string">"uninstall"</span>, <span class="hljs-string">"-y"</span>, <span class="hljs-string">"pinecone-client"</span>]
+)
+<span class="hljs-comment"># Install the specific version of 'pinecone-client'</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Installing 'pinecone-client' version 5.0.1..."</span>)
+run_command(
+    [
+        sys.executable, <span class="hljs-string">"-m"</span>, <span class="hljs-string">"pip"</span>, <span class="hljs-string">"install"</span>,\
+        <span class="hljs-string">"--force-reinstall"</span>, <span class="hljs-string">"pinecone-client==5.0.1"</span>
+<span class="hljs-string">    </span>]
+)
+</code></pre>
+    <p class="normal">Then, we <a id="_idIndexMarker230"/>verify the installation:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Verify the installation</span>
+<span class="hljs-keyword">try</span>:
+    <span class="hljs-keyword">import</span> pinecone
+    <span class="hljs-built_in">print</span>(
+<span class="hljs-built_in">        </span><span class="hljs-string">f"'pinecone-client' version </span><span class="hljs-subst">{pinecone.__version__}</span><span class="hljs-string"> is installed."</span>
+)
+<span class="hljs-keyword">except</span> ImportError:
+    <span class="hljs-built_in">print</span>(
+<span class="hljs-built_in">        </span><span class="hljs-string">"Failed to import the 'pinecone-client' library after installation."</span>
+)
+    sys.exit(<span class="hljs-number">1</span>)
+</code></pre>
+    <p class="normal">The output shows we have successfully installed the client:</p>
+    <pre class="programlisting con"><code class="hljs-con">Uninstalling 'pinecone-client'...
+Installing 'pinecone-client' version 5.0.1...
+'pinecone-client' version 5.0.1 is installed.
+</code></pre>
+    <p class="normal">Let’s go ahead and initialize the Pinecone API key.</p>
+    <h3 class="heading-3" id="_idParaDest-89"><a id="_idTextAnchor093"/>Initializing the Pinecone API key</h3>
+    <p class="normal">The <a id="_idIndexMarker231"/>program now downloads <code class="inlineCode">pinecone_setup.py</code>, which we will use to initialize the Pinecone API key:</p>
+    <pre class="programlisting code"><code class="hljs-code">download(<span class="hljs-string">"commons"</span>,<span class="hljs-string">"pinecone_setup.py"</span>)
+</code></pre>
+    <p class="normal">This setup mirrors the Google Colab secrets-based approach we used for OpenAI in <a href="Chapter_1.xhtml#_idTextAnchor021"><em class="italic">Chapter 1</em></a>, but it’s adapted here for initializing the Pinecone API.:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Import libraries</span>
+<span class="hljs-keyword">import</span> openai
+<span class="hljs-keyword">import</span> os
+<span class="hljs-keyword">from</span> google.colab <span class="hljs-keyword">import</span> userdata
+<span class="hljs-comment"># Function to initialize the Pinecone API key</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">initialize_pinecone_api</span>():
+    <span class="hljs-comment"># Access the secret by its name</span>
+    PINECONE_API_KEY = userdata.get(<span class="hljs-string">'PINECONE_API_KEY'</span>)
+  
+    <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> PINECONE_API_KEY:
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">"PINECONE_API_KEY is not set in userdata!"</span>)
+  
+    <span class="hljs-comment"># Set the API key in the environment and OpenAI</span>
+    os.environ[<span class="hljs-string">'PINECONE_API_KEY'</span>] = PINECONE_API_KEY
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">"PINECONE_API_KEY initialized successfully."</span>)
+</code></pre>
+    <p class="normal">If <a id="_idIndexMarker232"/>Google secrets was set to <code class="inlineCode">True</code> for OpenAI in the OpenAI section of this notebook, then the Pinecone setup function will be called:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">if</span> google_secrets==<span class="hljs-literal">True</span>:
+    <span class="hljs-keyword">import</span> pinecone_setup
+    pinecone_setup.initialize_pinecone_api()
+</code></pre>
+    <p class="normal">If Google secrets was set to <code class="inlineCode">False</code>, then you can implement a custom function by uncommenting the code and entering the Pinecone API key with any method you wish:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">if</span> google_secrets==<span class="hljs-literal">False</span>: <span class="hljs-comment"># Uncomment the code and choose any method you wish to initialize the Pinecone API key</span>
+    <span class="hljs-keyword">import</span> os
+    <span class="hljs-comment">#PINECONE_API_KEY=[YOUR PINECONE_API_KEY]</span>
+    <span class="hljs-comment">#os.environ['PINECONE_API_KEY'] = PINECONE_API_KEY</span>
+    <span class="hljs-comment">#openai.api_key = os.getenv("PINECONE_API_KEY")</span>
+    <span class="hljs-comment">#print("Pinecone API key initialized successfully.")</span>
+</code></pre>
+    <p class="normal">The program is now ready to process the data we will upsert to the Pinecone index.</p>
+    <h2 class="heading-2" id="_idParaDest-90"><a id="_idTextAnchor094"/>Processing data</h2>
+    <p class="normal">Our goal <a id="_idIndexMarker233"/>now is to prepare the scenarios for storage and retrieval so that we can then query the Pinecone index. The main steps of the process are represented in <em class="italic">Figure 3.2</em>, which is only one layer of the roadmap for the following chapters. We will process the data in the following steps:</p>
+    <ol>
+      <li class="numberedList" value="1"><strong class="keyWord">Data loading and preparation</strong>, in which the data will be broken into smaller parts. In this case, each scenario will be stored in one line of a scenario list, which will prepare the chunking process. We will not always break text into lines, however, as we will see in the <em class="italic">Upserting classical data into the index</em> section later.</li>
+      <li class="numberedList"><strong class="keyWord">Chunking functionality</strong> to store each line of scenarios into chunks.</li>
+      <li class="numberedList"><strong class="keyWord">Embedding</strong> the chunks of text obtained.</li>
+      <li class="numberedList"><strong class="keyWord">Verification</strong> to ensure that we embedded the corresponding number of chunks.</li>
+    </ol>
+    <p class="normal">Let’s now cover the first two steps: loading and preparing the data, followed by chunking.</p>
+    <h3 class="heading-3" id="_idParaDest-91"><a id="_idTextAnchor095"/>Data loading and chunking</h3>
+    <p class="normal">We will use<a id="_idIndexMarker234"/> the scenarios implemented in <a href="Chapter_2.xhtml#_idTextAnchor055"><em class="italic">Chapter 2</em></a>. They are stored in a file that we will now download:</p>
+    <pre class="programlisting code"><code class="hljs-code">download(<span class="hljs-string">"Chapter03"</span>,<span class="hljs-string">"</span><span class="hljs-string">scenario.csv"</span>)
+</code></pre>
+    <p class="normal">We will add more scenarios throughout our journey in this book to create a GenAISys. For the moment, our main objective is to get our Pinecone index to work. The program first initializes <code class="inlineCode">start_time</code> for time measurement. Then we load the lines of scenario instructions directly into <code class="inlineCode">chunks</code> line by line:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> time
+start_time = time.time()  <span class="hljs-comment"># Start timing</span>
+<span class="hljs-comment"># File path</span>
+file_path = <span class="hljs-string">'scenario.csv'</span>
+<span class="hljs-comment"># Read the file, skip the header, and clean the lines</span>
+chunks = []
+<span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(file_path, <span class="hljs-string">'r'</span>) <span class="hljs-keyword">as</span> file:
+    <span class="hljs-built_in">next</span>(file)  <span class="hljs-comment"># Skip the header line</span>
+    chunks = [line.strip() <span class="hljs-keyword">for</span> line <span class="hljs-keyword">in</span> file]  <span class="hljs-comment"># Read and clean lines as chunks</span>
+</code></pre>
+    <p class="normal">Then the code displays the number of chunks and the time it took to create the chunks:</p>
+    <pre class="programlisting code"><code class="hljs-code">response_time = time.time() - start_time  <span class="hljs-comment"># Measure response time</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Response Time: </span><span class="hljs-subst">{response_time:</span><span class="hljs-number">.2</span><span class="hljs-subst">f}</span><span class="hljs-string"> seconds"</span>)  <span class="hljs-comment"># Print response time</span>
+</code></pre>
+    <pre class="programlisting con"><code class="hljs-con">Total number of chunks: 3
+Response Time: 0.00 seconds
+</code></pre>
+    <p class="normal">The program<a id="_idIndexMarker235"/> now verifies the first three chunks of scenario instructions:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Optionally, print the first three chunks for verification</span>
+<span class="hljs-keyword">for</span> i, chunk <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(chunks[:<span class="hljs-number">3</span>], start=<span class="hljs-number">1</span>):
+    <span class="hljs-built_in">print</span>(chunk)
+</code></pre>
+    <p class="normal">The output shows the three scenarios we will be working on in this chapter:</p>
+    <pre class="programlisting con"><code class="hljs-con">['ID,SCENARIO\n',
+ '100,Semantic analysis.This is not an analysis but a semantic search. Provide more information on the topic.\n',
+ '200,Sentiment analysis  Read the content return a sentiment analysis nalysis on this text and provide a score with the label named : Sentiment analysis score followed by a numerical value between 0 and 1  with no + or - sign and  add an explanation to justify the score.\n',
+ '300,Semantic analysis.This is not an analysis but a semantic search. Provide more information on the topic.\n']
+</code></pre>
+    <p class="normal">The chunks of data are now ready for embedding. Let’s proceed with embedding.</p>
+    <h3 class="heading-3" id="_idParaDest-92"><a id="_idTextAnchor096"/>Embedding the dataset</h3>
+    <p class="normal">To embed <a id="_idIndexMarker236"/>the dataset, we will first initialize the embedding model and then embed the chunks. The program first initializes the embedding model.</p>
+    <h4 class="heading-4">Initializing the embedding model</h4>
+    <p class="normal">We <a id="_idIndexMarker237"/>will be using an OpenAI embedding model to embed the data. To embed our data with an OpenAI model, we can choose one of three main models:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">text-embedding-3-small</code>, which is fast and has a lower resource usage. This is sufficient for real-time usage. It is a smaller model and is thus cost-effective. However, as the vector store will increase in size with complex scenarios, it might be less accurate for nuanced tasks.</li>
+      <li class="bulletList"><code class="inlineCode">text-embedding-3-large</code>, which provides high accuracy and nuanced embeddings and will prove effective for complex semantic similarity searches. It requires more resources and costs more.</li>
+      <li class="bulletList"><code class="inlineCode">text-embedding-ada-002</code>, which is cost-effective for good-quality embeddings. However, it’s slightly slower than models such as <code class="inlineCode">text-embedding-3-small</code> and <code class="inlineCode">text-embedding-3-large</code>.</li>
+    </ul>
+    <div class="note">
+      <p class="normal"> You can consult the OpenAI documentation at <a href="https://platform.openai.com/docs/guides/embeddings"><span class="url">https://platform.openai.com/docs/guides/embeddings</span></a> for more info.</p>
+    </div>
+    <p class="normal">To import a limited number of scenarios in this chapter, we will use <code class="inlineCode">text-embedding-3-small</code> to optimize speed and cost. The program initializes the model while the others are commented for further use if needed:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> openai
+<span class="hljs-keyword">import</span> time
+embedding_model=<span class="hljs-string">"text-embedding-3-small"</span>
+<span class="hljs-comment">#embedding_model="text-embedding-3-large"</span>
+<span class="hljs-comment">#embedding_model="text-embedding-ada-002"</span>
+</code></pre>
+    <p class="normal">We initialize the OpenAI client:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Initialize the OpenAI client</span>
+client = openai.OpenAI()
+</code></pre>
+    <p class="normal">An embedding function is then created that will convert the text sent to it into embeddings. The<a id="_idIndexMarker238"/> function is designed to produce embeddings for a batch of input texts (<code class="inlineCode">texts</code>) with the embeddings model of our choice, in this case, <code class="inlineCode">text-embedding-3-small</code>:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">get_embedding</span>(<span class="hljs-params">texts, model=</span><span class="hljs-string">"text-embedding-3-small"</span>)
+</code></pre>
+    <p class="normal">The function first cleans the text by replacing newline characters in each text with spaces:</p>
+    <pre class="programlisting code"><code class="hljs-code">texts = [text.replace(<span class="hljs-string">"\n"</span>, <span class="hljs-string">" "</span>) <span class="hljs-keyword">for</span> text <span class="hljs-keyword">in</span> texts]
+</code></pre>
+    <p class="normal">Then, the function makes the API embedding call:</p>
+    <pre class="programlisting code"><code class="hljs-code">response = client.embeddings.create(<span class="hljs-built_in">input</span>=texts, model=model)
+</code></pre>
+    <p class="normal">The embeddings are extracted from the response:</p>
+    <pre class="programlisting code"><code class="hljs-code">embeddings = [res.embedding <span class="hljs-keyword">for</span> res <span class="hljs-keyword">in</span> response.data]  <span class="hljs-comment"># Extract embeddings</span>
+</code></pre>
+    <p class="normal">Finally, the embeddings are returned:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">return</span> embeddings
+</code></pre>
+    <p class="normal">The program is now ready to embed the chunks.</p>
+    <h4 class="heading-4">Embedding the chunks</h4>
+    <p class="normal">The program<a id="_idIndexMarker239"/> first defines a function to embed the chunks:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">embed_chunks</span>(
+<span class="hljs-keyword">    </span><span class="hljs-params">chunks, embedding_model=</span><span class="hljs-string">"text-embedding-3-small"</span><span class="hljs-params">,</span>
+<span class="hljs-params">    batch_size=</span><span class="hljs-number">1000</span><span class="hljs-params">, pause_time=</span><span class="hljs-number">3</span>
+):
+</code></pre>
+    <p class="normal">The parameters of the function are:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">chunks</code>: The parts of text to embed</li>
+      <li class="bulletList"><code class="inlineCode">embedding_model</code>: Defines the model to use, such as <code class="inlineCode">text-embedding-3-small</code></li>
+      <li class="bulletList"><code class="inlineCode">batch_size</code>: The number of chunks the function can process in a single batch, such as <code class="inlineCode">batch_size=1000</code></li>
+      <li class="bulletList"><code class="inlineCode">pause_time</code>: A pause time in seconds, which can be useful for rate limits</li>
+    </ul>
+    <p class="normal">We then initialize the timing function, <code class="inlineCode">embeddings</code> variable, and counter:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="code-highlight"><strong class="hljs-slc">start_time</strong></span> = time.time()  <span class="hljs-comment"># Start timing the operation</span>
+<span class="code-highlight"><strong class="hljs-slc">embeddings</strong></span> = []  <span class="hljs-comment"># Initialize an empty list to store the embeddings</span>
+<span class="code-highlight"><strong class="hljs-slc">counter</strong></span> = <span class="hljs-number">1</span>  <span class="hljs-comment"># Batch counter</span>
+</code></pre>
+    <p class="normal">The code is <a id="_idIndexMarker240"/>now ready to process the chunks in batches:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Process chunks in batches</span>
+    <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0</span>, <span class="hljs-built_in">len</span>(chunks), batch_size):
+        chunk_batch = chunks[i:i + batch_size]  <span class="hljs-comment"># Select a batch of chunks</span>
+</code></pre>
+    <p class="normal">Each batch is then sent to the embedding function:</p>
+    <pre class="programlisting code"><code class="hljs-code">        <span class="hljs-comment"># Get the embeddings for the current batch</span>
+        current_embeddings = get_embedding(
+            chunk_batch, model=embedding_model
+        )
+</code></pre>
+    <p class="normal">The embedded batch is appended to the embeddings list:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Append the embeddings to the final list</span>
+        embeddings.extend(current_embeddings)
+</code></pre>
+    <p class="normal">The number of batches is monitored and displayed and the pause is activated:</p>
+    <pre class="programlisting code"><code class="hljs-code">   <span class="hljs-comment"># Print batch progress and pause</span>
+        <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Batch </span><span class="hljs-subst">{counter}</span><span class="hljs-string"> embedded."</span>)
+        counter += <span class="hljs-number">1</span>
+        time.sleep(pause_time)  <span class="hljs-comment"># Optional: adjust or remove this depending on rate limits</span>
+</code></pre>
+    <p class="normal">Once all the batches are processed, the total time is displayed:</p>
+    <pre class="programlisting code"><code class="hljs-code">   <span class="hljs-comment"># Print total response time</span>
+    response_time = time.time() - start_time
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Total Response Time: </span><span class="hljs-subst">{response_time:</span><span class="hljs-number">.2</span><span class="hljs-subst">f}</span><span class="hljs-string"> seconds"</span>)
+</code></pre>
+    <p class="normal">The embedding function is ready to be called with the chunks list:</p>
+    <pre class="programlisting code"><code class="hljs-code">embeddings = embed_chunks(chunks)
+</code></pre>
+    <p class="normal">The output shows that the scenario data has been embedded:</p>
+    <pre class="programlisting con"><code class="hljs-con">Batch 1 embedded.
+Total Response Time: 4.09 seconds
+</code></pre>
+    <p class="normal">The first embedding is displayed for verification:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-built_in">print</span>(<span class="hljs-string">"</span><span class="hljs-string">First embedding:"</span>, embeddings[<span class="hljs-number">0</span>])
+</code></pre>
+    <p class="normal">The output <a id="_idIndexMarker241"/>confirms that the embeddings have been generated:</p>
+    <pre class="programlisting con"><code class="hljs-con">First embedding: [0.017762450501322746, 0.041617266833782196, -0.024105189368128777,…
+</code></pre>
+    <p class="normal">The final verification is to check that the number of embeddings matches the number of chunks:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Check the lengths of the chunks and embeddings</span>
+num_chunks = <span class="hljs-built_in">len</span>(chunks)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Number of chunks: </span><span class="hljs-subst">{num_chunks}</span><span class="hljs-string">"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Number of embeddings: </span><span class="hljs-subst">{</span><span class="hljs-built_in">len</span><span class="hljs-subst">(embeddings)}</span><span class="hljs-string">"</span>)
+</code></pre>
+    <p class="normal">The output confirms that the chunking and embedding process is most probably successful:</p>
+    <pre class="programlisting con"><code class="hljs-con">Number of chunks: 3
+Number of embeddings: 3
+</code></pre>
+    <p class="normal">The chunks and embeddings are now ready to be upserted into the Pinecone index.</p>
+    <h2 class="heading-2" id="_idParaDest-93"><a id="_idTextAnchor097"/>Creating the Pinecone index</h2>
+    <p class="normal">The <code class="inlineCode">genai-v1</code> Pinecone index <a id="_idIndexMarker242"/>we will create will contain two namespaces, as shown in <em class="italic">Figure 3.3</em>:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">genaisys</code>: A repository of instruction scenarios. These prompts drive generative AI behavior and can also trigger traditional functions such as web search.</li>
+      <li class="bulletList"><code class="inlineCode">Data01</code>: The embedded classical data that the RAG pipeline queries.</li>
+    </ul>
+    <figure class="mediaobject"><img alt="Figure 3.3: Partitioning the Pinecone index into namespaces" src="../Images/B32304_03_3.png"/></figure>
+    <p class="packt_figref">Figure 3.3: Partitioning the Pinecone index into namespaces</p>
+    <p class="normal">We begin by importing two classes:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> pinecone <span class="hljs-keyword">import</span> Pinecone, ServerlessSpec
+</code></pre>
+    <p class="normal">The <code class="inlineCode">Pinecone</code> class<a id="_idIndexMarker243"/> is the primary interface to interact with the Pinecone index. We will use this class to configure Pinecone’s serverless services.</p>
+    <p class="normal">Before going further, you will need to set up a Pinecone account and obtain an API key. Make sure to verify the cost of these services at <a href="https://www.pinecone.io/"><span class="url">https://www.pinecone.io/</span></a>. This chapter is self-contained, so you can begin by reading the content, comments, and code before deciding on creating a Pinecone account.</p>
+    <p class="normal">Once our account is set up, we need to retrieve and initialize our API key:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Retrieve the API key from environment variables</span>
+api_key = os.environ.get(<span class="hljs-string">'PINECONE_API_KEY'</span>)
+<span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> api_key:
+    <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">"PINECONE_API_KEY is not set in the environment!"</span>)
+<span class="hljs-comment"># Initialize the Pinecone client</span>
+pc = Pinecone(api_key=api_key)
+</code></pre>
+    <p class="normal">We now import the specification class, define the name of our index (<code class="inlineCode">genai-v1</code>), and initialize our first namespace (<code class="inlineCode">genaisys</code>) for our scenarios:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> pinecone <span class="hljs-keyword">import</span> ServerlessSpec
+index_name = "genai-v1"
+namespace=<span class="hljs-string">"genaisys"</span>
+</code></pre>
+    <p class="normal">We now have a project management decision to make—use the Pinecone cloud to host our index or <strong class="keyWord">Amazon Web Services</strong> (<strong class="keyWord">AWS</strong>)?</p>
+    <pre class="programlisting code"><code class="hljs-code">cloud = os.environ.get(<span class="hljs-string">'PINECONE_CLOUD'</span>) <span class="hljs-keyword">or</span> <span class="hljs-string">'aws'</span>
+region = os.environ.get(<span class="hljs-string">'PINECONE_REGION'</span>) <span class="hljs-keyword">or</span> <span class="hljs-string">'us-east-1'</span>
+spec = ServerlessSpec(cloud=cloud, region=region)
+</code></pre>
+    <p class="normal">The code first checks whether an environment variable (<code class="inlineCode">PINECONE_CLOUD</code>) is set to use the Pinecone cloud. If there is no predefined environment variable check set, the variable defaults to AWS with <code class="inlineCode">'aws'</code> and <code class="inlineCode">'</code><code class="inlineCode">us-east-1'</code> as the default region.</p>
+    <div class="note">
+      <p class="normal"> For more information, refer to the Pinecone Python SDK documentation at <a href="https://docs.pinecone.io/reference/python-sdk"><span class="url">https://docs.pinecone.io/reference/python-sdk</span></a>.</p>
+    </div>
+    <p class="normal">In this case, AWS was chosen for the following reasons:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Market leadership and reliability</strong>: AWS has a market share of over 30% of the global infrastructure market. As such, it is deemed reliable by a large number of organizations.</li>
+      <li class="bulletList"><strong class="keyWord">Compliance and security standards</strong>: AWS has over 140 security standards for data security and privacy, including PCI-DSS and HIPAA/HITECH, FedRAMP, GDPR, FIPS 140-2, and NIST 800-171.</li>
+      <li class="bulletList"><strong class="keyWord">Scalability</strong>: AWS has a global network of data centers, making scalability seamless.</li>
+    </ul>
+    <p class="normal">Alternatively, you<a id="_idIndexMarker244"/> can create an index manually in your Pinecone console to select the embedding model and the host, such as AWS or <strong class="keyWord">Google Cloud Platform</strong> (<strong class="keyWord">GCP</strong>). You<a id="_idIndexMarker245"/> can also select your pod size from x1 to more, which will determine the maximum size of your index. Each choice depends on your project and resource optimization strategy.</p>
+    <p class="normal">In any case, we need metrics to monitor usage and cost. Pinecone provides detailed usage metrics accessible via your account, allowing you to manage indexes efficiently. For example, we might want to delete information you don’t need anymore, add targeted data, or optimize the usage per user.</p>
+    <p class="normal">Pinecone provides three key metrics:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Serverless storage usage</strong>: Measured in <strong class="keyWord">gigabyte-hours</strong> (<strong class="keyWord">GB-hours</strong>). The cost is calculated at 1 GB of storage per hour. Carefully monitoring the amount of data we store is an important factor in any AI project.</li>
+      <li class="bulletList"><strong class="keyWord">Serverless write operations units</strong>: Measures the resources consumed by write operations to the Pinecone database that contains our index.</li>
+      <li class="bulletList"><strong class="keyWord">Serverless read operations</strong> <strong class="keyWord">units</strong>: Measures the resources consumed by read operations.</li>
+    </ul>
+    <p class="normal">You can download detailed information on your consumption by going to your Pinecone account, selecting <strong class="keyWord">Usage</strong>, and then clicking on the <strong class="keyWord">Download</strong> button, as shown here:</p>
+    <figure class="mediaobject"><img alt="Figure 3.4: Downloading Pinecone usage data" src="../Images/B32304_03_4.png"/></figure>
+    <p class="packt_figref">Figure 3.4: Downloading Pinecone usage data</p>
+    <p class="normal">The download file is in CSV format and contains a detailed account of our Pinecone usage, such as <code class="inlineCode">BillingAccountId </code>(account identifier), <code class="inlineCode">BillingAccountName </code>(account name), <code class="inlineCode">OrganizationName</code> (organization name),<code class="inlineCode"> OrganizationId</code> (organization ID), <code class="inlineCode">ProjectId </code>(project identifier), <code class="inlineCode">ProjectName </code>(project name),<code class="inlineCode"> ResourceId</code> (resource identifier), <code class="inlineCode">ResourceName </code>(resource name), <code class="inlineCode">ChargePeriodStart </code>(charge start date), <code class="inlineCode">ChargePeriodEnd</code> (charge end date),<code class="inlineCode"> BillingPeriodStart </code>(billing start date), <code class="inlineCode">BillingPeriodEnd </code>(billing end date), <code class="inlineCode">SkuId</code> (SKU identifier), <code class="inlineCode">SkuPriceId</code> (SKU price ID), <code class="inlineCode">ServiceName</code> (service name), <code class="inlineCode">ChargeDescription </code>(charge details), <code class="inlineCode">CloudId </code>(cloud provider), <code class="inlineCode">RegionId </code>(region), <code class="inlineCode">Currency</code> (currency type), <code class="inlineCode">PricingQuantity</code> (usage quantity), <code class="inlineCode">PricingUnit</code> (usage unit), <code class="inlineCode">ListCost</code> (listed cost), <code class="inlineCode">EffectiveCost</code> (calculated cost), <code class="inlineCode">BilledCost</code> (final cost), and <code class="inlineCode">Metadata</code> (additional data).</p>
+    <div class="note">
+      <p class="normal"> As AI slowly enters its industrial age, straying away from the initial excitement of the early 2020s, continuous monitoring of these metrics becomes increasingly critical.</p>
+    </div>
+    <p class="normal">We will now<a id="_idIndexMarker246"/> check whether the index we selected exists or not. The program imports the <code class="inlineCode">pinecone</code> and <code class="inlineCode">time</code> classes to insert a sleep time before checking whether the index exists:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> time
+<span class="hljs-keyword">import</span> pinecone
+<span class="hljs-comment"># check if index already exists (it shouldn't if this is first time)</span>
+<span class="hljs-keyword">if</span> index_name <span class="hljs-keyword">not</span> <span class="hljs-keyword">in</span> pc.list_indexes().names():
+</code></pre>
+    <p class="normal">If the index exists, the following code will be skipped to avoid creating duplicate indexes. If not, an index is created:</p>
+    <pre class="programlisting code"><code class="hljs-code">   <span class="hljs-comment"># if does not exist, create index</span>
+    pc.create_index(
+        index_name,
+        dimension=<span class="hljs-number">1536</span>,  <span class="hljs-comment"># dimension of the embedding model</span>
+        metric=<span class="hljs-string">'cosine'</span>,
+        spec=spec
+    )
+    <span class="hljs-comment"># wait for index to be initialized</span>
+    time.sleep(<span class="hljs-number">1</span>)
+</code></pre>
+    <p class="normal">The parameters are as follows:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">index_name</code>, which is the name of our Pinecone index, <code class="inlineCode">genai-v1</code></li>
+      <li class="bulletList"><code class="inlineCode">dimension=1536</code>, the dimensionality of the embedding vectors</li>
+      <li class="bulletList"><code class="inlineCode">metric='cosine'</code>, which sets the distance metric for similarity searches to cosine similarity</li>
+      <li class="bulletList"><code class="inlineCode">spec=spec</code>, which defines the region and the serverless specification we defined previously for the cloud services</li>
+      <li class="bulletList"><code class="inlineCode">time.sleep(1)</code>, which makes the program wait to make sure the index is fully created before continuing</li>
+    </ul>
+    <p class="normal">If the index has just been created, the output shows its details with <code class="inlineCode">total_vector_count</code> set to <code class="inlineCode">0</code> (if you see a number other than <code class="inlineCode">0</code>, the notebook has likely already been run):</p>
+    <pre class="programlisting con"><code class="hljs-con">{'dimension': 1536,
+ 'index_fullness': 0.0,
+ 'namespaces': {},
+ 'total_vector_count': 0}
+</code></pre>
+    <p class="normal">If the index <a id="_idIndexMarker247"/>already exists, the statistics will be displayed, including <code class="inlineCode">index_fullness</code> to monitor the space used in your index pod from 0 to 1:</p>
+    <pre class="programlisting con"><code class="hljs-con">Index stats
+{'dimension': 1536,
+ 'index_fullness': 0.0,
+ 'namespaces': {'genaisys': {'vector_count': 3}},
+ 'total_vector_count': 3}
+</code></pre>
+    <p class="normal">In this case, we haven’t populated the index yet. We can connect to the index we just created and display its statistics before populating it:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># connect to index</span>
+index = pc.Index(index_name)
+<span class="hljs-comment"># view index stats</span>
+index.describe_index_stats()
+</code></pre>
+    <p class="normal">The output displays the information, confirming that we are connected:</p>
+    <pre class="programlisting con"><code class="hljs-con">{'dimension': 1536,
+ 'index_fullness': 0.0,
+ 'namespaces': {'genaisys': {'vector_count': 0}},
+ 'total_vector_count': 0}
+</code></pre>
+    <p class="normal">The selected embedding model must match Pinecone’s index dimension (<code class="inlineCode">1536</code>). We will create the parameters of a Pinecone index interactively when we begin working on use cases in <a href="Chapter_5.xhtml#_idTextAnchor140"><em class="italic">Chapter 5</em></a>. Here, we are using <code class="inlineCode">embedding_model="text-embedding-3-small</code> with its 1,536 dimensions, which matches the dimension of the Pinecone index.</p>
+    <p class="normal">Note also that the <code class="inlineCode">'genaisys'</code> namespace we initialized is taken into account. This ensures that when we <a id="_idIndexMarker248"/>upsert the scenarios we designed, they will not be confused with the classical data that is in another namespace of the same index. We are now ready to upsert the data to our Pinecone index.</p>
+    <h1 class="heading-1" id="_idParaDest-94"><a id="_idTextAnchor098"/>Upserting instruction scenarios into the index</h1>
+    <p class="normal">Upserting embedded<a id="_idIndexMarker249"/> chunks into a Pinecone index comes with a cost, as explained at the beginning of this section. We must carefully decide which data to upsert. If we upsert all the data, we might do the following:</p>
+    <ul>
+      <li class="bulletList">Overload the index and make retrieval challenging, be it instruction scenarios or classical data</li>
+      <li class="bulletList">Drive up the cost of write and read operations</li>
+      <li class="bulletList">Add more noise than is manageable and confuse the retrieval functions</li>
+    </ul>
+    <p class="normal">If we choose not to upsert the data, we have two options:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Querying in real time in memory</strong>: Loading chunked, embedded data into memory and querying the information in real time could alleviate the data store and be a pragmatic way to deal with ephemeral information we don’t need to store, such as the daily weather forecast. However, we must also weigh the cost/benefit of this approach versus upserting at each step for the use cases we’ll be working on starting from <a href="Chapter_5.xhtml#_idTextAnchor140"><em class="italic">Chapter 5</em></a>.</li>
+      <li class="bulletList"><strong class="keyWord">Fine-tuning data</strong>: This comes with the cost of building training datasets, which requires human and computing resources. In the case of fast-moving markets, we might have to fine-tune regularly, which entails high investments. The cost/benefit will be up to the project management team to consider. A cost-benefit analysis of fine-tuning versus RAG will be explored in <a href="Chapter_5.xhtml#_idTextAnchor140"><em class="italic">Chapter 5</em></a>.</li>
+    </ul>
+    <p class="normal">We first initialize the libraries and start a timer to measure how long it takes to run the script:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> pinecone
+<span class="hljs-keyword">import</span> time
+<span class="hljs-keyword">import</span> sys
+start_time = time.time()  <span class="hljs-comment"># Start timing before the request</span>
+</code></pre>
+    <p class="normal">The program must then calculate the maximum size of the batch we send to Pinecone. It is set to 400,000 bytes, or 4 MB, to play it safe. If the limit is reached, the batch size is returned:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Function to calculate the size of a batch</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_batch_size</span>(<span class="hljs-params">data, limit=</span><span class="hljs-number">4000000</span>):  <span class="hljs-comment"># limit set to 4MB to be safe</span>
+    total_size = <span class="hljs-number">0</span>
+    batch_size = <span class="hljs-number">0</span>
+    <span class="hljs-keyword">for</span> item <span class="hljs-keyword">in</span> data:
+        item_size = <span class="hljs-built_in">sum</span>([sys.getsizeof(v) <span class="hljs-keyword">for</span> v <span class="hljs-keyword">in</span> item.values()])
+        <span class="hljs-keyword">if</span> total_size + item_size &gt; limit:
+            <span class="hljs-keyword">break</span>
+        total_size += item_size
+        batch_size += <span class="hljs-number">1</span>
+    <span class="hljs-keyword">return</span> batch_size
+</code></pre>
+    <p class="normal">We now <a id="_idIndexMarker250"/>need an <code class="inlineCode">upsert</code> function that takes the batch size into account when called:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Upsert function with namespace</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">upsert_to_pinecone</span>(<span class="hljs-params">batch, batch_size, namespace=</span><span class="hljs-string">"genaisys"</span>):
+    <span class="hljs-string">"""</span>
+<span class="hljs-string">    Upserts a batch of data to Pinecone under a specified namespace.</span>
+<span class="hljs-string">    """</span>
+    <span class="hljs-keyword">try</span>:
+        index.upsert(vectors=batch, namespace=namespace)
+        <span class="hljs-built_in">print</span>(
+            <span class="hljs-string">f"Upserted </span><span class="hljs-subst">{batch_size}</span><span class="hljs-string"> vectors to namespace '</span><span class="hljs-subst">{namespace}</span><span class="hljs-string">'."</span>
+        )
+    <span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+        <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Error during upsert: </span><span class="hljs-subst">{e}</span><span class="hljs-string">"</span>)
+</code></pre>
+    <div class="note">
+      <p class="normal">In production, we would typically exit on error, but for this educational notebook, printing helps us observe without stopping execution. </p>
+    </div>
+    <p class="normal">Note that we will upsert the instruction scenarios into the namespace, <code class="inlineCode">genaisys</code>, within the Pinecone index. We can now define the main batch upsert function:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">batch_upsert</span>(<span class="hljs-params">data</span>):
+</code></pre>
+    <p class="normal">The function begins by determining the total length of the data and then prepares batches that match the batch size that it will calculate with the <code class="inlineCode">get_batch_size</code> function. Then, it creates a batch and sends it to the <code class="inlineCode">upsert_to_pinecone</code> function we defined:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Function to upsert data in batches</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">batch_upsert</span>(<span class="hljs-params">data</span>):
+    total = <span class="hljs-built_in">len</span>(data)
+    i = <span class="hljs-number">0</span>
+    <span class="hljs-keyword">while</span> i &lt; total:
+        batch_size = get_batch_size(data[i:])
+        batch = data[i:i + batch_size]
+        <span class="hljs-keyword">if</span> batch:
+            upsert_to_pinecone(batch, batch_size, namespace=<span class="hljs-string">"genaisys"</span>)
+            i += batch_size
+            <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Upserted </span><span class="hljs-subst">{i}</span><span class="hljs-string">/</span><span class="hljs-subst">{total}</span><span class="hljs-string"> items..."</span>)  <span class="hljs-comment"># Display current progress</span>
+        <span class="hljs-keyword">else</span>:
+            <span class="hljs-keyword">break</span>
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">"Upsert complete."</span>)
+</code></pre>
+    <p class="normal">When the <a id="_idIndexMarker251"/>upsert is completed, the output will display a success message, signaling that we are ready to prepare the upsert process. A Pinecone index requires an ID that we will now create:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Generate IDs for each data item</span>
+ids = [<span class="hljs-built_in">str</span>(i) <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">1</span>, <span class="hljs-built_in">len</span>(chunks) + <span class="hljs-number">1</span>)]
+</code></pre>
+    <p class="normal">Once each embedded chunk has an ID, we need to format the data to fit Pinecone’s index structure:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Prepare data for upsert</span>
+data_for_upsert = [
+    {<span class="hljs-string">"id"</span>: <span class="hljs-built_in">str</span>(<span class="hljs-built_in">id</span>), <span class="hljs-string">"values"</span>: emb, <span class="hljs-string">"metadata"</span>: {<span class="hljs-string">"text"</span>: chunk}}
+    <span class="hljs-keyword">for</span> <span class="hljs-built_in">id</span>, (chunk, emb) <span class="hljs-keyword">in</span> <span class="hljs-built_in">zip</span>(ids, <span class="hljs-built_in">zip</span>(chunks, embeddings))
+]
+</code></pre>
+    <p class="normal">The data is now formatted with an ID, values (embeddings), and metadata (the chunks). Let’s call the <code class="inlineCode">batch_upsert</code> function that will call the related functions we created:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Upsert data in batches</span>
+batch_upsert(data_for_upsert)
+</code></pre>
+    <p class="normal">When the upserting process is finished, the number of vectors upserted to the namespace and the time it took are displayed:</p>
+    <pre class="programlisting con"><code class="hljs-con">Upserted 3 vectors to namespace 'genaisys'.
+Upserted 3/3 items...
+Upsert complete.
+Upsertion response time: 0.45 seconds
+</code></pre>
+    <p class="normal">We can also display the statistics of the Pinecone index:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment">#You might have to run this cell after a few seconds to give Pinecone</span>
+<span class="hljs-comment">#the time to update the index information</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Index stats"</span>)
+<span class="hljs-built_in">print</span>(index.describe_index_stats(include_metadata=<span class="hljs-literal">True</span>))
+</code></pre>
+    <div class="note">
+      <p class="normal"> Note that you might have to wait a few seconds to give Pinecone time to update the index information.</p>
+    </div>
+    <p class="normal">The output displays the information:</p>
+    <pre class="programlisting con"><code class="hljs-con">Index stats
+{'dimension': 1536,
+ 'index_fullness': 0.0,
+ 'namespaces': {'genaisys': {'vector_count': 3}},
+ 'total_vector_count': 3}
+</code></pre>
+    <p class="normal">The information displayed is as follows:</p>
+    <ul>
+      <li class="bulletList"><code class="inlineCode">'dimension': 1536</code>: Dimension of the embeddings.</li>
+      <li class="bulletList"><code class="inlineCode">'index_fullness': 0.0</code>: A value between 0 and 1 that shows how full the Pinecone index is. We must monitor this value to optimize the data we are upserting to avoid <a id="_idIndexMarker252"/>having to increase the size of the storage capacity we are using. For more information, consult the Pinecone documentation at <a href="https://docs.pinecone.io/guides/get-started/overview"><span class="url">https://docs.pinecone.io/guides/get-started/overview</span></a>.</li>
+      <li class="bulletList"><code class="inlineCode">'namespaces': {'genaisys': {'vector_count': 3}}</code>: Displays the namespace and vector count.</li>
+      <li class="bulletList"><code class="inlineCode">'total_vector_count': 3}</code>: Displays the total vector count in the Pinecone index.</li>
+    </ul>
+    <p class="normal">We are now ready to upload the classical data into its namespace.</p>
+    <h1 class="heading-1" id="_idParaDest-95"><a id="_idTextAnchor099"/>Upserting classical data into the index</h1>
+    <p class="normal">Building <a id="_idIndexMarker253"/>a GenAISys involves teams. So that each team can work in parallel to optimize production times, we will upsert the classical data in a separate program/notebook. One team can work on instruction scenarios while another team works on gathering and processing data.</p>
+    <p class="normal">Open <code class="inlineCode">Pinecone_RAG.ipynb</code>. We will be reusing several components of the <code class="inlineCode">Pinecone_instruction_scenarios.ipynb</code> notebook built in the <em class="italic">Building a dynamic Pinecone index</em> section of this chapter. Setting up the environment is identical to the previous notebook. The Pinecone index is the same, <code class="inlineCode">genai-v1</code>. The namespace for source-data upserting is <code class="inlineCode">data01</code>, as we’ve already established in earlier sections, to make sure the data is separated from the instruction scenarios. So, the only real difference is the data we load and the chunking method. Let’s get into it!</p>
+    <h2 class="heading-2" id="_idParaDest-96"><a id="_idTextAnchor100"/>Data loading and chunking</h2>
+    <p class="normal">This <a id="_idIndexMarker254"/>section embeds chunks using the same process as for instruction scenarios in <code class="inlineCode">Pinecone_instruction_scenarios.ipynb</code>. However, this time, GPT-4o does <a id="_idIndexMarker255"/>the chunking. When importing lines of instruction scenarios, we wanted to keep the integrity of the scenario in one chunk to be able to provide a complete set of instructions to the generative AI model. In this case, we will leverage the power of generative AI and chunk raw text with GPT-4o.</p>
+    <p class="normal">We begin by downloading data, not scenarios, and setting the path of the file:</p>
+    <pre class="programlisting code"><code class="hljs-code">download(<span class="hljs-string">"Chapter03"</span>,<span class="hljs-string">"data01.txt"</span>)
+<span class="hljs-comment"># Load the CSV file</span>
+file_path = <span class="hljs-string">'/content/data01.txt'</span>
+</code></pre>
+    <p class="normal">Now, the text file is loaded as one big chunk in a variable and displayed:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">try</span>:
+    <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(file_path, <span class="hljs-string">'r'</span>) <span class="hljs-keyword">as</span> file:
+        text = file.read()
+    text
+<span class="hljs-keyword">except</span> FileNotFoundError:
+    text = <span class="hljs-string">"Error: File not found. Please check the file path."</span>
+<span class="hljs-built_in">print</span>(text)
+</code></pre>
+    <div class="note">
+      <p class="normal"> While a production application would typically exit on a critical <code class="inlineCode">FileNotFoundError</code>, for this educational notebook, printing the error allows us to observe the outcome without interrupting the learning flow.</p>
+    </div>
+    <p class="normal">You can comment <code class="inlineCode">print(text)</code> or only print a few lines. In this case, let’s verify that we have correctly imported the file. The output shows that we did:</p>
+    <pre class="programlisting con"><code class="hljs-con">The CTO was explaing that a business-ready generative AI system (GenAISys) offers functionality similar to ChatGPT-like platforms…
+</code></pre>
+    <p class="normal">The<a id="_idIndexMarker256"/> text contains a message from the CTO of the company whose data we are uploading to our custom RAG database. A company <a id="_idIndexMarker257"/>might have thousands of such internal messages—far too many (and too volatile) to justify model fine-tuning. Storing only the key chunks in Pinecone gives us searchable context without flooding the index with noise.</p>
+    <p class="normal">The <code class="inlineCode">text</code> variable is not ready yet to be chunked by GPT-4o. The first step is to create an OpenAI instance and give the GPT-4o model instructions:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Import libraries</span>
+<span class="hljs-keyword">from</span> openai <span class="hljs-keyword">import</span> OpenAI
+<span class="hljs-comment"># Initialize OpenAI Client</span>
+client = OpenAI()
+<span class="hljs-comment"># Function to chunk text using GPT-4o</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">chunk_text_with_gpt4o</span>(<span class="hljs-params">text</span>):
+    <span class="hljs-comment"># Prepare the messages for GPT-4o</span>
+    messages = [
+        {<span class="hljs-string">"role"</span>: <span class="hljs-string">"system"</span>, <span class="hljs-string">"content"</span>: <span class="hljs-string">"You are an assistant skilled at splitting long texts into meaningful, semantically coherent chunks of 50-100 words each."</span>},
+        {<span class="hljs-string">"role"</span>: <span class="hljs-string">"user"</span>, <span class="hljs-string">"content"</span>: <span class="hljs-string">f"Split the following text into meaningful chunks:\n\n</span><span class="hljs-subst">{text}</span><span class="hljs-string">"</span>}
+    ]
+Now we send the request to the API:
+    <span class="hljs-comment"># Make the GPT-4o API call</span>
+    response = client.chat.completions.create(
+        model=<span class="hljs-string">"gpt-4o"</span>,  <span class="hljs-comment"># GPT-4o model</span>
+        messages=messages,
+        temperature=<span class="hljs-number">0.2</span>,  <span class="hljs-comment"># Low randomness for consistent chunks</span>
+        max_tokens=<span class="hljs-number">1024</span>  <span class="hljs-comment"># Sufficient tokens for the chunked response</span>
+    )
+</code></pre>
+    <p class="normal">We need to keep an eye on the <code class="inlineCode">max_tokens=1024</code> setting: GPT-4o will stop generating once it hits that limit. For very large documents, you can stream the text in smaller slices—then let GPT-4o refine each slice. We can also use ready-made chunking functions that will break the text down into optimized <em class="italic">chunks</em> to obtain more nuanced and precise results when retrieving the data. However, in this case, let’s maximize the usage of GPT-4o; we send the entire file in one<a id="_idIndexMarker258"/> call with a low temperature so we can watch the model<a id="_idIndexMarker259"/> partition a real-world document from end to end.</p>
+    <p class="normal">Now we can retrieve the chunks from the response, clean them, store them in a list of chunks, and return the <code class="inlineCode">chunks</code> variable:</p>
+    <pre class="programlisting code"><code class="hljs-code">   <span class="hljs-comment"># Extract and clean the response</span>
+    chunked_text = response.choices[<span class="hljs-number">0</span>].message.content
+    chunks = chunked_text.split(<span class="hljs-string">"\n\n"</span>)  <span class="hljs-comment"># Assume GPT-4o separates chunks with double newlines</span>
+    <span class="hljs-keyword">return</span> chunks
+</code></pre>
+    <p class="normal">Now, we can call the chunking function. We don’t have to display the chunks and can comment the code in production. However, in this case, let’s verify that everything is working:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Chunk the text</span>
+chunks = chunk_text_with_gpt4o(text)
+<span class="hljs-comment"># Display the chunks</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Chunks:"</span>)
+<span class="hljs-keyword">for</span> i, chunk <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(chunks):
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">f"\nChunk </span><span class="hljs-subst">{i+</span><span class="hljs-number">1</span><span class="hljs-subst">}</span><span class="hljs-string">:"</span>)
+    <span class="hljs-built_in">print</span>(chunk)
+</code></pre>
+    <p class="normal">The output shows that the chunks were successfully created:</p>
+    <pre class="programlisting con"><code class="hljs-con">Chunks:
+Chunk 1:
+The CTO was explaining that …
+Chunk 2:
+GenAISys relies on a generative AI model…
+Chunk 3:
+We defined memoryless, short-term, long-term…
+</code></pre>
+    <p class="normal">The remaining embedding and upsert steps are identical to those in <code class="inlineCode">Pinecone_instruction_scenarios.ipynb</code>—just remember to use <code class="inlineCode">namespace="data01"</code> when writing the vectors. After that, we’re ready to query the index and verify retrieval.</p>
+    <h1 class="heading-1" id="_idParaDest-97"><a id="_idTextAnchor101"/>Querying the Pinecone index</h1>
+    <p class="normal">As you <a id="_idIndexMarker260"/>know, our vector store now has two logical areas—<code class="inlineCode">genaisys</code> for instruction scenarios and <code class="inlineCode">data01</code> for classical data. In this section, we’ll query each area interactively to prove the retrieval code works before we wire it into the multi-user interface in <a href="Chapter_4.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a>. We will query these two namespaces in the Pinecone index, as shown in <em class="italic">Figure 3.5</em>:</p>
+    <figure class="mediaobject"><img alt="Figure 3.5: Generative AI model querying either the instruction scenarios or the data" src="../Images/B32304_03_5.png"/></figure>
+    <p class="packt_figref">Figure 3.5: Generative AI model querying either the instruction scenarios or the data</p>
+    <p class="normal">Open <code class="inlineCode">Query_Pinecone.ipynb</code> to run the verification queries. The next steps are the same as those in the <em class="italic">Setting up the environment</em> and <em class="italic">Creating the Pinecone index</em> sections, except for two minor differences:</p>
+    <ul>
+      <li class="bulletList">The namespace is not provided when we connect to the Pinecone index, only its name: <code class="inlineCode">index_name = 'genai-v1'</code>. This is because the querying function will manage the choice of a namespace.</li>
+      <li class="bulletList">The <code class="inlineCode">Upserting</code> section of the notebook has been removed because we are not upserting but querying the Pinecone index.</li>
+    </ul>
+    <p class="normal">The <code class="inlineCode">Query</code> section of the notebook is divided into two subsections. The first subsection contains the querying functions and the second one the querying requests. Let’s begin with the querying functions.</p>
+    <h2 class="heading-2" id="_idParaDest-98"><a id="_idTextAnchor102"/>Querying functions</h2>
+    <p class="normal">There are four <a id="_idIndexMarker261"/>querying functions, as follows:</p>
+    <ul>
+      <li class="bulletList">QF1: <code class="inlineCode">query_vector_store(query_text, namespace)</code>, which receives the query, sends the request to QF2, and returns the response. It will use QF4 to display the results.</li>
+      <li class="bulletList">QF2: <code class="inlineCode">get_query_results(query_text, namespace)</code>, which receives the query from QF1, sends it to QF3 to be embedded, makes the actual query, and returns a response to QF1.</li>
+      <li class="bulletList">QF3: <code class="inlineCode">get_embedding(text, model=embedding_model)</code>, which receives text to embed from QF2 and sends the embedded text back to QF2.</li>
+      <li class="bulletList">QF4: <code class="inlineCode">display_results(query_results)</code>, which receives the results from QF1, processes them, and returns them to QF1.</li>
+    </ul>
+    <p class="normal">We can <a id="_idIndexMarker262"/>simplify the representation as shown in <em class="italic">Figure 3.6</em> by creating two groups of functions:</p>
+    <ul>
+      <li class="bulletList">A group with QF1, <code class="inlineCode">query_vector_store</code>, and QF4, <code class="inlineCode">display_results</code>, in which QF1 queries the vector store through QF2 and returns the results to display.</li>
+      <li class="bulletList">A group with QF2, <code class="inlineCode">get_query_results</code>, queries the vector store after embedding the query with QF3, <code class="inlineCode">get_embedding</code>, and returns the results to QF1.</li>
+    </ul>
+    <figure class="mediaobject"><img alt="Figure 3.6: Querying the vector store with two groups of functions" src="../Images/B32304_03_6.png"/></figure>
+    <p class="packt_figref">Figure 3.6: Querying the vector store with two groups of functions</p>
+    <p class="normal">Let’s begin with the first group of functions.</p>
+    <h3 class="heading-3" id="_idParaDest-99"><a id="_idTextAnchor103"/>Querying the vector store and returning results</h3>
+    <p class="normal">The<a id="_idIndexMarker263"/> first function, QF1, receives the user input:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">query_vector_store</span>(<span class="hljs-params">query_text, namespace</span>):
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">"Querying vector store..."</span>)
+</code></pre>
+    <p class="normal">Then, the <a id="_idIndexMarker264"/>function calls QF2, <code class="inlineCode">query_results</code>:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-comment"># Retrieve query results</span>
+    query_results = get_query_results(query_text, namespace)
+</code></pre>
+    <p class="normal">QF2 then returns the results in <code class="inlineCode">query_results</code>, which, in turn, is sent to <code class="inlineCode">display_results</code> to obtain the text and target ID:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-comment"># Process and display the results</span>
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">"Processed query results:"</span>)
+    text, target_id = display_results(query_results)
+    <span class="hljs-keyword">return</span> text, target_id
+</code></pre>
+    <p class="normal"><code class="inlineCode">display_results</code> processes <a id="_idIndexMarker265"/>the query results it receives and <a id="_idIndexMarker266"/>returns the result along with metadata to find the text obtained in the metadata of the Pinecone index. When it is found, the function retrieves the ID:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">display_results</span>(<span class="hljs-params">query_results</span>):
+    <span class="hljs-keyword">for</span> <span class="hljs-keyword">match</span> <span class="hljs-keyword">in</span> query_results[<span class="hljs-string">'</span><span class="hljs-string">matches'</span>]:
+        <span class="hljs-built_in">print</span>(<span class="hljs-string">f"ID: </span><span class="hljs-subst">{</span><span class="hljs-keyword">match</span><span class="hljs-subst">[</span><span class="hljs-string">'id'</span><span class="hljs-subst">]}</span><span class="hljs-string">, Score: </span><span class="hljs-subst">{</span><span class="hljs-keyword">match</span><span class="hljs-subst">[</span><span class="hljs-string">'score'</span><span class="hljs-subst">]}</span><span class="hljs-string">"</span>)
+        <span class="hljs-keyword">if</span> <span class="hljs-string">'</span><span class="hljs-string">metadata'</span> <span class="hljs-keyword">in</span> <span class="hljs-keyword">match</span> <span class="hljs-keyword">and</span> <span class="hljs-string">'text'</span> <span class="hljs-keyword">in</span> <span class="hljs-keyword">match</span>[<span class="hljs-string">'metadata'</span>]:
+            text=<span class="hljs-keyword">match</span>[<span class="hljs-string">'metadata'</span>][<span class="hljs-string">'</span><span class="hljs-string">text'</span>]
+            <span class="hljs-comment">#print(f"Text: {match['metadata']['text']}")</span>
+            target_id = query_results[<span class="hljs-string">'matches'</span>][<span class="hljs-number">0</span>][<span class="hljs-string">'id'</span>]  <span class="hljs-comment"># Get the ID from the first match</span>
+            <span class="hljs-comment">#print(f"Target ID: {target_id}")</span>
+        <span class="hljs-keyword">else</span>:
+            <span class="hljs-built_in">print</span>(<span class="hljs-string">"No metadata available."</span>)
+      <span class="hljs-keyword">return</span> text, target_id
+</code></pre>
+    <p class="normal">The text and ID are returned to QF1,<code class="inlineCode"> query_vector_store</code>, which, in turn, returns the results when the function is called. Note that for educational purposes, this function assumes <code class="inlineCode">query_results</code> will always contain at least one match with <code class="inlineCode">'metadata'</code> and <code class="inlineCode">'text'</code> fields. Let’s now see how the query is processed.</p>
+    <h3 class="heading-3" id="_idParaDest-100"><a id="_idTextAnchor104"/>Processing the queries</h3>
+    <p class="normal">The <a id="_idIndexMarker267"/>program queries the Pinecone index with <code class="inlineCode">get_query_results</code> with the input text and namespace provided. But first, the input text must be embedded to enable a vector similarity search in the vector store:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">get_query_results</span>(<span class="hljs-params">query_text, namespace</span>):
+    <span class="hljs-comment"># Generate the query vector from the query text</span>
+    query_vector = get_embedding(query_text)  <span class="hljs-comment"># Replace with your method to generate embeddings</span>
+</code></pre>
+    <p class="normal">Once the input is embedded, a vector search is requested with the vectorized input within the namespace specified:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-comment"># Perform the query</span>
+    query_results = index.query(
+        vector=query_vector,
+        namespace=namespace,
+        top_k=<span class="hljs-number">1</span>,  <span class="hljs-comment"># Adjust as needed</span>
+        include_metadata=<span class="hljs-literal">True</span>
+    )
+</code></pre>
+    <p class="normal">Note that <code class="inlineCode">k</code> is set to <code class="inlineCode">1</code> in this example to retrieve a single top result for precision, and also, the metadata is set to <code class="inlineCode">True</code> to include the corresponding text. The results are returned to QF2,<code class="inlineCode">query_results</code>:</p>
+    <pre class="programlisting code"><code class="hljs-code">    <span class="hljs-comment"># Return the results</span>
+    <span class="hljs-keyword">return</span> query_results
+</code></pre>
+    <p class="normal">The embedding <a id="_idIndexMarker268"/>function is the same as what we used to upsert the data in the Pinecone index:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> openai
+client = openai.OpenAI()
+embedding_model = <span class="hljs-string">"text-embedding-3-small"</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_embedding</span>(<span class="hljs-params">text, model=embedding_model</span>):
+    text = text.replace(<span class="hljs-string">"\n"</span>, <span class="hljs-string">" "</span>)
+    response = client.embeddings.create(<span class="hljs-built_in">input</span>=[text], model=model)
+    embedding = response.data[<span class="hljs-number">0</span>].embedding
+    <span class="hljs-keyword">return</span> embedding
+</code></pre>
+    <div class="note">
+      <p class="normal"> Make sure to use the same model to embed queries as you did to embed the data you upserted so that the embedded input is in the same vector format as the embedded data stored. This is critical for similarity search to make accurate similarity calculations.</p>
+    </div>
+    <p class="normal">We’re now ready to run two tests: an instruction scenario query (namespace <code class="inlineCode">genaisys</code>) and a source data query (namespace <code class="inlineCode">data01</code>).</p>
+    <h2 class="heading-2" id="_idParaDest-101"><a id="_idTextAnchor105"/>Retrieval queries</h2>
+    <p class="normal">To retrieve <a id="_idIndexMarker269"/>an instruction scenario, we will enter a user input and the namespace to let the system find the closest instruction to perform:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Define your namespace and query text</span>
+namespace = <span class="hljs-string">"genaisys"</span>  <span class="hljs-comment"># Example namespace</span>
+query_text = <span class="hljs-string">"The customers like the idea of travelling and learning. Provide your sentiment."</span>
+</code></pre>
+    <p class="normal">The system should detect the task briefly asked for and return a comprehensive instruction scenario. For that, we’ll call the entry point of the functions, <code class="inlineCode">query_vector_store</code>, and display the output returned:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Call the query function</span>
+text, target_id = query_vector_store(query_text, namespace)
+<span class="hljs-comment"># Display the final output</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Final output:"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Text: </span><span class="hljs-subst">{text}</span><span class="hljs-string">"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Target ID: </span><span class="hljs-subst">{target_id}</span><span class="hljs-string">"</span>)
+</code></pre>
+    <p class="normal">The output is satisfactory and is ready to be used in <a href="Chapter_4.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a> in a conversational loop:</p>
+    <pre class="programlisting con"><code class="hljs-con">Querying vector store...
+Processed query results:
+ID: 2, Score: 0.221010014
+Querying response time: 0.54 seconds
+Final output:
+Text: 200,Sentiment analysis  Read the content return a sentiment analysis nalysis on this text and provide a score with the label named : Sentiment analysis score followed by a numerical value between 0 and 1  with no + or - sign and  add an explanation to justify the score.
+Target ID: 2
+</code></pre>
+    <p class="normal">The <a id="_idIndexMarker270"/>program now retrieves data from the Pinecone index. The query functions are identical since the namespace is a variable. Let’s just look at the query and output. The query is directed to the data namespace:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Define your namespace and query text</span>
+namespace = <span class="hljs-string">"data01"</span>  <span class="hljs-comment"># Example namespace</span>
+query_text = <span class="hljs-string">"What did the CTO say about the different types of memory?"</span>
+The result <span class="hljs-keyword">is</span> printed:
+<span class="hljs-comment"># Display the final output</span>
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Final output:"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Text: </span><span class="hljs-subst">{text}</span><span class="hljs-string">"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Target ID: </span><span class="hljs-subst">{target_id}</span><span class="hljs-string">"</span>)
+</code></pre>
+    <p class="normal">The output is satisfactory:</p>
+    <pre class="programlisting con"><code class="hljs-con">Querying vector store...
+Processed query results:
+ID: 3, Score: 0.571151137
+Querying response time: 0.45 seconds
+Final output:
+Text: We defined memoryless, short-term, long-term memory, and cross-topic memory. For the hybrid travel marketing campaign, we will distinguish semantic memory (facts) from episodic memory (personal events in time, for example). The CTO said that we will need to use episodic memories of past customer trips to make the semantic aspects of our trips more engaging.
+Target ID: 3
+</code></pre>
+    <p class="normal">We have <a id="_idIndexMarker271"/>thus populated a Pinecone vector store and queried it. Let’s summarize the implementation of the Pinecone index before we move on to adding more layers to our GenAISys.</p>
+    <h1 class="heading-1" id="_idParaDest-102"><a id="_idTextAnchor106"/>Summary</h1>
+    <p class="normal">In this chapter, we pushed our GenAISys project another step forward by moving beyond ordinary RAG. First, we layered expert-written instruction scenarios on top of the source data corpus, turning a static RAG pipeline into a dynamic framework that can fetch not only facts but also the exact reasoning pattern the model should follow. The global market is accelerating so quickly that users now expect ChatGPT-level assistance the moment a need arises; if we hope to keep pace, our architecture must be flexible, cost-aware, and capable of near-real-time delivery.</p>
+    <p class="normal">We began by laying out that architecture, then introduced the law of diminishing returns to determine when an implicit similarity search is worth its compute bill and when a direct, explicit call—such as a simple web search—will do the job more cheaply. With the theory in place, we wrote a program to download, chunk, embed, and upsert the instruction scenarios into a dedicated namespace inside a Pinecone index. Next, we enlisted GPT-4o to perform the same chunk-and-embed routine on the source documents, storing those vectors in a second namespace. Once both partitions were in place, we verified the retrieval layer: a single query function now routes any prompt to the correct namespace and returns the best match along with its metadata.</p>
+    <p class="normal">With scenarios and data cleanly separated yet instantly searchable, the GenAISys has the retrieval backbone it needs. In the next chapter, we will plug these components into the conversational loop and let the system demonstrate its full, business-ready agility.</p>
+    <h1 class="heading-1" id="_idParaDest-103"><a id="_idTextAnchor107"/>Questions</h1>
+    <ol>
+      <li class="numberedList" value="1">There is no limit to automating all tasks in a generative AI system. (True or False)</li>
+      <li class="numberedList">The law of diminishing returns is of no use in AI. (True or False)</li>
+      <li class="numberedList">Chunking is the process of breaking data into smaller parts to retrieve more nuanced information. (True or False)</li>
+      <li class="numberedList">There is only one embedding model you should use. (True or False)</li>
+      <li class="numberedList">Upserting data to a Pinecone index means uploading data to a database. (True or False)</li>
+      <li class="numberedList">A namespace is the name of a database. (True or False).</li>
+      <li class="numberedList">A namespace can be used to access different types of data. (True or False)</li>
+      <li class="numberedList">Querying the Pinecone index requires the user input to be embedded. (True or False)</li>
+      <li class="numberedList">Querying the Pinecone index is based on a metric such as cosine similarity. (True or False)</li>
+      <li class="numberedList">The Pinecone index and the query functions are the only components of a GenAISys. (True or False)</li>
+    </ol>
+    <h1 class="heading-1" id="_idParaDest-104"><a id="_idTextAnchor108"/>References</h1>
+    <ul>
+      <li class="bulletList">OpenAI embeddings documentation: <a href="https://platform.openai.com/docs/guides/embeddings"><span class="url">https://platform.openai.com/docs/guides/embeddings</span></a></li>
+      <li class="bulletList">Pinecone Python SDK documentation: <a href="https://docs.pinecone.io/reference/python-sdk"><span class="url">https://docs.pinecone.io/reference/python-sdk</span></a></li>
+      <li class="bulletList">Pinecone documentation: <a href="https://docs.pinecone.io/guides/get-started/overview"><span class="url">https://docs.pinecone.io/guides/get-started/overview</span></a></li>
+    </ul>
+    <h1 class="heading-1" id="_idParaDest-105"><a id="_idTextAnchor109"/>Further reading</h1>
+    <ul>
+      <li class="bulletList"><em class="italic">AI Development Cost: Learn What Makes Developing an AI Solution</em>: <a href="https://www.spaceo.ai/blog/ai-development-cost/"><span class="url">https://www.spaceo.ai/blog/ai-development-cost/</span></a></li>
+    </ul>
+    <ul>
+      <li class="bulletList">
+        <div class="unlock">
+          <table class="table-container" id="table001-2">
+            <tbody>
+              <tr>
+                <td class="table-cell">
+                  <h4 class="heading-4">Unlock this book’s exclusive benefits now</h4>
+                  <p class="normal">Scan this QR code or go to <a href="http://packtpub.com/unlock"><span class="url">packtpub.com/unlock</span></a>, then search for this book by name.</p>
+                </td>
+                <td class="table-cell" rowspan="2">
+                  <figure class="mediaobject"><img alt="A qr code on a white background  AI-generated content may be incorrect." src="../Images/Unlock.png"/></figure>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell">
+                  <p class="normal"><em class="italic">Note: Keep your purchase invoice ready before you start.</em></p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </li>
+    </ul>
+  </div>
+</body></html>

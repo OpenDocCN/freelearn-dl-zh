@@ -1,0 +1,564 @@
+<html><head></head><body>
+<div id="book-content">
+<div id="sbo-rt-content"><div id="_idContainer041">
+			<h1 id="_idParaDest-133" class="chapter-number"><a id="_idTextAnchor132"/>7</h1>
+			<h1 id="_idParaDest-134"><a id="_idTextAnchor133"/>Real-World Use Case – Retrieval-Augmented Generation</h1>
+			<p>In the previous chapter, we learned how to augment our kernel with memories, which enables our applications to be much more personalized. Cloud-based AI models, such as OpenAI’s GPT, usually have knowledge cut-offs that are a few months old. They also usually don’t have domain-specific knowledge, such as the user manuals of the products your company makes, and don’t know the preferences of your users, such as their favorite programming language or their favorite city. The previous chapter taught you ways to augment the knowledge of models by keeping small pieces of knowledge in memory and retrieving them <span class="No-Break">as needed.</span></p>
+			<p>In this chapter, we’re going to show you how to expand the data that’s available to your AI application. Instead of using a small amount of data that fits in the prompt, we’re going to use <a id="_idIndexMarker466"/>a large amount of data with a <strong class="bold">retrieval-augmented generation</strong> (<strong class="bold">RAG</strong>) application that combines the latest generative AI models with recent specialized information to answer questions about a specific topic – in our case, academic articles <span class="No-Break">about AI.</span></p>
+			<p>RAG takes advantage of the fact that lots of institutions have useful data that wasn’t part of the data that was used to train OpenAI’s GPT. This gives these institutions a way of putting this data to use while still taking advantage of the generative power <span class="No-Break">of GPT.</span></p>
+			<p>In this chapter, we’ll be covering the <span class="No-Break">following topics:</span></p>
+			<ul>
+				<li>Creating a document index with the Azure AI <span class="No-Break">Search</span><span class="No-Break"> service</span></li>
+				<li>Loading a large number of documents to <span class="No-Break">the index</span></li>
+				<li>Creating an application that searches the index and uses AI to write an answer based on the data <span class="No-Break">it found</span></li>
+			</ul>
+			<p>By the end of this chapter, you will have created an application that uses a large amount of recent data and uses AI to find and combine the data in a <span class="No-Break">user-friendly way.</span></p>
+			<h1 id="_idParaDest-135"><a id="_idTextAnchor134"/>Technical requirements</h1>
+			<p>To complete this chapter, you will need to have a recent, supported version of your preferred Python or C# <span class="No-Break">development environment:</span></p>
+			<ul>
+				<li>For Python, the minimum supported version is Python 3.10, and the recommended version is <span class="No-Break">Python 3.11</span></li>
+				<li>For C#, the minimum supported version is .<span class="No-Break">NET 8</span></li>
+			</ul>
+			<p>In this chapter, we will call OpenAI services. Given the amount that companies spend on training these LLMs, it’s no surprise that using these services is not free. You will need an <strong class="bold">OpenAI API</strong> key, obtained either directly through <strong class="bold">OpenAI</strong> or <strong class="bold">Microsoft</strong>, via the <strong class="bold">Azure </strong><span class="No-Break"><strong class="bold">OpenAI</strong></span><span class="No-Break"> service.</span></p>
+			<p>If you are using .NET, the code for this chapter is <span class="No-Break">at </span><a href="https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/dotnet/ch7"><span class="No-Break">https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/dotnet/ch7</span></a><span class="No-Break">.</span></p>
+			<p>If you are using Python, the code for this chapter is <span class="No-Break">at </span><a href="https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/python/ch7"><span class="No-Break">https://github.com/PacktPublishing/Building-AI-Applications-with-Microsoft-Semantic-Kernel/tree/main/python/ch7</span></a><span class="No-Break">.</span></p>
+			<p>To create a document index, you will need a free trial of Microsoft Azure <span class="No-Break">AI Search.</span></p>
+			<p>You can install the required packages by going to the GitHub repository and using the following: <strong class="source-inline">pip install -</strong><span class="No-Break"><strong class="source-inline">r requirements.txt</strong></span><span class="No-Break">.</span></p>
+			<h1 id="_idParaDest-136"><a id="_idTextAnchor135"/>Why would you need to customize GPT models?</h1>
+			<p>GPT models <a id="_idIndexMarker467"/>are already very useful without any customizations. When your user types a request, you, as a programmer, could simply forward the request to the GPT model (such as GPT-3.5 or GPT-4), and, in many cases, the unaltered response from the model is good enough. However, in many cases, the responses aren’t good enough. There are three categories of problems <span class="No-Break">with responses:</span></p>
+			<ul>
+				<li><strong class="bold">Non-text functionality</strong>: In some cases, the response you want is not text-based. For example, you may want to allow your user to turn a light on or off, perform complex math, or insert records into <span class="No-Break">a database.</span></li>
+				<li><strong class="bold">Lack of context</strong>: Models can’t accurately answer questions if they haven’t been exposed to the data that contains the answer. Despite being trained with immense amounts of data, there’s a lot of data that LLMs haven’t been exposed to. At the time of writing, the cut-off date for data used to train GPT 3.5 and GPT-4 is September 2021, although there is a preview version of GPT-4 called GPT-4 Turbo with a cut-off date of December 2023 (you can see the cut-off dates of models at <a href="https://platform.openai.com/docs/models/">https://platform.openai.com/docs/models/</a>.) In addition, models don’t have access to proprietary data, such as the internal documents of <span class="No-Break">your company.</span></li>
+				<li><strong class="bold">Unsupported formats</strong>: LLMs such as GPT-3.5 Turbo and GPT-4 have been trained to provide answers in text with a conversational tone. In some cases, you might want the answers to be provided in a specific format, such as JSON. Since models haven’t been trained for that, they may provide inconsistent answers. It’s not uncommon for a low percentage of responses to use an incorrect format, even though your prompt was very specific. For example, you may have added <strong class="source-inline">Answer only with Y or N</strong> to your prompt, but some requests return responses such as <strong class="source-inline">Yes</strong> (instead of <em class="italic">Y</em>) or <strong class="source-inline">The answer is yes</strong>, which requires adding code to validate <span class="No-Break">the answer.</span></li>
+			</ul>
+			<p>We showed you <a id="_idIndexMarker468"/>how to solve the first issue (non-text functionality) using Semantic Kernel via native functions, as shown in <a href="B21826_03.xhtml#_idTextAnchor071"><span class="No-Break"><em class="italic">Chapter 3</em></span></a>. However, if the problem with the responses you’re getting is a lack of context or format, you can use the techniques depicted in the <span class="No-Break">following diagram:</span></p>
+			<div>
+				<div id="_idContainer039" class="IMG---Figure">
+					<img src="image/B21826_07_1.jpg" alt="Figure 7.1 – Techniques to improve responses" width="921" height="597"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.1 – Techniques to improve responses</p>
+			<p>The first technique <a id="_idIndexMarker469"/>you should always try is <strong class="bold">prompt engineering</strong>, something we covered in detail in <a href="B21826_02.xhtml#_idTextAnchor045"><span class="No-Break"><em class="italic">Chapter 2</em></span></a>. Prompt engineering is easy to do and test: it can be used both to give new data to the LLM (improving context) and to provide some examples of how you want the answer to look (<span class="No-Break">improving format).</span></p>
+			<p>For example, let’s say <a id="_idIndexMarker470"/>you’re building an application that gives your team suggestions of places to go for lunch, something that’s always a challenge among teams of developers. Instead of simply asking <strong class="source-inline">Where should we go for lunch?</strong>, you will get much better results by adding context and format specifications, such as <strong class="source-inline">We are a team of six developers aged 25-38, two of us are vegetarians, and we are looking for places to have lunch near the Eiffel Tower on a Friday. We want to spend less than 20 euro per person and we don't want to spend more than 90 minutes having lunch. Please provide your answer with the name of the place, their website, their average price, and their street address</strong>. The format specification is the <span class="No-Break">last sentence.</span></p>
+			<p>The main downside is that the more data you want to provide and the more complex the instructions, the larger your prompts will become, resulting in additional costs <span class="No-Break">and latency.</span></p>
+			<p>Besides providing examples through prompt engineering, another technique you can use to improve the format of your answer is to fine-tune your model. Fine-tuning allows you to provide hundreds or thousands of examples of questions and answers to an existing model (for example, GPT-3.5) and save a new, <span class="No-Break">fine-tuned model.</span></p>
+			<p>One example of successful fine-tuning is to show thousands of examples of the way you expect JSON output to look. Since you are providing thousands of examples, you can’t pass this on to every prompt because the prompt will become too large. You can create a file that contains thousands of questions and JSON answers and use the OpenAI fine-tuning API or fine-tuning UI to create a custom GPT model that has been trained with your additional examples. The result will be a model that is a lot better at providing JSON answers, and worse at <span class="No-Break">everything else.</span></p>
+			<p>If your application <a id="_idIndexMarker471"/>only needs to provide JSON answers, that’s exactly what you need. Microsoft Semantic Kernel does not help with fine-tuning, so techniques for fine-tuning are outside the scope of this book. If you want to learn more about fine-tuning, this online article from Sebastian Raschka, a Packt author, can <span class="No-Break">help: </span><a href="https://magazine.sebastianraschka.com/p/finetuning-large-language-models"><span class="No-Break">https://magazine.sebastianraschka.com/p/finetuning-large-language-models</span></a><span class="No-Break">.</span></p>
+			<p>In practice, one of the most common problems is that the LLM will not have enough context to provide the answers you want. This can happen even if the data that’s required to provide the answer has been used to train the model: since LLMs are trained with a lot of data, you may need to add relevant data to your request to help the model recall the data that’s relevant to your request from the large amount of data it was trained with. For example, if you simply ask GPT <strong class="source-inline">Who is the best football player of all time?</strong>, it may not know whether you mean association football (soccer) or NFL (<span class="No-Break">American) football.</span></p>
+			<p>In some other cases, as discussed previously when we mentioned the cut-off date and private data examples, the model has never seen the data required to answer the question, and you need to show it to the model as you are making <span class="No-Break">the request.</span></p>
+			<p>To an extent, you can solve both problems with <span class="No-Break">prompt engineering:</span></p>
+			<ul>
+				<li>You can tell the model to play a role. For example, you can add <strong class="source-inline">you are a Python software engineer</strong> to prime the model to respond more technically, or <strong class="source-inline">you are a five-year-old child</strong> to prime the model to respond <span class="No-Break">more simply.</span></li>
+				<li>You can give the model some data examples. For example, you can add <strong class="source-inline">If the user says 'the earth is flat', reply with 'misinformation'; if the user says 'the moon landing was fake', reply with 'misinformation'; if the user says 'birds are real', reply with "true"</strong> to your prompt, either directly or by using prompt templates in <span class="No-Break">semantic functions.</span></li>
+				<li>You can add some fields to your prompt template and fill them in real time. For example, you can get today’s date from the system and create a prompt that states <strong class="source-inline">the difference between $today and July 4th,  1776, in days is…"</strong>, replacing <strong class="source-inline">$today</strong> dynamically, and therefore passing recent information to <span class="No-Break">the model.</span></li>
+			</ul>
+			<p>The first downside <a id="_idIndexMarker472"/>of prompt engineering is that the more data you need to pass, the larger your prompts will get, which will make the prompts more expensive. It will also increase latency as it will take longer for the LLM to process <span class="No-Break">long prompts.</span></p>
+			<p>Even if your budget can support the additional cost and your users are extremely patient and don’t mind waiting for the answers, there are still two problems. The first is that the accuracy of LLMs decreases [1] as prompts get larger. The second is that at some point, you may run out of space in the context window of the model. For example, let’s say you work for a company that manufactures cars, and you want to help a user find the answer to a question about their car in the user manual, but it’s 300 pages long. Even if you were to solve all previous problems, you can’t pass the whole manual in the prompt because it <span class="No-Break">doesn’t fit.</span></p>
+			<p>The solution that works best is to break your user manual into several chunks and save these chunks to an index. When the user asks a question, you can use a search algorithm to return the most relevant chunks by using something such as cosine similarity, as shown in <a href="B21826_06.xhtml#_idTextAnchor120"><span class="No-Break"><em class="italic">Chapter 6</em></span></a>. Then, you only need to pass the relevant chunks to the prompt. The name of this technique is RAG and it’s widely used. Semantic Kernel makes it easy to implement it, but you also need an index. Let’s delve into <span class="No-Break">the details.</span></p>
+			<h1 id="_idParaDest-137"><a id="_idTextAnchor136"/>Retrieval-augmented generation</h1>
+			<p>RAG is an approach that combines the powers of pre-trained language models with information <a id="_idIndexMarker473"/>retrieval to generate responses based on a large corpus of documents. This is particularly useful for generating informed responses that rely on external knowledge not contained within the model’s <span class="No-Break">training dataset.</span></p>
+			<p>RAG involves <span class="No-Break">three steps:</span></p>
+			<ul>
+				<li><strong class="bold">Retrieval</strong>: Given an input query (for example, a question or a prompt), you use a system to retrieve relevant documents or passages from your data sources. This is typically done <span class="No-Break">using embeddings.</span></li>
+				<li><strong class="bold">Augmentation</strong>: The retrieved documents are then used to augment the input prompt. Usually, this means creating a prompt that incorporates the data from the retrieval step and adds some <span class="No-Break">prompt engineering.</span></li>
+				<li><strong class="bold">Generation</strong>: The augmented prompt is then fed into a generative model, usually GPT, which generates the output. Because the prompt contains relevant information from the retrieved documents, the model can generate responses that are informed by that <span class="No-Break">external knowledge.</span></li>
+			</ul>
+			<p>In addition to providing additional and more recent information to an AI service, RAG can help with <strong class="bold">grounding</strong>. Grounding <a id="_idIndexMarker474"/>is the process of tying the language model’s responses to accurate, reliable, and contextually appropriate knowledge or data. This can be particularly important in scenarios where factual accuracy and relevance are crucial, such as answering questions about science, history, or current events. Grounding helps ensure that the information provided by the model is not only plausible but also correct and applicable to the <span class="No-Break">real world.</span></p>
+			<p>When you use RAG, you give the LLM the data that you want it to use to generate your responses. If your data is accurate, reliable, and contextually appropriate, the text that’s generated by the LLM using this data has a very high likelihood of also being accurate, reliable, and contextually appropriate. You can even ask the generator step to provide links to the documents it used. We will see this in <span class="No-Break">our example.</span></p>
+			<p>Let’s say you want to summarize the latest discoveries in models with large context windows. First, you need to retrieve information about the latest discoveries by doing a web search or using a database of <span class="No-Break">academic papers.</span></p>
+			<p>To implement RAG, you need a few <span class="No-Break">extra components:</span></p>
+			<ul>
+				<li><strong class="bold">Document store</strong>: A large collection of documents that the model can search through <a id="_idIndexMarker475"/>to find relevant information. This could be anything from a simple text file, a database, or a more sophisticated document store such as a vector database. In our <a id="_idIndexMarker476"/>example, we will use a vector database, <strong class="bold">Azure AI Search</strong>, but lots of implementations use out-of-the-box Python components such as <strong class="source-inline">numpy</strong>, which have the advantage of <span class="No-Break">being free.</span></li>
+				<li><strong class="bold">Retrieval system</strong>: The <a id="_idIndexMarker477"/>software that’s used to find the most relevant documents from the document store based on the <span class="No-Break">input query.</span></li>
+			</ul>
+			<p>Most vector database vendors provide algorithms that work well with their service, and lately, most solutions have been using vector comparisons such as cosine similarity. For example, services such as Pinecone and Azure AI Search provide document and embedding storage and <span class="No-Break">retrieval algorithms.</span></p>
+			<p>In our example, we will create an application that allows you to search for and ask questions <a id="_idIndexMarker478"/>about AI papers from the ArXiV database. We downloaded the list of ArXiV IDs, authors, titles, and abstracts for all papers in the <em class="italic">Computation and Language</em> category that were submitted in 2021 and after. This dataset is available in this book’s GitHub <span class="No-Break">repository: </span><a href="https://github.com/PacktPublishing/Microsoft-Semantic-Kernel/blob/b1187f88f46589f14a768e3ee7b89bef733f1263/data/papers/ai_arxiv_202101.json"><span class="No-Break">https://github.com/PacktPublishing/Microsoft-Semantic-Kernel/blob/b1187f88f46589f14a768e3ee7b89bef733f1263/data/papers/ai_arxiv_202101.json</span></a><span class="No-Break">.</span></p>
+			<p>The dataset contains a total of 36,908 scientific articles. The summaries of their contents are in the <strong class="source-inline">abstract</strong> field and contain over 40 million characters, which would require approximately 10 million tokens, something that’s too large for even the largest <span class="No-Break">AI models.</span></p>
+			<p>We are going to load all this data into an Azure AI Search index. But before we load the articles, we must create <span class="No-Break">the index.</span></p>
+			<h2 id="_idParaDest-138"><a id="_idTextAnchor137"/>Creating an index</h2>
+			<p>To store <a id="_idIndexMarker479"/>and retrieve large amounts of data, we will need to create an index. To do so, you must have an Azure account and must create an Azure AI Search service. Just search for <strong class="source-inline">Azure AI Search</strong> and click <strong class="bold">Create</strong>; you will be asked for a name. You will need the endpoint of the service, which you can find in the <strong class="bold">Configuration</strong> tab, shown in <span class="No-Break"><em class="italic">Figure 7</em></span><em class="italic">.2</em>. or the Azure AI Search service you created. <span class="No-Break"><em class="italic">Figure 7</em></span><em class="italic">.2</em> shows the endpoint for the service you created in the <strong class="bold">Url</strong> field, marked <span class="No-Break">in green:</span></p>
+			<div>
+				<div id="_idContainer040" class="IMG---Figure">
+					<img src="image/B21826_07_2.jpg" alt="Figure 7.2 – Azure AI Search configuration screen" width="1604" height="580"/>
+				</div>
+			</div>
+			<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.2 – Azure AI Search configuration screen</p>
+			<p>You will also need an admin key, which you can find under the <strong class="bold">Keys</strong> tab for your Azure AI <span class="No-Break">Search service.</span></p>
+			<p>Creating a service is just the first step: the service is just a place to store one or more indexes, which are the places where we will store the data. Now that we have a service, we need to write code to create <span class="No-Break">the index.</span></p>
+			<p>The field names deserve mentioning. Your life will be a lot easier if you can use some standard names – that is, <strong class="source-inline">Id</strong>, <strong class="source-inline">AdditionalMetadata</strong>, <strong class="source-inline">Text</strong>, <strong class="source-inline">Description</strong>, <strong class="source-inline">ExternalSourceName</strong>, <strong class="source-inline">IsReference</strong>, and <strong class="source-inline">Embedding</strong>. The field names should use that specific capitalization. If you use these names, you can easily use the preview version of the Azure AI Search Semantic Kernel connection, which will make your code much smaller. The text you’ll use for searching (abstracts, in our case) should be <strong class="source-inline">Text</strong>. In the following code, I’ll map these fields to what <span class="No-Break">we need.</span></p>
+			<p>So, let’s see how to do that in Python. Later, we’ll learn how to do this <span class="No-Break">in C#.</span></p>
+			<h3>Creating the index with Python</h3>
+			<p>Write <a id="_idIndexMarker480"/>the following code in a Python script to create <span class="No-Break">an index:</span></p>
+			<pre class="source-code">
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.indexes import SearchIndexClient</pre>			<p>First, you need to import the <strong class="source-inline">AzureKeyCredential</strong> function to read your admin key and <strong class="source-inline">SearchIndexClient</strong> to create an object that will allow you to interact with the Azure AI <span class="No-Break">Search service.</span></p>
+			<p>Next, we <a id="_idIndexMarker481"/>will import several classes for the types we will be using in <span class="No-Break">our index:</span></p>
+			<pre class="source-code">
+from azure.search.documents.indexes.models import (
+    SearchIndex,
+    SearchField,
+    SearchFieldDataType,
+    SimpleField,
+    SearchableField,
+    VectorSearch,
+    HnswAlgorithmConfiguration,
+    HnswParameters,
+    VectorSearchAlgorithmKind,
+    VectorSearchProfile,
+    VectorSearchAlgorithmMetric,
+)</pre>			<p>For fields that we want to search using embeddings, we use the <strong class="source-inline">SearchField</strong> type. For other fields, we use the <strong class="source-inline">SimpleField</strong> type if we don’t intend to search for content inside of them, and <strong class="source-inline">SearchableField</strong> if we want them to be searchable by <span class="No-Break">string comparisons.</span></p>
+			<p>Next, let’s create an API client that will add a new index to the index collection with the <span class="No-Break"><strong class="source-inline">SearchIndexClient</strong></span><span class="No-Break"> class:</span></p>
+			<pre class="source-code">
+def main() -&gt; None:
+    index_name = os.getenv("ARXIV_SEARCH_INDEX_NAME")
+    service_name = os.getenv("ARXIV_SEARCH_SERVICE_NAME")
+    service_endpoint = f"https://{service_name}.search.windows.net/"
+    admin_key = os.getenv("ARXIV_SEARCH_ADMIN_KEY")
+    credential = AzureKeyCredential(admin_key)
+    # Create a search index
+    index_client = SearchIndexClient(
+        endpoint=service_endpoint, credential=credential)
+    index_client.delete_index(index_name)</pre>			<p>When <a id="_idIndexMarker482"/>you are in the development phase, it’s not uncommon to have to redesign your index by adding or dropping fields, changing the size of the embeddings, and so on. Therefore, we usually drop and recreate the fields in the script. To drop a field in the preceding snippet, we used the <span class="No-Break"><strong class="source-inline">delete_index</strong></span><span class="No-Break"> method.</span></p>
+			<p>The following code specifies the fields and their properties to help describe which fields the index <span class="No-Break">will contain:</span></p>
+			<pre class="source-code">
+fields = [
+    SimpleField(name="Id", type=SearchFieldDataType.String, key=True, sortable=True, filterable=True, facetable=True),
+    SearchableField(name="AdditionalMetadata", type=SearchFieldDataType.String),
+    SearchableField(name="Text", type=SearchFieldDataType.String),
+    SearchableField(name="Description", type=SearchFieldDataType.String),
+    SearchableField(name="ExternalSourceName", type=SearchFieldDataType.String),
+    SimpleField(name="IsReference", type=SearchFieldDataType.Boolean),
+    SearchField(name="Embedding", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                searchable=True, vector_search_dimensions=1536, vector_search_profile_name="myHnswProfile"),
+]</pre>			<p>Here, we are adding the same fields we have in our dataset to the index: <strong class="source-inline">id</strong>, <strong class="source-inline">authors</strong>, <strong class="source-inline">title</strong>, and <strong class="source-inline">abstract</strong>. In addition, we’re adding a field called <strong class="source-inline">Embedding</strong>, where <a id="_idIndexMarker483"/>we will put the embedding vectors of the articles’ abstracts. For that field, we need to specify a vector search algorithm profile and a vector search dimension. The dimension is the size of the embeddings. Since we’re using the new <strong class="source-inline">OpenAI text-embeddings-3-small</strong>, the embeddings’ size <span class="No-Break">is 1,536.</span></p>
+			<p>These <a id="_idIndexMarker484"/>embeddings are used in search algorithms. Azure AI Search uses an algorithm called <strong class="bold">Hierarchical Navigable Small World</strong> (<strong class="bold">HNSW</strong>), a flexible algorithm that’s closely related to nearest neighbors for high-dimensional spaces, such as the number of dimensions of our embeddings. We’ll use this algorithm later to search for items in our index and bring the ones that are more closely related. Let’s add it to our <span class="No-Break">embedding field:</span></p>
+			<pre class="source-code">
+    # Configure the vector search configuration
+    vector_search = VectorSearch(
+        algorithms=[
+            HnswAlgorithmConfiguration(
+                name="myHnsw",
+                kind=VectorSearchAlgorithmKind.HNSW,
+                parameters=HnswParameters(
+                    m=10,
+                    ef_construction=400,
+                    ef_search=500,
+                    metric=VectorSearchAlgorithmMetric.COSINE
+                )
+            )
+        ],
+        profiles=[
+            VectorSearchProfile(
+                name="myHnswProfile",
+                algorithm_configuration_name="myHnsw",
+            )
+        ]
+    )</pre>			<p>In <a id="_idIndexMarker485"/>the preceding snippet, we used cosine similarity as the metric that determines the items in the index that are more closely related to what the user searched for. For now, we’ve used the default parameters of <strong class="source-inline">m=10</strong>, <strong class="source-inline">ef_construction=400</strong>, and <strong class="source-inline">ef_search=500</strong>. <strong class="source-inline">ef</strong> in the parameters stands for <span class="No-Break"><em class="italic">exploration factor</em></span><span class="No-Break">.</span></p>
+			<p>The <strong class="source-inline">m</strong> parameter controls the density of the index – in the index, each record will have <strong class="source-inline">m</strong> neighbors. The <strong class="source-inline">ef_construction</strong> parameter increases the number of candidates being used to find neighbors for each record: the higher this parameter, the more thorough the search is going to be. The <strong class="source-inline">ef_search</strong> parameter controls the depth of the search during runtime – that is, when a search is executed, how many results are retrieved from the index <span class="No-Break">for comparison.</span></p>
+			<p>Increasing <strong class="source-inline">ef_construction</strong> causes the index construction to take longer, whereas increasing <strong class="source-inline">ef_search</strong> causes runtime searches to take longer. In most cases, the numbers <a id="_idIndexMarker486"/>can be close to each other, but if you are planning to update the index frequently and don’t want the construction time to take longer, you may increase <strong class="source-inline">ef_search</strong>. On the other hand, if your searches are already taking long enough at runtime and you want to improve their quality, you may increase <strong class="source-inline">ef_construction</strong> as it will make the results better and only increase the time it takes to build the index, but not the time it takes to execute <span class="No-Break">a search.</span></p>
+			<p>Higher values for these parameters make the index better at finding records, but they also make it take longer to build and search through. The parameters we used here work well for this example, but when you are using your own dataset for your application, be sure to experiment with <span class="No-Break">the parameters.</span></p>
+			<p>Finally, we simply call <strong class="source-inline">create_or_update_index</strong> with all the parameters we specified. This command is what will create <span class="No-Break">the index:</span></p>
+			<pre class="source-code">
+    # Create the search index with the semantic settings
+    index = SearchIndex(name=index_name, fields=fields,
+                        vector_search=vector_search)
+    result = index_client.create_or_update_index(index)
+    print(f' {result.name} created')
+if __name__ == '__main__':
+    load_dotenv()
+    main()</pre>			<p>Now that we have an index, we can upload the records (each record is called a document) from our dataset <span class="No-Break">into it.</span></p>
+			<p>Next, we’ll learn how to create the index <span class="No-Break">with C#.</span></p>
+			<h3>Creating the index using C#</h3>
+			<p>It’s a lot <a id="_idIndexMarker487"/>simpler to create the index using C#. First, we must define the fields in a class, which I chose to <span class="No-Break">call </span><span class="No-Break"><strong class="source-inline">SearchModel</strong></span><span class="No-Break">:</span></p>
+			<pre class="source-code">
+using Azure.Search.Documents.Indexes;
+using Azure.Search.Documents.Indexes.Models;
+public class SearchModel
+{
+    [SimpleField(IsKey = true, IsSortable = true, IsFilterable = true, IsFacetable = true)]
+    public string Id { get; set; }
+    [SearchableField]
+    public string AdditionalMetadata { get; set; }
+    [SearchableField]
+    public string Text { get; set; }
+    [SearchableField]
+    public string Description { get; set; }
+    [SearchableField]
+    public string ExternalSourceName { get; set; }
+    [SimpleField(IsFilterable = true)]
+    public bool IsReference { get; set; }
+}</pre>			<p>Here, we <a id="_idIndexMarker488"/>are using the same field names that we used for Python. Note that we didn’t create an <strong class="source-inline">Embedding</strong> field like in Python. This will be created later, dynamically, when we load <span class="No-Break">the documents.</span></p>
+			<p>Let’s see how to create <span class="No-Break">an index:</span></p>
+			<pre class="source-code">
+using Azure;
+using Azure.Search.Documents;
+using Azure.Search.Documents.Indexes;
+using Azure.Search.Documents.Indexes.Models;
+var (apiKey, orgId, searchServiceName, searchServiceAdminKey, searchIndexName) = Settings.LoadFromFile();
+string indexName = searchIndexName;
+AzureKeyCredential credential = new AzureKeyCredential(searchServiceAdminKey);
+SearchIndexClient indexClient = new SearchIndexClient(new Uri(searchServiceName), credential);
+indexClient.DeleteIndex(indexName);
+var fields = new FieldBuilder().Build(typeof(SearchModel));
+SearchIndex index = new SearchIndex(indexName)
+{
+    Fields = fields,
+    // Add vector search configuration if needed
+};
+var result = indexClient.CreateOrUpdateIndex(index);</pre>			<p>The <a id="_idIndexMarker489"/>code is straightforward: first, we create a list of fields in <strong class="source-inline">SearchModel</strong> using the <strong class="source-inline">FieldBuilder</strong> class; then, we create an <strong class="source-inline">index</strong> object with the <strong class="source-inline">SearchIndex</strong> class; and finally, we call <strong class="source-inline">CreateOrUpdateIndex</strong> to create the index in the <span class="No-Break">cloud service.</span></p>
+			<h2 id="_idParaDest-139"><a id="_idTextAnchor138"/>Uploading documents to the index</h2>
+			<p>While loading documents to the index is also straightforward, there are a couple of details <a id="_idIndexMarker490"/>that we need to pay <span class="No-Break">attention to.</span></p>
+			<p>The first detail is the unique identifier of the document. In our case, that is the <strong class="source-inline">Id</strong> field. In an ideal case, the data that you want to load will have a unique and <span class="No-Break">immutable identifier.</span></p>
+			<p>Luckily, that is the case for the ArXiV database: the <strong class="source-inline">Id</strong> field in the ArXiV database is unique and immutable and can always be used to search for articles online. For example, the article with an ID of <strong class="source-inline">2309.12288</strong> will always be the latest version of the <em class="italic">The Reversal Curse: LLMs trained on “A is B” fail to learn “B is A”</em> article [2], which talks about a quirk in LLMs: when asked who Tom Cruise’s mother is, it will give the correct answer, Mary Lee Pfeiffer, 79% of the time. When asked who Mary Lee Pfeiffer’s famous actor son is, it will give the correct answer, Tom Cruise, only 33% of <span class="No-Break">the time.</span></p>
+			<p>The uniqueness and immutability of the <strong class="source-inline">Id</strong> field allow us to update the index with new information as needed. However, there’s one caveat: in the index, the <strong class="source-inline">Id</strong> field can only contain numbers, letters, and underscores, so we will need to replace the dot with <span class="No-Break">an underscore.</span></p>
+			<p>The second detail is that we need to load the embeddings. For Python, at the time of writing, this will require us to calculate the embeddings manually, as we did in <a href="B21826_06.xhtml#_idTextAnchor120"><span class="No-Break"><em class="italic">Chapter 6</em></span></a>. Different embedding models produce data vectors with different meanings, and usually different sizes, but even if the sizes are the same, the embeddings are incompatible unless <span class="No-Break">explicitly stated.</span></p>
+			<p>Therefore, you can’t create your embeddings with a model and later use another embedding model to do your searches. Also, this means that whoever is writing the code <a id="_idIndexMarker491"/>to perform searches needs to know the exact embedding model that was used to load the data in the index. In C#, we can use a connector called <strong class="source-inline">Microsoft.SemanticKernel.Connectors.AzureAISearch</strong>. That connector, while still in preview, will greatly simplify things. This should be available for Python soon but isn’t at the time <span class="No-Break">of writing.</span></p>
+			<p>Now that we know about these two details, let’s write some code that will load the documents into <span class="No-Break">the index.</span></p>
+			<h3>Uploading documents with Python</h3>
+			<p>We <a id="_idIndexMarker492"/>start by importing <span class="No-Break">several packages:</span></p>
+			<pre class="source-code">
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents import SearchClient</pre>			<p>The first set of packages is for connecting to the Azure AI Search index. The packages are similar to the ones we used when creating the index, but note that we’re using a different class, <strong class="source-inline">SearchClient</strong>, instead <span class="No-Break">of </span><span class="No-Break"><strong class="source-inline">SearchIndexClient</strong></span><span class="No-Break">.</span></p>
+			<p>Now, let’s load the Semantic <span class="No-Break">Kernel packages:</span></p>
+			<pre class="source-code">
+import asyncio
+import semantic_kernel as sk
+import semantic_kernel.connectors.ai.open_ai as sk_oai</pre>			<p>These <a id="_idIndexMarker493"/>Semantic Kernel packages are going to be used to connect to the OpenAI service and generate <span class="No-Break">the embeddings.</span></p>
+			<p>Finally, we’re going to import some packages to help us control the flow of <span class="No-Break">the program:</span></p>
+			<pre class="source-code">
+from tenacity import retry, wait_random_exponential, stop_after_attempt
+import pandas as pd
+import os
+from dotenv import load_dotenv</pre>			<p>The <strong class="source-inline">tenacity</strong> library is helpful when you need to call functions that may fail as it provides you with functionality that allows you to automatically retry. The <strong class="source-inline">pandas</strong> library is used to load a CSV file. It’s not strictly necessary; you can manipulate CSVs directly without it, but the <strong class="source-inline">pandas</strong> library makes <span class="No-Break">it easier.</span></p>
+			<p>Next, let’s define a helper function to <span class="No-Break">generate embeddings:</span></p>
+			<pre class="source-code">
+@retry(wait=wait_random_exponential(min=1, max=5), stop=stop_after_attempt(3))
+async def generate_embeddings(kernel: sk.Kernel, text):
+    e = await kernel.get_service("emb").generate_embeddings(text)
+    return e[0]</pre>			<p>This function assumes we have a kernel with a service named <strong class="source-inline">emb</strong> that can generate embeddings for a given text. We used the <strong class="source-inline">retry</strong> decorator to try to generate embeddings three times before giving up, waiting between <strong class="source-inline">1</strong> and <strong class="source-inline">5</strong> seconds between each try, increasing the interval as the number of <span class="No-Break">tries increased.</span></p>
+			<p>Since the OpenAI service that we’re going to use for generating embeddings is an online service and we have more than 30,000 articles to generate embeddings for, we are going to call it more than 30,000 times. With so many calls, it’s not uncommon for some of them to occasionally fail due to network connectivity or the service being too busy. Therefore, adding the <strong class="source-inline">retry</strong> functionality can help so that you don’t get an error on call <a id="_idIndexMarker494"/>number 29,000 that breaks <span class="No-Break">your program.</span></p>
+			<p class="callout-heading">Important – Using the OpenAI services is not free</p>
+			<p class="callout">To generate embeddings, we must call the OpenAI API. These calls require a paid subscription, and each call will incur a cost. The costs are usually small per request —version 3 of the embedding models costs $0.02 per million tokens at the time of writing this book, but costs can <span class="No-Break">add up.</span></p>
+			<p class="callout">OpenAI pricing details can be found <span class="No-Break">at </span><a href="https://openai.com/pricing"><span class="No-Break">https://openai.com/pricing</span></a><span class="No-Break">.</span></p>
+			<p class="callout">Azure OpenAI pricing details can be found <span class="No-Break">at </span><a href="https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/"><span class="No-Break">https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/</span></a><span class="No-Break">.</span></p>
+			<p>The process we’ll follow to create the index search client for loading documents is very similar to what we did when creating the index. The <strong class="source-inline">SearchClient</strong> class has one more parameter than <strong class="source-inline">SearchIndexClient</strong>, which we used to create the index: the <strong class="source-inline">index_name</strong> property that we <span class="No-Break">created before:</span></p>
+			<pre class="source-code">
+async def main():
+    kernel = sk.Kernel()
+    api_key = os.getenv("OPENAI_API_KEY")
+    embedding_gen = sk_oai.OpenAITextEmbedding(service_id="emb", ai_model_id="text-embedding-3-large", api_key=api_key)
+    kernel.add_service(embedding_gen)
+    index_name = os.getenv("ARXIV_SEARCH_INDEX_NAME")
+    service_name = os.getenv("ARXIV_SEARCH_SERVICE_NAME")
+    service_endpoint = f"https://{service_name}.search.windows.net/"
+    admin_key = os.getenv("ARXIV_SEARCH_ADMIN_KEY")
+    credential = AzureKeyCredential(admin_key)
+    # Create a search index
+    index_client = SearchClient(index_name=index_name,
+        endpoint=service_endpoint, credential=credential)</pre>			<p>Let’s <a id="_idIndexMarker495"/>load <span class="No-Break">the data:</span></p>
+			<pre class="source-code">
+    df = pd.read_json('ai_arxiv_202101.json', lines=True)
+    count = 0
+    documents = []
+    for key, item in df.iterrows():
+        id = str(item["Id"])
+        id = id.replace(".", "_")</pre>			<p>Here, we read the data file into a <strong class="source-inline">pandas</strong> DataFrame, and for each record, we create a dictionary called <strong class="source-inline">document</strong>. Note that we must replace periods with underscores in the <strong class="source-inline">Id</strong> field because Azure AI Search requires key fields to only contain numbers, letters, dashes, <span class="No-Break">and underscores.</span></p>
+			<p>Now that we have the data in the dictionary, we are ready to upload it, which we will do in the <span class="No-Break">following code:</span></p>
+			<pre class="source-code">
+        embeddings = await generate_embeddings(kernel, item["abstract"])
+        # convert embeddings to a list of floats
+        embeddings = [float(x) for x in embeddings]
+        document = {
+            "@search.action": "upload",
+            "Id": id,
+            "Text": item["title"],
+            "Description": item["abstract"],
+            "Embedding": embeddings
+        }
+        documents.append(document)</pre>			<p>The <a id="_idIndexMarker496"/>fields in the document dictionary match the fields that we used when we created the index: <strong class="source-inline">Id</strong>, <strong class="source-inline">Text</strong>, <strong class="source-inline">Description</strong>, and <strong class="source-inline">Embedding</strong>. The value for the <strong class="source-inline">Embedding</strong> field is generated by calling the <strong class="source-inline">generate_embeddings</strong> function we <span class="No-Break">created earlier.</span></p>
+			<p>Also, note the additional field, <strong class="source-inline">@search.action</strong>. This field contains instructions on what’s going to happen with that item when it’s submitted to the index. <strong class="source-inline">upload</strong> is a good default as it creates the record with that ID if it doesn’t exist and updates its contents in the index if <span class="No-Break">it does.</span></p>
+			<p>Lastly, once we’ve created the <strong class="source-inline">document</strong> dictionary item, we append it to the <span class="No-Break"><strong class="source-inline">documents</strong></span><span class="No-Break"> list.</span></p>
+			<p>Now, we are ready to upload it to <span class="No-Break">the index:</span></p>
+			<pre class="source-code">
+    N = 100
+    for i in range(0, len(documents), N):
+        result = index_client.upload_documents(documents[i:i+N])
+        print(f"Uploaded {len(documents[i:i+N])} records")
+    print(f"Final tally: inserted or updated {len(documents)} records")</pre>			<p>When uploading data to the index, there’s a limit of 16 MB per operation. Therefore, we can only upload a few records at a time. In the preceding code, I limited the number of records uploaded to <strong class="source-inline">100</strong>. However, any small enough number works since we are going to <a id="_idIndexMarker497"/>insert records into the index just once. The upload operation doesn’t take very long, and it’s better to upload a few records at a time and have a slightly longer upload duration than trying to upload many records at a time and risk getting <span class="No-Break">an error.</span></p>
+			<p>The final step is to call the <span class="No-Break"><strong class="source-inline">main</strong></span><span class="No-Break"> function:</span></p>
+			<pre class="source-code">
+if __name__ == "__main__":
+    load_dotenv()
+    asyncio.run(main())</pre>			<p>Note that before calling the <strong class="source-inline">main</strong> function, we called <strong class="source-inline">load_dotenv</strong> to get the values of the environment variables that contain the index name, the service name, the admin key, and the <span class="No-Break">OpenAI key.</span></p>
+			<p>Running this program will cost approximately $1.50 as it will generate the embeddings. It will take about two and a half hours to run since we are generating dozens of thousands of embeddings. If you want to reduce the cost or time for your experiment, you can simply load just a fraction of <span class="No-Break">the documents.</span></p>
+			<p>Once the program finishes running, you will see the following <span class="No-Break">printed message:</span></p>
+			<pre class="console">
+Final tally: inserted or updated 35,808 records.</pre>			<p>Now, we can use the index to find articles. Later, we will use it to answer questions about AI papers. But before we do that, let’s learn how to upload the documents to the index <span class="No-Break">using C#.</span></p>
+			<h3>Uploading documents with C#</h3>
+			<p>The <strong class="source-inline">Microsoft.SemanticKernel.Connectors.AzureAISearch</strong> package, which <a id="_idIndexMarker498"/>is in preview at the time of writing, makes it a lot easier to upload documents with C#. To use it, we must <span class="No-Break">install it:</span></p>
+			<pre class="console">
+dotnet add package Microsoft.SemanticKernel.Connectors.AzureAISearch --prerelease</pre>			<p>Also, add the OpenAI <span class="No-Break">connectors package:</span></p>
+			<pre class="console">
+dotnet add package Microsoft.SemanticKernel.Connectors.OpenAI</pre>			<p>Now, we are going to use these packages to load the following documents into <span class="No-Break">the index:</span></p>
+			<pre class="source-code">
+using Microsoft.SemanticKernel.Connectors.AzureAISearch;
+using Microsoft.SemanticKernel.Memory;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using System.Text.Json;</pre>			<p>Since the package is in prerelease form, we need to add a few <strong class="source-inline">pragma</strong> directives to let C# know that we know that we are using <span class="No-Break">prerelease functionality:</span></p>
+			<pre class="source-code">
+#pragma warning disable SKEXP0020
+#pragma warning disable SKEXP0010
+#pragma warning disable SKEXP0001
+ISemanticTextMemory memoryWithCustomDb;</pre>			<p>At this point, we can get our environment variables. I’ve modified the <strong class="source-inline">Settings.cs</strong> file to allow for the additional Azure AI Search variables to be stored and read from <strong class="source-inline">config/settings.json</strong>. For brevity, I won’t put the file here, but you can check out this chapter’s GitHub repository to <span class="No-Break">see it:</span></p>
+			<pre class="source-code">
+var (apiKey, orgId, searchServiceName, searchServiceAdminKey, searchIndexName) = Settings.LoadFromFile();</pre>			<p>Next, we <a id="_idIndexMarker499"/>must create a <strong class="source-inline">Memory</strong> object with <strong class="source-inline">MemoryBuilder</strong>. We will use the <strong class="source-inline">AzureAISearchMemoryStore</strong> class to connect to Azure <span class="No-Break">AI Search:</span></p>
+			<pre class="source-code">
+memoryWithCustomDb = new MemoryBuilder()
+                .WithOpenAITextEmbeddingGeneration("text-embedding-3-small", apiKey)
+                    .WithMemoryStore(new AzureAISearchMemoryStore(searchServiceName, searchServiceAdminKey))
+                        .Build();</pre>			<p>The next step is to read the data from the <strong class="source-inline">ai_arxiv.json</strong> file. Despite its extension, it’s not a JSON file; it’s a text file with one JSON object per line, so we will parse each line one at <span class="No-Break">a time:</span></p>
+			<pre class="source-code">
+string data = File.ReadAllText("ai_arxiv.json");
+int i = 0;
+foreach (string line in data.Split('\n'))
+{
+    i++;
+    var paper = JsonSerializer.Deserialize&lt;Dictionary&lt;string, object&gt;&gt;(line);
+    if (paper == null)
+    {
+        continue;
+    }
+    string title = paper["title"]?.ToString() ?? "No title available";
+    string id = paper["id"]?.ToString() ?? "No ID available";
+    string abstractText = paper["abstract"]?.ToString() ?? "No abstract available";
+    id = id.Replace(".", "_");</pre>			<p>The <a id="_idIndexMarker500"/>next step is to use the <strong class="source-inline">SaveInformationAsync</strong> method of the <strong class="source-inline">MemoryStore</strong> object to upload the document into <span class="No-Break">the index:</span></p>
+			<pre class="source-code">
+    await memoryWithCustomDb.SaveInformationAsync(collection: searchIndexName,
+        text: abstractText,
+        id: id,
+        description: title);
+    if (i % 100 == 0)
+    {
+        Console.WriteLine($"Processed {i} documents at {DateTime.Now}");
+    }
+}</pre>			<p>Now that we’ve loaded the documents into the index, we can learn how to use the index <a id="_idIndexMarker501"/>to run a simple search. Later, we will use the results of the search and Semantic Kernel to assemble <span class="No-Break">an answer.</span></p>
+			<h2 id="_idParaDest-140"><a id="_idTextAnchor139"/>Using the index to find academic articles</h2>
+			<p>This subsection assumes that the index was loaded in the previous step. The index now contains titles, abstracts, and embeddings for thousands of academic papers about LLMs from ArXiV. Note that the papers in ArXiV are not necessarily peer-reviewed, which <a id="_idIndexMarker502"/>means that some articles may contain incorrect information. Regardless, ArXiV is generally a reputable data source for academic articles about AI, and many classic papers can be found there, including <em class="italic">Attention is All You Need</em> [3], the academic article that introduced GPT to the world. That article is not part of our dataset because our dataset starts in 2021, and that article is <span class="No-Break">from 2017.</span></p>
+			<p>We’re going to use this index to help us find papers for a given search string. This will ensure that the search is working and that we’re comfortable with the results. In the next subsection, we’re going to use GPT to combine the search results and summarize the findings. Let’s see how to do this in Python <span class="No-Break">and C#.</span></p>
+			<h3>Searching for articles in Python</h3>
+			<p>The <a id="_idIndexMarker503"/>first thing we must do is load the <span class="No-Break">required libraries:</span></p>
+			<pre class="source-code">
+import asyncio
+import logging
+import semantic_kernel as sk
+import semantic_kernel.connectors.ai.open_ai as sk_oai
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents import SearchClient
+from azure.search.documents.models import VectorizedQuery
+from dotenv import load_dotenv
+from tenacity import retry, wait_random_exponential, stop_after_attempt
+import pandas as pd
+import os
+@retry(wait=wait_random_exponential(min=1, max=5), stop=stop_after_attempt(3))
+async def generate_embeddings(kernel: sk.Kernel, text):
+    e = await kernel.get_service("emb").generate_embeddings(text)
+    # convert e[0] to a vector of floats
+    result = [float(x) for x in e[0]]
+    return result</pre>			<p>There <a id="_idIndexMarker504"/>are no new libraries, and we’re using the same <strong class="source-inline">generate_embeddings</strong> function as we did before. The function that’s used to generate embeddings when searching must be compatible with the function that was used to store embeddings in the vector database. If you use the same model, the function is going to <span class="No-Break">be compatible.</span></p>
+			<p>In the following code, we’re creating a kernel and loading the embedding model <span class="No-Break">into it:</span></p>
+			<pre class="source-code">
+def create_kernel() -&gt; sk.Kernel:
+    kernel = sk.Kernel()
+    api_key = os.getenv("OPENAI_API_KEY")
+    embedding_gen = sk_oai.OpenAITextEmbedding(service_id="emb", ai_model_id="text-embedding-3-small", api_key=api_key)
+    kernel.add_service(embedding_gen)
+    return kernel
+async def main():
+    kernel = create_kernel()
+    ais_index_name = os.getenv("ARXIV_SEARCH_INDEX_NAME")
+    ais_service_name = os.getenv("ARXIV_SEARCH_SERVICE_NAME")
+    ais_service_endpoint = f"https://{ais_service_name}.search.windows.net/"
+    ais_admin_key = os.getenv("ARXIV_SEARCH_ADMIN_KEY")
+    credential = AzureKeyCredential(ais_admin_key)
+    search_client = SearchClient(ais_service_endpoint, ais_index_name, credential=credential)</pre>			<p>Besides <a id="_idIndexMarker505"/>loading the kernel with the embeddings model, we’ve also loaded all the environment variables with the configuration of our OpenAI connection and our Azure AI <span class="No-Break">Search connection.</span></p>
+			<p>Now, we can execute <span class="No-Break">the query:</span></p>
+			<pre class="source-code">
+    query_string = "&lt;your query here&gt;"
+    emb = await generate_embeddings(kernel, query_string)
+    vector_query = VectorizedQuery(vector=emb, k_nearest_neighbors=5, exhaustive=True, fields="Embedding")
+    results = search_client.search(
+        search_text=None,
+        vector_queries= [vector_query],
+        select=["Id", "Text", "Description"]
+    )</pre>			<p>Executing this query consists of a few steps. First, we calculate the embeddings from our query string. This is done with the <strong class="source-inline">generate_embeddings</strong> function. Then, we create <strong class="source-inline">VectorizedQuery</strong> with the embeddings before executing the query using the <strong class="source-inline">search</strong> method of <strong class="source-inline">SearchClient</strong>. The <strong class="source-inline">k_nearest_neighbors</strong> parameter of our query determines how many results we want to bring back. In this case, I’m bringing back the <span class="No-Break">first </span><span class="No-Break"><strong class="source-inline">5</strong></span><span class="No-Break">.</span></p>
+			<p>The <a id="_idIndexMarker506"/>results come in a dictionary with the columns in the index. We’ll also retrieve an additional special column called <strong class="source-inline">@search.score</strong> that’s created dynamically during the search and shows the cosine similarity of <span class="No-Break">each result:</span></p>
+			<pre class="source-code">
+    pd_results = []
+    for result in results:
+        d = {
+            "id": result['Id'],
+            "title": result['Description'],
+            "abstract": result['Text'],
+            "score": f"{result['@search.score']:.2f}"
+        }
+        pd_results.append(d)</pre>			<p>The values of the <strong class="source-inline">@search.score</strong> field may be used to sort results by order of similarity, and also to drop results that are below a <span class="No-Break">cut-off point.</span></p>
+			<p>Let’s print <span class="No-Break">the results:</span></p>
+			<pre class="source-code">
+    pd_results = pd.DataFrame(pd_results)
+    # print the title of each result
+    for index, row in pd_results.iterrows():
+        print(row["title"])
+if __name__ == "__main__":
+    load_dotenv()
+    asyncio.run(main())</pre>			<p>In the preceding code, I’m loading the results into a <strong class="source-inline">pandas</strong> DataFrame before printing them <a id="_idIndexMarker507"/>as this makes it easier to sort and filter results when you have too many. This isn’t required, though – you can simply use a dictionary. In this case, we’re limiting our results to only five, so we could also print them directly from the <strong class="source-inline">pd_results</strong> dictionary list we created. For example, let’s say we have the <span class="No-Break">following query:</span></p>
+			<pre class="source-code">
+query_string = "models with long context windows lose information in the middle"</pre>			<p>We’ll look at the results after we’ve learned how to implement the search <span class="No-Break">in C#.</span></p>
+			<h3>Searching for articles with C#</h3>
+			<p>We can create our <strong class="source-inline">memoryWithCustomDb</strong> object in the same way we did to load the documents. Up to that point, the code is the same. However, instead of loading documents, we will now search for them. We can do that with the <strong class="source-inline">SearchAsync</strong> method <a id="_idIndexMarker508"/>of the <strong class="source-inline">memoryWithCustomDb</strong> object. All we need to do is pass the name of our index, which is stored in the <strong class="source-inline">searchIndexName</strong> variable from the configuration, the query we want to make, which we specified in <strong class="source-inline">query_string</strong>, and the number of articles we want to retrieve, which we specified in <strong class="source-inline">limit</strong>. We set <strong class="source-inline">minRelevanceScore</strong> to <strong class="source-inline">0.0</strong> so that we always retrieve the top five results. You can set it to a higher number if you only want to return results that exceed a minimum <span class="No-Break">cosine similarity:</span></p>
+			<pre class="source-code">
+IAsyncEnumerable&lt;MemoryQueryResult&gt; memories = memoryWithCustomDb.SearchAsync(searchIndexName, query_string, limit: 5, minRelevanceScore: 0.0);
+int i = 0;
+await foreach (MemoryQueryResult item in memories)
+{
+    i++;
+    Console.WriteLine($"{i}. {item.Metadata.Description}");
+}</pre>			<p>With <a id="_idIndexMarker509"/>the dedicated <strong class="source-inline">memoryWithCustomDb</strong> C# object, querying the memory is very simple, and we can get our results with a single <span class="No-Break"><strong class="source-inline">SearchAsync</strong></span><span class="No-Break"> call.</span></p>
+			<p>Let’s check out <span class="No-Break">the results.</span></p>
+			<h3>Search results</h3>
+			<p>For <a id="_idIndexMarker510"/>both Python and C#, the results we get are <span class="No-Break">as follows:</span></p>
+			<pre class="console">
+1. Lost in the Middle: How Language Models Use Long Contexts
+2. Parallel Context Windows for Large Language Models
+3. Revisiting Parallel Context Windows: A Frustratingly Simple Alternative and Chain-of-Thought Deterioration
+4. "Paraphrasing The Original Text" Makes High Accuracy Long-Context QA
+5. Emotion Detection in Unfix-length-Context Conversation</pre>			<p>Now that we have seen that the search works in C# and Python, we can use RAG to automatically generate a summary of several papers based on a search <span class="No-Break">we’ll make.</span></p>
+			<h2 id="_idParaDest-141"><a id="_idTextAnchor140"/>Using RAG to create a summary of several articles on a topic</h2>
+			<p>We’re <a id="_idIndexMarker511"/>going to use the search results from the previous step and add them to a prompt by using the usual semantic function prompt template. The prompt will instruct a model – in our case, GPT-4 – to summarize the papers our <span class="No-Break">search returned.</span></p>
+			<p>Let’s start with the semantic function, which we will call <strong class="source-inline">summarize_abstracts</strong>. Here’s <span class="No-Break">its metaprompt:</span></p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">skprompt.txt</p>
+			<pre class="source-code">
+You are a professor of computer science writing a report about artificial intelligence for a popular newspaper.
+Keep the language simple and friendly.
+Below, I'm going to give you a list of 5 research papers about artificial intelligence. Each paper has a number and an abstract.
+<strong class="bold">Summarize the combined findings of the paper. When using the abstracts, refer to them by using their number inside [] brackets.</strong>
+Your summary should be about 250 words.
+Abstracts:
+{{$input}}</pre>			<p>The <a id="_idIndexMarker512"/>key part of the prompt is that when we ask for the summarization, I ask GPT to refer to the number of the abstract. For that to work, we will generate a list that has a number and an abstract, which is very similar to the results we generated in the <em class="italic">Using the index to find academic articles</em> section. The difference is that instead of having a number and the article title, we will have a number and the article abstract. Let’s see the <span class="No-Break">configuration file:</span></p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">config.json</p>
+			<pre class="source-code">
+{
+    "schema": 1,
+    "type": "completion",
+    "description": "Summarize abstracts of academic papers",
+    "execution_settings": {
+       "default": {
+         "max_tokens": 4000,
+         "temperature": 0.5
+       }
+     },
+    "input_variables": [
+       {
+         "name": "input",
+         "description": "A numbered list of abstracts to summarize.",
+         "required": true
+       }
+    ]
+}</pre>			<p>Here, the <a id="_idIndexMarker513"/>most important thing you must do is make sure that you have enough tokens in the <strong class="source-inline">max_tokens</strong> field. You’re going to be sending five abstracts, which might easily get to 200 tokens per abstract, so you need at least 1,000 tokens just for the abstracts and more for the instructions and <span class="No-Break">the response.</span></p>
+			<h3>Retrieving the data with Python and calling the semantic function</h3>
+			<p>The <a id="_idIndexMarker514"/>first thing we <a id="_idIndexMarker515"/>need to do is add a generative model to our kernel. I’ve modified the <strong class="source-inline">create_kernel</strong> function so that it adds a <span class="No-Break"><strong class="source-inline">gpt-4-turbo</strong></span><span class="No-Break"> model:</span></p>
+			<pre class="source-code">
+def create_kernel() -&gt; sk.Kernel:
+    kernel = sk.Kernel()
+    api_key = os.getenv("OPENAI_API_KEY")
+    embedding_gen = sk_oai.OpenAITextEmbedding(service_id="emb", ai_model_id="text-embedding-3-small", api_key=api_key)
+    <strong class="bold">gpt_gen = sk_oai.OpenAIChatCompletion(service_id="gpt-4-turbo", ai_model_id="gpt-4-turbo-preview", api_key=api_key)</strong>
+<strong class="bold">    kernel.add_service(gpt_gen)</strong>
+    kernel.add_service(embedding_gen)
+    return kernel</pre>			<p>You <a id="_idIndexMarker516"/>can use any model you want, but I decided on gpt-4-turbo because it provides a good balance between <a id="_idIndexMarker517"/>cost <span class="No-Break">and performance.</span></p>
+			<p>The next step is to create a function to <span class="No-Break">summarize documents:</span></p>
+			<pre class="source-code">
+async def summarize_documents(kernel: sk.Kernel, df: pd.DataFrame) -&gt; str:
+    doc_list = ""
+    i = 0
+    doc_list += "Here are the top 5 documents that are most similar to your query:\n\n"
+    for key, row in df.iterrows():
+        i = i + 1
+        id = row["Id"].replace("_", ".")
+        doc_list += f"{i}. "
+        doc_list += f"{row['Description']} - "
+        doc_list += f"https://arxiv.org/abs/{id}\n"</pre>			<p>The first part of the function creates a string that specifies a numbered list of documents and their URLs. Because of the way Azure AI Search stores IDs, remember that we had to convert dots into underscores. To generate the proper URL, we must convert <span class="No-Break">it back.</span></p>
+			<p>The second part of the function generates a list of abstracts with the same numbers as the papers. When we write the prompt, we can ask the model to refer to the numbers, which, in turn, refer to the articles’ titles <span class="No-Break">and URLs:</span></p>
+			<pre class="source-code">
+    a = 0
+    abstracts = ""
+    for key, row in df.iterrows():
+        a = a + 1
+        abstracts += f"\n\n{a}. {row['Text']}\n"</pre>			<p>The <a id="_idIndexMarker518"/>next step is to load <a id="_idIndexMarker519"/>the semantic function from its <span class="No-Break">configuration directory:</span></p>
+			<pre class="source-code">
+    f = kernel.import_plugin_from_prompt_directory(".", "prompts")
+    summary = await kernel.invoke(f["summarize_abstracts"], input=abstracts)</pre>			<p>The final step is to combine the list of papers and URLs with the generated summary and <span class="No-Break">return it:</span></p>
+			<pre class="source-code">
+    response = f"{doc_list}\n\n{summary}"
+    return response</pre>			<p>Now that we know how to do the retrieval with Python, let’s see how to do it with C#. We’ll look at the <span class="No-Break">results after.</span></p>
+			<h3>Retrieving the data with C# and calling the semantic function</h3>
+			<p>To <a id="_idIndexMarker520"/>retrieve the data, we’ll start with the same code we used in the <em class="italic">Using the index to find academic articles</em> section until we fill the <span class="No-Break"><strong class="source-inline">memories</strong></span><span class="No-Break"> variable:</span></p>
+			<pre class="source-code">
+IAsyncEnumerable&lt;MemoryQueryResult&gt; memories = memoryWithCustomDb.SearchAsync(searchIndexName, query_string, limit: 5, minRelevanceScore: 0.0);</pre>			<p>I’ve started the response by listing the documents that were retrieved, their numbers, and their URLs, all of which were built from the <strong class="source-inline">Id</strong> field. There’s no need to use an <a id="_idIndexMarker521"/>AI model for <span class="No-Break">this step:</span></p>
+			<pre class="source-code">
+string explanation = "Here are the top 5 documents that are most like your query:\n";
+int j = 0;
+await foreach (MemoryQueryResult item in memories)
+{
+    j++;
+    string id = item.Metadata.Id;
+    id.Replace('_', '.');
+    explanation += $"{j}. {item.Metadata.Description}\n";
+    explanation += $"https://arxiv.org/abs/{id}\n";
+}
+explanation += "\n";</pre>			<p>Then, instead of creating a string with all the titles, as we did in the <em class="italic">Using the index to find academic articles</em> section, we are going to create a string named <strong class="source-inline">input</strong> with the five abstracts, identified by a number in the <strong class="source-inline">i</strong> variable. This will be used as the input parameter for our <span class="No-Break">semantic function:</span></p>
+			<pre class="source-code">
+string input = "";
+int i = 0;
+await foreach (MemoryQueryResult item in memories)
+{
+    i++;
+    input += $"{i}. {item.Metadata.Text}";
+}</pre>			<p>Now, we <a id="_idIndexMarker522"/>can create a Semantic Kernel named <strong class="source-inline">kernel</strong>, add an AI service to it, and load the semantic function defined in the previous subsection, which I decided to <span class="No-Break">call </span><span class="No-Break"><strong class="source-inline">rag</strong></span><span class="No-Break">:</span></p>
+			<pre class="source-code">
+Kernel kernel = Kernel.CreateBuilder()
+                        .AddOpenAIChatCompletion("gpt-4-turbo", apiKey, orgId, serviceId: "gpt-4-turbo")
+                        .Build();
+var rag = kernel.ImportPluginFromPromptDirectory("prompts", "SummarizeAbstract");
+explanation += await kernel.InvokeAsync(rag["summarize_abstracts"], new KernelArguments() {["input"] = input});
+Console.WriteLine(explanation);</pre>			<p>Let’s run our programs and see the results we get when we use the same <strong class="source-inline">query_string</strong> value that we used for the test in the <span class="No-Break">previous subsection.</span></p>
+			<h3>RAG results</h3>
+			<p>The <a id="_idIndexMarker523"/>query that we will use here is <strong class="source-inline">"models with long context windows lose information in </strong><span class="No-Break"><strong class="source-inline">the middle"</strong></span><span class="No-Break">.</span></p>
+			<p>The results aren’t deterministic, but you should get something similar to <span class="No-Break">the following:</span></p>
+			<pre class="console">
+Here are the top 5 documents that are most like your query:
+1. Lost in the Middle: How Language Models Use Long Contexts - https://arxiv.org/abs/2307.03172
+2. Parallel Context Windows for Large Language Models - https://arxiv.org/abs/2212.10947
+3. Revisiting Parallel Context Windows: A Frustratingly Simple Alternative and Chain-of-Thought Deterioration - https://arxiv.org/abs/2305.15262
+4. "Paraphrasing the Original Text" Makes High Accuracy Long-Context QA - https://arxiv.org/abs/2312.11193
+5. Emotion Detection in Unfix-length-Context Conversation - https://arxiv.org/abs/2302.06029
+In the rapidly evolving field of artificial intelligence, particularly in the realm of language models, recent research has been shedding light on both the capabilities and limitations of these advanced systems. A critical challenge identified is the handling of long text sequences by language models, which is essential for tasks such as multi-document question answering and key-value retrieval [1]. Despite the advancements, it's observed that the performance of these models often diminishes when they need to process relevant information located in the middle of long contexts [1]. This indicates a need for better strategies to enable models to effectively utilize long input contexts.
+To address these limitations, a novel method named Parallel Context Windows (PCW) has been introduced, which allows off-the-shelf Large Language Models (LLMs) to process long texts by dividing them into smaller chunks. This method has shown substantial improvements in handling diverse tasks requiring long text sequences without the need for further training [2]. However, further analysis reveals that PCW may not consistently enhance the models' understanding of long contexts in more complex reasoning tasks, suggesting that the method's design might not guarantee significant improvements in practical applications [3].
+Another approach to enhancing long-context capabilities involves focusing on the quality of training data. It has been found that "effective" data, which can be achieved through techniques such as original text paraphrasing, is crucial for training models to handle long texts, leading to state-of-the-art performance in multi-document retrieval and question answering tasks [4].
+Additionally, research into variable-length context windows for predicting emotions in conversations introduces new modules to better capture conversational dynamics. This approach significantly outperforms existing models by more accurately determining the relevant context for emotion prediction [5].
+Collectively, these studies highlight the importance of innovative methods and quality training data in overcoming the challenges of processing long texts. They also underscore the need for continued exploration to enhance the practical applicability of language models in real-world scenarios.</pre>			<p>As you can see, the summary is comprehensive, captures the main idea of each paper, and shows how the papers relate to <span class="No-Break">one another.</span></p>
+			<p>In this section, we learned how to use an external database to help an LLM work with a lot more information than the model can handle with its <span class="No-Break">context window.</span></p>
+			<p>One advantage <a id="_idIndexMarker524"/>of this method is that the generative model primarily uses the search data that you supplied to it to generate a response. If you only supply it with real, well-curated data, you will substantially lower the chance that it will <em class="italic">hallucinate</em> – that is, generate information that doesn’t exist. If you did not use RAG, there’s a possibility that the generative model will make up non-existent papers and references just to try to answer the questions and generate the summaries we’re <span class="No-Break">asking for.</span></p>
+			<p>Blocking hallucinations completely is theoretically impossible, but using RAG can make the chance of hallucinating so low that, in practice, your users may never see fake data being generated by your model. This is the reason RAG models are used extensively in <span class="No-Break">production applications.</span></p>
+			<h1 id="_idParaDest-142"><a id="_idTextAnchor141"/>Summary</h1>
+			<p>In this chapter, we greatly expanded the data that’s available to our AI models by using the RAG methodology. Besides allowing AI models to use large amounts of data when building prompts, the RAG methodology also improves the accuracy of the model: since the prompt contains a lot of the data that’s required to generate the answer, models tend to <span class="No-Break">hallucinate less.</span></p>
+			<p>RAG also allows AI to provide references to the material it used to generate a response. Many real-world use cases require models to manipulate large quantities of data, require references to be provided, and are sensitive to hallucinations. RAG can help overcome these <span class="No-Break">issues easily.</span></p>
+			<p>In the next chapter, we will change gears and learn how to integrate a Semantic Kernel application with ChatGPT, making it available to hundreds of millions of users. In our example, we will use the application we built in <a href="B21826_05.xhtml#_idTextAnchor106"><span class="No-Break"><em class="italic">Chapter 5</em></span></a> for home automation, but you can use the same techniques to do that with your <span class="No-Break">own applications.</span></p>
+			<h1 id="_idParaDest-143"><a id="_idTextAnchor142"/>References</h1>
+			<p class="Bibliography">[1] N. F. Liu et al., “Lost in the Middle: How Language Models Use Long Contexts.” arXiv, Nov. 20, 2023. <span class="No-Break">doi: 10.48550/arXiv.2307.03172.</span></p>
+			<p class="Bibliography">[2] L. Berglund et al., “The Reversal Curse: LLMs trained on ‘A is B’ fail to learn ‘B is A.’”     arXiv, Sep. 22, 2023. <span class="No-Break">doi: 10.48550/arXiv.2309.12288.</span></p>
+			<p class="Bibliography">[3] A. Vaswani et al., “Attention Is All You Need,” <span class="No-Break">Jun. 2017.</span></p>
+		</div>
+	</div>
+</div>
+</body></html>

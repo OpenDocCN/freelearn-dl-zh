@@ -1,0 +1,272 @@
+<html><head></head><body>
+		<div id="_idContainer074">
+			<h1 id="_idParaDest-85"><em class="italic"><a id="_idTextAnchor332"/>Chapter <a id="_idTextAnchor333"/>5</em>: Flocking</h1>
+			<p>During early summer evenings, you have probably seen flocks of birds flying in the sky. You have probably noted how they seem to move as a single living object: they all move in a particular direction, turn around, and grow and shrink. A flocking system aims to replicate this behavior in games: we want to implement an algorithm to move many objects as an organic group.</p>
+			<p>In games, we call each <a id="_idIndexMarker268"/>element of a flock a <strong class="bold">boid</strong>. To implement a flocking behavior, we do not need to equip each boid with a high-level complex decision-making system; instead, all we need to do is implement simple <em class="italic">reactive</em> rules for each boid that depend only on the state of the flock itself. Thus, flocking is an excellent example of emergent behavior: each boid reacts exclusively to its neighbor's behaviors; nevertheless, the flock seems to move as if someone were coordinating it.</p>
+			<p>In this chapter, we will learn what these rules are and how to implement them in Unity3D. We will implement two variations of flocking in this chapter. The first one is based on an old flocking behavior demo that has been circulating in the Unity community since since the game engine was created.</p>
+			<p>The second variation is based on Craig Reynold's original flocking algorithm from 1986.</p>
+			<p>In this chapter, we will cover the following topics:</p>
+			<ul>
+				<li>An overview of basic flocking behavior and how to implement it<a id="_idTextAnchor334"/><a id="_idTextAnchor335"/></li>
+				<li>An alternative implementation of flocking behavior<a id="_idTextAnchor336"/><a id="_idTextAnchor337"/></li>
+			</ul>
+			<h1 id="_idParaDest-86">Technical requirements<a id="_idTextAnchor338"/><a id="_idTextAnchor339"/></h1>
+			<p>For this chapter, you just need Unity3D 2022. You can find the example project described in this chapter in the <strong class="source-inline">Chapter 5</strong> folder in the book's repository:<a id="_idTextAnchor340"/><a id="_idTextAnchor341"/> <a href="https://github.com/PacktPublishing/Unity-Artificial-Intelligence-Programming-Fifth-Edition/tree/main/Chapter05">https://github.com/PacktPublishing/Unity-Artificial-Intelligence-Programming-Fifth-Edition/tree/main/Chapter05</a>.</p>
+			<h1 id="_idParaDest-87"><a id="_idTextAnchor342"/>Basic flocking behavior</h1>
+			<p>As we said in <a id="_idIndexMarker269"/>the introduction to this chapter, we can describe a flocking behavior by using just three intuitive properties<a id="_idTextAnchor343"/>:</p>
+			<ul>
+				<li><strong class="bold">Separation</strong>: This property, also called <em class="italic">short-range repulsion</em>, represents the minimum <a id="_idIndexMarker270"/>distance between neighboring boids to avoid collisions. You can imagine this rule as a force that pushes a boid away from the othe<a id="_idTextAnchor344"/>rs.</li>
+				<li><strong class="bold">Alignment</strong>: This <a id="_idIndexMarker271"/>property represents the likelihood for each boid to move in the same direction as the flock (we measure this as the average direction of all the individual boids).</li>
+				<li><strong class="bold">Cohesion</strong>: This property, also <a id="_idIndexMarker272"/>called <em class="italic">long-range attraction</em>, represents the likelihood for each boid to move toward the center of mass of <a id="_idIndexMarker273"/>the flock (we measure this by averaging the position of each boid in the flock). Thus, you can imagine this rule as a force that pushes a boid toward the center of the flock.</li>
+			</ul>
+			<p>In this demo, we will create a scene with flocks of objects and implement the flocking behavior in C#. For this first version, we compute all the rules by ourselves. Also, we will create a boid commander that leads the crowd to control and track the general position of the flock easily.</p>
+			<p>You can see the <strong class="bold">Hierarchy</strong> scene in the following screenshot. As you can see, we have several boid entities named <strong class="bold">UnityFlock</strong>, under a controller named <strong class="bold">UnityFlockController</strong>. <strong class="bold">UnityFlock</strong> entities are individual boid objects that refer to their parent <strong class="bold">UnityFlockController</strong> entity, using it as a leader. The controller updates the next destination point randomly once it reaches the current destination point:</p>
+			<div>
+				<div id="_idContainer067" class="IMG---Figure">
+					<img src="image/B17984_05_1.jpg" alt="Figure 5.1 – The scene hierarchy&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.1 – The scene hierarchy</p>
+			<p><strong class="bold">UnityFlock</strong> is a prefab <a id="_idIndexMarker274"/>with just a cube mesh and a <strong class="source-inline">UnityFlock</strong> script. We can use any <a id="_idTextAnchor345"/><a id="_idTextAnchor346"/>other mesh <a id="_idIndexMarker275"/>representation for this prefab to represent something more interesting, such as birds. You can add as many <strong class="bold">UnityFlock</strong> prefabs as you like. The algorithm will automatically check the number of children in the <strong class="bold">UnityFlockController</strong> o<a id="_idTextAnchor347"/><a id="_idTextAnchor348"/>bject.</p>
+			<h2 id="_idParaDest-88"><a id="_idTextAnchor349"/>Individual behavior</h2>
+			<p><em class="italic">Boid</em> is a term coined by Craig Reynold that refers to bird-like objects. We use this term to describe <a id="_idIndexMarker276"/>each object in our flock. The boid behaviour consists of a group of objects, each having their individual position, velocity, and orientation. Now, let's implement the boid behavior. You can find the behavior that controls each boid in the flock in the <strong class="source-inline">UnityFlock.cs</strong> script, which we'll examine now:</p>
+			<p class="source-code">using UnityEngine;</p>
+			<p class="source-code">using System.Collections;</p>
+			<p class="source-code">public class UnityFlock : MonoBehaviour { </p>
+			<p class="source-code">    public float minSpeed = 20.0f;</p>
+			<p class="source-code">    public float turnSpeed = 20.0f; </p>
+			<p class="source-code">    public float randomFreq = 20.0f;</p>
+			<p class="source-code">    public float randomForce = 20.0f;</p>
+			<p class="source-code">    //alignment variables</p>
+			<p class="source-code">    public float toOriginForce = 50.0f;</p>
+			<p class="source-code">    public float toOriginRange = 100.0f;</p>
+			<p class="source-code">    public float gravity = 2.0f;</p>
+			<p class="source-code">    //seperation variables</p>
+			<p class="source-code">    public float avoidanceRadius = 50.0f;</p>
+			<p class="source-code">    public float avoidanceForce = 20.0f;</p>
+			<p class="source-code">    //cohesion variables</p>
+			<p class="source-code">    public float followVelocity = 4.0f;</p>
+			<p class="source-code">    public float followRadius = 40.0f;</p>
+			<p class="source-code">    //these variables control the movement of the boid</p>
+			<p class="source-code">    private Transform origin;</p>
+			<p class="source-code">    private Vector3 velocity;</p>
+			<p class="source-code">    private Vector3 normalizedVelocity;</p>
+			<p class="source-code">    private Vector3 randomPush;</p>
+			<p class="source-code">    private Vector3 originPush;</p>
+			<p class="source-code">    private Transform[] objects;</p>
+			<p class="source-code">    private UnityFlock[] otherFlocks;</p>
+			<p class="source-code">    private Transform transformComponent;</p>
+			<p class="source-code">    private float randomFreqInterval;</p>
+			<p>As public fields, we declare the input values for our algorithm. These can be set up and customized <a id="_idIndexMarker277"/>from within the Inspector. In this script, we perform the following operations:</p>
+			<ol>
+				<li>We define the minimum movement speed (<strong class="source-inline">minSpeed</strong>) and rotation speed (<strong class="source-inline">turnSpeed</strong>) for our boid.</li>
+				<li>We use <strong class="source-inline">randomFreq</strong> to determine how many times we want to update the <strong class="source-inline">randomPush</strong> value, based on the <strong class="source-inline">randomForce</strong> value. Then, we use this force to vary the single boid's velocity and make the flock's movement look more realistic.</li>
+				<li><strong class="source-inline">toOriginRange</strong> specifies how much we want the flock to spread out. In other words, it represents the maximum distance from the flock's origin in which we want to maintain the boids (following the previously mentioned cohesion rule). We use the <strong class="source-inline">avoidanceRadius</strong> and <strong class="source-inline">avoidanceForce</strong> properties to maintain a minimum distance between individual boids (following the separation rule). Similarly, we use <strong class="source-inline">followRadius</strong> and <strong class="source-inline">followVelocity</strong> to keep a minimum distance between the leader or origin of the flock. The <strong class="source-inline">origin</strong> variable stores the parent object that controls the entire flock; in other words, it is the flock leader. The boids need to know about the other boids in the flock. Therefore, we use the <strong class="source-inline">objects</strong> and <strong class="source-inline">otherFlocks</strong> attributes to store the neighboring boid's information.</li>
+			</ol>
+			<p>This is the initialization method for our boid:</p>
+			<p class="source-code">void Start () {</p>
+			<p class="source-code">    randomFreqInterval = 1.0f / randomFreq;</p>
+			<p class="source-code">    // Assign the parent as origin </p>
+			<p class="source-code">    origin = transform.parent;</p>
+			<p class="source-code">    // Flock transform </p>
+			<p class="source-code">    transformComponent = transform;</p>
+			<p class="source-code">    // Temporary components </p>
+			<p class="source-code">    Component[] tempFlocks= null;</p>
+			<p class="source-code">    // Get all the unity flock components from the parent </p>
+			<p class="source-code">    // transform in the group </p>
+			<p class="source-code">    if (transform.parent) {</p>
+			<p class="source-code">        tempFlocks = transform.parent</p>
+			<p class="source-code">          .GetComponentsInChildren&lt;UnityFlock&gt;();       </p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    // Assign and store all the flock objects in this group </p>
+			<p class="source-code">    objects = new Transform[tempFlocks.Length];</p>
+			<p class="source-code">    otherFlocks = new UnityFlock[tempFlocks.Length];</p>
+			<p class="source-code">    for (int i = 0;i&lt;tempFlocks.Length;i++) { </p>
+			<p class="source-code">        objects[i] = tempFlocks[i].transform;</p>
+			<p class="source-code">        otherFlocks[i] = (UnityFlock)tempFlocks[i];</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    // Null Parent as the flock leader will be </p>
+			<p class="source-code">    // UnityFlockController object </p>
+			<p class="source-code">    transform.parent = null;</p>
+			<p class="source-code">    // Calculate random push depends on the random </p>
+			<p class="source-code">    // frequency provided</p>
+			<p class="source-code">    StartCoroutine(UpdateRandom());</p>
+			<p class="source-code">}</p>
+			<p>We set the <a id="_idIndexMarker278"/>parent of the object of our boid as origin, meaning that this is the controller object for the other boids to follow. Then, we grab all the other boids in the group and store them in the <strong class="source-inline">otherFlocks</strong> attribute for later reference.</p>
+			<p class="callout-heading">Coroutines</p>
+			<p class="callout">Put simply, coroutines <a id="_idIndexMarker279"/>are <em class="italic">functions that can be paused</em>. With coroutines, you can run a method, pause the execution for a desired amount of time (for example, a single frame or several seconds), and then continue from the following line as if nothing happened. They have two primary use cases: to run a function after a specific interval (without keeping track of every frame of <strong class="source-inline">elapsedTimes</strong>, as we did in other examples) or to split the computation of some heavy algorithm over multiple frames (and, therefore, not incur in frame drops). Coroutines, it turns out, are a pretty helpful <a id="_idIndexMarker280"/>tool to master. You can read more at <a href="https://docs.unity3d.com/Manual/Coroutines.html">https://docs.unity3d.com/Manual/Coroutines.html</a>.</p>
+			<p>Now, we can implement <a id="_idIndexMarker281"/>the <strong class="source-inline">UpdateRandom</strong> coroutine. As a coroutine, the function never actually terminates, but we run the body of the <strong class="source-inline">while</strong> loop for each random time interval:</p>
+			<ol>
+				<li value="1">We define the <strong class="source-inline">UpdateRandom</strong> method as a coroutine by specifying the <strong class="source-inline">IEnumerator</strong> r<a id="_idTextAnchor350"/><a id="_idTextAnchor351"/>eturn type: <p class="source-code">IEnumerator UpdateRandom() { </p><p class="source-code">    while (true) {</p><p class="source-code">        randomPush = </p><p class="source-code">          Random.insideUnitSphere * randomForce;</p><p class="source-code">        yield return new WaitForSeconds(</p><p class="source-code">          randomFreqInterval + Random.Range(</p><p class="source-code">            -randomFreqInterval / 2.0f, </p><p class="source-code">            randomFreqInterval / 2.0f));</p><p class="source-code">    }</p><p class="source-code">}</p></li>
+				<li>The <strong class="source-inline">UpdateRandom()</strong> method updates the <strong class="source-inline">randomPush</strong> value throughout the game with an interval based on <strong class="source-inline">randomFreq</strong>. <strong class="source-inline">Random.insideUnitSphere</strong> returns a <strong class="source-inline">Vector3</strong> object with random <em class="italic">x</em>, <em class="italic">y</em>, and <em class="italic">z</em> values within a sphere, with a radius of the <strong class="source-inline">randomForce</strong> value.</li>
+				<li>We wait <a id="_idIndexMarker282"/>for a certain random amount of time before resuming <strong class="source-inline">while(true)</strong>.</li>
+				<li>Loop to update the <strong class="source-inline">randomPush</strong> value again.</li>
+				<li>Now, here is our boid behavior's <strong class="source-inline">Update()</strong> method, which helps the boid entity comply with the three rules of the flocking algorithm:<p class="source-code">void Update() {</p><p class="source-code">        //Internal variables</p><p class="source-code">        float speed = velocity.magnitude;</p><p class="source-code">        Vector3 avgVelocity = Vector3.zero;</p><p class="source-code">        Vector3 avgPosition = Vector3.zero;</p><p class="source-code">        int count = 0;</p><p class="source-code">        Vector3 myPosition = </p><p class="source-code">          transformComponent.position;</p><p class="source-code">        Vector3 forceV;</p><p class="source-code">        Vector3 toAvg;</p><p class="source-code">        for (int i = 0; i &lt; objects.Length; i++) {</p><p class="source-code">            Transform boidTransform = objects[i];</p><p class="source-code">            if (boidTransform != transformComponent) {</p><p class="source-code">                Vector3 otherPosition =</p><p class="source-code">                  boidTransform.position;</p><p class="source-code">                // Average position to calculate </p><p class="source-code">                // cohesion</p><p class="source-code">                avgPosition += otherPosition;</p><p class="source-code">                count++;</p><p class="source-code">                //Directional vector from other flock</p><p class="source-code">                // to this flock</p><p class="source-code">                forceV = myPosition - otherPosition;</p><p class="source-code">                //Magnitude of that directional </p><p class="source-code">                //vector(Length)</p><p class="source-code">                float directionMagnitude = </p><p class="source-code">                  forceV.magnitude;</p><p class="source-code">                float forceMagnitude = 0.0f;</p><p class="source-code">                if (directionMagnitude &lt; followRadius)</p><p class="source-code">                {</p><p class="source-code">                    if (directionMagnitude &lt;</p><p class="source-code">                         avoidanceRadius) {</p><p class="source-code">                        forceMagnitude = 1.0f – </p><p class="source-code">                          (directionMagnitude / </p><p class="source-code">                           avoidanceRadius);</p><p class="source-code">                        if (directionMagnitude &gt; 0)</p><p class="source-code">                            avgVelocity += (forceV /</p><p class="source-code">                              directionMagnitude) *</p><p class="source-code">                              forceMagnitude * </p><p class="source-code">                              avoidanceForce;</p><p class="source-code">                    }</p><p class="source-code">                    forceMagnitude =</p><p class="source-code">                      directionMagnitude / </p><p class="source-code">                      followRadius;</p><p class="source-code">                    UnityFlock tempOtherBoid = </p><p class="source-code">                      otherFlocks[i];</p><p class="source-code">                    avgVelocity += followVelocity *</p><p class="source-code">                      forceMagnitude * </p><p class="source-code">                     tempOtherBoid.normalizedVelocity;</p><p class="source-code">                }</p><p class="source-code">            }</p><p class="source-code">        }</p></li>
+			</ol>
+			<p>The preceding code implements the separation rule. First, we check the distance between the current boid and the other boids, and then we update the velocity accordingly, as explained in the comments in the preceding code block.</p>
+			<ol>
+				<li value="6">We now calculate <a id="_idIndexMarker283"/>the average velocity vector of the flock by dividing the current velocity vector by the number of boids in the flock:<p class="source-code">        if (count &gt; 0) {</p><p class="source-code">            //Calculate the average flock</p><p class="source-code">           //velocity(Alignment)</p><p class="source-code">            avgVelocity /= count;</p><p class="source-code">            //Calculate Center value of the </p><p class="source-code">            //flock(Cohesion)</p><p class="source-code">            toAvg = (avgPosition / count) –</p><p class="source-code">              myPosition;</p><p class="source-code">        } else {</p><p class="source-code">            toAvg = Vector3.zero;</p><p class="source-code">        }</p><p class="source-code">        //Directional Vector to the leader</p><p class="source-code">        forceV = origin.position - myPosition;</p><p class="source-code">        float leaderDirectionMagnitude = </p><p class="source-code">          forceV.magnitude;</p><p class="source-code">        float leaderForceMagnitude =</p><p class="source-code">          leaderDirectionMagnitude / toOriginRange;</p><p class="source-code">        //Calculate the velocity of the flock to the</p><p class="source-code">        //leader</p><p class="source-code">        if (leaderDirectionMagnitude &gt; 0)</p><p class="source-code">            originPush = leaderForceMagnitude * </p><p class="source-code">              toOriginForce * (forceV /</p><p class="source-code">              leaderDirectionMagnitude);</p><p class="source-code">        if (speed &lt; minSpeed &amp;&amp; speed &gt; 0) {</p><p class="source-code">            velocity = (velocity / speed) * minSpeed;</p><p class="source-code">        }</p><p class="source-code">        Vector3 wantedVel = velocity;</p><p class="source-code">        //Calculate final velocity</p><p class="source-code">        wantedVel -= wantedVel * Time.deltaTime;</p><p class="source-code">        wantedVel += randomPush * Time.deltaTime;</p><p class="source-code">        wantedVel += originPush * Time.deltaTime;</p><p class="source-code">        wantedVel += avgVelocity * Time.deltaTime;</p><p class="source-code">        wantedVel += gravity * Time.deltaTime * </p><p class="source-code">          toAvg.normalized;</p><p class="source-code">        velocity = Vector3.RotateTowards(velocity,</p><p class="source-code">          wantedVel, turnSpeed * Time.deltaTime, </p><p class="source-code">          100.00f);</p><p class="source-code">        transformComponent.rotation =</p><p class="source-code">          Quaternion.LookRotation(velocity);</p><p class="source-code">        //Move the flock based on the calculated</p><p class="source-code">        //velocity</p><p class="source-code">        transformComponent.Translate(velocity * </p><p class="source-code">          Time.deltaTime, Space.World);</p><p class="source-code">        normalizedVelocity = velocity.normalized;</p><p class="source-code">    }</p></li>
+				<li>We add up <a id="_idIndexMarker284"/>all the factors, such as <strong class="source-inline">randomPush</strong>, <strong class="source-inline">originPush</strong>, and <strong class="source-inline">avgVelocity</strong>, to calculate the final target velocity vector, <strong class="source-inline">wantedVel</strong>. We also update the current velocity to <strong class="source-inline">wantedVel</strong> with a linear interpolation by using the <strong class="source-inline">Vector3.RotateTowards</strong> method.</li>
+				<li>We move our boid based on the new velocity using the <strong class="source-inline">Translate</strong> method.</li>
+				<li>As a final touch, we create a cube mesh, to which we add the <strong class="source-inline">UnityFlock</strong> script, and then save it as a prefab, as shown in the following screenshot:</li>
+			</ol>
+			<div>
+				<div id="_idContainer068" class="IMG---Figure">
+					<img src="image/B17984_05_2.jpg" alt="Figure 5.2 – The UnityFlock prefab&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.2 – The Uni<a id="_idTextAnchor352"/><a id="_idTextAnchor353"/><a id="_idTextAnchor354"/><a id="_idTextAnchor355"/>tyFlock prefab</p>
+			<h2 id="_idParaDest-89"><a id="_idTextAnchor356"/>Controller</h2>
+			<p>Now, it is time <a id="_idIndexMarker285"/>to create the controller class. This class updates its position so that the other individual boid objects know where to go. The <strong class="source-inline">origin</strong> variable in the preceding <strong class="source-inline">UnityFlock</strong> script contains a reference to this object.</p>
+			<p>The following is the code in the <strong class="source-inline">UnityFlockController.cs</strong> file:</p>
+			<p class="source-code">using UnityEngine;</p>
+			<p class="source-code">using System.Collections;</p>
+			<p class="source-code">public class UnityFlockController : MonoBehaviour { </p>
+			<p class="source-code">    public Vector3 bound;</p>
+			<p class="source-code">    public float speed = 100.0f;</p>
+			<p class="source-code">    public float targetReachedRadius = 10.0f;</p>
+			<p class="source-code">    private Vector3 initialPosition;</p>
+			<p class="source-code">    private Vector3 nextMovementPoint;</p>
+			<p class="source-code">    // Use this for initialization </p>
+			<p class="source-code">    void Start () {</p>
+			<p class="source-code">        initialPosition = transform.position;</p>
+			<p class="source-code">        CalculateNextMovementPoint();</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    // Update is called once per frame </p>
+			<p class="source-code">    void Update () {</p>
+			<p class="source-code">        transform.Translate(Vector3.forward * speed * </p>
+			<p class="source-code">          Time.deltaTime);</p>
+			<p class="source-code">        transform.rotation = </p>
+			<p class="source-code">          Quaternion.Slerp(transform.rotation,</p>
+			<p class="source-code">            Quaternion.LookRotation(nextMovementPoint –</p>
+			<p class="source-code">            transform.position), 1.0f * Time.deltaTime);</p>
+			<p class="source-code">        if (Vector3.Distance(nextMovementPoint, </p>
+			<p class="source-code">            transform.position) &lt;= targetReachedRadius) </p>
+			<p class="source-code">            CalculateNextMovementPoint();</p>
+			<p class="source-code">    }</p>
+			<p>In the <strong class="source-inline">Update()</strong> method, we check whether our controller object is near the target destination <a id="_idIndexMarker286"/>point. If it is, we update the <strong class="source-inline">nextMovementPoint</strong> variable again with the <strong class="source-inline">CalculateNextMovementPoint()</strong> method that we just discussed:</p>
+			<p class="source-code">void CalculateNextMovementPoint () {</p>
+			<p class="source-code">    float posX = Random.Range(initialPosition.x - bound.x,</p>
+			<p class="source-code">      initialPosition.x + bound.x);</p>
+			<p class="source-code">    float posY = Random.Range(initialPosition.y - bound.y, </p>
+			<p class="source-code">      initialPosition.y + bound.y);</p>
+			<p class="source-code">    float posZ = Random.Range(initialPosition.z - bound.z,</p>
+			<p class="source-code">      initialPosition.z + bound.z);</p>
+			<p class="source-code">    nextMovementPoint = initialPosition + new Vector3(posX,</p>
+			<p class="source-code">      posY, posZ);</p>
+			<p class="source-code">}</p>
+			<p>The <strong class="source-inline">CalculateNextMovementPoint()</strong> method finds the next random destination position in a range between the current position and the boundary vectors.</p>
+			<p>Finally, we put all of this together, as shown in <em class="italic">Figure 5.1</em>, which should give you flocks of squares flying around realistically in the sunset:</p>
+			<div>
+				<div id="_idContainer069" class="IMG---Figure">
+					<img src="image/B17984_05_3.jpg" alt="Figure 5.3 – A demonstration of the ﬂocking behavior using the Unity seagull sample&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.3 – A demonstration of the ﬂocking behavior using the Unity seagull sample</p>
+			<p>The previous <a id="_idIndexMarker287"/>example gave you the basics of flocking behaviors. In the next section, we will explore a different implementation that makes use of Unity's <strong class="source-inline">Rigi<a id="_idTextAnchor357"/><a id="_idTextAnchor358"/><a id="_idTextAnchor359"/><a id="_idTextAnchor360"/>dbody</strong> component.</p>
+			<h1 id="_idParaDest-90"><a id="_idTextAnchor361"/>Alternative implementation</h1>
+			<p>In this section, we use the Unity physics engine to simplify the code a bit. In fact, in this example, we <a id="_idIndexMarker288"/>attach a <strong class="source-inline">Rigidbody</strong> component to the boids to use the <strong class="source-inline">Rigidbody</strong> properties to translate and steer them. In addition, the <strong class="source-inline">Rigidbody</strong> component is also helpful in preventing the other boids from overlapping with each other.</p>
+			<p>In this implementation, we have two components: the individual boid behavior and the controller behavior (the element referred to as the <em class="italic">flock controller</em> in the previous section). As before, the controller is the object that the rest of the boids follow.</p>
+			<p>The code in the <strong class="source-inline">Flock.cs</strong> file is as follows:</p>
+			<p class="source-code">using UnityEngine;</p>
+			<p class="source-code">using System.Collections;</p>
+			<p class="source-code">using System.Collections.Generic;</p>
+			<p class="source-code">public class Flock : MonoBehaviour { </p>
+			<p class="source-code">    internal FlockController controller;</p>
+			<p class="source-code">    private new Rigidbody rigidbody;</p>
+			<p class="source-code">    private void Start() {</p>
+			<p class="source-code">        rigidbody = GetComponent&lt;Rigidbody&gt;();</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    void Update () {</p>
+			<p class="source-code">        if (controller) {</p>
+			<p class="source-code">            Vector3 relativePos = Steer() * Time.deltaTime;</p>
+			<p class="source-code">            if (relativePos != Vector3.zero)</p>
+			<p class="source-code">              rigidbody.velocity = relativePos;</p>
+			<p class="source-code">            // enforce minimum and maximum speeds for the</p>
+			<p class="source-code">            // boids </p>
+			<p class="source-code">            float speed = rigidbody.velocity.magnitude;</p>
+			<p class="source-code">            if (speed &gt; controller.maxVelocity) {</p>
+			<p class="source-code">                rigidbody.velocity =</p>
+			<p class="source-code">                  rigidbody.velocity.normalized *</p>
+			<p class="source-code">                  controller.maxVelocity;</p>
+			<p class="source-code">            } else if (speed &lt; controller.minVelocity) {</p>
+			<p class="source-code">                rigidbody.velocity =</p>
+			<p class="source-code">                  rigidbody.velocity.normalized *</p>
+			<p class="source-code">                  controller.minVelocity;</p>
+			<p class="source-code">            }</p>
+			<p class="source-code">        }</p>
+			<p class="source-code">    }</p>
+			<p>We will create <strong class="source-inline">FlockController</strong> in a moment. In the meantime, in the <strong class="source-inline">Update()</strong> method in the previous code block, we calculate the boid's velocity using the <strong class="source-inline">Steer()</strong> method and apply the <a id="_idIndexMarker289"/>result to the boid's rigid-body velocity.</p>
+			<p>Next, we check whether the current speed of the <strong class="source-inline">Rigidbody</strong> component falls inside our controller's maximum and minimum velocity ranges. If not, we cap the velocity at the preset range:</p>
+			<p class="source-code">private Vector3 Steer () {</p>
+			<p class="source-code">    Vector3 center = controller.flockCenter – </p>
+			<p class="source-code">      transform.localPosition;   // cohesion</p>
+			<p class="source-code">    Vector3 velocity = controller.flockVelocity –</p>
+			<p class="source-code">      rigidbody.velocity; // allignement</p>
+			<p class="source-code">    Vector3 follow = controller.target.localPosition – </p>
+			<p class="source-code">      transform.localPosition; // follow leader</p>
+			<p class="source-code">    Vector3 separation = Vector3.zero;</p>
+			<p class="source-code">    foreach (Flock flock in controller.flockList) { </p>
+			<p class="source-code">        if (flock != this) {</p>
+			<p class="source-code">            Vector3 relativePos = transform.localPosition - </p>
+			<p class="source-code">              flock.transform.localPosition;</p>
+			<p class="source-code">            separation += relativePos.normalized;</p>
+			<p class="source-code">        }</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">    // randomize</p>
+			<p class="source-code">    Vector3 randomize = new Vector3( (Random.value * 2) –</p>
+			<p class="source-code">      1, (Random.value * 2) - 1, (Random.value * 2) - 1);</p>
+			<p class="source-code">    randomize.Normalize();</p>
+			<p class="source-code">    return (controller.centerWeight * center + </p>
+			<p class="source-code">            controller.velocityWeight * velocity + </p>
+			<p class="source-code">            controller.separationWeight * separation +</p>
+			<p class="source-code">            controller.followWeight * follow + </p>
+			<p class="source-code">            controller.randomizeWeight * randomize);</p>
+			<p class="source-code">}</p>
+			<p>The <strong class="source-inline">steer()</strong> method <a id="_idIndexMarker290"/>implements the <em class="italic">separation</em>, <em class="italic">cohesion</em>, <em class="italic">alignment</em>, and <em class="italic">follows the leader</em> rules of the flocking algorithm. Then, we add up all the factors with a random weight value. We use this <em class="italic">Flock</em> script together with the <strong class="source-inline">Rigidbody</strong> and <strong class="source-inline">SphereCollider</strong> components to create a Flock prefab, as shown in the following screenshot (make sure to disable the gravity by unchecking <strong class="bold">Use Gravity</strong>):</p>
+			<div>
+				<div id="_idContainer070" class="IMG---Figure">
+					<img src="image/B17984_05_4.jpg" alt="Figure 5.4 – Flock&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.4 – Flock</p>
+			<p>It is now <a id="_idIndexMarker291"/>time to implement the final piece of the puzzle: the <strong class="source-inline">FlockCo<a id="_idTextAnchor362"/><a id="_idTextAnchor363"/><a id="_idTextAnchor364"/><a id="_idTextAnchor365"/>ntroller</strong> component.</p>
+			<h2 id="_idParaDest-91"><a id="_idTextAnchor366"/>FlockController</h2>
+			<p>This <strong class="source-inline">FlockController</strong> component <a id="_idIndexMarker292"/>is similar to the one in the previous example. In addition to controlling the flock's speed and position, this script also instantiates the boids at runtime:</p>
+			<ol>
+				<li value="1">The code in the <strong class="source-inline">FlockController.cs</strong> file is as follows:<p class="source-code">using UnityEngine;</p><p class="source-code">using System.Collections;</p><p class="source-code">using System.Collections.Generic;</p><p class="source-code">public class FlockController : MonoBehaviour { </p><p class="source-code">    public float minVelocity = 1;</p><p class="source-code">    public float maxVelocity = 8;</p><p class="source-code">    public int flockSize = 20;</p><p class="source-code">    public float centerWeight = 1;</p><p class="source-code">    public float velocityWeight = 1;</p><p class="source-code">    public float separationWeight = 1;</p><p class="source-code">    public float followWeight = 1;</p><p class="source-code">    public float randomizeWeight = 1;</p><p class="source-code">    public Flock prefab; </p><p class="source-code">    public Transform target;</p><p class="source-code">    Vector3 flockCenter;</p><p class="source-code">    internal Vector3 flockVelocity;</p><p class="source-code">    public ArrayList flockList = new ArrayList();</p><p class="source-code">    void Start () {</p><p class="source-code">        for (int i = 0; i &lt; flockSize; i++) {</p><p class="source-code">            Flock flock = Instantiate(prefab,</p><p class="source-code">              transform.position, transform.rotation)</p><p class="source-code">              as Flock;</p><p class="source-code">            flock.transform.parent = transform;</p><p class="source-code">            flock.controller = this;</p><p class="source-code">            flockList.Add(flock);</p><p class="source-code">        }</p><p class="source-code">    }</p></li>
+				<li>We declare all the public properties to implement the flocking algorithm and then start generating the boid objects based on the flock size input.</li>
+				<li>We set <a id="_idIndexMarker293"/>up the controller class and the parent <strong class="source-inline">Transform</strong> object, as we did last time.</li>
+				<li>We add every boid object we create to the <strong class="source-inline">flockList</strong> array. The target variable accepts an entity to be used as a moving leader. In this example, we create a sphere entity as a moving target leader for our flock:<p class="source-code">  <a id="_idTextAnchor367"/><a id="_idTextAnchor368"/>  void Update() {</p><p class="source-code">        //Calculate the Center and Velocity of the</p><p class="source-code">        // whole flock group</p><p class="source-code">        Vector3 center = Vector3.zero;</p><p class="source-code">        Vector3 velocity = Vector3.zero;</p><p class="source-code">        foreach (Flock flock in flockList) {</p><p class="source-code">                center += </p><p class="source-code">                  flock.transform.localPosition;</p><p class="source-code">                velocity += flock.GetComponent</p><p class="source-code">                  &lt;Rigidbody&gt;().velocity;</p><p class="source-code">        }</p><p class="source-code">        flockCenter = center / flockSize;</p><p class="source-code">        flockVelocity = velocity / flockSize;</p><p class="source-code">    }</p><p class="source-code">}</p></li>
+				<li>In the <strong class="source-inline">Update</strong> method, we <a id="_idIndexMarker294"/>keep updating the average center and velocity of the flock. These are the values referenced from the boid object and are used to adjust the cohesion and alignment properties with the controller:</li>
+			</ol>
+			<div>
+				<div id="_idContainer071" class="IMG---Figure">
+					<img src="image/B17984_05_5.jpg" alt="Figure 5.5 – Flock Controller&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.5 – Flock Controller</p>
+			<p>We need <a id="_idIndexMarker295"/>to implement our <strong class="bold">Target</strong> entity with the <strong class="bold">Target Movement (Script)</strong>. The movement script is the same as what we saw in our previous Unity3D sample controller's movement script:</p>
+			<div>
+				<div id="_idContainer072" class="IMG---Figure">
+					<img src="image/B17984_05_6.jpg" alt="Figure 5.6 – The Target entity with the TargetMovement script&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.6 – The Target entity with the TargetMovement script</p>
+			<ol>
+				<li value="6">Here is how our <strong class="source-inline">TargetMovement</strong> script works: we pick a random point nearby for the <a id="_idIndexMarker296"/>target to move to, and when we get close to that point, we pick a new one. The code in the <strong class="source-inline">TargetMovement.cs</strong> file is as follows:<p class="source-code">using UnityEngine;</p><p class="source-code">using System.Collections;</p><p class="source-code">public class TargetMovement : MonoBehaviour {</p><p class="source-code">    // Move target around circle with tangential speed</p><p class="source-code">    public Vector3 bound;</p><p class="source-code">    public float speed = 10<a id="_idTextAnchor369"/><a id="_idTextAnchor370"/>0.0f;</p><p class="source-code">    public float targetReachRadius = 10.0f;</p><p class="source-code">    private Vector3 initialPosition;</p><p class="source-code">    private Vector3 nextMovementPoint;</p><p class="source-code">    void Start () {</p><p class="source-code">        initialPosition = transform.position;</p><p class="source-code">        CalculateNextMovementPoint();</p><p class="source-code">    }</p><p class="source-code">    void CalculateNextMovementPoint () {</p><p class="source-code">        float posX = Random.Range(initialPosition.x =</p><p class="source-code">          bound.x, initialPosition.x+bound.x);</p><p class="source-code">        float posY = Random.Range(initialPosition.y = </p><p class="source-code">          bound.y, initialPosition.y+bound.y);</p><p class="source-code">        float posZ = Random.Range(initialPosition.z =</p><p class="source-code">          bound.z, initialPosition.z+bound.z);</p><p class="source-code">        nextMovementPoint = initialPosition + </p><p class="source-code">          new Vector3(posX, posY, posZ);</p><p class="source-code">    }</p><p class="source-code">    void Update () {</p><p class="source-code">        transform.Translate(Vector3.forward * speed *</p><p class="source-code">          Time.deltaTime); </p><p class="source-code">        transform.rotation = </p><p class="source-code">          Quaternion.Slerp(transform.rotation,</p><p class="source-code">        Quaternion.LookRotation(nextMovementPoint –</p><p class="source-code">          transform.position), Time.deltaTime);</p><p class="source-code">        if (Vector3.Distance(nextMovementPoint,</p><p class="source-code">          transform.position) &lt;= targetReachRadius)</p><p class="source-code">          CalculateNextMovementPoint();</p><p class="source-code">    }</p><p class="source-code">}</p></li>
+				<li>After we <a id="_idIndexMarker297"/>put everything together, we should see a nice flock of cubic boids flying around in the scene, all chasing the spheric target:</li>
+			</ol>
+			<div>
+				<div id="_idContainer073" class="IMG---Figure">
+					<img src="image/B17984_05_7.jpg" alt="Figure 5.7 – Flocking with Craig Reynold's algorithm&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.7 – Flocking with Craig Reynold's algorithm</p>
+			<p>Now that <a id="_idIndexMarker298"/>we have implemented flocking behavior in two different ways, we can experiment with different parameters and tweak the boids' behavior until we find a movement we like. I want to conclude this chapter with an important takeaway: note that we do not need complex algorithms to have a natural-looking behavior. For that, we just need simple reactive rules and<a id="_idTextAnchor371"/><a id="_idTextAnchor372"/> a way to combine them.</p>
+			<h1 id="_idParaDest-92"><a id="_idTextAnchor373"/>Summary</h1>
+			<p>In this chapter, we learned how to implement flocking behaviors in two ways. First, we examined and learned how to implement a basic flocking algorithm using nothing other than our scripts. Next, we implemented the same algorithm using Unity's <strong class="source-inline">Rigidbody</strong> component to control the boid's movement and Sphere Collider to avoid collision with other boids.</p>
+			<p>In our example, we always referred to boids as bird-like entities. However, we can use flocking for many other applications: fishes swimming in the sea, sheep grazing on a plane, a swarm of insects, and even groups of people walking on the street can show flocking behavior. To adapt the algorithm to different scenarios, we just need to change the flocking rules' values and eventually lock the movement to a plane.</p>
+			<p>In the next chapter, we will go beyond random movement and look at how to follow a specific path. This is the first step toward learning how to avoid obstacles that are in your way.</p>
+		</div>
+	</body></html>
