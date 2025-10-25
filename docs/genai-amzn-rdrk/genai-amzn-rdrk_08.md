@@ -252,7 +252,7 @@ print(response_body['content'][0].get("text"))
 
 这里有一个带有上下文的示例提示：
 
-```py` ``` ```py`
+```py
 
 `: Identify and classify entities related to sports in the` `given text.`
 
@@ -268,9 +268,6 @@ print(response_body['content'][0].get("text"))
 
 [运动员：塞雷娜·威廉姆斯], [运动员：维纳斯·威廉姆斯], [赛事：大满贯], [赛事：澳大利亚公开赛], [运动：网球]
 
-```py
-
-```` ```py ````
 
 在*图 8*.2 中，展示了前一个用例的代码示例。需要注意的是，代码并未明确提及已安装的库。假设用户已经预先安装了之前代码示例中详细说明的所需 Python 包和库：
 
@@ -290,7 +287,7 @@ print(response_body['content'][0].get("text"))
 
 这里是一个带有少样本学习的示例提示：
 
-```py` ``` ```py`
+```py
 
 `: Identify and classify entities related to technology companies in the` `given text.`
 
@@ -336,7 +333,7 @@ print(response_body['content'][0].get("text"))
 
 `: "Amazon, the e-commerce behemoth based in Seattle, Washington, unveiled its latest line of Echo smart speakers and Alexa-powered devices at a` `hardware event."`
 
-```` ```py ````
+```
 
 让我们为前面的用例编写一个代码示例，并在 Amazon Bedrock 上调用 Amazon Titan 模型：
 
