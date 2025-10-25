@@ -647,49 +647,27 @@ print(response["choices"][0]["text"].strip())
 
     ```py
     def generate_email(transcript):
-    ```
-
-    ```py
+    
         response = openai.Completion.create(
-    ```
-
-    ```py
+    
           engine="test1",
-    ```
-
-    ```py
+    
           prompt= transcript + f"Generate a response email to the transcript above, notifying the customer that the ticket has been created and apologizing if it was complaining. The name of the customer is {data['name']} and the policy number is {data['policy_number']}.",
-    ```
-
-    ```py
+    
           temperature=1,
-    ```
-
-    ```py
+    
           max_tokens=1968,
-    ```
-
-    ```py
+    
           top_p=0.5,
-    ```
-
-    ```py
+    
           frequency_penalty=0,
-    ```
-
-    ```py
+    
           presence_penalty=0,
-    ```
-
-    ```py
+    
           best_of=1,
-    ```
-
-    ```py
+    
           stop=None)
-    ```
-
-    ```py
+    
         return response["choices"][0]["text"].strip()
     ```
 
@@ -705,49 +683,27 @@ print(response["choices"][0]["text"].strip())
 
     ```py
     def improvement(data):
-    ```
-
-    ```py
+    
         response = openai.Completion.create(
-    ```
-
-    ```py
+    
           engine="test1",
-    ```
-
-    ```py
+    
           prompt= f"Elaborate a list of remediations to get to the following improvement: {data['contact_center_improvement']}",
-    ```
-
-    ```py
+    
           temperature=1,
-    ```
-
-    ```py
+    
           max_tokens=1968,
-    ```
-
-    ```py
+    
           top_p=0.5,
-    ```
-
-    ```py
+    
           frequency_penalty=0,
-    ```
-
-    ```py
+    
           presence_penalty=0,
-    ```
-
-    ```py
+    
           best_of=1,
-    ```
-
-    ```py
+    
           stop=None)
-    ```
-
-    ```py
+    
         return response["choices"][0]["text"].strip()
     ```
 

@@ -132,25 +132,15 @@
 
     ```py
     raw_train_ds = tf.keras.utils.text_dataset_from_directory(
-    ```
-
-    ```py
+    
          'aclImdb/train',
-    ```
-
-    ```py
+    
          batch_size=batch_size,
-    ```
-
-    ```py
+    
          validation_split=0.2,
-    ```
-
-    ```py
+    
          subset='training',
-    ```
-
-    ```py
+    
          seed=seed)
     ```
 

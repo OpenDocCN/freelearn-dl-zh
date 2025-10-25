@@ -246,17 +246,11 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     from matplotlib import pyplot as plt
-    ```
-
-    ```py
+    
     from sklearn.datasets import load_iris
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.tree import DecisionTreeClassifier
     ```
 
@@ -264,9 +258,7 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     # Load the dataset
-    ```
-
-    ```py
+    
     X, y = load_iris(return_X_y=True)
     ```
 
@@ -274,13 +266,9 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     # Split the dataset
-    ```
-
-    ```py
+    
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, random_state=0)
     ```
 
@@ -288,21 +276,13 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     # Plot the training points
-    ```
-
-    ```py
+    
     plt.scatter(X[:, 0], X[:, 1], c=y)
-    ```
-
-    ```py
+    
     plt.xlabel('Sepal length')
-    ```
-
-    ```py
+    
     plt.ylabel('Sepal width')
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -316,9 +296,7 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     dt = DecisionTreeClassifier()
     ```
 
@@ -326,9 +304,7 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     # Fit the model on the training data
-    ```
-
-    ```py
+    
     dt.fit(X_train, y_train)
     ```
 
@@ -336,21 +312,13 @@ pip install scikit-learn graphviz matplotlib
 
     ```py
     # Compute the accuracy on training and test sets
-    ```
-
-    ```py
+    
     print('Accuracy on training set:', dt.score(
-    ```
-
-    ```py
+    
         X_train, y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', dt.score(
-    ```
-
-    ```py
+    
         X_test, y_test))
     ```
 
@@ -471,13 +439,9 @@ pip install scikit-learn
 
     ```py
     from sklearn.datasets import fetch_california_housing
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.tree import DecisionTreeRegressor
     ```
 
@@ -491,9 +455,7 @@ pip install scikit-learn
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, test_size=0.2, random_state=0)
     ```
 
@@ -507,9 +469,7 @@ pip install scikit-learn
 
     ```py
     dt.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     DecisionTreeRegressor()
     ```
 
@@ -517,17 +477,11 @@ pip install scikit-learn
 
     ```py
     print('R2-score on training set:', dt.score(
-    ```
-
-    ```py
+    
         X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', dt.score(
-    ```
-
-    ```py
+    
         X_test, y_test))
     ```
 
@@ -617,13 +571,9 @@ def plot_decision_function(dt, X, y):
 
     ```py
     X, y = load_iris(return_X_y=True)
-    ```
-
-    ```py
+    
     # Keep only 2 features
-    ```
-
-    ```py
+    
     X = X[:, :2]
     ```
 
@@ -631,9 +581,7 @@ def plot_decision_function(dt, X, y):
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, random_state=0)
     ```
 
@@ -641,9 +589,7 @@ def plot_decision_function(dt, X, y):
 
     ```py
     dt = DecisionTreeClassifier(max_depth=5,
-    ```
-
-    ```py
+    
         random_state=0)
     ```
 
@@ -651,9 +597,7 @@ def plot_decision_function(dt, X, y):
 
     ```py
     dt.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     DecisionTreeClassifier(max_depth=5, random_state=0)
     ```
 
@@ -661,17 +605,11 @@ def plot_decision_function(dt, X, y):
 
     ```py
     print('Accuracy on training set:', dt.score(
-    ```
-
-    ```py
+    
         X_train, y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', dt.score(
-    ```
-
-    ```py
+    
         X_test, y_test))
     ```
 
@@ -955,13 +893,9 @@ pip install scikit-learn
 
     ```py
     from sklearn.datasets import fetch_california_housing
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.ensemble import RandomForestRegressor
     ```
 
@@ -975,9 +909,7 @@ pip install scikit-learn
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, random_state=0)
     ```
 
@@ -991,9 +923,7 @@ pip install scikit-learn
 
     ```py
     rf.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     RandomForestRegressor(random_state=0)
     ```
 
@@ -1001,13 +931,9 @@ pip install scikit-learn
 
     ```py
     # Display the accuracy on both training and test set
-    ```
-
-    ```py
+    
     print('R2-score on training set:', rf.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', rf.score(X_test, y_test))
     ```
 
@@ -1062,13 +988,9 @@ R2-score on test set: 0.7941678302821006
 
     ```py
     from sklearn.datasets import fetch_california_housing
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.ensemble import RandomForestRegressor
     ```
 
@@ -1082,9 +1004,7 @@ R2-score on test set: 0.7941678302821006
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, random_state=0)
     ```
 
@@ -1098,9 +1018,7 @@ R2-score on test set: 0.7941678302821006
 
     ```py
     rf.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     RandomForestRegressor(max_features='log2', random_state=0)
     ```
 
@@ -1108,17 +1026,11 @@ R2-score on test set: 0.7941678302821006
 
     ```py
     print('R2-score on training set:', rf.score(X_train,
-    ```
-
-    ```py
+    
         y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', rf.score(X_test,
-    ```
-
-    ```py
+    
         y_test))
     ```
 
@@ -1227,9 +1139,7 @@ XGBoost 是一种非常流行的梯度提升实现。它可以像 scikit-learn �
 
     ```py
     import pickle
-    ```
-
-    ```py
+    
     from xgboost import XGBClassifier
     ```
 
@@ -1237,9 +1147,7 @@ XGBoost 是一种非常流行的梯度提升实现。它可以像 scikit-learn �
 
     ```py
     X_train, X_test, y_train, y_test = pickle.load(open(
-    ```
-
-    ```py
+    
         'prepared_titanic.pkl', 'rb'))
     ```
 
@@ -1253,9 +1161,7 @@ XGBoost 是一种非常流行的梯度提升实现。它可以像 scikit-learn �
 
     ```py
     # Train the model on training set
-    ```
-
-    ```py
+    
     bst.fit(X_train, y_train)
     ```
 
@@ -1263,17 +1169,11 @@ XGBoost 是一种非常流行的梯度提升实现。它可以像 scikit-learn �
 
     ```py
     print('Accuracy on training set:', bst.score(X_train,
-    ```
-
-    ```py
+    
         y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', bst.score(X_test,
-    ```
-
-    ```py
+    
         y_test))
     ```
 
@@ -1330,9 +1230,7 @@ Accuracy on test set: 0.8156424581005587
 
     ```py
     import pickle
-    ```
-
-    ```py
+    
     from xgboost import XGBClassifier
     ```
 
@@ -1340,9 +1238,7 @@ Accuracy on test set: 0.8156424581005587
 
     ```py
     X_train, X_test, y_train, y_test = pickle.load(open(
-    ```
-
-    ```py
+    
         'prepared_titanic.pkl', 'rb'))
     ```
 
@@ -1362,17 +1258,11 @@ Accuracy on test set: 0.8156424581005587
 
     ```py
     print('Accuracy on training set:', bst.score(X_train,
-    ```
-
-    ```py
+    
         y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', bst.score(X_test,
-    ```
-
-    ```py
+    
         y_test))
     ```
 

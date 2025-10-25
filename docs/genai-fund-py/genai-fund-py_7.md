@@ -78,9 +78,7 @@ RLHF是传统RL的一种变体，它结合了人类反馈以及通常的风险/�
 
     ```py
     def square(number):
-    ```
-
-    ```py
+    
         return number ** 2
     ```
 
@@ -88,113 +86,59 @@ RLHF是传统RL的一种变体，它结合了人类反馈以及通常的风险/�
 
     ```py
     from langchain.prompts import PromptTemplate
-    ```
-
-    ```py
+    
     from langchain.llms import OpenAI
-    ```
-
-    ```py
+    
     # Define a prompt template requesting JSON formatted output
-    ```
-
-    ```py
+    
     prompt_structure = PromptTemplate(
-    ```
-
-    ```py
+    
         template="""
-    ```
-
-    ```py
+    
             Context: {context}
-    ```
-
-    ```py
+    
             Instruction: {instruction}
-    ```
-
-    ```py
+    
             Text: {text_to_process}
-    ```
-
-    ```py
+    
             Output Cue: Format the response in JSON with one element called summary.
-    ```
-
-    ```py
+    
         """,
-    ```
-
-    ```py
+    
         input_variables=["context," "instruction",
-    ```
-
-    ```py
+    
             "text_to_process"]
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     # Dynamic elements for the prompt
-    ```
-
-    ```py
+    
     context = "Summarizing long text passages."
-    ```
-
-    ```py
+    
     instruction = "Summarize the key points from the following text in JSON format."
-    ```
-
-    ```py
+    
     text_to_process = """
-    ```
-
-    ```py
+    
     Mars is the fourth planet from the Sun. The surface of Mars is orange-red because…
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     formatted_prompt = prompt_structure.format_prompt(
-    ```
-
-    ```py
+    
         context=context,
-    ```
-
-    ```py
+    
         instruction=instruction,
-    ```
-
-    ```py
+    
         text_to_process=text_to_process
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     llm = OpenAI(model_name='gpt-3.5-turbo-instruct',
-    ```
-
-    ```py
+    
         temperature=0.9, max_tokens = 256)
-    ```
-
-    ```py
+    
     response = llm.invoke(formatted_prompt)
-    ```
-
-    ```py
+    
     print(response)
     ```
 
@@ -202,13 +146,9 @@ RLHF是传统RL的一种变体，它结合了人类反馈以及通常的风险/�
 
     ```py
     {
-    ```
-
-    ```py
+    
         "summary": "Mars is the fourth planet from the Sun, known for its orange-red surface and high-contrast features that make it a popular object for telescope viewing."
-    ```
-
-    ```py
+    
     }
     ```
 

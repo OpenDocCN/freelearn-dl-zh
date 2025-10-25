@@ -146,13 +146,9 @@ from sklearn.linear_model import LinearRegression
 
     ```py
     # Load the California housing dataset
-    ```
-
-    ```py
+    
     X, y = fetch_california_housing(return_X_y=True)
-    ```
-
-    ```py
+    
     X = np.concatenate([X, X*X], axis=1)
     ```
 
@@ -160,13 +156,9 @@ from sklearn.linear_model import LinearRegression
 
     ```py
     # Split the data
-    ```
-
-    ```py
+    
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, test_size=0.2, random_state=0)
     ```
 
@@ -174,17 +166,11 @@ from sklearn.linear_model import LinearRegression
 
     ```py
     # Rescale the data
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -192,13 +178,9 @@ from sklearn.linear_model import LinearRegression
 
     ```py
     # Fit the linear regression model
-    ```
-
-    ```py
+    
     lr = LinearRegression()
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -206,13 +188,9 @@ from sklearn.linear_model import LinearRegression
 
     ```py
     # Print the R2-score on train and test
-    ```
-
-    ```py
+    
     print('R2-score on train set:', lr.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', lr.score(X_test, y_test))
     ```
 
@@ -305,13 +283,9 @@ plt.show()
 
     ```py
     # Fit the Ridge model ridge = Ridge(alpha=5000)
-    ```
-
-    ```py
+    
     ridge.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     Ridge(alpha=5000)
     ```
 
@@ -319,13 +293,9 @@ plt.show()
 
     ```py
     # Print the R2-score on train and test
-    ```
-
-    ```py
+    
     print('R2-score on train set:', ridge.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', ridge.score(X_test, y_test))
     ```
 
@@ -408,9 +378,7 @@ scikit-learn 的 lasso 实现可以通过 `Lasso` 类获得。与 `Ridge` 类类
 
     ```py
     # Fit the Lasso model lasso = Lasso(alpha=0.02)
-    ```
-
-    ```py
+    
     lasso.fit(X_train, y_train)
     ```
 
@@ -418,13 +386,9 @@ scikit-learn 的 lasso 实现可以通过 `Lasso` 类获得。与 `Ridge` 类类
 
     ```py
     # Print the R2-score on train and test
-    ```
-
-    ```py
+    
     print('R2-score on train set:', lasso.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', lasso.score(X_test, y_test))
     ```
 
@@ -502,17 +466,11 @@ plt.show()
 
     ```py
     # Fit the LASSO model
-    ```
-
-    ```py
+    
     Elastic = ElasticNet(alpha=0.1, l1_ratio=0.5)
-    ```
-
-    ```py
+    
     elastic.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     ElasticNet(alpha=0.1)
     ```
 
@@ -520,21 +478,13 @@ plt.show()
 
     ```py
     # Print the R2-score on train and test
-    ```
-
-    ```py
+    
     print('R2-score on train set:', elastic.score(
-    ```
-
-    ```py
+    
         X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', elastic.score(
-    ```
-
-    ```py
+    
         X_test, y_test))
     ```
 
@@ -625,9 +575,7 @@ scikit-learn 的官方文档中，关于弹性网回归的详细信息可以在�
 
     ```py
     from sklearn.datasets import load_breast_cancer
-    ```
-
-    ```py
+    
     from sklearn.linear_model import LogisticRegression
     ```
 
@@ -635,9 +583,7 @@ scikit-learn 的官方文档中，关于弹性网回归的详细信息可以在�
 
     ```py
     # Load the dataset
-    ```
-
-    ```py
+    
     X, y = load_breast_cancer(return_X_y=True)
     ```
 
@@ -645,13 +591,9 @@ scikit-learn 的官方文档中，关于弹性网回归的详细信息可以在�
 
     ```py
     # Split the data
-    ```
-
-    ```py
+    
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, test_size=0.2, random_state=42)
     ```
 
@@ -659,17 +601,11 @@ scikit-learn 的官方文档中，关于弹性网回归的详细信息可以在�
 
     ```py
     # Rescale the data
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -677,17 +613,11 @@ scikit-learn 的官方文档中，关于弹性网回归的详细信息可以在�
 
     ```py
     # Fit the logistic regression model with no regularization
-    ```
-
-    ```py
+    
     Lr = LogisticRegression(penalty='none')
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     LogisticRegression(penalty='none')
     ```
 
@@ -695,13 +625,9 @@ scikit-learn 的官方文档中，关于弹性网回归的详细信息可以在�
 
     ```py
     # Print the accuracy score on train and test
-    ```
-
-    ```py
+    
     print('Accuracy on train set:', lr.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', lr.score(X_test, y_test))
     ```
 
@@ -741,9 +667,7 @@ Accuracy on train set: 1.0 Accuracy on test set: 0.9385964912280702
 
     ```py
     lr.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     LogisticRegression(C=0.1)
     ```
 
@@ -751,29 +675,17 @@ Accuracy on train set: 1.0 Accuracy on test set: 0.9385964912280702
 
     ```py
     # Print the accuracy score on train and test
-    ```
-
-    ```py
+    
     print('Accuracy on train set:', lr.score(
-    ```
-
-    ```py
+    
         X_train, y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', lr.score(
-    ```
-
-    ```py
+    
         X_test, y_test))
-    ```
-
-    ```py
+    
     Accuracy on train set: 0.9802197802197802
-    ```
-
-    ```py
+    
     Accuracy on test set: 0.9824561403508771
     ```
 
@@ -883,13 +795,9 @@ L1 和 L2 正则化有内在的差异，这些差异有时可以帮助我们提�
 
     ```py
     # Define the hyperparameters we want to test param_grid = {
-    ```
-
-    ```py
+    
         'penalty': ['l1', 'l2'],
-    ```
-
-    ```py
+    
         'C': [0.01, 0.03, 0.06, 0.1, 0.3, 0.6] }
     ```
 
@@ -929,21 +837,13 @@ L1 和 L2 正则化有内在的差异，这些差异有时可以帮助我们提�
 
     ```py
     # Fit and wait
-    ```
-
-    ```py
+    
     grid.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     # Print the best set of hyperparameters
-    ```
-
-    ```py
+    
     print('best hyperparameters:', grid.best_params_)
-    ```
-
-    ```py
+    
     best hyperparameters: {'C': 0.06, 'penalty': 'l2'}
     ```
 
@@ -953,29 +853,17 @@ L1 和 L2 正则化有内在的差异，这些差异有时可以帮助我们提�
 
     ```py
     # Print the accuracy score on train and test
-    ```
-
-    ```py
+    
     print('Accuracy on train set:', grid.score(
-    ```
-
-    ```py
+    
         X_train, y_train))
-    ```
-
-    ```py
+    
     print('Accuracy on test set:', grid.score(
-    ```
-
-    ```py
+    
         X_test, y_test))
-    ```
-
-    ```py
+    
     Accuracy on train set: 0.9824175824175824
-    ```
-
-    ```py
+    
     Accuracy on test set: 0.9912280701754386
     ```
 

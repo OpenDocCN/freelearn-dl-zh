@@ -235,21 +235,13 @@ embedding[1:10]
 
     ```py
     # Note: you need to be using OpenAI Python   v     0.27.0 for the code below to work
-    ```
-
-    ```py
+    
     import openai
-    ```
-
-    ```py
+    
     openai.api_key = os.getenv("OPENAI_API_KEY")
-    ```
-
-    ```py
+    
     audio_file= open("/path/to/file/audio.mp3", "rb")
-    ```
-
-    ```py
+    
     transcript = openai.Audio.transcribe("whisper-1", audio_file)
     ```
 

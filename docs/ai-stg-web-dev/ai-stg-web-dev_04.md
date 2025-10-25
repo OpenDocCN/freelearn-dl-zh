@@ -621,9 +621,7 @@ Scikit-learn 以其简洁且有效的预测数据分析方法而著称，是我�
     # Test the model
     accuracy = model.score(X_test, y_test)
     print(f'Model accuracy: {accuracy}')
-    ```
-
-    ```
+    
 
 模型的准确性是基于测试集计算的，为其性能提供了初步的衡量标准。
 

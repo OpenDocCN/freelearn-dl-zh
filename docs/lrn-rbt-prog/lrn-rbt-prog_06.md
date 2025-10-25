@@ -165,9 +165,7 @@ SFTP使用SSH通过网络将文件从树莓派复制到其他设备。所以，�
     Author: Your Name <your@email.com>
     Date: <todays date>
     Adding the starter code
-    ```
-
-    ```py
+    
 
     ```
 

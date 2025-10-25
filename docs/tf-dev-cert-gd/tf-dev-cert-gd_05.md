@@ -136,29 +136,17 @@
 
     ```py
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow import keras
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     import random
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt #helper libraries
-    ```
-
-    ```py
+    
     from tensorflow.keras.utils import plot_model
     ```
 
@@ -166,21 +154,13 @@
 
     ```py
     #Lets import the fashion mnist
-    ```
-
-    ```py
+    
     fashion_data = keras.datasets.fashion_mnist
-    ```
-
-    ```py
+    
     #Lets create of numpy array of training and testing data
-    ```
-
-    ```py
+    
     (train_images, train_labels), (test_images,
-    ```
-
-    ```py
+    
         test_labels) = fashion_data.load_data()
     ```
 
@@ -194,13 +174,9 @@
 
     ```py
     #We create a list of the categories
-    ```
-
-    ```py
+    
     class_names=['Top', 'Trouser','Pullover', 'Dress', 'Coat', 
-    ```
-
-    ```py
+    
         'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankleboot']
     ```
 
@@ -214,21 +190,13 @@
 
     ```py
     # Display a sample image from the training data (index 7)
-    ```
-
-    ```py
+    
     plt.imshow(train_images[7])
-    ```
-
-    ```py
+    
     plt.grid(False)
-    ```
-
-    ```py
+    
     plt.axis('off')
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -244,9 +212,7 @@
 
     ```py
     #Lets check the shape of our training images and testing images
-    ```
-
-    ```py
+    
     train_images.shape, test_images.shape
     ```
 
@@ -260,25 +226,15 @@
 
     ```py
     df=pd.DataFrame(np.unique(train_labels,
-    ```
-
-    ```py
+    
         return_counts=True)).T
-    ```
-
-    ```py
+    
     dict = {0: ‹Label›,1: ‹Count›}
-    ```
-
-    ```py
+    
     df.rename(columns=dict,
-    ```
-
-    ```py
+    
         inplace=True)
-    ```
-
-    ```py
+    
     df
     ```
 
@@ -294,37 +250,21 @@
 
     ```py
     plt.figure(figsize=(9,9))
-    ```
-
-    ```py
+    
     for i in range(16):
-    ```
-
-    ```py
+    
         plt.subplot(4,4,i+1)
-    ```
-
-    ```py
+    
         plt.xticks([])
-    ```
-
-    ```py
+    
         plt.yticks([])
-    ```
-
-    ```py
+    
         plt.grid(False)
-    ```
-
-    ```py
+    
         plt.imshow(train_images[i])
-    ```
-
-    ```py
+    
         plt.title(class_names[train_labels[i]])
-    ```
-
-    ```py
+    
     plt.show()
     ```
 

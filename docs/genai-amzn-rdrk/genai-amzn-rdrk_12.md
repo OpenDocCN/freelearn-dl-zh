@@ -76,33 +76,19 @@ Amazon Bedrock 的核心安全原则之一是，作为 Amazon Bedrock 的用户�
 
     ```py
     {
-    ```
-
-    ```py
+    
     "Version": "2012-10-17",
-    ```
-
-    ```py
+    
     "Statement": [{
-    ```
-
-    ```py
+    
     "Effect": "Allow",
-    ```
-
-    ```py
+    
     "Action": ["KMS:Decrypt"],
-    ```
-
-    ```py
+    
     "Resource": ["arn:aws:kms:region:account-id:key/key-id"],
-    ```
-
-    ```py
+    
     "Condition": {"StringEquals": {"kms:ViaService": ["s3.region.amazonaws.com"]}}}]
-    ```
-
-    ```py
+    
     }
     ```
 
@@ -120,89 +106,47 @@ Amazon Bedrock 的核心安全原则之一是，作为 Amazon Bedrock 的用户�
 
     ```py
     {
-    ```
-
-    ```py
+    
         "Version": "2012-10-17",
-    ```
-
-    ```py
+    
         "Id": "KMS Key Policy",
-    ```
-
-    ```py
+    
         "Statement": [{
-    ```
-
-    ```py
+    
                 "Sid": "Permissions for custom model builders",
-    ```
-
-    ```py
+    
                 "Effect": "Allow",
-    ```
-
-    ```py
+    
                 "Principal": {"AWS": "arn:aws:iam::account-id:user/role"},
-    ```
-
-    ```py
+    
                 "Action": [
-    ```
-
-    ```py
+    
                     "kms:Decrypt",
-    ```
-
-    ```py
+    
                     "kms:GenerateDataKey",
-    ```
-
-    ```py
+    
                     "kms:DescribeKey",
-    ```
-
-    ```py
+    
                     "kms:CreateGrant"
-    ```
-
-    ```py
+    
                 ],
-    ```
-
-    ```py
+    
                 "Resource": "*"},
-    ```
-
-    ```py
+    
             {
-    ```
-
-    ```py
+    
                 "Sid": "Permissions for custom model users",
-    ```
-
-    ```py
+    
                 "Effect": "Allow",
-    ```
-
-    ```py
+    
                 "Principal": {"AWS": "arn:aws:iam::account-id:user/role"},
-    ```
-
-    ```py
+    
                 "Action": "kms:Decrypt",
-    ```
-
-    ```py
+    
                 "Resource": "*"
-    ```
-
-    ```py
+    
             }
-    ```
-
-    ```py
+    
     }
     ```
 
@@ -214,41 +158,23 @@ Amazon Bedrock 的核心安全原则之一是，作为 Amazon Bedrock 的用户�
 
     ```py
     {
-    ```
-
-    ```py
+    
         "Version": "2012-10-17",
-    ```
-
-    ```py
+    
         "Statement": [{
-    ```
-
-    ```py
+    
                 "Sid": "Allow Bedrock to encrypt/decrypt the bedrock agent resources ,
-    ```
-
-    ```py
+    
                 "Effect": "Allow",    "Action":["kms:GenerateDataKey","kms:Decrypt"],
-    ```
-
-    ```py
+    
                 "Resource": "arn:aws:kms:${region}:${account-id}:key/${key-id}",
-    ```
-
-    ```py
+    
                 "Condition": {"StringEquals": {
-    ```
-
-    ```py
+    
     "kms:EncryptionContext:aws:bedrock:arn": "arn:aws:bedrock:${region}:${account-id}:agent/${agent-id}"
-    ```
-
-    ```py
+    
                     }}}]
-    ```
-
-    ```py
+    
     }
     ```
 

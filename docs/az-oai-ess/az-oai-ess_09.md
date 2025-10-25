@@ -268,9 +268,7 @@ OPENAI_SPEECH_REGION = {OPENAI_SPEECH_REGION}
 
     ```py
     Here’s an example prompt: HTML Hello World Tutorial: Generate a beginner-friendly tutorial for creating a basic “Hello World” webpage using HTML:
-    ```
-
-    ```py
+    
     num_of_sentences = 1
     content = input("Please enter the content: ")
     prompt = 'Provide a summary of the text below that captures its main idea in '+ str(num_of_sentences) +'sentences. \n' + content
@@ -410,9 +408,7 @@ OPENAI_SPEECH_REGION = {OPENAI_SPEECH_REGION}
 
     ```py
     and to optimize the efficiency of the image generation process:
-    ```
-
-    ```py
+    
     im_ph = []
     for image_phrase in image_phrases:
        if(len(image_phrase) > 0):

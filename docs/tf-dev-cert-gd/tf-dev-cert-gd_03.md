@@ -106,25 +106,15 @@ R 2 = 1 − R res _ R tot
 
     ```py
     # import tensorflow
-    ```
-
-    ```py
+    
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow import keras
-    ```
-
-    ```py
+    
     from tensorflow.keras import Sequential
-    ```
-
-    ```py
+    
     from tensorflow.keras.layers import Dense
-    ```
-
-    ```py
+    
     print(tf.__version__)
     ```
 
@@ -138,25 +128,15 @@ R 2 = 1 − R res _ R tot
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     import seaborn as sns
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import MinMaxScaler
     ```
 
@@ -166,13 +146,9 @@ R 2 = 1 − R res _ R tot
 
     ```py
     #Loading from the course GitHub account
-    ```
-
-    ```py
+    
     df=pd.read_csv('https://raw.githubusercontent.com/oluwole-packt/datasets/main/salary_dataset.csv')
-    ```
-
-    ```py
+    
     df.head()
     ```
 

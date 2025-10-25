@@ -114,41 +114,23 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     import pandas as pd
-    ```
-
-    ```py
+    
     import tensorflow_datasets as tfds
-    ```
-
-    ```py
+    
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.text import Tokenizer
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.sequence import pad_sequences
-    ```
-
-    ```py
+    
     from tensorflow.keras.utils import to_categorical
-    ```
-
-    ```py
+    
     import tensorflow_hub as hub
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from tensorflow.keras.models import Sequential
-    ```
-
-    ```py
+    
     from tensorflow.keras.layers import Embedding, SimpleRNN, Conv1D, GlobalMaxPooling1D, LSTM, GRU, Bidirectional, Dense, Flatten
     ```
 
@@ -158,21 +140,13 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Load the dataset
-    ```
-
-    ```py
+    
     dataset, info = tfds.load('ag_news_subset',
-    ```
-
-    ```py
+    
         with_info=True, as_supervised=True)
-    ```
-
-    ```py
+    
     train_dataset, test_dataset = dataset['train'],
-    ```
-
-    ```py
+    
         dataset['test']
     ```
 
@@ -182,33 +156,19 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Tokenize and pad the sequences
-    ```
-
-    ```py
+    
     tokenizer = Tokenizer(num_words=20000,
-    ```
-
-    ```py
+    
         oov_token="<OOV>")
-    ```
-
-    ```py
+    
     train_texts = [x[0].numpy().decode(
-    ```
-
-    ```py
+    
         'utf-8') for x in train_dataset]
-    ```
-
-    ```py
+    
     tokenizer.fit_on_texts(train_texts)
-    ```
-
-    ```py
+    
     sequences = tokenizer.texts_to_sequences(train_texts)
-    ```
-
-    ```py
+    
     sequences = pad_sequences(sequences, padding='post')
     ```
 
@@ -220,33 +180,19 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Convert labels to one-hot encoding
-    ```
-
-    ```py
+    
     train_labels = [label.numpy() for _, label in train_dataset]
-    ```
-
-    ```py
+    
     train_labels = to_categorical(train_labels,
-    ```
-
-    ```py
+    
         num_classes=4)4  # assuming 4 classes
-    ```
-
-    ```py
+    
     # Split the training set into training and validation sets
-    ```
-
-    ```py
+    
     train_sequences, val_sequences, train_labels,
-    ```
-
-    ```py
+    
         val_labels = train_test_split(sequences,
-    ```
-
-    ```py
+    
             train_labels, test_size=0.2)
     ```
 
@@ -256,13 +202,9 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     vocab_size=20000
-    ```
-
-    ```py
+    
     embedding_dim =64
-    ```
-
-    ```py
+    
     max_length=sequences.shape[1]
     ```
 
@@ -272,37 +214,21 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Define the DNN model
-    ```
-
-    ```py
+    
     model_dnn = Sequential([
-    ```
-
-    ```py
+    
         Embedding(vocab_size, embedding_dim,
-    ```
-
-    ```py
+    
             input_length=max_length),
-    ```
-
-    ```py
+    
         Flatten(),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(64, activation='relu'),
-    ```
-
-    ```py
+    
         Dense(16, activation='relu'),
-    ```
-
-    ```py
+    
         Dense(4, activation='softmax')
-    ```
-
-    ```py
+    
     ])
     ```
 
@@ -312,37 +238,21 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Define the CNN model
-    ```
-
-    ```py
+    
     model_cnn = Sequential([
-    ```
-
-    ```py
+    
         Embedding(vocab_size, embedding_dim,
-    ```
-
-    ```py
+    
             input_length=max_length),
-    ```
-
-    ```py
+    
         Conv1D(128, 5, activation='relu'),
-    ```
-
-    ```py
+    
         GlobalMaxPooling1D(),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(64, activation='relu'),
-    ```
-
-    ```py
+    
         Dense(4, activation='softmax')
-    ```
-
-    ```py
+    
     ])
     ```
 
@@ -352,37 +262,21 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Define the LSTM model
-    ```
-
-    ```py
+    
     model_lstm = Sequential([
-    ```
-
-    ```py
+    
         Embedding(vocab_size, embedding_dim,
-    ```
-
-    ```py
+    
             input_length=max_length),
-    ```
-
-    ```py
+    
         LSTM(32, return_sequences=True),
-    ```
-
-    ```py
+    
         LSTM(32),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(64, activation='relu'),
-    ```
-
-    ```py
+    
         Dense(4, activation='softmax')
-    ```
-
-    ```py
+    
     ])
     ```
 
@@ -392,33 +286,19 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Define the BiLSTM model
-    ```
-
-    ```py
+    
     model_BiLSTM = Sequential([
-    ```
-
-    ```py
+    
         Embedding(vocab_size, embedding_dim,
-    ```
-
-    ```py
+    
             input_length=max_length),
-    ```
-
-    ```py
+    
         Bidirectional(LSTM(32, return_sequences=True)),
-    ```
-
-    ```py
+    
         Bidirectional(LSTM(16)),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(64, activation='relu'),
-    ```
-
-    ```py
+    
         Dense(4, activation='softmax')])
     ```
 
@@ -430,33 +310,19 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     models = [model_cnn, model_dnn, model_lstm,
-    ```
-
-    ```py
+    
         model_BiLSTM]
-    ```
-
-    ```py
+    
     for model in models:
-    ```
-
-    ```py
+    
         model.compile(loss='categorical_crossentropy',
-    ```
-
-    ```py
+    
             optimizer='adam', metrics=['accuracy'])
-    ```
-
-    ```py
+    
         model.fit(train_sequences, train_labels,epochs=10,
-    ```
-
-    ```py
+    
             validation_data=(val_sequences, val_labels),
-    ```
-
-    ```py
+    
             verbose=False
     ```
 
@@ -466,77 +332,41 @@ AG News 数据集是一个包含超过 100 万篇新闻文章的集合，数据�
 
     ```py
     # Evaluate the model
-    ```
-
-    ```py
+    
     test_texts = [x[0].numpy().decode(
-    ```
-
-    ```py
+    
         'utf-8') for x in test_dataset]
-    ```
-
-    ```py
+    
     test_sequences = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
         test_texts)
-    ```
-
-    ```py
+    
     test_sequences = pad_sequences(test_sequences,
-    ```
-
-    ```py
+    
         padding='post', maxlen=sequences.shape[1])
-    ```
-
-    ```py
+    
     test_labels = [label.numpy() for _, label in test_dataset]
-    ```
-
-    ```py
+    
     test_labels = to_categorical(test_labels,
-    ```
-
-    ```py
+    
         num_classes=4)
-    ```
-
-    ```py
+    
     model_names = ["Model_CNN", "Model_DNN", "Model_LSTM",
-    ```
-
-    ```py
+    
         "Model_BiLSTM"]
-    ```
-
-    ```py
+    
     for i, model in enumerate(models):
-    ```
-
-    ```py
+    
         loss, accuracy = model.evaluate(test_sequences,
-    ```
-
-    ```py
+    
             test_labels)
-    ```
-
-    ```py
+    
         print("Model Evaluation -", model_names[i])
-    ```
-
-    ```py
+    
         print("Loss:", loss)
-    ```
-
-    ```py
+    
         print("Accuracy:", accuracy)
-    ```
-
-    ```py
+    
         print()
     ```
 
@@ -583,29 +413,17 @@ Accuracy: 0.8915789723396301
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow.keras.models import Sequential
-    ```
-
-    ```py
+    
     from tensorflow.keras.layers import Embedding, LSTM, Dense, Flatten
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.text import Tokenizer
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.sequence import pad_sequences
-    ```
-
-    ```py
+    
     import tensorflow_datasets as tfds
     ```
 
@@ -615,9 +433,7 @@ Accuracy: 0.8915789723396301
 
     ```py
     !wget http://nlp.stanford.edu/data/glove.6B.zip
-    ```
-
-    ```py
+    
     !unzip glove.6B.zip -d glove.6B
     ```
 
@@ -633,17 +449,11 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     dataset, info = tfds.load('ag_news_subset',
-    ```
-
-    ```py
+    
         with_info=True, as_supervised=True)
-    ```
-
-    ```py
+    
     train_dataset, test_dataset = dataset['train'],
-    ```
-
-    ```py
+    
         dataset['test']
     ```
 
@@ -653,41 +463,23 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     tokenizer = Tokenizer(num_words=20000,
-    ```
-
-    ```py
+    
         oov_token="<OOV>")
-    ```
-
-    ```py
+    
     train_texts = [x[0].numpy().decode(
-    ```
-
-    ```py
+    
         'utf-8') for x in train_dataset]
-    ```
-
-    ```py
+    
     tokenizer.fit_on_texts(train_texts)
-    ```
-
-    ```py
+    
     train_sequences = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
         train_texts)
-    ```
-
-    ```py
+    
     train_sequences = pad_sequences(train_sequences,
-    ```
-
-    ```py
+    
         padding='post')
-    ```
-
-    ```py
+    
     max_length = train_sequences.shape[1]
     ```
 
@@ -697,25 +489,15 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     test_texts = [x[0].numpy().decode(
-    ```
-
-    ```py
+    
         'utf-8') for x in test_dataset]
-    ```
-
-    ```py
+    
     test_sequences = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
         test_texts)
-    ```
-
-    ```py
+    
     test_sequences = pad_sequences(test_sequences,
-    ```
-
-    ```py
+    
         padding='post', maxlen=max_length)
     ```
 
@@ -725,9 +507,7 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     vocab_size = len(tokenizer.word_index) + 1
-    ```
-
-    ```py
+    
     embedding_dim = 50
     ```
 
@@ -737,37 +517,21 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     # Download GloVe embeddings and prepare embedding matrix
-    ```
-
-    ```py
+    
     with open('/content/glove.6B/glove.6B.50d.txt', 'r', encoding='utf-8') as f:
-    ```
-
-    ```py
+    
         for line in f:
-    ```
-
-    ```py
+    
             values = line.split()
-    ```
-
-    ```py
+    
             word = values[0]
-    ```
-
-    ```py
+    
             if word in tokenizer.word_index:
-    ```
-
-    ```py
+    
                 idx = tokenizer.word_index[word]
-    ```
-
-    ```py
+    
                 embedding_matrix[idx] = np.array(
-    ```
-
-    ```py
+    
                     values[1:], dtype=np.float32)
     ```
 
@@ -777,77 +541,41 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     model_lstm = Sequential([
-    ```
-
-    ```py
+    
         Embedding(vocab_size, embedding_dim,
-    ```
-
-    ```py
+    
             input_length=max_length,
-    ```
-
-    ```py
+    
             weights=[embedding_matrix], trainable=False),
-    ```
-
-    ```py
+    
         LSTM(32, return_sequences=True),
-    ```
-
-    ```py
+    
         LSTM(32),
-    ```
-
-    ```py
+    
         Dense(64, activation='relu'),
-    ```
-
-    ```py
+    
         Dense(4, activation='softmax')
-    ```
-
-    ```py
+    
     ])
-    ```
-
-    ```py
+    
     model_lstm.compile(optimizer='adam',
-    ```
-
-    ```py
+    
         loss='categorical_crossentropy',
-    ```
-
-    ```py
+    
         metrics=['accuracy'])
-    ```
-
-    ```py
+    
     # Convert labels to one-hot encoding
-    ```
-
-    ```py
+    
     train_labels = tf.keras.utils.to_categorical(
-    ```
-
-    ```py
+    
         [label.numpy() for _, label in train_dataset])
-    ```
-
-    ```py
+    
     test_labels = tf.keras.utils.to_categorical(
-    ```
-
-    ```py
+    
         [label.numpy() for _, label in test_dataset])
-    ```
-
-    ```py
+    
     model_lstm.fit(train_sequences, train_labels,
-    ```
-
-    ```py
+    
         epochs=10, validation_split=0.2)
     ```
 
@@ -857,17 +585,11 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     loss, accuracy = model_lstm.evaluate(test_sequences,
-    ```
-
-    ```py
+    
         test_labels)
-    ```
-
-    ```py
+    
     print("Loss:", loss)
-    ```
-
-    ```py
+    
     print("Accuracy:", accuracy)
     ```
 
@@ -911,25 +633,15 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.text import Tokenizer
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.sequence import pad_sequences
-    ```
-
-    ```py
+    
     from tensorflow.keras.models import Sequential
-    ```
-
-    ```py
+    
     from tensorflow.keras.layers import Embedding, LSTM, Dense, Bidirectional
-    ```
-
-    ```py
+    
     import numpy as np
     ```
 
@@ -949,13 +661,9 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     tokenizer = Tokenizer()
-    ```
-
-    ```py
+    
     tokenizer.fit_on_texts([text])
-    ```
-
-    ```py
+    
     total_words = len(tokenizer.word_index) + 1
     ```
 
@@ -965,29 +673,17 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     input_sequences = []
-    ```
-
-    ```py
+    
     for line in text.split('\n'):
-    ```
-
-    ```py
+    
         token_list = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
             [line])[0]
-    ```
-
-    ```py
+    
         for i in range(1, len(token_list)):
-    ```
-
-    ```py
+    
             n_gram_sequence = token_list[:i+1]
-    ```
-
-    ```py
+    
             input_sequences.append(n_gram_sequence)
     ```
 
@@ -1011,17 +707,11 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     max_sequence_len = max([len(x) for x in input_sequences])
-    ```
-
-    ```py
+    
     input_sequences = np.array(pad_sequences(
-    ```
-
-    ```py
+    
         input_sequences, maxlen=max_sequence_len,
-    ```
-
-    ```py
+    
         padding='pre'))
     ```
 
@@ -1031,17 +721,11 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     predictors, label = input_sequences[:,:-1],
-    ```
-
-    ```py
+    
         input_sequences[:,-1]
-    ```
-
-    ```py
+    
     label = tf.keras.utils.to_categorical(label,
-    ```
-
-    ```py
+    
         num_classes=total_words)
     ```
 
@@ -1051,41 +735,23 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     model = Sequential([
-    ```
-
-    ```py
+    
         Embedding(total_words, 200,
-    ```
-
-    ```py
+    
             input_length=max_sequence_len-1),
-    ```
-
-    ```py
+    
         Bidirectional(LSTM(200)),
-    ```
-
-    ```py
+    
         Dense(total_words, activation='softmax')
-    ```
-
-    ```py
+    
     ])
-    ```
-
-    ```py
+    
     model.compile(loss='categorical_crossentropy',
-    ```
-
-    ```py
+    
         optimizer='adam', metrics=['accuracy'])
-    ```
-
-    ```py
+    
     history = model.fit(predictors, label, epochs=300,
-    ```
-
-    ```py
+    
         verbose=0)
     ```
 
@@ -1095,69 +761,37 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     def generate_text(seed_text, next_words, model, max_sequence_len):
-    ```
-
-    ```py
+    
         for _ in range(next_words):
-    ```
-
-    ```py
+    
             token_list = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
                 [seed_text])[0]
-    ```
-
-    ```py
+    
             token_list = pad_sequences([token_list],
-    ```
-
-    ```py
+    
                 maxlen=max_sequence_len-1, padding='pre')
-    ```
-
-    ```py
+    
             # Get the predictions
-    ```
-
-    ```py
+    
             predictions = model.predict(token_list)
-    ```
-
-    ```py
+    
             # Get the index with the maximum prediction value
-    ```
-
-    ```py
+    
             predicted = np.argmax(predictions)
-    ```
-
-    ```py
+    
             output_word = ""
-    ```
-
-    ```py
+    
             for word,index in tokenizer.word_index.items():
-    ```
-
-    ```py
+    
                 if index == predicted:
-    ```
-
-    ```py
+    
                     output_word = word
-    ```
-
-    ```py
+    
                     break
-    ```
-
-    ```py
+    
             seed_text += " " + output_word
-    ```
-
-    ```py
+    
         return seed_text
     ```
 
@@ -1167,13 +801,9 @@ GloVe 6B 嵌入由 60 亿词元的词向量组成，由斯坦福大学的研究�
 
     ```py
     input_text= "In the hustle and bustle of ipoti"
-    ```
-
-    ```py
+    
     print(generate_text(input_text, 50, model,
-    ```
-
-    ```py
+    
         max_sequence_len))
     ```
 

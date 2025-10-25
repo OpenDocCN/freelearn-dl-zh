@@ -34,33 +34,19 @@ CLIPSeg 建立在 CLIP 的成功之上，CLIP 是 SD 所使用的相同模型。
 
     ```py
     from transformers import( 
-    ```
-
-    ```py
+    
         CLIPSegProcessor,CLIPSegForImageSegmentation)
-    ```
-
-    ```py
+    
     processor = CLIPSegProcessor.from_pretrained(
-    ```
-
-    ```py
+    
         "CIDAS/clipseg-rd64-refined"
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     model = CLIPSegForImageSegmentation.from_pretrained(
-    ```
-
-    ```py
+    
         "CIDAS/clipseg-rd64-refined"
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -72,73 +58,39 @@ CLIPSeg 建立在 CLIP 的成功之上，CLIP 是 SD 所使用的相同模型。
 
     ```py
     from diffusers.utils import load_image
-    ```
-
-    ```py
+    
     from diffusers.utils.pil_utils import numpy_to_pil
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     source_image = load_image("./images/clipseg_source_image.png")
-    ```
-
-    ```py
+    
     prompts = ['the background']
-    ```
-
-    ```py
+    
     inputs = processor(
-    ```
-
-    ```py
+    
         text = prompts,
-    ```
-
-    ```py
+    
         images = [source_image] * len(prompts),
-    ```
-
-    ```py
+    
         padding = True,
-    ```
-
-    ```py
+    
         return_tensors = "pt"
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     with torch.no_grad():
-    ```
-
-    ```py
+    
         outputs = model(**inputs)
-    ```
-
-    ```py
+    
     preds = outputs.logits
-    ```
-
-    ```py
+    
     mask_data = torch.sigmoid(preds)
-    ```
-
-    ```py
+    
     mask_data_numpy = mask_data.detach().unsqueeze(-1).numpy()
-    ```
-
-    ```py
+    
     mask_pil = numpy_to_pil(
-    ```
-
-    ```py
+    
         mask_data_numpy)[0].resize(source_image.size)
     ```
 
@@ -156,13 +108,9 @@ CLIPSeg 建立在 CLIP 的成功之上，CLIP 是 SD 所使用的相同模型。
 
     ```py
     bw_thresh = 100
-    ```
-
-    ```py
+    
     bw_fn = lambda x : 255 if x > bw_thresh else 0
-    ```
-
-    ```py
+    
     bw_mask_pil = mask_pil.convert("L").point(bw_fn, mode="1")
     ```
 
@@ -184,65 +132,35 @@ CLIPSeg 建立在 CLIP 的成功之上，CLIP 是 SD 所使用的相同模型。
 
     ```py
     from diffusers import(StableDiffusionInpaintPipeline, 
-    ```
-
-    ```py
+    
         EulerDiscreteScheduler)
-    ```
-
-    ```py
+    
     inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "CompVis/stable-diffusion-v1-4",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         safety_checker = None
-    ```
-
-    ```py
+    
     ).to("cuda:0")
-    ```
-
-    ```py
+    
     sd_prompt = "blue sky and mountains"
-    ```
-
-    ```py
+    
     out_image = inpaint_pipe(
-    ```
-
-    ```py
+    
         prompt = sd_prompt,
-    ```
-
-    ```py
+    
         image = source_image,
-    ```
-
-    ```py
+    
         mask_image = bw_mask_pil,
-    ```
-
-    ```py
+    
         strength = 0.9,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda:0").manual_seed(7)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     out_image
     ```
 
@@ -291,9 +209,7 @@ r = Image.composite(source_image ,output_image,
 
     ```py
     from rembg import remove
-    ```
-
-    ```py
+    
     remove(source_image)
     ```
 
@@ -333,29 +249,17 @@ Image.alpha_composite(white_bg, image_wo_bg)
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from transformers import CLIPVisionModelWithProjection
-    ```
-
-    ```py
+    
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-    ```
-
-    ```py
+    
         "h94/IP-Adapter",
-    ```
-
-    ```py
+    
         subfolder = "models/image_encoder",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
     ).to("cuda:0")
     ```
 
@@ -363,29 +267,17 @@ Image.alpha_composite(white_bg, image_wo_bg)
 
     ```py
     from diffusers import StableDiffusionImg2ImgPipeline
-    ```
-
-    ```py
+    
     pipeline = StableDiffusionImg2ImgPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         image_encoder = image_encoder,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         safety_checker = None
-    ```
-
-    ```py
+    
     ).to("cuda:0")
     ```
 
@@ -397,21 +289,13 @@ Image.alpha_composite(white_bg, image_wo_bg)
 
     ```py
     pipeline.load_ip_adapter(
-    ```
-
-    ```py
+    
         "h94/IP-Adapter",
-    ```
-
-    ```py
+    
         Subfolder = "models",
-    ```
-
-    ```py
+    
         weight_name = "ip-adapter_sd15.bin"
-    ```
-
-    ```py
+    
     )
     ```
 

@@ -123,49 +123,27 @@ input_image
 
     ```py
     from PIL import Image
-    ```
-
-    ```py
+    
     from PIL import PngImagePlugin
-    ```
-
-    ```py
+    
     import json
-    ```
-
-    ```py
+    
     # Open the original image
-    ```
-
-    ```py
+    
     image = Image.open("input_image.png")
-    ```
-
-    ```py
+    
     # Define the metadata you want to add
-    ```
-
-    ```py
+    
     metadata = PngImagePlugin.PngInfo()
-    ```
-
-    ```py
+    
     gen_meta_str = json.dumps(gen_meta)
-    ```
-
-    ```py
+    
     metadata.add_text("my_sd_gen_meta", gen_meta_str)
-    ```
-
-    ```py
+    
     # Save the image with the added metadata
-    ```
-
-    ```py
+    
     image.save("output_image_with_metadata.png", "PNG", 
-    ```
-
-    ```py
+    
         pnginfo=metadata)
     ```
 
@@ -175,77 +153,41 @@ input_image
 
     ```py
     from PIL import Image
-    ```
-
-    ```py
+    
     from PIL import PngImagePlugin
-    ```
-
-    ```py
+    
     import json
-    ```
-
-    ```py
+    
     # Open the original image
-    ```
-
-    ```py
+    
     image = input_image#Image.open("input_image.png")
-    ```
-
-    ```py
+    
     # Define the metadata you want to add
-    ```
-
-    ```py
+    
     metadata = PngImagePlugin.PngInfo()
-    ```
-
-    ```py
+    
     gen_meta_str = json.dumps(gen_meta)
-    ```
-
-    ```py
+    
     metadata.add_text("my_sd_gen_meta", gen_meta_str)
-    ```
-
-    ```py
+    
     # add a copy right json object
-    ```
-
-    ```py
+    
     copyright_meta = {
-    ```
-
-    ```py
+    
         "author":"Andrew Zhu",
-    ```
-
-    ```py
+    
         "license":"free use"
-    ```
-
-    ```py
+    
     }
-    ```
-
-    ```py
+    
     copyright_meta_str = json.dumps(copyright_meta)
-    ```
-
-    ```py
+    
     metadata.add_text("copy_right", copyright_meta_str)
-    ```
-
-    ```py
+    
     # Save the image with the added metadata
-    ```
-
-    ```py
+    
     image.save("output_image_with_metadata.png", "PNG", 
-    ```
-
-    ```py
+    
         pnginfo=metadata)
     ```
 
@@ -255,25 +197,15 @@ input_image
 
     ```py
     from PIL import Image
-    ```
-
-    ```py
+    
     image = Image.open("output_image_with_metadata.png")
-    ```
-
-    ```py
+    
     metadata = image.info
-    ```
-
-    ```py
+    
     # print the meta
-    ```
-
-    ```py
+    
     for key, value in metadata.items():
-    ```
-
-    ```py
+    
         print(f"{key}: {value}")
     ```
 
@@ -281,9 +213,7 @@ input_image
 
     ```py
     my_sd_gen_meta: {"model_id": "stablediffusionapi/deliberate-v2", "prompt": "high resolution, a photograph of an astronaut riding a horse", "seed": 123, "inference_steps": 30, "height": 512, "width": 768, "guidance_scale": 7.5}
-    ```
-
-    ```py
+    
     copy_right: {"author": "Andrew Zhu", "license": "free use"}
     ```
 

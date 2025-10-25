@@ -202,13 +202,9 @@
 
     ```py
     $ pip install ragas
-    ```
-
-    ```py
+    
     $ pip install tqdm -q –user
-    ```
-
-    ```py
+    
     tqdm package, which is used by ragas, is a popular Python library used for creating progress bars and displaying progress information for iterative processes. You have probably come across the matplotlib package before, as it is a widely used plotting library for Python. We will be using it to provide visualizations for our evaluation metric results.
     ```
 
@@ -216,65 +212,35 @@
 
     ```py
     import tqdm as notebook_tqdm
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     from datasets import Dataset
-    ```
-
-    ```py
+    
     from ragas import evaluate
-    ```
-
-    ```py
+    
     from ragas.testset.generator import TestsetGenerator
-    ```
-
-    ```py
+    
     from ragas.testset.evolutions import (
-    ```
-
-    ```py
+    
      simple, reasoning, multi_context)
-    ```
-
-    ```py
+    
     from ragas.metrics import (
-    ```
-
-    ```py
+    
      answer_relevancy,
-    ```
-
-    ```py
+    
      faithfulness,
-    ```
-
-    ```py
+    
      context_recall,
-    ```
-
-    ```py
+    
      context_precision,
-    ```
-
-    ```py
+    
     **answer_correctness,**
-    ```
-
-    ```py
+    
      **answer_similarity**
-    ```
-
-    ```py
+    
     `tqdm` will give our ragas platform the ability to use progress bars during the time-consuming processing tasks it implements. We are going to use the popular pandas data manipulation and analysis library to pull our data into DataFrames as part of our analysis. The `matplotlib.pyplot as plt` import gives us the ability to add visualizations (charts in this case) for our metric results. We also import `Dataset` from `datasets`. The `datasets` library is an open source library developed and maintained by Hugging Face. The `datasets` library provides a standardized interface for accessing and manipulating a wide variety of datasets, typically focused on the field of `from ragas import evaluate`: The `evaluate` function takes a dataset in the ragas format, along with optional metrics, language models, embeddings, and other configurations, and runs the evaluation on the RAG pipeline. The `evaluate` function returns a `Result` object containing the scores for each metric, providing a convenient way to assess the performance of RAG pipelines using various metrics and configurations.
     ```
 

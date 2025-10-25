@@ -132,9 +132,7 @@
     W = sum(price*(area-np.mean(area))) / sum((area-np.mean(area))**2)
     b = np.mean(price) - W*np.mean(area)
     print("The regression coefficients are", W,b) 
-    ```
-
-    ```py
+    
     -----------------------------------------------
     The regression coefficients are 24.815544052284988 43.4989785533412 
     ```
@@ -238,9 +236,7 @@
                           Dense(1, input_shape = [1,], activation=None)
     ])
     model.summary() 
-    ```
-
-    ```py
+    
     Model: "sequential"
     ____________________________________________________________
      Layer (type)           Output Shape              Param #   
@@ -264,9 +260,7 @@
 
     ```py
     model.fit(x=data['area'],y=data['price'], epochs=100, batch_size=32, verbose=1, validation_split=0.2) 
-    ```
-
-    ```py
+    
     model.fit(x=data['area'],y=data['price'], epochs=100, batch_size=32, verbose=1, validation_split=0.2)
     Epoch 1/100
     3/3 [==============================] - 0s 78ms/step - loss: 1.2643 - val_loss: 1.4828
@@ -555,9 +549,7 @@
         Dense(10, activation='sigmoid')
     ])
     model.summary() 
-    ```
-
-    ```py
+    
     Model: "sequential"
     ____________________________________________________________
      Layer (type)           Output Shape              Param #   

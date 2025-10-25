@@ -96,9 +96,7 @@ LangGraph 内置的另一个关键元素是持久性。 持久性可以用来保
 
     ```py
     %pip install tiktoken
-    ```
-
-    ```py
+    
     tiktoken package, which is an OpenAI package used for tokenizing text data before feeding it into language models. Last, we pull in the langgraph package we have been discussing.
     ```
 
@@ -106,17 +104,11 @@ LangGraph 内置的另一个关键元素是持久性。 持久性可以用来保
 
     ```py
     llm = ChatOpenAI(model_name="gpt-4o-mini",
-    ```
-
-    ```py
+    
      temperature=0, streaming=True)
-    ```
-
-    ```py
+    
     agent_llm = ChatOpenAI(model_name="gpt-4o-mini",
-    ```
-
-    ```py
+    
      temperature=0, streaming=True)
     ```
 
@@ -270,9 +262,7 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      def score_documents(state) -> Literal[
-    ```
-
-    ```py
+    
      "generate", "improve"]:
     ```
 
@@ -282,13 +272,9 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      class scoring(BaseModel):
-    ```
-
-    ```py
+    
      binary_score: str = Field(
-    ```
-
-    ```py
+    
      description="Relevance score 'yes' or 'no'")
     ```
 
@@ -298,9 +284,7 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      llm_with_tool = llm.with_structured_output(
-    ```
-
-    ```py
+    
      scoring)
     ```
 
@@ -310,29 +294,17 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      prompt = PromptTemplate(
-    ```
-
-    ```py
+    
      template="""You are assessing relevance of a retrieved document to a user question with a binary grade. Here is the retrieved document:
-    ```
-
-    ```py
+    
      {context}
-    ```
-
-    ```py
+    
      Here is the user question: {question}
-    ```
-
-    ```py
+    
      If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.""",
-    ```
-
-    ```py
+    
      input_variables=["context", "question"],
-    ```
-
-    ```py
+    
      )
     ```
 
@@ -350,17 +322,11 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      messages = state["messages"]
-    ```
-
-    ```py
+    
      last_message = messages[-1]
-    ```
-
-    ```py
+    
      question = messages[0].content
-    ```
-
-    ```py
+    
      docs = last_message.content
     ```
 
@@ -378,13 +344,9 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      scored_result = chain.invoke({"question":
-    ```
-
-    ```py
+    
      question, "context": docs})
-    ```
-
-    ```py
+    
      score = scored_result.binary_score
     ```
 
@@ -392,29 +354,17 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      if score == "yes":
-    ```
-
-    ```py
+    
      print("---DECISION: DOCS RELEVANT---")
-    ```
-
-    ```py
+    
      return "generate"
-    ```
-
-    ```py
+    
      else:
-    ```
-
-    ```py
+    
      print("---DECISION: DOCS NOT RELEVANT---")
-    ```
-
-    ```py
+    
      print(score)
-    ```
-
-    ```py
+    
      return "improve"
     ```
 
@@ -426,25 +376,15 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      def agent(state):
-    ```
-
-    ```py
+    
      print("---CALL AGENT---")
-    ```
-
-    ```py
+    
      messages = state["messages"]
-    ```
-
-    ```py
+    
      llm = llm.bind_tools(tools)
-    ```
-
-    ```py
+    
      response = llm.invoke(messages)
-    ```
-
-    ```py
+    
      return {"messages": [response]}
     ```
 
@@ -454,77 +394,41 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      def improve(state):
-    ```
-
-    ```py
+    
      print("---TRANSFORM QUERY---")
-    ```
-
-    ```py
+    
      messages = state["messages"]
-    ```
-
-    ```py
+    
      question = messages[0].content
-    ```
-
-    ```py
+    
      msg = [
-    ```
-
-    ```py
+    
      HumanMessage(content=f"""\n
-    ```
-
-    ```py
+    
      Look at the input and try to reason about
-    ```
-
-    ```py
+    
      the underlying semantic intent / meaning.
-    ```
-
-    ```py
+    
      \n
-    ```
-
-    ```py
+    
      Here is the initial question:
-    ```
-
-    ```py
+    
      \n ------- \n
-    ```
-
-    ```py
+    
      {question}
-    ```
-
-    ```py
+    
      \n ------- \n
-    ```
-
-    ```py
+    
      Formulate an improved question:
-    ```
-
-    ```py
+    
      """,
-    ```
-
-    ```py
+    
      )
-    ```
-
-    ```py
+    
      ]
-    ```
-
-    ```py
+    
      response = llm.invoke(msg)
-    ```
-
-    ```py
+    
      return {"messages": [response]}
     ```
 
@@ -534,49 +438,27 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      def generate(state):
-    ```
-
-    ```py
+    
      print("---GENERATE---")
-    ```
-
-    ```py
+    
      messages = state["messages"]
-    ```
-
-    ```py
+    
      question = messages[0].content
-    ```
-
-    ```py
+    
      last_message = messages[-1]
-    ```
-
-    ```py
+    
      question = messages[0].content
-    ```
-
-    ```py
+    
      docs = last_message.content
-    ```
-
-    ```py
+    
      rag_chain = generation_prompt | llm |
-    ```
-
-    ```py
+    
      str_output_parser
-    ```
-
-    ```py
+    
      response = rag_chain.invoke({"context": docs,
-    ```
-
-    ```py
+    
      "question": question})
-    ```
-
-    ```py
+    
      return {"messages": [response]}
     ```
 
@@ -594,9 +476,7 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      from langgraph.graph import END, StateGraph
-    ```
-
-    ```py
+    
      from langgraph.prebuilt import ToolNode
     ```
 
@@ -620,29 +500,17 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      workflow.add_node("agent", agent)  # agent
-    ```
-
-    ```py
+    
      retrieve = ToolNode(tools)
-    ```
-
-    ```py
+    
      workflow.add_node("retrieve", retrieve)
-    ```
-
-    ```py
+    
      # retrieval from web and or retriever
-    ```
-
-    ```py
+    
      workflow.add_node("improve", improve)
-    ```
-
-    ```py
+    
      # Improving the question for better retrieval
-    ```
-
-    ```py
+    
      workflow.add_node("generate", generate)  # Generating a response after we know the documents are relevant
     ```
 
@@ -668,25 +536,15 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      workflow.add_conditional_edges("agent", tools_condition,
-    ```
-
-    ```py
+    
      {
-    ```
-
-    ```py
+    
      "tools": "retrieve",
-    ```
-
-    ```py
+    
      END: END,
-    ```
-
-    ```py
+    
      },
-    ```
-
-    ```py
+    
      )
     ```
 
@@ -696,17 +554,11 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      workflow.add_conditional_edges("retrieve",
-    ```
-
-    ```py
+    
      score_documents)
-    ```
-
-    ```py
+    
      workflow.add_edge("generate", END)
-    ```
-
-    ```py
+    
      workflow.add_edge("improve", "agent")
     ```
 
@@ -724,25 +576,15 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      from IPython.display import Image, display
-    ```
-
-    ```py
+    
      try:
-    ```
-
-    ```py
+    
      display(Image(graph.get_graph(
-    ```
-
-    ```py
+    
      xray=True).draw_mermaid_png()))
-    ```
-
-    ```py
+    
      except:
-    ```
-
-    ```py
+    
      pass
     ```
 
@@ -752,25 +594,15 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      import pprint
-    ```
-
-    ```py
+    
      inputs = {
-    ```
-
-    ```py
+    
      "messages": [
-    ```
-
-    ```py
+    
      ("user", user_query),
-    ```
-
-    ```py
+    
      ]
-    ```
-
-    ```py
+    
      }
     ```
 
@@ -786,29 +618,17 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      for output in graph.stream(inputs):
-    ```
-
-    ```py
+    
      for key, value in output.items():
-    ```
-
-    ```py
+    
      pprint.pprint(f"Output from node '{key}':")
-    ```
-
-    ```py
+    
      pprint.pprint("---")
-    ```
-
-    ```py
+    
      pprint.pprint(value, indent=2, width=80,
-    ```
-
-    ```py
+    
      depth=None)
-    ```
-
-    ```py
+    
      final_answer = value
     ```
 
@@ -828,21 +648,13 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      ---CALL AGENT---
-    ```
-
-    ```py
+    
      "Output from node 'agent':"
-    ```
-
-    ```py
+    
      '---'
-    ```
-
-    ```py
+    
      { 'messages': [ AIMessage(content='', additional_kwargs={'tool_calls': [{'index': 0, 'id': 'call_46NqZuz3gN2F9IR5jq0MRdVm', 'function': {'arguments': '{"query":"Google\'s environmental initiatives"}', 'name': 'retrieve_google_environmental_question_answers'}, 'type': 'function'}]}, response_metadata={'finish_reason': 'tool_calls'}, id='run-eba27f1e-1c32-4ffc-a161-55a32d645498-0', tool_calls=[{'name': 'retrieve_google_environmental_question_answers', 'args': {'query': "Google's environmental initiatives"}, 'id': 'call_46NqZuz3gN2F9IR5jq0MRdVm'}])]}
-    ```
-
-    ```py
+    
      '\n---\n'
     ```
 
@@ -852,9 +664,7 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      ---CHECK RELEVANCE---
-    ```
-
-    ```py
+    
      ---DECISION: DOCS RELEVANT---
     ```
 
@@ -864,17 +674,11 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      "Output from node 'retrieve':"
-    ```
-
-    ```py
+    
      '---'
-    ```
-
-    ```py
+    
      { 'messages': [ ToolMessage(content='iMasons Climate AccordGoogle is a founding member and part of the governing body of the iMasons Climate Accord, a coalition united on carbon reduction in digital infrastructure.\nReFEDIn 2022, to activate industry-wide change…[TRUNCATED]', tool_call_id='call_46NqZuz3gN2F9IR5jq0MRdVm')]}
-    ```
-
-    ```py
+    
      '\n---\n'
     ```
 
@@ -884,45 +688,25 @@ from langgraph.prebuilt import tools_condition
 
     ```py
      ---GENERATE---
-    ```
-
-    ```py
+    
      "Output from node 'generate':"
-    ```
-
-    ```py
+    
      '---'
-    ```
-
-    ```py
+    
      { 'messages': [ 'Google has a comprehensive and multifaceted approach to '
-    ```
-
-    ```py
+    
      'environmental sustainability, encompassing various '
-    ```
-
-    ```py
+    
      'initiatives aimed at reducing carbon emissions, promoting'
-    ```
-
-    ```py
+    
      'sustainable practices, and leveraging technology for '
-    ```
-
-    ```py
+    
      "environmental benefits. Here are some key aspects of Google's "
-    ```
-
-    ```py
+    
      'environmental initiatives:\n''\n'
-    ```
-
-    ```py
+    
      '1\. **Carbon Reduction and Renewable Energy**…']}
-    ```
-
-    ```py
+    
      '\n---\n'
     ```
 

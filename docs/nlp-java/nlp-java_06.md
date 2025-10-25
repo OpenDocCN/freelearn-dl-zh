@@ -410,9 +410,7 @@ p(tokens,cat) = p(tokens|cat) * p(cat)
     Type a string to be classified
     super super
 
-    ```
-
-    ```py
+    
     h 0.76   
     c 0.24    
     ```
@@ -2430,9 +2428,7 @@ System.out.println("Done, now go annotate and save with same"
     ```py
     java -cp lingpipe-cookbook.1.0.jar:lib/lingpipe-4.1.0.jar:lib/opencsv-2.4.jar com.lingpipe.cookbook.chapter3.InterAnnotatorAgreement
 
-    ```
-
-    ```py
+    
     data/disney_e_n.csv treated as truth 
     data/disney1_e_n.csv treated as response
     Disagreement: n x e for: When all else fails #Disney

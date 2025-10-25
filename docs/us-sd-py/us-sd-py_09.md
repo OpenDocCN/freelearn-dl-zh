@@ -32,33 +32,19 @@
 
     ```py
     # initialize model
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     model_id = "stablediffusionapi/deliberate-v2"
-    ```
-
-    ```py
+    
     pipe = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         model_id,
-    ```
-
-    ```py
+    
         torch_dtype=torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda")
     ```
 
@@ -66,37 +52,21 @@
 
     ```py
     # without using TI
-    ```
-
-    ```py
+    
     prompt = "a high quality photo of a futuristic city in deep \ 
-    ```
-
-    ```py
+    
     space, midjourney-style"
-    ```
-
-    ```py
+    
     image = pipe(
-    ```
-
-    ```py
+    
         prompt,
-    ```
-
-    ```py
+    
         num_inference_steps = 50,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 
@@ -112,17 +82,11 @@
 
     ```py
     pipe.load_textual_inversion(
-    ```
-
-    ```py
+    
         "sd-concepts-library/midjourney-style",
-    ```
-
-    ```py
+    
         token = "midjourney-style"
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -269,101 +233,53 @@ embeds =  loaded_learned_embeds[keys[0]] * weight
 
     ```py
     def load_textual_inversion(
-    ```
-
-    ```py
+    
         learned_embeds_path,
-    ```
-
-    ```py
+    
         token,
-    ```
-
-    ```py
+    
         text_encoder,
-    ```
-
-    ```py
+    
         tokenizer,
-    ```
-
-    ```py
+    
         weight = 0.5,
-    ```
-
-    ```py
+    
         device = "cpu"
-    ```
-
-    ```py
+    
     ):
-    ```
-
-    ```py
+    
         loaded_learned_embeds = \
-    ```
-
-    ```py
+    
             torch.load(learned_embeds_path, map_location=device)
-    ```
-
-    ```py
+    
         if "string_to_token" in loaded_learned_embeds:
-    ```
-
-    ```py
+    
             string_to_token = \
-    ```
-
-    ```py
+    
                 loaded_learned_embeds['string_to_token']
-    ```
-
-    ```py
+    
             string_to_param = \
-    ```
-
-    ```py
+    
                 loaded_learned_embeds['string_to_param']
-    ```
-
-    ```py
+    
             # separate token and the embeds
-    ```
-
-    ```py
+    
             trained_token = list(string_to_token.keys())[0]
-    ```
-
-    ```py
+    
             embeds = string_to_param[trained_token]
-    ```
-
-    ```py
+    
             embeds = embeds[0] * weight
-    ```
-
-    ```py
+    
         elif "emb_params" in loaded_learned_embeds:
-    ```
-
-    ```py
+    
             embeds = loaded_learned_embeds["emb_params"][0] * weight
-    ```
-
-    ```py
+    
         else:
-    ```
-
-    ```py
+    
             keys = list(loaded_learned_embeds.keys())
-    ```
-
-    ```py
+    
             embeds =  loaded_learned_embeds[keys[0]] * weight
-    ```
-
-    ```py
+    
         # ...
     ```
 
@@ -383,9 +299,7 @@ embeds =  loaded_learned_embeds[keys[0]] * weight
 
     ```py
     dtype = text_encoder.get_input_embeddings().weight.dtype
-    ```
-
-    ```py
+    
     embeds.to(dtype)
     ```
 
@@ -393,33 +307,19 @@ embeds =  loaded_learned_embeds[keys[0]] * weight
 
     ```py
     token = token if token is not None else trained_token
-    ```
-
-    ```py
+    
     num_added_tokens = tokenizer.add_tokens(token)
-    ```
-
-    ```py
+    
     if num_added_tokens == 0:
-    ```
-
-    ```py
+    
         raise ValueError(
-    ```
-
-    ```py
+    
             f"""The tokenizer already contains the token {token}.
-    ```
-
-    ```py
+    
             Please pass a different `token` that is not already in 
-    ```
-
-    ```py
+    
             the tokenizer."""
-    ```
-
-    ```py
+    
         )
     ```
 

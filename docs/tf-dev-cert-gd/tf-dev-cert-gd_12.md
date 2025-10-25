@@ -128,13 +128,9 @@
 
     ```py
     import pandas as pd
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
     ```
 
@@ -144,9 +140,7 @@
 
     ```py
     df = pd.read_csv('/content/sales_data.csv')
-    ```
-
-    ```py
+    
     df.head()
     ```
 
@@ -156,17 +150,11 @@
 
     ```py
     # Check data types
-    ```
-
-    ```py
+    
     print(df.dtypes)
-    ```
-
-    ```py
+    
     # Summary statistics
-    ```
-
-    ```py
+    
     print(df.describe())
     ```
 
@@ -176,25 +164,15 @@
 
     ```py
     #Sales data plot
-    ```
-
-    ```py
+    
     df.set_index('Date').plot()
-    ```
-
-    ```py
+    
     plt.ylabel('Sales')
-    ```
-
-    ```py
+    
     plt.title('Sales Over Time')
-    ```
-
-    ```py
+    
     plt.xticks(rotation=90)
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -261,13 +239,9 @@ plt.show()
 
     ```py
     # Apply naive forecast
-    ```
-
-    ```py
+    
     df['Naive_Forecast'] = df['Sales'].shift(1)
-    ```
-
-    ```py
+    
     df.head()
     ```
 
@@ -283,129 +257,67 @@ plt.show()
 
     ```py
     def plot_forecast(validation_df, forecast_df,
-    ```
-
-    ```py
+    
         start_date=None, end_date=None,
-    ```
-
-    ```py
+    
         plot_title='Naive Forecasting',
-    ```
-
-    ```py
+    
         forecast_label='Naive Forecast'):
-    ```
-
-    ```py
+    
             if start_date:
-    ```
-
-    ```py
+    
                 validation_df = validation_df[
-    ```
-
-    ```py
+    
                     validation_df['Date'] >= start_date]
-    ```
-
-    ```py
+    
                 forecast_df = forecast_df[forecast_df[
-    ```
-
-    ```py
+    
                     'Date'] >= start_date]
-    ```
-
-    ```py
+    
             if end_date:
-    ```
-
-    ```py
+    
                 validation_df = validation_df[
-    ```
-
-    ```py
+    
                     validation_df['Date'] <= end_date]
-    ```
-
-    ```py
+    
                 forecast_df = forecast_df[forecast_df[
-    ```
-
-    ```py
+    
                     'Date'] <= end_date]
-    ```
-
-    ```py
+    
         # Extract the dates in the selected range
-    ```
-
-    ```py
+    
         all_dates = validation_df['Date']
-    ```
-
-    ```py
+    
         plt.figure(figsize=(12, 9))
-    ```
-
-    ```py
+    
         plt.plot(validation_df['Date'],
-    ```
-
-    ```py
+    
             validation_df['Sales'],
-    ```
-
-    ```py
+    
             label='Validation Data')
-    ```
-
-    ```py
+    
         plt.plot(forecast_df['Date'],
-    ```
-
-    ```py
+    
             forecast_df['Naive_Forecast'],
-    ```
-
-    ```py
+    
             label=forecast_label)
-    ```
-
-    ```py
+    
         plt.legend(loc='best')
-    ```
-
-    ```py
+    
         plt.title(plot_title)
-    ```
-
-    ```py
+    
         plt.xlabel('Date')
-    ```
-
-    ```py
+    
         plt.ylabel('Sales')
-    ```
-
-    ```py
+    
         # Set x-ticks to every 90th date in the selected range
-    ```
-
-    ```py
+    
         plt.xticks(all_dates[::90], rotation=90)
-    ```
-
-    ```py
+    
         plt.legend()
-    ```
-
-    ```py
+    
         plt.tight_layout()
-    ```
-
-    ```py
+    
         plt.show()
     ```
 
@@ -415,13 +327,9 @@ plt.show()
 
     ```py
     plot_forecast(valid_df, valid_df,
-    ```
-
-    ```py
+    
         plot_title='Naive Forecasting',
-    ```
-
-    ```py
+    
         forecast_label='Naive Forecast')
     ```
 
@@ -437,9 +345,7 @@ plt.show()
 
     ```py
     plot_forecast(valid_df, valid_df,
-    ```
-
-    ```py
+    
         start_date='2022-01-01', end_date='2022-06-30')
     ```
 
@@ -455,41 +361,23 @@ plt.show()
 
     ```py
     # Compute and print mean squared error
-    ```
-
-    ```py
+    
     mse = tf.keras.metrics.mean_squared_error(
-    ```
-
-    ```py
+    
         valid_df['Sales'], valid_df
-    ```
-
-    ```py
+    
             ['Naive_Forecast']).numpy()
-    ```
-
-    ```py
+    
     print('Mean Squared Error:', mse)
-    ```
-
-    ```py
+    
     # Compute and print mean absolute error
-    ```
-
-    ```py
+    
     mae = tf.keras.metrics.mean_absolute_error(
-    ```
-
-    ```py
+    
         valid_df['Sales'],
-    ```
-
-    ```py
+    
         valid_df['Naive_Forecast']).numpy()
-    ```
-
-    ```py
+    
     print('Mean Absolute Error:', mae)
     ```
 
@@ -633,9 +521,7 @@ true_values = valid_df['Sales']
 
     ```py
     import tensorflow as tf
-    ```
-
-    ```py
+    
     import numpy as np
     ```
 
@@ -645,13 +531,9 @@ true_values = valid_df['Sales']
 
     ```py
     # Create an array of temperatures for 2 weeks
-    ```
-
-    ```py
+    
     temperature = np.arange(1, 15)
-    ```
-
-    ```py
+    
     print(temperature)
     ```
 
@@ -667,13 +549,9 @@ true_values = valid_df['Sales']
 
     ```py
     window_size = 3
-    ```
-
-    ```py
+    
     batch_size = 2
-    ```
-
-    ```py
+    
     shuffle_buffer = 10
     ```
 
@@ -683,13 +561,9 @@ true_values = valid_df['Sales']
 
     ```py
     dataset = tf.data.Dataset.from_tensor_slices(temperature)
-    ```
-
-    ```py
+    
     for element in dataset:
-    ```
-
-    ```py
+    
         print(element.numpy())
     ```
 
@@ -699,25 +573,15 @@ true_values = valid_df['Sales']
 
     ```py
     dataset = dataset.window(window_size + 1, shift=1, 
-    ```
-
-    ```py
+    
         drop_remainder=True)
-    ```
-
-    ```py
+    
     for window in dataset:
-    ```
-
-    ```py
+    
         window_data = ' '.join([str(
-    ```
-
-    ```py
+    
             element.numpy()) for element in window])
-    ```
-
-    ```py
+    
         print(window_data)
     ```
 
@@ -727,49 +591,27 @@ true_values = valid_df['Sales']
 
     ```py
     After window:
-    ```
-
-    ```py
+    
     1 2 3 4
-    ```
-
-    ```py
+    
     2 3 4 5
-    ```
-
-    ```py
+    
     3 4 5 6
-    ```
-
-    ```py
+    
     4 5 6 7
-    ```
-
-    ```py
+    
     5 6 7 8
-    ```
-
-    ```py
+    
     6 7 8 9
-    ```
-
-    ```py
+    
     7 8 9 10
-    ```
-
-    ```py
+    
     8 9 10 11
-    ```
-
-    ```py
+    
     9 10 11 12
-    ```
-
-    ```py
+    
     10 11 12 13
-    ```
-
-    ```py
+    
     11 12 13 14
     ```
 
@@ -779,17 +621,11 @@ true_values = valid_df['Sales']
 
     ```py
     dataset = dataset.flat_map(
-    ```
-
-    ```py
+    
         lambda window: window.batch(window_size + 1))
-    ```
-
-    ```py
+    
     for element in dataset:
-    ```
-
-    ```py
+    
         print(element.numpy())
     ```
 
@@ -797,49 +633,27 @@ true_values = valid_df['Sales']
 
     ```py
     After flat_map:
-    ```
-
-    ```py
+    
     [1 2 3 4]
-    ```
-
-    ```py
+    
     [2 3 4 5]
-    ```
-
-    ```py
+    
     [3 4 5 6]
-    ```
-
-    ```py
+    
     [4 5 6 7]
-    ```
-
-    ```py
+    
     [5 6 7 8]
-    ```
-
-    ```py
+    
     [6 7 8 9]
-    ```
-
-    ```py
+    
     [ 7  8  9 10]
-    ```
-
-    ```py
+    
     [ 8  9 10 11]
-    ```
-
-    ```py
+    
     [ 9 10 11 12]
-    ```
-
-    ```py
+    
     [10 11 12 13]
-    ```
-
-    ```py
+    
     [11 12 13 14]
     ```
 
@@ -849,17 +663,11 @@ true_values = valid_df['Sales']
 
     ```py
     dataset = dataset.shuffle(shuffle_buffer)
-    ```
-
-    ```py
+    
     print("\nAfter shuffle:")
-    ```
-
-    ```py
+    
     for element in dataset:
-    ```
-
-    ```py
+    
         print(element.numpy())
     ```
 
@@ -867,49 +675,27 @@ true_values = valid_df['Sales']
 
     ```py
     After shuffle:
-    ```
-
-    ```py
+    
     [5 6 7 8]
-    ```
-
-    ```py
+    
     [4 5 6 7]
-    ```
-
-    ```py
+    
     [1 2 3 4]
-    ```
-
-    ```py
+    
     [11 12 13 14]
-    ```
-
-    ```py
+    
     [ 7  8  9 10]
-    ```
-
-    ```py
+    
     [ 8  9 10 11]
-    ```
-
-    ```py
+    
     [10 11 12 13]
-    ```
-
-    ```py
+    
     [ 9 10 11 12]
-    ```
-
-    ```py
+    
     [6 7 8 9]
-    ```
-
-    ```py
+    
     [2 3 4 5]
-    ```
-
-    ```py
+    
     [3 4 5 6]
     ```
 
@@ -919,21 +705,13 @@ true_values = valid_df['Sales']
 
     ```py
     dataset = dataset.map(lambda window: (window[:-1],
-    ```
-
-    ```py
+    
         window[-1]))
-    ```
-
-    ```py
+    
     print("\nAfter map:")
-    ```
-
-    ```py
+    
     for x,y in dataset:
-    ```
-
-    ```py
+    
         print("x =", x.numpy(), "y =", y.numpy())
     ```
 
@@ -941,49 +719,27 @@ true_values = valid_df['Sales']
 
     ```py
     After map:
-    ```
-
-    ```py
+    
     features = [3 4 5] label = 6
-    ```
-
-    ```py
+    
     features = [1 2 3] label = 4
-    ```
-
-    ```py
+    
     features = [10 11 12] label = 13
-    ```
-
-    ```py
+    
     features = [ 8  9 10] label = 11
-    ```
-
-    ```py
+    
     features = [4 5 6] label = 7
-    ```
-
-    ```py
+    
     features = [7 8 9] label = 10
-    ```
-
-    ```py
+    
     features = [11 12 13] label = 14
-    ```
-
-    ```py
+    
     features = [5 6 7] label = 8
-    ```
-
-    ```py
+    
     features = [2 3 4] label = 5
-    ```
-
-    ```py
+    
     features = [6 7 8] label = 9
-    ```
-
-    ```py
+    
     features = [ 9 10 11] label = 12
     ```
 
@@ -993,17 +749,11 @@ true_values = valid_df['Sales']
 
     ```py
     dataset = dataset.batch(batch_size).prefetch(1)
-    ```
-
-    ```py
+    
     print("\nAfter batch and prefetch:")
-    ```
-
-    ```py
+    
     for batch in dataset:
-    ```
-
-    ```py
+    
         print(batch)
     ```
 
@@ -1011,97 +761,51 @@ true_values = valid_df['Sales']
 
     ```py
     After batch and prefetch:
-    ```
-
-    ```py
+    
     (<tf.Tensor: shape=(2, 3), dtype=int64,
-    ```
-
-    ```py
+    
         numpy=array([[10, 11, 12],
-    ```
-
-    ```py
+    
             [ 3,  4,  5]])>, <tf.Tensor: shape=(2,),
-    ```
-
-    ```py
+    
             dtype=int64, numpy=array([13,  6])>)
-    ```
-
-    ```py
+    
     (<tf.Tensor: shape=(2, 3), dtype=int64,
-    ```
-
-    ```py
+    
         numpy=array([[ 9, 10, 11],
-    ```
-
-    ```py
+    
             [11, 12, 13]])>, <tf.Tensor: shape=(2,),
-    ```
-
-    ```py
+    
             dtype=int64, numpy=array([12, 14])>)
-    ```
-
-    ```py
+    
     (<tf.Tensor: shape=(2, 3), dtype=int64,
-    ```
-
-    ```py
+    
         numpy=array([[6, 7, 8],
-    ```
-
-    ```py
+    
             [7, 8, 9]])>, <tf.Tensor: shape=(2,),
-    ```
-
-    ```py
+    
             dtype=int64, numpy=array([ 9, 10])>)
-    ```
-
-    ```py
+    
     (<tf.Tensor: shape=(2, 3), dtype=int64,
-    ```
-
-    ```py
+    
         numpy=array([[1, 2, 3],
-    ```
-
-    ```py
+    
             [4, 5, 6]])>, <tf.Tensor: shape=(2,),
-    ```
-
-    ```py
+    
             dtype=int64, numpy=array([4, 7])>)
-    ```
-
-    ```py
+    
     (<tf.Tensor: shape=(2, 3), dtype=int64,
-    ```
-
-    ```py
+    
         numpy=array([[2, 3, 4],
-    ```
-
-    ```py
+    
             [5, 6, 7]])>, <tf.Tensor: shape=(2,),
-    ```
-
-    ```py
+    
             dtype=int64, numpy=array([5, 8])>)
-    ```
-
-    ```py
+    
     (<tf.Tensor: shape=(1, 3), dtype=int64, numpy=array(
-    ```
-
-    ```py
+    
         [[ 8,  9, 10]])>, <tf.Tensor: shape=(1,),
-    ```
-
-    ```py
+    
         dtype=int64, numpy=array([11])>)
     ```
 
@@ -1117,9 +821,7 @@ true_values = valid_df['Sales']
 
     ```py
     time = pd.to_datetime(df['Date'])
-    ```
-
-    ```py
+    
     sales = df['Sales'].values
     ```
 
@@ -1129,21 +831,13 @@ true_values = valid_df['Sales']
 
     ```py
     split_time = int(len(df) * 0.8)
-    ```
-
-    ```py
+    
     time_train = time[:split_time]
-    ```
-
-    ```py
+    
     x_train = sales[:split_time]
-    ```
-
-    ```py
+    
     time_valid = time[split_time:]
-    ```
-
-    ```py
+    
     x_valid = sales[split_time:]
     ```
 
@@ -1153,61 +847,33 @@ true_values = valid_df['Sales']
 
     ```py
     def windowed_dataset(
-    ```
-
-    ```py
+    
         series, window_size, batch_size, shuffle_buffer):
-    ```
-
-    ```py
+    
             dataset = tf.data.Dataset.from_tensor_slices(
-    ```
-
-    ```py
+    
                 series)
-    ```
-
-    ```py
+    
             dataset = dataset.window(window_size + 1,
-    ```
-
-    ```py
+    
                 shift=1, drop_remainder=True)
-    ```
-
-    ```py
+    
             dataset = dataset.flat_map(lambda window:
-    ```
-
-    ```py
+    
                 window.batch(window_size + 1))
-    ```
-
-    ```py
+    
             dataset = dataset.shuffle(shuffle_buffer).map(
-    ```
-
-    ```py
+    
                 lambda window: (window[:-1], window[-1]))
-    ```
-
-    ```py
+    
             dataset = dataset.batch(
-    ```
-
-    ```py
+    
                 batch_size).prefetch(1)
-    ```
-
-    ```py
+    
         return dataset
-    ```
-
-    ```py
+    
     dataset = windowed_dataset(x_train, window_size,
-    ```
-
-    ```py
+    
         batch_size, shuffle_buffer_size)
     ```
 
@@ -1217,37 +883,21 @@ true_values = valid_df['Sales']
 
     ```py
     model = tf.keras.models.Sequential([
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(10,
-    ```
-
-    ```py
+    
             input_shape=[window_size], activation="relu"),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(10, activation="relu"),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(1)
-    ```
-
-    ```py
+    
         ])
-    ```
-
-    ```py
+    
     model.compile(loss="mse",
-    ```
-
-    ```py
+    
         optimizer=tf.keras.optimizers.SGD(
-    ```
-
-    ```py
+    
             learning_rate=1e-6, momentum=0.9))
     ```
 
@@ -1265,25 +915,15 @@ true_values = valid_df['Sales']
 
     ```py
     input_batches = [sales[time:time + window_size][
-    ```
-
-    ```py
+    
         np.newaxis] for time in range(len(
-    ```
-
-    ```py
+    
             sales) - window_size)]
-    ```
-
-    ```py
+    
     inputs = np.concatenate(input_batches, axis=0)
-    ```
-
-    ```py
+    
     forecast = model.predict(inputs)
-    ```
-
-    ```py
+    
     results = forecast[split_time-window_size:, 0]
     ```
 
@@ -1293,17 +933,11 @@ true_values = valid_df['Sales']
 
     ```py
     print(tf.keras.metrics.mean_squared_error(x_valid,
-    ```
-
-    ```py
+    
         results).numpy())
-    ```
-
-    ```py
+    
     print(tf.keras.metrics.mean_absolute_error(x_valid,
-    ```
-
-    ```py
+    
         results).numpy())
     ```
 

@@ -136,25 +136,15 @@ hashing of "machine learning" -> e04d1bcee667afb8622501b9a4b4654d
 
     ```py
     Import numpy as np
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import StandardScaler, OneHotEncoder
-    ```
-
-    ```py
+    
     from category_encoders.hashing import HashingEncoder
-    ```
-
-    ```py
+    
     from sklearn.linear_model import LogisticRegression
     ```
 
@@ -162,13 +152,9 @@ hashing of "machine learning" -> e04d1bcee667afb8622501b9a4b4654d
 
     ```py
     df = pd.read_csv('aug-train.zip')
-    ```
-
-    ```py
+    
     print('number of unique values for the feature city',
-    ```
-
-    ```py
+    
         df['city'].nunique())
     ```
 
@@ -182,13 +168,9 @@ number of unique values for the feature city 123
 
     ```py
     df = df.drop(columns=['gender', 'major_discipline',
-    ```
-
-    ```py
+    
         'company_size', 'company_type'])
-    ```
-
-    ```py
+    
     df = df.dropna()
     ```
 
@@ -196,21 +178,13 @@ number of unique values for the feature city 123
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         df.drop(columns=['target']), df['target'],
-    ```
-
-    ```py
+    
         stratify=df['target'], test_size=0.2,
-    ```
-
-    ```py
+    
         random_state=0
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -218,37 +192,21 @@ number of unique values for the feature city 123
 
     ```py
     quanti_feats = ['city_development_index', 'training_hours']
-    ```
-
-    ```py
+    
     # Instantiate the scaler
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     # Select quantitative features
-    ```
-
-    ```py
+    
     X_train_quanti = X_train[quanti_feats]
-    ```
-
-    ```py
+    
     X_test_quanti = X_test[quanti_feats]
-    ```
-
-    ```py
+    
     # Rescale quantitative features
-    ```
-
-    ```py
+    
     X_train_quanti = scaler.fit_transform(X_train_quanti)
-    ```
-
-    ```py
+    
     X_test_quanti = scaler.transform(X_test_quanti)
     ```
 
@@ -256,57 +214,31 @@ number of unique values for the feature city 123
 
     ```py
     quali_feats = ['relevent_experience',
-    ```
-
-    ```py
+    
         'enrolled_university', 'education_level',
-    ```
-
-    ```py
+    
         'experience', 'last_new_job']
-    ```
-
-    ```py
+    
     quali_feats = ['last_new_job']
-    ```
-
-    ```py
+    
     # Instantiate the one hot encoder
-    ```
-
-    ```py
+    
     encoder = OneHotEncoder()
-    ```
-
-    ```py
+    
     # Select qualitative features to one hot encode
-    ```
-
-    ```py
+    
     X_train_quali = X_train[quali_feats]
-    ```
-
-    ```py
+    
     X_test_quali = X_test[quali_feats]
-    ```
-
-    ```py
+    
     # Encode those features
-    ```
-
-    ```py
+    
     X_train_quali = encoder.fit_transform(
-    ```
-
-    ```py
+    
         X_train_quali).toarray()
-    ```
-
-    ```py
+    
     X_test_quali = encoder.transform(
-    ```
-
-    ```py
+    
         X_test_quali).toarray()
     ```
 
@@ -314,41 +246,23 @@ number of unique values for the feature city 123
 
     ```py
     high_cardinality_feature = ['city']
-    ```
-
-    ```py
+    
     # Instantiate the hashing encoder
-    ```
-
-    ```py
+    
     hasher = HashingEncoder(n_components=7)
-    ```
-
-    ```py
+    
     # Encode the city feature with hashing
-    ```
-
-    ```py
+    
     X_train_hash = hasher.fit_transform(
-    ```
-
-    ```py
+    
         X_train[high_cardinality_feature])
-    ```
-
-    ```py
+    
     X_test_hash = hasher.fit_transform(
-    ```
-
-    ```py
+    
         X_test[high_cardinality_feature])
-    ```
-
-    ```py
+    
     # Display the result on the training set
-    ```
-
-    ```py
+    
     X_train_hash.head()
     ```
 
@@ -371,17 +285,11 @@ number of unique values for the feature city 123
 
     ```py
     X_train = np.concatenate([X_train_quali,
-    ```
-
-    ```py
+    
         X_train_quanti, X_train_hash], 1)
-    ```
-
-    ```py
+    
     X_test = np.concatenate([X_test_quali,
-    ```
-
-    ```py
+    
         X_test_quanti, X_test_hash], 1)
     ```
 
@@ -389,9 +297,7 @@ number of unique values for the feature city 123
 
     ```py
     lr = LogisticRegression()
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -399,13 +305,9 @@ number of unique values for the feature city 123
 
     ```py
     print('Accuracy train set:', lr.score(X_train,
-    ```
-
-    ```py
+    
         y_train))
-    ```
-
-    ```py
+    
     print('Accuracy test set:', lr.score(X_test, y_test))
     ```
 
@@ -472,21 +374,13 @@ pip install pandas scikit-learn.
 
     ```py
     Import numpy as np
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
-    ```
-
-    ```py
+    
     from sklearn.linear_model import LogisticRegression
     ```
 
@@ -500,13 +394,9 @@ pip install pandas scikit-learn.
 
     ```py
     df = df.drop(columns=['gender', 'major_discipline',
-    ```
-
-    ```py
+    
         'company_size', 'company_type'])
-    ```
-
-    ```py
+    
     df = df.dropna()
     ```
 
@@ -514,21 +404,13 @@ pip install pandas scikit-learn.
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         df.drop(columns=['target']), df['target'],
-    ```
-
-    ```py
+    
         stratify=df['target'], test_size=0.2,
-    ```
-
-    ```py
+    
         random_state=0
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -536,29 +418,17 @@ pip install pandas scikit-learn.
 
     ```py
     quanti_feats = ['city_development_index',
-    ```
-
-    ```py
+    
         'training_hours']
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train_quanti = X_train[quanti_feats]
-    ```
-
-    ```py
+    
     X_test_quanti = X_test[quanti_feats]
-    ```
-
-    ```py
+    
     X_train_quanti = scaler.fit_transform(X_train_quanti)
-    ```
-
-    ```py
+    
     X_test_quanti = scaler.transform(X_test_quanti)
     ```
 
@@ -566,41 +436,23 @@ pip install pandas scikit-learn.
 
     ```py
     # Get only cities above threshold
-    ```
-
-    ```py
+    
     threshold = 0.1
-    ```
-
-    ```py
+    
     kept_cities = X_train['city'].value_counts(
-    ```
-
-    ```py
+    
         normalize=True)[X_train['city'].value_counts(
-    ```
-
-    ```py
+    
         normalize=True) > threshold].index
-    ```
-
-    ```py
+    
     # Update all cities below threshold as 'other'
-    ```
-
-    ```py
+    
     X_train.loc[~X_train['city'].isin(kept_cities),
-    ```
-
-    ```py
+    
         'city'] = 'other'
-    ```
-
-    ```py
+    
     X_test.loc[~X_test['city'].isin(kept_cities),
-    ```
-
-    ```py
+    
         'city'] = 'other'
     ```
 
@@ -608,53 +460,29 @@ pip install pandas scikit-learn.
 
     ```py
     # Get qualitative features
-    ```
-
-    ```py
+    
     quali_feats = ['city', 'relevent_experience',
-    ```
-
-    ```py
+    
         'enrolled_university', 'education_level',
-    ```
-
-    ```py
+    
         'experience', 'last_new_job']
-    ```
-
-    ```py
+    
     X_train_quali = X_train[quali_feats]
-    ```
-
-    ```py
+    
     X_test_quali = X_test[quali_feats]
-    ```
-
-    ```py
+    
     # Instantiate the one hot encoder
-    ```
-
-    ```py
+    
     encoder = OneHotEncoder()
-    ```
-
-    ```py
+    
     # Apply one hot encoding
-    ```
-
-    ```py
+    
     X_train_quali = encoder.fit_transform(
-    ```
-
-    ```py
+    
         X_train_quali).toarray()
-    ```
-
-    ```py
+    
     X_test_quali = encoder.transform(
-    ```
-
-    ```py
+    
         X_test_quali).toarray()
     ```
 
@@ -662,13 +490,9 @@ pip install pandas scikit-learn.
 
     ```py
     X_train = np.concatenate([X_train_quali,
-    ```
-
-    ```py
+    
         X_train_quanti], 1)
-    ```
-
-    ```py
+    
     X_test = np.concatenate([X_test_quali, X_test_quanti], 1)
     ```
 
@@ -676,9 +500,7 @@ pip install pandas scikit-learn.
 
     ```py
     lr = LogisticRegression()
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -686,9 +508,7 @@ pip install pandas scikit-learn.
 
     ```py
     print('Accuracy train set:', lr.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('Accuracy test set:', lr.score(X_test, y_test))
     ```
 
@@ -865,9 +685,7 @@ pip install pandas scikit-learn matplotlib imbalanced-learn
 
     ```py
     df = pd.read_csv('creditcardfraud.zip')
-    ```
-
-    ```py
+    
     df['Class'].value_counts(normalize=True)
     ```
 
@@ -883,17 +701,11 @@ Name: Class, dtype: float64
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         df.drop(columns=['Class']), df['Class'],
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0,
-    ```
-
-    ```py
+    
         stratify=df['Class'])
     ```
 
@@ -901,29 +713,17 @@ Name: Class, dtype: float64
 
     ```py
     # Instantiate the object with a 10% strategy
-    ```
-
-    ```py
+    
     rus = RandomUnderSampler(sampling_strategy=0.1,
-    ```
-
-    ```py
+    
         random_state=0)
-    ```
-
-    ```py
+    
     # Undersample the train dataset
-    ```
-
-    ```py
+    
     X_train, y_train = rus.fit_resample(X_train, y_train)
-    ```
-
-    ```py
+    
     # Check the balance
-    ```
-
-    ```py
+    
     y_train.value_counts()
     ```
 
@@ -941,17 +741,11 @@ Name: Class, dtype: int64
 
     ```py
     # Scale the data
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -963,9 +757,7 @@ Name: Class, dtype: int64
 
     ```py
     lr = LogisticRegression()
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -973,33 +765,19 @@ Name: Class, dtype: int64
 
     ```py
     # Get the probas
-    ```
-
-    ```py
+    
     y_train_proba = lr.predict_proba(X_train)[:, 1]
-    ```
-
-    ```py
+    
     y_test_proba = lr.predict_proba(X_test)[:, 1]
-    ```
-
-    ```py
+    
     # Display the ROC AUC
-    ```
-
-    ```py
+    
     print('ROC AUC training set:', roc_auc_score(y_train,
-    ```
-
-    ```py
+    
         y_train_proba))
-    ```
-
-    ```py
+    
     print('ROC AUC test set:', roc_auc_score(y_test,
-    ```
-
-    ```py
+    
         y_test_proba))
     ```
 
@@ -1142,9 +920,7 @@ pip install pandas scikit-learn matplotlib imbalanced-learn.
 
     ```py
     df = pd.read_csv('creditcardfraud.zip')
-    ```
-
-    ```py
+    
     df['Class'].value_counts(normalize=True)
     ```
 
@@ -1160,17 +936,11 @@ Name: Class, dtype: float64
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         df.drop(columns=['Class']), df['Class'],
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0,
-    ```
-
-    ```py
+    
         stratify=df['Class'])
     ```
 
@@ -1178,29 +948,17 @@ Name: Class, dtype: float64
 
     ```py
     # Instantiate the oversampler with a 10% strategy
-    ```
-
-    ```py
+    
     ros = RandomOverSampler(sampling_strategy=0.1,
-    ```
-
-    ```py
+    
         random_state=0)
-    ```
-
-    ```py
+    
     # Overersample the train dataset
-    ```
-
-    ```py
+    
     X_train, y_train = ros.fit_resample(X_train, y_train)
-    ```
-
-    ```py
+    
     # Check the balance
-    ```
-
-    ```py
+    
     y_train.value_counts()
     ```
 
@@ -1222,17 +980,11 @@ Name: Class, dtype: int64
 
     ```py
     # Scale the data
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -1240,9 +992,7 @@ Name: Class, dtype: int64
 
     ```py
     lr = LogisticRegression()
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -1250,33 +1000,19 @@ Name: Class, dtype: int64
 
     ```py
     # Get the probas
-    ```
-
-    ```py
+    
     y_train_proba = lr.predict_proba(X_train)[:, 1]
-    ```
-
-    ```py
+    
     y_test_proba = lr.predict_proba(X_test)[:, 1]
-    ```
-
-    ```py
+    
     # Display the ROC AUC
-    ```
-
-    ```py
+    
     print('ROC AUC training set:', roc_auc_score(y_train,
-    ```
-
-    ```py
+    
          y_train_proba))
-    ```
-
-    ```py
+    
     print('ROC AUC test set:', roc_auc_score(y_test,
-    ```
-
-    ```py
+    
         y_test_proba))
     ```
 
@@ -1407,9 +1143,7 @@ pip install pandas scikit-learn matplotlib imbalanced-learn.
 
     ```py
     df = pd.read_csv('creditcardfraud.zip')
-    ```
-
-    ```py
+    
     df['Class'].value_counts(normalize=True)
     ```
 
@@ -1425,17 +1159,11 @@ Name: Class, dtype: float64
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         df.drop(columns=['Class']), df['Class'],
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0,
-    ```
-
-    ```py
+    
         stratify=df['Class'])
     ```
 
@@ -1443,29 +1171,17 @@ Name: Class, dtype: float64
 
     ```py
     # Instantiate the SLOT with a 10% strategy
-    ```
-
-    ```py
+    
     smote = SMOTE(sampling_strategy=0.1, random_state=0)
-    ```
-
-    ```py
+    
     # Overersample the train dataset
-    ```
-
-    ```py
+    
     X_train, y_train = smote.fit_resample(X_train,
-    ```
-
-    ```py
+    
         y_train)
-    ```
-
-    ```py
+    
     # Check the balance
-    ```
-
-    ```py
+    
     y_train.value_counts()
     ```
 
@@ -1483,17 +1199,11 @@ Name: Class, dtype: int64
 
     ```py
     # Scale the data
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -1501,9 +1211,7 @@ Name: Class, dtype: int64
 
     ```py
     lr = LogisticRegression()
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -1511,33 +1219,19 @@ Name: Class, dtype: int64
 
     ```py
     # Get the probas
-    ```
-
-    ```py
+    
     y_train_proba = lr.predict_proba(X_train)[:, 1]
-    ```
-
-    ```py
+    
     y_test_proba = lr.predict_proba(X_test)[:, 1]
-    ```
-
-    ```py
+    
     # Display the ROC AUC
-    ```
-
-    ```py
+    
     print('ROC AUC training set:', roc_auc_score(y_train,
-    ```
-
-    ```py
+    
         y_train_proba))
-    ```
-
-    ```py
+    
     print('ROC AUC test set:', roc_auc_score(y_test,
-    ```
-
-    ```py
+    
         y_test_proba))
     ```
 

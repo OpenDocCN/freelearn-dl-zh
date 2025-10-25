@@ -52,9 +52,7 @@ Gradio 的另一个特性是其他类似框架中不存在的，即 Gradio 界�
 
     ```py
     pip install -U click
-    ```
-
-    ```py
+    
     pip install -U uvicorn
     ```
 
@@ -62,37 +60,21 @@ Gradio 的另一个特性是其他类似框架中不存在的，即 Gradio 界�
 
     ```py
     import gradio
-    ```
-
-    ```py
+    
     def greet(name):
-    ```
-
-    ```py
+    
         return "Hello " + name + "!"
-    ```
-
-    ```py
+    
     demo = gradio.Interface(
-    ```
-
-    ```py
+    
         fn = greet,
-    ```
-
-    ```py
+    
         inputs = "text",
-    ```
-
-    ```py
+    
         outputs = "text"
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     demo.launch()
     ```
 

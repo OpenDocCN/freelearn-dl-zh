@@ -38,17 +38,11 @@
 
     ```py
     import requests
-    ```
-
-    ```py
+    
     from bs4 import BeautifulSoup
-    ```
-
-    ```py
+    
     import re
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.text import Tokenizer
     ```
 
@@ -58,17 +52,11 @@
 
     ```py
     # Define the URL of the page
-    ```
-
-    ```py
+    
     url = "https://en.wikipedia.org/wiki/Machine_learning"
-    ```
-
-    ```py
+    
     # Send a GET request to the webpage
-    ```
-
-    ```py
+    
     response = requests.get(url)
     ```
 
@@ -78,9 +66,7 @@
 
     ```py
     # Parse the HTML content of the page with BeautifulSoup
-    ```
-
-    ```py
+    
     soup = BeautifulSoup(response.content, 'html.parser')
     ```
 
@@ -90,13 +76,9 @@
 
     ```py
     # Extract the text from all paragraph tags on the page
-    ```
-
-    ```py
+    
     passage = " ".join([
-    ```
-
-    ```py
+    
         p.text for p in soup.find_all('p')])
     ```
 
@@ -106,109 +88,57 @@
 
     ```py
     # Define a simple list of stopwords
-    ```
-
-    ```py
+    
     stopwords = ["i", "me", "my", "myself", "we", "our",
-    ```
-
-    ```py
+    
         "ours", "ourselves", "you", "your",
-    ```
-
-    ```py
+    
         "yours", "yourself", "yourselves", "he",
-    ```
-
-    ```py
+    
         "him", "his", "himself", "she", "her",
-    ```
-
-    ```py
+    
         "hers", "herself", "it", "its", "itself",
-    ```
-
-    ```py
+    
         "they", "them", "their", "theirs",
-    ```
-
-    ```py
+    
         "themselves", "what", "which", "who",
-    ```
-
-    ```py
+    
         "whom", "this", "that", "these", "those",
-    ```
-
-    ```py
+    
         "am", "is", "are", "was", "were", "be",
-    ```
-
-    ```py
+    
         "been", "being", "have", "has", "had",
-    ```
-
-    ```py
+    
         "having", "do", "does", "did", "doing",
-    ```
-
-    ```py
+    
         "a", "an", "the", "and", "but", "if",
-    ```
-
-    ```py
+    
         "or", "because", "as", "until", "while",
-    ```
-
-    ```py
+    
         "of", "at", "by", "for", "with", "about",
-    ```
-
-    ```py
+    
         "against", "between", "into", "through",
-    ```
-
-    ```py
+    
         "during", "before", "after", "above",
-    ```
-
-    ```py
+    
         "below", "to", "from", "up", "down",
-    ```
-
-    ```py
+    
         "in", "out", "on", "off", "over",
-    ```
-
-    ```py
+    
         "under", "again", "further", "then",
-    ```
-
-    ```py
+    
         "once", "here", "there", "when", "where",
-    ```
-
-    ```py
+    
         "why", "how", "all", "any", "both",
-    ```
-
-    ```py
+    
         "each", "few", "more", "most", "other",
-    ```
-
-    ```py
+    
         "some", "such", "no", "nor", "not",
-    ```
-
-    ```py
+    
         "only", "own", "same", "so", "than",
-    ```
-
-    ```py
+    
         "too", "very", "s", "t", "can", "will",
-    ```
-
-    ```py
+    
         "just", "don", "should", "now"]
     ```
 
@@ -234,33 +164,19 @@
 
     ```py
     # Remove HTML tags using regex
-    ```
-
-    ```py
+    
     passage = re.sub(r'<[^>]+>', '', passage)
-    ```
-
-    ```py
+    
     # Remove unwanted special characters
-    ```
-
-    ```py
+    
     passage = re.sub('[^a-zA-Z\s]', '', passage)
-    ```
-
-    ```py
+    
     # Remove stopwords
-    ```
-
-    ```py
+    
     passage = ' '.join(word for word in passage.split() if word not in stopwords)
-    ```
-
-    ```py
+    
     # Print the cleaned passage
-    ```
-
-    ```py
+    
     print(passage[:500])  # print only first 500 characters for brevity
     ```
 
@@ -300,17 +216,11 @@
 
     ```py
     text = "Machine learning is fascinating. It is a field full of challenges!"
-    ```
-
-    ```py
+    
     # Define the tokenizer and fit it on the text
-    ```
-
-    ```py
+    
     tokenizer = Tokenizer()
-    ```
-
-    ```py
+    
     tokenizer.fit_on_texts([text])
     ```
 
@@ -320,9 +230,7 @@
 
     ```py
     # Print out the word index to see how words are tokenized
-    ```
-
-    ```py
+    
     print(tokenizer.word_index)
     ```
 
@@ -384,25 +292,15 @@ print(sequence)
 
     ```py
     sentences = [
-    ```
-
-    ```py
+    
         "I love reading books.",
-    ```
-
-    ```py
+    
         "The cat sat on the mat.",
-    ```
-
-    ```py
+    
         "It's a beautiful day outside!",
-    ```
-
-    ```py
+    
         "Have you done your homework?"
-    ```
-
-    ```py
+    
     ]
     ```
 
@@ -410,9 +308,7 @@ print(sequence)
 
     ```py
     [[2, 3, 4, 5], [1, 6, 7, 8, 1, 9],
-    ```
-
-    ```py
+    
         [10, 11, 12, 13, 14], [15, 16, 17, 18, 19]]
     ```
 
@@ -430,9 +326,7 @@ print(sequence)
 
     ```py
     padded = pad_sequences(sequences)
-    ```
-
-    ```py
+    
     print(padded)
     ```
 
@@ -440,17 +334,11 @@ print(sequence)
 
     ```py
     [[ 0  0  2  3  4  5]
-    ```
-
-    ```py
+    
      [ 1  6  7  8  1  9]
-    ```
-
-    ```py
+    
      [ 0 10 11 12 13 14]
-    ```
-
-    ```py
+    
      [ 0 15 16 17 18 19]]
     ```
 
@@ -458,17 +346,11 @@ print(sequence)
 
     ```py
     # post padding
-    ```
-
-    ```py
+    
     padded_sequences = pad_sequences(sequences,
-    ```
-
-    ```py
+    
         padding='post')
-    ```
-
-    ```py
+    
     print(padded_sequences)
     ```
 
@@ -476,17 +358,11 @@ print(sequence)
 
     ```py
     [[ 2  3  4  5  0  0]
-    ```
-
-    ```py
+    
      [ 1  6  7  8  1  9]
-    ```
-
-    ```py
+    
      [10 11 12 13 14  0]
-    ```
-
-    ```py
+    
      [15 16 17 18 19  0]]
     ```
 
@@ -496,33 +372,19 @@ print(sequence)
 
     ```py
     Sentences = [
-    ```
-
-    ```py
+    
         "I love reading books.",
-    ```
-
-    ```py
+    
         "The cat sat on the mat.",
-    ```
-
-    ```py
+    
         "It's a beautiful day outside!",
-    ```
-
-    ```py
+    
         "Have you done your homework?",
-    ```
-
-    ```py
+    
         "Machine Learning is a very interesting subject that enables 
-    ```
-
-    ```py
+    
          you build amazing solutions beyond your imagination."
-    ```
-
-    ```py
+    
     ]
     ```
 
@@ -530,21 +392,13 @@ print(sequence)
 
     ```py
     [[ 5  6  7  8  0  0  0  0  0  0  0  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [ 1  9 10 11  1 12  0  0  0  0  0  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [13  2 14 15 16  0  0  0  0  0  0  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [17  3 18  4 19  0  0  0  0  0  0  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [20 21 22  2 23 24 25 26 27  3 28 29 30 31  4 32]]
     ```
 
@@ -554,25 +408,15 @@ print(sequence)
 
     ```py
     # Define the max length
-    ```
-
-    ```py
+    
     max_length = 10
-    ```
-
-    ```py
+    
     # Pad the sequences
-    ```
-
-    ```py
+    
     padded = pad_sequences(sequences, padding='post',
-    ```
-
-    ```py
+    
         maxlen=max_length)
-    ```
-
-    ```py
+    
     print(padded))
     ```
 
@@ -580,21 +424,13 @@ print(sequence)
 
     ```py
     [[ 5  6  7  8  0  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [ 1  9 10 11  1 12  0  0  0  0]
-    ```
-
-    ```py
+    
      [13  2 14 15 16  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [17  3 18  4 19  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [25 26 27  3 28 29 30 31  4 32]]
     ```
 
@@ -602,17 +438,11 @@ print(sequence)
 
     ```py
     # Pad the sequences
-    ```
-
-    ```py
+    
     padded = pad_sequences(sequences, padding='post',
-    ```
-
-    ```py
+    
         truncating='post', maxlen=max_length)
-    ```
-
-    ```py
+    
     print(padded)
     ```
 
@@ -620,21 +450,13 @@ print(sequence)
 
     ```py
     [[ 5  6  7  8  0  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [ 1  9 10 11  1 12  0  0  0  0]
-    ```
-
-    ```py
+    
      [13  2 14 15 16  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [17  3 18  4 19  0  0  0  0  0]
-    ```
-
-    ```py
+    
      [20 21 22  2 23 24 25 26 27  3]]
     ```
 
@@ -721,29 +543,17 @@ print(test_sequence)
 
     ```py
     import tensorflow as tf
-    ```
-
-    ```py
+    
     import tensorflow_datasets as tfds
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.text import Tokenizer
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.sequence import pad_sequences
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import io
     ```
 
@@ -753,21 +563,13 @@ print(test_sequence)
 
     ```py
     # Load the Yelp Polarity Reviews dataset
-    ```
-
-    ```py
+    
     (train_dataset, test_dataset),
-    ```
-
-    ```py
+    
         dataset_info = tfds.load('yelp_polarity_reviews',
-    ```
-
-    ```py
+    
             split=['train', 'test'], shuffle_files=True,
-    ```
-
-    ```py
+    
             with_info=True, as_supervised=True)
     ```
 
@@ -777,149 +579,77 @@ print(test_sequence)
 
     ```py
     def get_reviews(dataset, num_samples=5):
-    ```
-
-    ```py
+    
         reviews = []
-    ```
-
-    ```py
+    
         for text, label in dataset.take(num_samples):
-    ```
-
-    ```py
+    
             reviews.append((text.numpy().decode('utf-8'), 
-    ```
-
-    ```py
+    
                 label.numpy()))
-    ```
-
-    ```py
+    
         return reviews
-    ```
-
-    ```py
+    
     def dataset_insights(dataset, num_samples=2000):
-    ```
-
-    ```py
+    
         total_reviews = 0
-    ```
-
-    ```py
+    
         total_positive = 0
-    ```
-
-    ```py
+    
         total_negative = 0
-    ```
-
-    ```py
+    
         total_length = 0
-    ```
-
-    ```py
+    
         min_length = float('inf')
-    ```
-
-    ```py
+    
         max_length = 0
-    ```
-
-    ```py
+    
         for text, label in dataset.take(num_samples):
-    ```
-
-    ```py
+    
             total_reviews += 1
-    ```
-
-    ```py
+    
             review_length = len(text.numpy().decode(
-    ```
-
-    ```py
+    
                 'utf-8').split())
-    ```
-
-    ```py
+    
             total_length += review_length
-    ```
-
-    ```py
+    
             if review_length < min_length:
-    ```
-
-    ```py
+    
                 min_length = review_length
-    ```
-
-    ```py
+    
             if review_length > max_length:
-    ```
-
-    ```py
+    
                 max_length = review_length
-    ```
-
-    ```py
+    
             if label.numpy() == 1:
-    ```
-
-    ```py
+    
                 total_positive += 1
-    ```
-
-    ```py
+    
             else:
-    ```
-
-    ```py
+    
                 total_negative += 1
-    ```
-
-    ```py
+    
         avg_length = total_length / total_reviews
-    ```
-
-    ```py
+    
         return min_length, max_length, avg_length,
-    ```
-
-    ```py
+    
             total_positive, total_negative
-    ```
-
-    ```py
+    
     def plot_reviews(positive, negative):
-    ```
-
-    ```py
+    
         labels = ['Positive', 'Negative']
-    ```
-
-    ```py
+    
         counts = [positive, negative]
-    ```
-
-    ```py
+    
         plt.bar(labels, counts, color=['blue', 'red'])
-    ```
-
-    ```py
+    
         plt.xlabel('Review Type')
-    ```
-
-    ```py
+    
         plt.ylabel('Count')
-    ```
-
-    ```py
+    
         plt.title('Distribution of Reviews')
-    ```
-
-    ```py
+    
         plt.show()
     ```
 
@@ -929,21 +659,13 @@ print(test_sequence)
 
     ```py
     # Check out some reviews
-    ```
-
-    ```py
+    
     print("Training Set Reviews:")
-    ```
-
-    ```py
+    
     train_reviews = get_reviews(train_dataset, 7)
-    ```
-
-    ```py
+    
     for review, label in train_reviews:
-    ```
-
-    ```py
+    
         print(f"Label: {label}, Review: {review[:100]}")
     ```
 
@@ -951,33 +673,19 @@ print(test_sequence)
 
     ```py
     Training Set Reviews:
-    ```
-
-    ```py
+    
     Label: 1, Review: The Groovy P. and I ventured to his old stomping grounds for lunch today.  The '5 and Diner' on 16th...
-    ```
-
-    ```py
+    
     Label: 0, Review: Mediocre burgers - if you are in the area and want a fast food burger, Fatburger is  a better bet th...
-    ```
-
-    ```py
+    
     Label: 0, Review: Not at all impressed...our server was not very happy to be there...food was very sub-par and it was ...
-    ```
-
-    ```py
+    
     Label: 0, Review: I wish I would have read Megan P's review before I decided to cancel my dinner reservations because ...
-    ```
-
-    ```py
+    
     Label: 1, Review: A large selection of food from all over the world. Great atmosphere and ambiance.  Quality of food i...
-    ```
-
-    ```py
+    
     Label: 1, Review: I know, I know a review for Subway, come on.  But I have to say that the service at this subway is t...
-    ```
-
-    ```py
+    
     Label: 1, Review: We came in for a pre-bachelor party madness meal and I have to say it was one of the best dining exp...
     ```
 
@@ -985,33 +693,19 @@ print(test_sequence)
 
     ```py
     min_length, max_length, avg_length, total_positive, 
-    ```
-
-    ```py
+    
         total_negative = dataset_insights(train_dataset)
-    ```
-
-    ```py
+    
     # Display the results
-    ```
-
-    ```py
+    
     print(f"Shortest Review Length: {min_length}")
-    ```
-
-    ```py
+    
     print(f"Longest Review Length: {max_length}")
-    ```
-
-    ```py
+    
     print(f"Average Review Length: {avg_length:.2f}")
-    ```
-
-    ```py
+    
     print(f"Total Positive Reviews: {total_positive}")
-    ```
-
-    ```py
+    
     print(f"Total Negative Reviews: {total_negative}")
     ```
 
@@ -1019,21 +713,13 @@ print(test_sequence)
 
     ```py
     Shortest Review Length: 1
-    ```
-
-    ```py
+    
     Longest Review Length: 942
-    ```
-
-    ```py
+    
     Average Review Length: 131.53
-    ```
-
-    ```py
+    
     Total Positive Reviews: 1030
-    ```
-
-    ```py
+    
     Total Negative Reviews: 970
     ```
 
@@ -1055,45 +741,25 @@ print(test_sequence)
 
     ```py
     # Define parameters
-    ```
-
-    ```py
+    
     vocab_size = 10000
-    ```
-
-    ```py
+    
     embedding_dim = 16
-    ```
-
-    ```py
+    
     max_length = 132
-    ```
-
-    ```py
+    
     trunc_type='post'
-    ```
-
-    ```py
+    
     padding_type='post'
-    ```
-
-    ```py
+    
     oov_tok = "<OOV>"
-    ```
-
-    ```py
+    
     num_epochs = 10
-    ```
-
-    ```py
+    
     # Build the Tokenizer
-    ```
-
-    ```py
+    
     tokenizer = Tokenizer(num_words=vocab_size,
-    ```
-
-    ```py
+    
         oov_token=oov_tok)
     ```
 
@@ -1111,65 +777,35 @@ print(test_sequence)
 
     ```py
     # Fetch and decode the training data
-    ```
-
-    ```py
+    
     train_text = []
-    ```
-
-    ```py
+    
     train_label = []
-    ```
-
-    ```py
+    
     for example in train_dataset.take(20000):
-    ```
-
-    ```py
+    
         text, label = example
-    ```
-
-    ```py
+    
         train_text.append(text.numpy().decode('utf-8'))
-    ```
-
-    ```py
+    
         train_label.append(label.numpy())
-    ```
-
-    ```py
+    
     # Convert labels to numpy array
-    ```
-
-    ```py
+    
     train_labels = np.array(train_label)
-    ```
-
-    ```py
+    
     # Fit the tokenizer on the training texts
-    ```
-
-    ```py
+    
     tokenizer.fit_on_texts(train_text)
-    ```
-
-    ```py
+    
     # Get the word index from the tokenizer
-    ```
-
-    ```py
+    
     word_index = tokenizer.word_index
-    ```
-
-    ```py
+    
     # Convert texts to sequences
-    ```
-
-    ```py
+    
     train_sequences = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
         train_text)
     ```
 
@@ -1179,49 +815,27 @@ print(test_sequence)
 
     ```py
     # Fetch and decode the test data
-    ```
-
-    ```py
+    
     test_text = []
-    ```
-
-    ```py
+    
     test_label = []
-    ```
-
-    ```py
+    
     for example in test_dataset.take(8000):
-    ```
-
-    ```py
+    
         text, label = example
-    ```
-
-    ```py
+    
         test_text.append(text.numpy().decode('utf-8'))
-    ```
-
-    ```py
+    
         test_label.append(label.numpy())
-    ```
-
-    ```py
+    
     # Convert labels to numpy array
-    ```
-
-    ```py
+    
     test_labels = np.array(test_label)
-    ```
-
-    ```py
+    
     # Convert texts to sequences
-    ```
-
-    ```py
+    
     test_sequences = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
         test_text)
     ```
 
@@ -1231,29 +845,17 @@ print(test_sequence)
 
     ```py
     # Pad the sequences
-    ```
-
-    ```py
+    
     train_padded = pad_sequences(train_sequences,
-    ```
-
-    ```py
+    
         maxlen=max_length, padding=padding_type,
-    ```
-
-    ```py
+    
         truncating=trunc_type)
-    ```
-
-    ```py
+    
     test_padded = pad_sequences(test_sequences,
-    ```
-
-    ```py
+    
         maxlen=max_length, padding=padding_type,
-    ```
-
-    ```py
+    
         truncating=trunc_type)
     ```
 
@@ -1263,17 +865,11 @@ print(test_sequence)
 
     ```py
     # Split the data into training and validation sets
-    ```
-
-    ```py
+    
     train_padded, val_padded, train_labels,
-    ```
-
-    ```py
+    
         val_labels = train_test_split(train_padded,
-    ```
-
-    ```py
+    
             train_labels, test_size=0.2, random_state=42)
     ```
 
@@ -1283,37 +879,21 @@ print(test_sequence)
 
     ```py
     # Define the model
-    ```
-
-    ```py
+    
     model = tf.keras.Sequential([
-    ```
-
-    ```py
+    
         tf.keras.layers.Embedding(vocab_size,
-    ```
-
-    ```py
+    
             embedding_dim, input_length=max_length),
-    ```
-
-    ```py
+    
         tf.keras.layers.GlobalAveragePooling1D(),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(24, activation='relu'),
-    ```
-
-    ```py
+    
         tf.keras.layers.Dense(1, activation='sigmoid')
-    ```
-
-    ```py
+    
     # because it's binary classification
-    ```
-
-    ```py
+    
     ])
     ```
 
@@ -1327,13 +907,9 @@ print(test_sequence)
 
     ```py
     # Compile the model
-    ```
-
-    ```py
+    
     model.compile(loss='binary_crossentropy',
-    ```
-
-    ```py
+    
         optimizer='adam', metrics=['accuracy'])
     ```
 
@@ -1341,17 +917,11 @@ print(test_sequence)
 
     ```py
     # Train the model
-    ```
-
-    ```py
+    
     history = model.fit(train_padded, train_labels,
-    ```
-
-    ```py
+    
         epochs=num_epochs, validation_data=(val_padded,
-    ```
-
-    ```py
+    
             val_labels))
     ```
 
@@ -1359,41 +929,23 @@ print(test_sequence)
 
     ```py
     Epoch 6/10
-    ```
-
-    ```py
+    
     625/625 [==============================] - 4s 7ms/step - loss: 0.1293 - accuracy: 0.9551 - val_loss: 0.3149 - val_accuracy: 0.8875
-    ```
-
-    ```py
+    
     Epoch 7/10
-    ```
-
-    ```py
+    
     625/625 [==============================] - 4s 6ms/step - loss: 0.1116 - accuracy: 0.9638 - val_loss: 0.3330 - val_accuracy: 0.8880
-    ```
-
-    ```py
+    
     Epoch 8/10
-    ```
-
-    ```py
+    
     625/625 [==============================] - 5s 9ms/step - loss: 0.0960 - accuracy: 0.9697 - val_loss: 0.3703 - val_accuracy: 0.8813
-    ```
-
-    ```py
+    
     Epoch 9/10
-    ```
-
-    ```py
+    
     625/625 [==============================] - 4s 6ms/step - loss: 0.0828 - accuracy: 0.9751 - val_loss: 0.3885 - val_accuracy: 0.8796
-    ```
-
-    ```py
+    
     Epoch 10/10
-    ```
-
-    ```py
+    
     625/625 [==============================] - 4s 6ms/step - loss: 0.0727 - accuracy: 0.9786 - val_loss: 0.4258 - val_accuracy: 0.8783
     ```
 
@@ -1403,17 +955,11 @@ print(test_sequence)
 
     ```py
     # Evaluate the model on the test set
-    ```
-
-    ```py
+    
     results = model.evaluate(test_padded, test_labels)
-    ```
-
-    ```py
+    
     print("Test Loss: ", results[0])
-    ```
-
-    ```py
+    
     print("Test Accuracy: ", results[1])
     ```
 
@@ -1423,89 +969,47 @@ print(test_sequence)
 
     ```py
     def plot_history(history):
-    ```
-
-    ```py
+    
         plt.figure(figsize=(12, 4))
-    ```
-
-    ```py
+    
         # Plot training & validation accuracy values
-    ```
-
-    ```py
+    
         plt.subplot(1, 2, 1)
-    ```
-
-    ```py
+    
         plt.plot(history.history['accuracy'])
-    ```
-
-    ```py
+    
         plt.plot(history.history['val_accuracy'])
-    ```
-
-    ```py
+    
         plt.title('Model accuracy')
-    ```
-
-    ```py
+    
         plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
         plt.xlabel('Epoch')
-    ```
-
-    ```py
+    
         plt.legend(['Train', 'Validation'],
-    ```
-
-    ```py
+    
             loc='upper left')
-    ```
-
-    ```py
+    
         # Plot training & validation loss values
-    ```
-
-    ```py
+    
         plt.subplot(1, 2, 2)
-    ```
-
-    ```py
+    
         plt.plot(history.history['loss'])
-    ```
-
-    ```py
+    
         plt.plot(history.history['val_loss'])
-    ```
-
-    ```py
+    
         plt.title('Model loss')
-    ```
-
-    ```py
+    
         plt.ylabel('Loss')
-    ```
-
-    ```py
+    
         plt.xlabel('Epoch')
-    ```
-
-    ```py
+    
         plt.legend(['Train', 'Validation'],
-    ```
-
-    ```py
+    
             loc='upper right')
-    ```
-
-    ```py
+    
         plt.tight_layout()
-    ```
-
-    ```py
+    
         plt.show()
     ```
 
@@ -1521,21 +1025,13 @@ print(test_sequence)
 
     ```py
     # New sentences
-    ```
-
-    ```py
+    
     new_sentences = ["The restaurant was absolutely fantastic. The staff were kind and the food was delicious.",  # positive
-    ```
-
-    ```py
+    
         "I've had an incredible day at the beach, the weather was beautiful.",  # positive
-    ```
-
-    ```py
+    
         "The movie was a big disappointment. I wouldn't recommend it to anyone.",  # negative
-    ```
-
-    ```py
+    
         "I bought a new phone and it stopped working after a week. Terrible product."]  # negative
     ```
 
@@ -1543,73 +1039,39 @@ print(test_sequence)
 
     ```py
     # Preprocess the sentences in the same way as the training data
-    ```
-
-    ```py
+    
     new_sequences = tokenizer.texts_to_sequences(
-    ```
-
-    ```py
+    
         new_sentences)
-    ```
-
-    ```py
+    
     new_padded = pad_sequences(new_sequences,
-    ```
-
-    ```py
+    
         maxlen=max_length, padding=padding_type,
-    ```
-
-    ```py
+    
         truncating=trunc_type)
-    ```
-
-    ```py
+    
     # Use the model to predict the sentiment of the new sentences
-    ```
-
-    ```py
+    
     predictions = model.predict(new_padded)
-    ```
-
-    ```py
+    
     # Print out the sequences and the corresponding predictions
-    ```
-
-    ```py
+    
     for i in range(len(new_sentences)):
-    ```
-
-    ```py
+    
         print("Sequence:", new_sequences[i])
-    ```
-
-    ```py
+    
         print("Predicted sentiment (
-    ```
-
-    ```py
+    
             probability):", predictions[i])
-    ```
-
-    ```py
+    
         if predictions[i] > 0.5:
-    ```
-
-    ```py
+    
             print("Interpretation: Positive sentiment")
-    ```
-
-    ```py
+    
         else:
-    ```
-
-    ```py
+    
             print("Interpretation: Negative sentiment")
-    ```
-
-    ```py
+    
         print("\n")
     ```
 
@@ -1617,53 +1079,29 @@ print(test_sequence)
 
     ```py
     1/1 [==============================] - 0s 21ms/step
-    ```
-
-    ```py
+    
     Sequence: [2, 107, 7, 487, 533, 2, 123, 27, 290, 3, 2, 31, 7, 182]
-    ```
-
-    ```py
+    
     Predicted sentiment (probability): [0.9689689]
-    ```
-
-    ```py
+    
     Interpretation: Positive sentiment
-    ```
-
-    ```py
+    
     Sequence: [112, 25, 60, 1251, 151, 26, 2, 3177, 2, 2079, 7, 634]
-    ```
-
-    ```py
+    
     Predicted sentiment (probability): [0.9956489]
-    ```
-
-    ```py
+    
     Interpretation: Positive sentiment
-    ```
-
-    ```py
+    
     Sequence: [2, 1050, 7, 6, 221, 1174, 4, 454, 234, 9, 5, 528]
-    ```
-
-    ```py
+    
     Predicted sentiment (probability): [0.43672907]
-    ```
-
-    ```py
+    
     Interpretation: Negative sentiment
-    ```
-
-    ```py
+    
     Sequence: [4, 764, 6, 161, 483, 3, 9, 695, 524, 83, 6, 393, 464, 1341]
-    ```
-
-    ```py
+    
     Predicted sentiment (probability): [0.36306405]
-    ```
-
-    ```py
+    
     Interpretation: Negative sentiment
     ```
 
@@ -1677,21 +1115,13 @@ print(test_sequence)
 
     ```py
     weights = model.get_layer(
-    ```
-
-    ```py
+    
         'embedding').get_weights()[0]
-    ```
-
-    ```py
+    
     vocab = tokenizer.word_index
-    ```
-
-    ```py
+    
     print(weights.shape)
-    ```
-
-    ```py
+    
     # shape: (vocab_size, embedding_dim)
     ```
 
@@ -1701,37 +1131,21 @@ print(test_sequence)
 
     ```py
     out_v = io.open('vectors.tsv', 'w', encoding='utf-8')
-    ```
-
-    ```py
+    
     out_m = io.open('metadata.tsv', 'w', encoding='utf-8')
-    ```
-
-    ```py
+    
     for word, index in vocab.items():
-    ```
-
-    ```py
+    
         if index < vocab_size:
-    ```
-
-    ```py
+    
             vec = weights[index]
-    ```
-
-    ```py
+    
             out_v.write('\t'.join([str(x) for x in vec]) + "\n")
-    ```
-
-    ```py
+    
             out_m.write(word + "\n")
-    ```
-
-    ```py
+    
     out_v.close()
-    ```
-
-    ```py
+    
     out_m.close()
     ```
 
@@ -1745,25 +1159,15 @@ print(test_sequence)
 
     ```py
     try:
-    ```
-
-    ```py
+    
         from google.colab import files
-    ```
-
-    ```py
+    
         files.download('vectors.tsv')
-    ```
-
-    ```py
+    
         files.download('metadata.tsv')
-    ```
-
-    ```py
+    
     except Exception:
-    ```
-
-    ```py
+    
         pass
     ```
 

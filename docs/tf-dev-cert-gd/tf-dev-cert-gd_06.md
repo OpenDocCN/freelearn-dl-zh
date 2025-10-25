@@ -121,9 +121,7 @@ print('Test Accuracy: ', test_acc)
 
     ```py
     callbacks = EarlyStopping(monitor='val_loss',
-    ```
-
-    ```py
+    
         patience=5, verbose=1, restore_best_weights=True)
     ```
 
@@ -143,57 +141,31 @@ print('Test Accuracy: ', test_acc)
 
     ```py
     #Step 1:  Model configuration
-    ```
-
-    ```py
+    
     model=keras.Sequential([
-    ```
-
-    ```py
+    
         keras.layers.Flatten(input_shape=(28,28)),
-    ```
-
-    ```py
+    
         keras.layers.Dense(100, activation=»relu»),
-    ```
-
-    ```py
+    
         keras.layers.Dense(10,activation=»softmax»)
-    ```
-
-    ```py
+    
     ])
-    ```
-
-    ```py
+    
     #Step 2: Compiling the model, we add the loss, optimizer and evaluation metrics here
-    ```
-
-    ```py
+    
     model.compile(optimizer='adam',
-    ```
-
-    ```py
+    
         loss=›sparse_categorical_crossentropy›,
-    ```
-
-    ```py
+    
         metrics=[‹accuracy›])
-    ```
-
-    ```py
+    
     #Step 3: We fit our data to the model
-    ```
-
-    ```py
+    
     history= model.fit(train_images, train_labels,
-    ```
-
-    ```py
+    
         epochs=100, callbacks=[callbacks],
-    ```
-
-    ```py
+    
         validation_split=0.2)
     ```
 
@@ -222,13 +194,9 @@ Epoch 19: early stopping
 
     ```py
     test_loss, test_acc = model.evaluate(test_images,
-    ```
-
-    ```py
+    
         test_labels)
-    ```
-
-    ```py
+    
     print('Test Accuracy: ', test_acc)
     ```
 

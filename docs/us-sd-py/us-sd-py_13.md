@@ -63,89 +63,47 @@ Canny 图像指的是经过 Canny 边缘检测的图像，这是一种流行的�
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     # load model
-    ```
-
-    ```py
+    
     text2img_pipe = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "stablediffusionapi/deliberate-v2",
-    ```
-
-    ```py
+    
          torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda:0")
-    ```
-
-    ```py
+    
     # generate sample image
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     high resolution photo,best quality, masterpiece, 8k
-    ```
-
-    ```py
+    
     A cute cat stand on the tree branch, depth of field, detailed body
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     neg_prompt = """
-    ```
-
-    ```py
+    
     paintings,ketches, worst quality, low quality, normal quality, lowres,
-    ```
-
-    ```py
+    
     monochrome, grayscale
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     image = text2img_pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(7)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 
@@ -161,9 +119,7 @@ Canny 图像指的是经过 Canny 边缘检测的图像，这是一种流行的�
 
     ```py
     pip install opencv-contrib-python
-    ```
-
-    ```py
+    
     pip install controlnet_aux
     ```
 
@@ -171,13 +127,9 @@ Canny 图像指的是经过 Canny 边缘检测的图像，这是一种流行的�
 
     ```py
     from controlnet_aux import CannyDetector
-    ```
-
-    ```py
+    
     canny = CannyDetector()
-    ```
-
-    ```py
+    
     image_canny = canny(image, 30, 100)
     ```
 
@@ -203,25 +155,15 @@ Canny 图像指的是经过 Canny 边缘检测的图像，这是一种流行的�
 
     ```py
     from diffusers import ControlNetModel
-    ```
-
-    ```py
+    
     canny_controlnet = ControlNetModel.from_pretrained(
-    ```
-
-    ```py
+    
         'takuma104/control_v11',
-    ```
-
-    ```py
+    
         subfolder='control_v11p_sd15_canny',
-    ```
-
-    ```py
+    
         torch_dtype=torch.float16
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -231,29 +173,17 @@ Canny 图像指的是经过 Canny 边缘检测的图像，这是一种流行的�
 
     ```py
     from diffusers import StableDiffusionControlNetImg2ImgPipeline
-    ```
-
-    ```py
+    
     cn_pipe = \
-    ```
-
-    ```py
+    
         StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "stablediffusionapi/deliberate-v2",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         controlnet = canny_controlnet
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -263,69 +193,37 @@ Canny 图像指的是经过 Canny 边缘检测的图像，这是一种流行的�
 
     ```py
     prompt = """
-    ```
-
-    ```py
+    
     high resolution photo,best quality, masterpiece, 8k
-    ```
-
-    ```py
+    
     A cute dog stand on the tree branch, depth of field, detailed body
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     neg_prompt = """
-    ```
-
-    ```py
+    
     paintings,ketches, worst quality, low quality, normal quality, lowres,
-    ```
-
-    ```py
+    
     monochrome, grayscale
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     image_from_canny = single_cn_pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         image = canny_image,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(2),
-    ```
-
-    ```py
+    
         num_inference_steps = 30,
-    ```
-
-    ```py
+    
         guidance_scale = 6.0
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image_from_canny
     ```
 

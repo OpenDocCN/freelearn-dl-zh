@@ -244,13 +244,9 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     # start a new conversation
-    ```
-
-    ```py
+    
     user_input = """Analyze the image in a comprehensive and detailed manner"""
-    ```
-
-    ```py
+    
     conv = conv_templates[conv_mode].copy()
     ```
 
@@ -258,25 +254,15 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     # process image to tensor
-    ```
-
-    ```py
+    
     image_tensor = process_images(
-    ```
-
-    ```py
+    
         [input_image],
-    ```
-
-    ```py
+    
         image_processor,
-    ```
-
-    ```py
+    
         {"image_aspect_ratio":"pad"}
-    ```
-
-    ```py
+    
     ).to(model.device, dtype=torch.float16)
     ```
 
@@ -284,25 +270,15 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     if model.config.mm_use_im_start_end:
-    ```
-
-    ```py
+    
         inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + \
-    ```
-
-    ```py
+    
             DEFAULT_IM_END_TOKEN + '\n' + user_input
-    ```
-
-    ```py
+    
     else:
-    ```
-
-    ```py
+    
         inp = DEFAULT_IMAGE_TOKEN + '\n' + user_input
-    ```
-
-    ```py
+    
     conv.append_message(conv.roles[0], inp)
     ```
 
@@ -310,41 +286,23 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     # get the prompt for inference
-    ```
-
-    ```py
+    
     conv.append_message(conv.roles[1], None)
-    ```
-
-    ```py
+    
     prompt = conv.get_prompt()
-    ```
-
-    ```py
+    
     # convert prompt to token ids
-    ```
-
-    ```py
+    
     input_ids = tokenizer_image_token(
-    ```
-
-    ```py
+    
         prompt,
-    ```
-
-    ```py
+    
         tokenizer,
-    ```
-
-    ```py
+    
         IMAGE_TOKEN_INDEX,
-    ```
-
-    ```py
+    
         return_tensors='pt'
-    ```
-
-    ```py
+    
     ).unsqueeze(0).cuda()
     ```
 
@@ -352,21 +310,13 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     stop_str = conv.sep if conv.sep_style != \
-    ```
-
-    ```py
+    
         SeparatorStyle.TWO else conv.sep2
-    ```
-
-    ```py
+    
     keywords = [stop_str]
-    ```
-
-    ```py
+    
     stopping_criteria = KeywordsStoppingCriteria(keywords,
-    ```
-
-    ```py
+    
         tokenizer, input_ids)
     ```
 
@@ -374,69 +324,37 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     # output the data
-    ```
-
-    ```py
+    
     with torch.inference_mode():
-    ```
-
-    ```py
+    
         output_ids = model.generate(
-    ```
-
-    ```py
+    
             input_ids,
-    ```
-
-    ```py
+    
             images =image_tensor,
-    ```
-
-    ```py
+    
             do_sample = True,
-    ```
-
-    ```py
+    
             temperature = 0.2,
-    ```
-
-    ```py
+    
             max_new_tokens = 1024,
-    ```
-
-    ```py
+    
             streamer = None,
-    ```
-
-    ```py
+    
             use_cache = True,
-    ```
-
-    ```py
+    
             stopping_criteria = [stopping_criteria]
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
     outputs = tokenizer.decode(output_ids[0,
-    ```
-
-    ```py
+    
         input_ids.shape[1]:]).strip()
-    ```
-
-    ```py
+    
     # make sure the conv object holds all the output
-    ```
-
-    ```py
+    
     conv.messages[-1][-1] = outputs
-    ```
-
-    ```py
+    
     print(outputs)
     ```
 
@@ -444,9 +362,7 @@ tokenizer, model, image_processor, _ = load_pretrained_model(
 
     ```py
     The image features a man dressed in a white space suit, riding a horse in a desert-like environment. The man appears to be a space traveler, possibly on a mission or exploring the area. The horse is galloping, and the man is skillfully riding it.
-    ```
-
-    ```py
+    
     In the background, there are two moons visible, adding to the sense of a space-themed setting. The combination of the man in a space suit, the horse, and the moons creates a captivating and imaginative scene.</s>
     ```
 

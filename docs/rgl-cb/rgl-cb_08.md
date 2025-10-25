@@ -154,13 +154,9 @@ pip install pandas numpy scikit-learn matplotlib torch transformers
 
     ```py
     # Load data
-    ```
-
-    ```py
+    
     data = pd.read_csv('Tweets.csv')
-    ```
-
-    ```py
+    
     data[['airline_sentiment', 'text']].head()
     ```
 
@@ -196,65 +192,35 @@ train_data, test_data = train_test_split(data,
 
     ```py
     # Define dataset class class TextClassificationDataset(Dataset):
-    ```
-
-    ```py
+    
     def __init__(self, data, max_length):
-    ```
-
-    ```py
+    
         self.data = data
-    ```
-
-    ```py
+    
         self.tokenizer = AutoTokenizer.from_pretrained(
-    ```
-
-    ```py
+    
             'bert-base-uncased')
-    ```
-
-    ```py
+    
         self.tokens = self.tokenizer(
-    ```
-
-    ```py
+    
             data['text'].to_list(), padding=True,
-    ```
-
-    ```py
+    
             truncation=True, max_length=max_length,
-    ```
-
-    ```py
+    
             return_tensors='pt')['input_ids']
-    ```
-
-    ```py
+    
         le = LabelEncoder()
-    ```
-
-    ```py
+    
         self.labels = torch.tensor(le.fit_transform(
-    ```
-
-    ```py
+    
             data['airline_sentiment']))
-    ```
-
-    ```py
+    
     def __len__(self):
-    ```
-
-    ```py
+    
         return len(self.data)
-    ```
-
-    ```py
+    
     def __getitem__(self, index):
-    ```
-
-    ```py
+    
         return self.tokens[index], self.labels[index]
     ```
 
@@ -683,13 +649,9 @@ pip install pandas numpy scikit-learn matplotlib torch transformers
 
     ```py
     # Load data
-    ```
-
-    ```py
+    
     data = pd.read_csv('IMDB Dataset.csv')
-    ```
-
-    ```py
+    
     data.head()
     ```
 
@@ -707,13 +669,9 @@ pip install pandas numpy scikit-learn matplotlib torch transformers
 
     ```py
     # Split data into train and test sets
-    ```
-
-    ```py
+    
     Train_data, test_data = train_test_split(data,
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0)
     ```
 
@@ -793,45 +751,25 @@ pip install pandas numpy scikit-learn matplotlib torch transformers
 
     ```py
     batch_size = 64
-    ```
-
-    ```py
+    
     max_words = 64
-    ```
-
-    ```py
+    
     # Initialize datasets and dataloaders
-    ```
-
-    ```py
+    
     train_dataset = TextClassificationDataset(train_data,
-    ```
-
-    ```py
+    
         max_words)
-    ```
-
-    ```py
+    
     test_dataset = TextClassificationDataset(test_data,
-    ```
-
-    ```py
+    
         max_words)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(train_dataset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_dataset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
     ```
 
@@ -955,69 +893,37 @@ pip install pandas numpy scikit-learn matplotlib torch transformers
 
     ```py
     vocab_size = train_dataset.tokenizer.vocab_size
-    ```
-
-    ```py
+    
     embedding_dim = 32
-    ```
-
-    ```py
+    
     hidden_dim = 32
-    ```
-
-    ```py
+    
     output_size = 1
-    ```
-
-    ```py
+    
     # Optionally, set the device to GPU if you have one device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
-    ```
-
-    ```py
+    
     model = GRUClassifier(
-    ```
-
-    ```py
+    
         vocab_size=vocab_size,
-    ```
-
-    ```py
+    
         embedding_dim=embedding_dim,
-    ```
-
-    ```py
+    
         hidden_size=hidden_dim,
-    ```
-
-    ```py
+    
         output_size=output_size,
-    ```
-
-    ```py
+    
     ).to(device)
-    ```
-
-    ```py
+    
     random_data = torch.randint(0, vocab_size,
-    ```
-
-    ```py
+    
         size=(batch_size, max_words)).to(device)
-    ```
-
-    ```py
+    
     result = model(random_data)
-    ```
-
-    ```py
+    
     print('Resulting output tensor:', result.shape)
-    ```
-
-    ```py
+    
     print('Sum of the output tensor:', result.sum())
     ```
 
@@ -1031,9 +937,7 @@ Resulting output tensor: torch.Size([64, 1]) Sum of the output tensor: tensor(31
 
     ```py
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-    ```
-
-    ```py
+    
     criterion = nn.BCELoss()
     ```
 
@@ -1123,13 +1027,9 @@ def train_IMDB_classification(model, train_dataloader,
 
     ```py
     train_losses, test_losses, train_accuracy, test_accuracy = train_IMDB_classification(model,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=20)
     ```
 
@@ -1143,17 +1043,11 @@ def train_IMDB_classification(model, train_dataloader,
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('loss (BCE)')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -1169,17 +1063,11 @@ def train_IMDB_classification(model, train_dataloader,
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -1461,41 +1349,23 @@ pip install pandas numpy scikit-learn matplotlib torch transformers
 
     ```py
     vocab_size = train_dataset.tokenizer.vocab_size
-    ```
-
-    ```py
+    
     embedding_dim = 32 hidden_dim = 32 output_size = 1
-    ```
-
-    ```py
+    
     # Optionally, set the device to GPU if you have one
-    ```
-
-    ```py
+    
     device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
-    ```
-
-    ```py
+    
     model = GRUClassifier(
-    ```
-
-    ```py
+    
         vocab_size=vocab_size,
-    ```
-
-    ```py
+    
         embedding_dim=embedding_dim,
-    ```
-
-    ```py
+    
         hidden_size=hidden_dim,
-    ```
-
-    ```py
+    
          output_size=output_size, ).to(device)
     ```
 
@@ -1510,17 +1380,11 @@ criterion = nn.BCELoss()
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_IMDB_classification(model,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=20)
     ```
 
@@ -1534,17 +1398,11 @@ criterion = nn.BCELoss()
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('loss (BCE)')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -1560,17 +1418,11 @@ criterion = nn.BCELoss()
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -1643,49 +1495,27 @@ test_dataloader = DataLoader(test_dataset,
 
     ```py
     vocab_size = train_dataset.tokenizer.vocab_size
-    ```
-
-    ```py
+    
     embedding_dim = 32
-    ```
-
-    ```py
+    
     hidden_dim = 32
-    ```
-
-    ```py
+    
     output_size = 1
-    ```
-
-    ```py
+    
     # Optionally, set the device to GPU if you have one
-    ```
-
-    ```py
+    
     device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
-    ```
-
-    ```py
+    
     model = GRUClassifier(
-    ```
-
-    ```py
+    
         vocab_size=vocab_size,
-    ```
-
-    ```py
+    
         embedding_dim=embedding_dim,
-    ```
-
-    ```py
+    
         hidden_size=hidden_dim,
-    ```
-
-    ```py
+    
         output_size=output_size, ).to(device)
     ```
 
@@ -1700,17 +1530,11 @@ criterion = nn.BCELoss()
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_IMDB_classification(model,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=20)
     ```
 
@@ -1724,17 +1548,11 @@ criterion = nn.BCELoss()
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('loss (BCE)')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -1750,17 +1568,11 @@ criterion = nn.BCELoss()
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 

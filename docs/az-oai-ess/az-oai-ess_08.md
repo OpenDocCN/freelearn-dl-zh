@@ -185,9 +185,7 @@
 
     ```py
     'title' column in the data_content DataFrame is normalized by removing excess whitespace, unnecessary punctuation, and newline characters:
-    ```
-
-    ```py
+    
     pd.options.mode.chained_assignment = None
     # s is input text
     def normalize_text(s, sep_token = " \n "):
@@ -214,9 +212,7 @@
 
     ```py
     the embeddings into the data_content DataFrame, laying the groundwork for potential further analysis or applications involving the generated embeddings:
-    ```
-
-    ```py
+    
     data_content['ada_v2'] = data_content["description"]. apply(
         lambda x : get_embedding(
             x, engine = 'text-embedding-ada-002'))

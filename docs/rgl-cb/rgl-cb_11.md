@@ -245,17 +245,11 @@ transform = transforms.Compose([
 
     ```py
     batch_size = 64
-    ```
-
-    ```py
+    
     device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
-    ```
-
-    ```py
+    
     epochs = 20
     ```
 
@@ -263,57 +257,31 @@ transform = transforms.Compose([
 
     ```py
     trainset = DogsAndCats(
-    ```
-
-    ```py
+    
         'kagglecatsanddogs_3367a/PetImages/Cat/train/',
-    ```
-
-    ```py
+    
         'kagglecatsanddogs_3367a/PetImages/Dog/train/',
-    ```
-
-    ```py
+    
         transform=transform
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(trainset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
-    ```
-
-    ```py
+    
     testset = DogsAndCats(
-    ```
-
-    ```py
+    
         'kagglecatsanddogs_3367a/PetImages/Cat/test/',
-    ```
-
-    ```py
+    
         'kagglecatsanddogs_3367a/PetImages/Dog/test/',
-    ```
-
-    ```py
+    
         transform=transform
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(testset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
     ```
 
@@ -321,41 +289,23 @@ transform = transforms.Compose([
 
     ```py
     def display_images(dataloader, classes = ['cat', 'dog']):
-    ```
-
-    ```py
+    
         plt.figure(figsize=(14, 10))
-    ```
-
-    ```py
+    
         images, labels = next(iter(dataloader))
-    ```
-
-    ```py
+    
         for idx in range(8):
-    ```
-
-    ```py
+    
             plt.subplot(2, 4, idx+1)
-    ```
-
-    ```py
+    
             plt.imshow(images[idx].permute(
-    ```
-
-    ```py
+    
                 1, 2, 0).numpy() * 0.5 + 0.5)
-    ```
-
-    ```py
+    
             plt.title(classes[int(labels[idx].item())])
-    ```
-
-    ```py
+    
             plt.axis('off')
-    ```
-
-    ```py
+    
     display_images(train_dataloader)
     ```
 
@@ -371,37 +321,21 @@ transform = transforms.Compose([
 
     ```py
     class Classifier(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self):
-    ```
-
-    ```py
+    
             super(Classifier, self).__init__()
-    ```
-
-    ```py
+    
             self.mobilenet = mobilenet_v3_small()
-    ```
-
-    ```py
+    
             self.output_layer = nn.Linear(1000, 1)
-    ```
-
-    ```py
+    
         def forward(self, x):
-    ```
-
-    ```py
+    
             x = self.mobilenet(x)
-    ```
-
-    ```py
+    
             x = nn.Sigmoid()(self.output_layer(x))
-    ```
-
-    ```py
+    
             return x
     ```
 
@@ -409,9 +343,7 @@ transform = transforms.Compose([
 
     ```py
     model = Classifier()
-    ```
-
-    ```py
+    
     model = model.to(device)
     ```
 
@@ -419,13 +351,9 @@ transform = transforms.Compose([
 
     ```py
     criterion = nn.BCELoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(model.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
     ```
 
@@ -433,25 +361,15 @@ transform = transforms.Compose([
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_model(
-    ```
-
-    ```py
+    
         epochs, model, criterion, optimizer, device,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, trainset,
-    ```
-
-    ```py
+    
         testset
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -459,53 +377,29 @@ transform = transforms.Compose([
 
     ```py
     plt.figure(figsize=(10, 10))
-    ```
-
-    ```py
+    
     plt.subplot(2, 1, 1)
-    ```
-
-    ```py
+    
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('BCE Loss')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.subplot(2, 1, 2)
-    ```
-
-    ```py
+    
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('Epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -544,37 +438,21 @@ augment = A.Compose([
 
     ```py
     augmented_trainset = DogsAndCats(
-    ```
-
-    ```py
+    
         'kagglecatsanddogs_3367a/PetImages/Cat/train/',
-    ```
-
-    ```py
+    
         'kagglecatsanddogs_3367a/PetImages/Dog/train/',
-    ```
-
-    ```py
+    
         transform=transform,
-    ```
-
-    ```py
+    
         augment=augment,
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     augmented_train_dataloader = DataLoader(
-    ```
-
-    ```py
+    
         augmented_trainset, batch_size=batch_size,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -600,17 +478,11 @@ augment = A.Compose([
 
     ```py
     model = Classifier()
-    ```
-
-    ```py
+    
     model = model.to(device)
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(model.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
     ```
 
@@ -618,25 +490,15 @@ augment = A.Compose([
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_model(
-    ```
-
-    ```py
+    
         epochs, model, criterion, optimizer, device,
-    ```
-
-    ```py
+    
         augmented_train_dataloader, test_dataloader,
-    ```
-
-    ```py
+    
         trainset, testset
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -652,53 +514,29 @@ augment = A.Compose([
 
     ```py
     plt.figure(figsize=(10, 10))
-    ```
-
-    ```py
+    
     plt.subplot(2, 1, 1)
-    ```
-
-    ```py
+    
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('BCE Loss')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.subplot(2, 1, 2)
-    ```
-
-    ```py
+    
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -839,41 +677,23 @@ from ultralytics import YOLO
 
     ```py
     def read_labels(labels_path):
-    ```
-
-    ```py
+    
         res = []
-    ```
-
-    ```py
+    
         with open(labels_path, 'r') as file:
-    ```
-
-    ```py
+    
             lines = file.readlines()
-    ```
-
-    ```py
+    
             for line in lines:
-    ```
-
-    ```py
+    
                 cls,xc,yc,w,h = line.strip().split(' ')
-    ```
-
-    ```py
+    
                 res.append([int(float(cls)), float(xc),
-    ```
-
-    ```py
+    
                     float(yc), float(w), float(h)])
-    ```
-
-    ```py
+    
             file.close()
-    ```
-
-    ```py
+    
         return res
     ```
 
@@ -881,105 +701,55 @@ from ultralytics import YOLO
 
     ```py
     def plot_labels(images_folder, labels_folder,
-    ```
-
-    ```py
+    
         classes):
-    ```
-
-    ```py
+    
             images_path = sorted(glob(
-    ```
-
-    ```py
+    
                 images_folder + '/*.jpg'))
-    ```
-
-    ```py
+    
          labels_path = sorted(glob(
-    ```
-
-    ```py
+    
                 labels_folder + '/*.txt'))
-    ```
-
-    ```py
+    
         plt.figure(figsize=(10, 6))
-    ```
-
-    ```py
+    
         for i in range(8):
-    ```
-
-    ```py
+    
             idx = np.random.randint(len(images_path))
-    ```
-
-    ```py
+    
             image = plt.imread(images_path[idx])
-    ```
-
-    ```py
+    
             labels = read_labels(labels_path[idx])
-    ```
-
-    ```py
+    
             for cls, xc, yc, w, h in labels:
-    ```
-
-    ```py
+    
                 xc = int(xc*image.shape[1])
-    ```
-
-    ```py
+    
                 yc = int(yc*image.shape[0])
-    ```
-
-    ```py
+    
                 w = int(w*image.shape[1])
-    ```
-
-    ```py
+    
                 h = int(h*image.shape[0])
-    ```
-
-    ```py
+    
                 cv2.rectangle(image,
-    ```
-
-    ```py
+    
                     (xc - w//2, yc - h//2),
-    ```
-
-    ```py
+    
                     (xc + w//2 ,yc + h//2), (255,0,0), 2)
-    ```
-
-    ```py
+    
                 cv2.putText(image, f'{classes[int(cls)]}',
-    ```
-
-    ```py
+    
                     (xc-w//2, yc - h//2 - 10),
-    ```
-
-    ```py
+    
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-    ```
-
-    ```py
+    
                     (1.,0.,0.), 1)
-    ```
-
-    ```py
+    
             plt.subplot(2, 4, i + 1)
-    ```
-
-    ```py
+    
             plt.imshow(image)
-    ```
-
-    ```py
+    
             plt.axis('off')
     ```
 
@@ -987,9 +757,7 @@ from ultralytics import YOLO
 
     ```py
     plot_labels('QR-detection-yolo/train/images/',
-    ```
-
-    ```py
+    
         'QR-detection-yolo/train/labels/', 'QR Code')
     ```
 
@@ -1005,9 +773,7 @@ from ultralytics import YOLO
 
     ```py
     plot_labels('QR-detection-yolo/test/images/',
-    ```
-
-    ```py
+    
         'QR-detection-yolo/test/labels/', 'QR Code')
     ```
 
@@ -1084,29 +850,17 @@ def generate_synthetic_background_image_with_tag(
 
     ```py
     generate_synthetic_background_image_with_tag(
-    ```
-
-    ```py
+    
         n_images_to_generate=3000,
-    ```
-
-    ```py
+    
         output_path='QR-detection-yolo/generated_qr_code_images/',
-    ```
-
-    ```py
+    
         raw_tags_folder='QR-detection-yolo/train/images/',
-    ```
-
-    ```py
+    
         background_images_path='QR-detection-yolo/background_images/',
-    ```
-
-    ```py
+    
         labels_path='QR-detection-yolo/train/labels/'
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -1136,9 +890,7 @@ plot_labels(
 
     ```py
     # Create a new YOLO model with pretrained weights
-    ```
-
-    ```py
+    
     model = YOLO('yolov8n.pt')
     ```
 
@@ -1150,17 +902,11 @@ plot_labels(
 
     ```py
     train: ../../QR-detection-yolo/generated_qr_code_images/images
-    ```
-
-    ```py
+    
     val: ../../QR-detection-yolo/test/images
-    ```
-
-    ```py
+    
     nc: 1
-    ```
-
-    ```py
+    
     names: ['QR_CODE']
     ```
 
@@ -1168,13 +914,9 @@ plot_labels(
 
     ```py
     # Train the model for 50 epochs
-    ```
-
-    ```py
+    
     model.train(data='data_qr_generated.yaml', epochs=50,
-    ```
-
-    ```py
+    
         lr0=0.001, name='generated_qrcode')
     ```
 
@@ -1184,81 +926,43 @@ plot_labels(
 
     ```py
     def plot_results_random_images(test_images, model, classes=['QR_code']):
-    ```
-
-    ```py
+    
         images = glob(test_images + '/*.jpg')
-    ```
-
-    ```py
+    
         plt.figure(figsize=(14, 10))
-    ```
-
-    ```py
+    
         for i in range(8):
-    ```
-
-    ```py
+    
             idx = np.random.randint(len(images))
-    ```
-
-    ```py
+    
             result = model.predict(images[idx])
-    ```
-
-    ```py
+    
             image = result[0].orig_img.copy()
-    ```
-
-    ```py
+    
             raw_res = result[0].boxes.data
-    ```
-
-    ```py
+    
             for detection in raw_res:
-    ```
-
-    ```py
+    
                 x1, y1, x2, y2, p,
-    ```
-
-    ```py
+    
                     cls = detection.cpu().tolist()
-    ```
-
-    ```py
+    
                 cv2.rectangle(image, (int(x1), int(y1)),
-    ```
-
-    ```py
+    
                     (int(x2), int(y2)), (255,0,0), 2)
-    ```
-
-    ```py
+    
                 cv2.putText(image, f'{classes[int(cls)]}',
-    ```
-
-    ```py
+    
                     (int(x1), int(y1) - 10),
-    ```
-
-    ```py
+    
                         cv2.FONT_HERSHEY_SIMPLEX, 1,
-    ```
-
-    ```py
+    
                         (255,0,0), 2)
-    ```
-
-    ```py
+    
             plt.subplot(2, 4, i + 1)
-    ```
-
-    ```py
+    
             plt.axis('off')
-    ```
-
-    ```py
+    
             plt.imshow(image)
     ```
 
@@ -1266,25 +970,15 @@ plot_labels(
 
     ```py
     # Load the best weights
-    ```
-
-    ```py
+    
     model = YOLO(
-    ```
-
-    ```py
+    
         'runs/detect/generated_qrcode/weights/best.pt')
-    ```
-
-    ```py
+    
     # Plot the results
-    ```
-
-    ```py
+    
     Plot_results_random_images(
-    ```
-
-    ```py
+    
         'QR-detection-yolo/test/images/', model)
     ```
 
@@ -1300,13 +994,9 @@ plot_labels(
 
     ```py
     plt.figure(figsize=(10, 8))
-    ```
-
-    ```py
+    
     plt.imshow(plt.imread(
-    ```
-
-    ```py
+    
         'runs/detect/generated_qrcode/results.png'))
     ```
 
@@ -1330,21 +1020,13 @@ plot_labels(
 
     ```py
     import openai
-    ```
-
-    ```py
+    
     import urllib
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     openai.api_key = 'xx-xxx'
     ```
 
@@ -1356,77 +1038,41 @@ plot_labels(
 
     ```py
     def get_mask_to_complete(image_path, label_path, output_filename, margin: int = 100):
-    ```
-
-    ```py
+    
         image = plt.imread(image_path)
-    ```
-
-    ```py
+    
         labels = read_labels(label_path)
-    ```
-
-    ```py
+    
         output_mask = np.zeros(image.shape[:2])
-    ```
-
-    ```py
+    
         for cls, xc, yc, w, h in labels:
-    ```
-
-    ```py
+    
             xc = int(xc*image.shape[1])
-    ```
-
-    ```py
+    
             yc = int(yc*image.shape[0])
-    ```
-
-    ```py
+    
             w = int(w*image.shape[1])
-    ```
-
-    ```py
+    
             h = int(h*image.shape[0])
-    ```
-
-    ```py
+    
             output_mask[yc-h//2-margin:yc+h//2+margin,
-    ```
-
-    ```py
+    
                 xc-w//2-margin:xc+w//2+margin] = 255
-    ```
-
-    ```py
+    
         output_mask = np.concatenate([image,
-    ```
-
-    ```py
+    
             np.expand_dims(output_mask, -1)],
-    ```
-
-    ```py
+    
                 axis=-1).astype(np.uint8)
-    ```
-
-    ```py
+    
         # Save the images
-    ```
-
-    ```py
+    
         output_mask_filename = output_filename.split('.')[0] + '_mask.png'
-    ```
-
-    ```py
+    
         plt.imsave(output_filename, image)
-    ```
-
-    ```py
+    
         plt.imsave(output_mask_filename, output_mask)
-    ```
-
-    ```py
+    
         return output_mask_filename
     ```
 
@@ -1434,49 +1080,27 @@ plot_labels(
 
     ```py
     output_image_filename = 'image_edit.png'
-    ```
-
-    ```py
+    
     mask_filename = get_mask_to_complete(
-    ```
-
-    ```py
+    
         'QR-detection-yolo/generated_qr_code_images/images/synthetic_image_0.jpg',
-    ```
-
-    ```py
+    
         'QR-detection-yolo/generated_qr_code_images/labels/synthetic_image_0.txt',
-    ```
-
-    ```py
+    
         output_image_filename
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     # Display the masked image and the original image side by side
-    ```
-
-    ```py
+    
     plt.figure(figsize=(12, 10))
-    ```
-
-    ```py
+    
     plt.subplot(1, 2, 1)
-    ```
-
-    ```py
+    
     plt.imshow(plt.imread(output_image_filename))
-    ```
-
-    ```py
+    
     plt.subplot(1, 2, 2)
-    ```
-
-    ```py
+    
     plt.imshow(plt.imread(mask_filename))
     ```
 
@@ -1726,93 +1350,49 @@ import tqdm
 
     ```py
     class AnimeStyleDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, input_path: str,
-    ```
-
-    ```py
+    
             output_path: str, transform, augment = None):
-    ```
-
-    ```py
+    
                 self.input_paths = sorted(glob(
-    ```
-
-    ```py
+    
                     f'{input_path}/*.png'))
-    ```
-
-    ```py
+    
                 self.output_paths = sorted(glob(
-    ```
-
-    ```py
+    
                     f'{output_path}/*.png'))
-    ```
-
-    ```py
+    
                 self.transform = transform
-    ```
-
-    ```py
+    
                 self.augment = augment
-    ```
-
-    ```py
+    
         def __len__(self):
-    ```
-
-    ```py
+    
             return len(self.input_paths)
-    ```
-
-    ```py
+    
         def __getitem__(self, idx):
-    ```
-
-    ```py
+    
             input_img = plt.imread(self.input_paths[idx])
-    ```
-
-    ```py
+    
             output_img = plt.imread(
-    ```
-
-    ```py
+    
                 self.output_paths[idx])
-    ```
-
-    ```py
+    
             if self.augment:
-    ```
-
-    ```py
+    
                 augmented = self.augment(image=input_img)
-    ```
-
-    ```py
+    
                 input_img = augmented['image']
-    ```
-
-    ```py
+    
                 output_img = A.ReplayCompose.replay(
-    ```
-
-    ```py
+    
                     augmented['replay'],
-    ```
-
-    ```py
+    
                     image=output_img)['image']
-    ```
-
-    ```py
+    
             return self.transform(input_img),
-    ```
-
-    ```py
+    
                 self.transform(output_img)
     ```
 
@@ -1845,41 +1425,23 @@ augment = A.ReplayCompose([
 
     ```py
     batch_size = 12
-    ```
-
-    ```py
+    
     device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
-    ```
-
-    ```py
+    
     mean = (0.485, 0.456, 0.406)
-    ```
-
-    ```py
+    
     std = (0.229, 0.224, 0.225)
-    ```
-
-    ```py
+    
     transform = transforms.Compose([
-    ```
-
-    ```py
+    
         transforms.ToTensor(),
-    ```
-
-    ```py
+    
         transforms.Resize((512, 512), antialias=True),
-    ```
-
-    ```py
+    
         transforms.Normalize(mean, std),
-    ```
-
-    ```py
+    
     ])
     ```
 
@@ -1891,61 +1453,33 @@ augment = A.ReplayCompose([
 
     ```py
     trainset = AnimeStyleDataset(
-    ```
-
-    ```py
+    
         'anime-style-transfer/train/images/',
-    ```
-
-    ```py
+    
         'anime-style-transfer/train/labels/',
-    ```
-
-    ```py
+    
         transform=transform,
-    ```
-
-    ```py
+    
         augment=augment,
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(trainset,
-    ```
-
-    ```py
+    
     batch_size=batch_size, shuffle=True)
-    ```
-
-    ```py
+    
     testset = AnimeStyleDataset(
-    ```
-
-    ```py
+    
         'anime-style-transfer/test/images/',
-    ```
-
-    ```py
+    
         'anime-style-transfer/test/labels/',
-    ```
-
-    ```py
+    
         transform=transform,
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(testset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
     ```
 
@@ -1953,65 +1487,35 @@ augment = A.ReplayCompose([
 
     ```py
     def unnormalize(x, mean, std):
-    ```
-
-    ```py
+    
         x = np.asarray(x, dtype=np.float32)
-    ```
-
-    ```py
+    
         for dim in range(3):
-    ```
-
-    ```py
+    
             x[:, :, dim] = (x[:, :, dim] * std[dim]) + mean[dim]
-    ```
-
-    ```py
+    
         return x
-    ```
-
-    ```py
+    
     plt.figure(figsize=(12, 6))
-    ```
-
-    ```py
+    
     images, labels = next(iter(train_dataloader))
-    ```
-
-    ```py
+    
     for idx in range(4):
-    ```
-
-    ```py
+    
         plt.subplot(2, 4, idx*2+1)
-    ```
-
-    ```py
+    
         plt.imshow(unnormalize(images[idx].permute(
-    ```
-
-    ```py
+    
             1, 2, 0).numpy(), mean, std))
-    ```
-
-    ```py
+    
         plt.axis('off')
-    ```
-
-    ```py
+    
         plt.subplot(2, 4, idx*2+2)
-    ```
-
-    ```py
+    
         plt.imshow(unnormalize(labels[idx].permute(
-    ```
-
-    ```py
+    
             1, 2, 0).numpy(), mean, std))
-    ```
-
-    ```py
+    
         plt.axis('off')
     ```
 
@@ -2027,29 +1531,17 @@ augment = A.ReplayCompose([
 
     ```py
     model = smp.UnetPlusPlus(
-    ```
-
-    ```py
+    
         encoder_name='timm-mobilenetv3_large_100',
-    ```
-
-    ```py
+    
         encoder_weights='imagenet',
-    ```
-
-    ```py
+    
         in_channels=3,
-    ```
-
-    ```py
+    
         classes=3,
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
     model = model.to(device)
     ```
 
@@ -2061,157 +1553,81 @@ augment = A.ReplayCompose([
 
     ```py
     class VGGPerceptualLoss(torch.nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self):
-    ```
-
-    ```py
+    
             super(VGGPerceptualLoss, self).__init__()
-    ```
-
-    ```py
+    
             blocks = []
-    ```
-
-    ```py
+    
             blocks.append(vgg16(weights=VGG16_Weights.DEFAULT).features[:4].eval())
-    ```
-
-    ```py
+    
             blocks.append(vgg16(weights=VGG16_Weights.DEFAULT).features[4:9].eval())
-    ```
-
-    ```py
+    
             blocks.append(vgg16(weights=VGG16_Weights.DEFAULT).features[9:16].eval())
-    ```
-
-    ```py
+    
             blocks.append(vgg16(weights=VGG16_Weights.DEFAULT).features[16:23].eval())
-    ```
-
-    ```py
+    
             for block in blocks:
-    ```
-
-    ```py
+    
                 block = block.to(device)
-    ```
-
-    ```py
+    
                 for param in block.parameters():
-    ```
-
-    ```py
+    
                     param.requires_grad = False
-    ```
-
-    ```py
+    
                 self.blocks = torch.nn.ModuleList(blocks)
-    ```
-
-    ```py
+    
                 self.transform = torch.nn.functional.interpolate
-    ```
-
-    ```py
+    
         def forward(self, input, target):
-    ```
-
-    ```py
+    
             input = self.transform(input, mode='bilinear',
-    ```
-
-    ```py
+    
                 size=(224, 224), align_corners=False)
-    ```
-
-    ```py
+    
                 target = self.transform(target,
-    ```
-
-    ```py
+    
                     mode='bilinear', size=(224, 224),
-    ```
-
-    ```py
+    
                     align_corners=False)
-    ```
-
-    ```py
+    
                 loss = 0.0
-    ```
-
-    ```py
+    
                 x = input
-    ```
-
-    ```py
+    
                 y = target
-    ```
-
-    ```py
+    
                 for i, block in enumerate(self.blocks):
-    ```
-
-    ```py
+    
                     x = block(x)
-    ```
-
-    ```py
+    
                     y = block(y)
-    ```
-
-    ```py
+    
                     loss += torch.nn.functional.l1_loss(
-    ```
-
-    ```py
+    
                         x, y)
-    ```
-
-    ```py
+    
                     act_x = x.reshape(x.shape[0],
-    ```
-
-    ```py
+    
                         x.shape[1], -1)
-    ```
-
-    ```py
+    
                     act_y = y.reshape(y.shape[0],
-    ```
-
-    ```py
+    
                         y.shape[1], -1)
-    ```
-
-    ```py
+    
                     gram_x = act_x @ act_x.permute(
-    ```
-
-    ```py
+    
                         0, 2, 1)
-    ```
-
-    ```py
+    
                     gram_y = act_y @ act_y.permute(
-    ```
-
-    ```py
+    
                         0, 2, 1)
-    ```
-
-    ```py
+    
                     loss += torch.nn.functional.l1_loss(
-    ```
-
-    ```py
+    
                         gram_x, gram_y)
-    ```
-
-    ```py
+    
             return loss
     ```
 
@@ -2225,25 +1641,15 @@ augment = A.ReplayCompose([
 
     ```py
     optimizer = torch.optim.Adam(model.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
-    ```
-
-    ```py
+    
     scheduler = ExponentialLR(optimizer, gamma=0.995)
-    ```
-
-    ```py
+    
     vgg_loss = VGGPerceptualLoss()
-    ```
-
-    ```py
+    
     content_loss_weight=1.
-    ```
-
-    ```py
+    
     style_loss_weight=5e-4
     ```
 
@@ -2255,41 +1661,23 @@ augment = A.ReplayCompose([
 
     ```py
     train_losses, test_losses = train_style_transfer(
-    ```
-
-    ```py
+    
         model,
-    ```
-
-    ```py
+    
         train_dataloader,
-    ```
-
-    ```py
+    
         test_dataloader,
-    ```
-
-    ```py
+    
         vgg_loss,
-    ```
-
-    ```py
+    
         content_loss_weight,
-    ```
-
-    ```py
+    
         style_loss_weight,
-    ```
-
-    ```py
+    
         device,
-    ```
-
-    ```py
+    
         epochs=50,
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -2307,25 +1695,15 @@ augment = A.ReplayCompose([
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('Loss')
-    ```
-
-    ```py
+    
     plt.xlabel('Epoch')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -2341,53 +1719,29 @@ augment = A.ReplayCompose([
 
     ```py
     images, labels = next(iter(test_dataloader))
-    ```
-
-    ```py
+    
     with torch.no_grad():
-    ```
-
-    ```py
+    
         outputs = model(images.to(device)).cpu()
-    ```
-
-    ```py
+    
     plt.figure(figsize=(12, 6))
-    ```
-
-    ```py
+    
     for idx in range(4):
-    ```
-
-    ```py
+    
         plt.subplot(2, 4, idx*2+1)
-    ```
-
-    ```py
+    
         plt.imshow(unnormalize(images[idx].permute(
-    ```
-
-    ```py
+    
             1, 2, 0).numpy(), mean, std))
-    ```
-
-    ```py
+    
         plt.axis('off')
-    ```
-
-    ```py
+    
         plt.subplot(2, 4, idx*2+2)
-    ```
-
-    ```py
+    
         plt.imshow(unnormalize(outputs[idx].permute(
-    ```
-
-    ```py
+    
             1, 2, 0).numpy(), mean, std).clip(0, 1))
-    ```
-
-    ```py
+    
         plt.axis('off')
     ```
 

@@ -173,165 +173,85 @@ CORS 策略是一组规则，指定哪些来源（域名或网站）允许访问
 
     ```py
     {
-    ```
-
-    ```py
+    
         "Version": "2012-10-17",
-    ```
-
-    ```py
+    
         "Statement": [
-    ```
-
-    ```py
+    
             {
-    ```
-
-    ```py
+    
                 "Sid": "BedrockConsole",
-    ```
-
-    ```py
+    
                 "Effect": "Allow",
-    ```
-
-    ```py
+    
                 "Action": [
-    ```
-
-    ```py
+    
                    "bedrock:CreateEvaluationJob",
-    ```
-
-    ```py
+    
                    "bedrock:GetEvaluationJob",
-    ```
-
-    ```py
+    
                    "bedrock:ListEvaluationJobs",
-    ```
-
-    ```py
+    
                    "bedrock:StopEvaluationJob",
-    ```
-
-    ```py
+    
                    "bedrock:GetCustomModel",
-    ```
-
-    ```py
+    
                    "bedrock:ListCustomModels",
-    ```
-
-    ```py
+    
                    "bedrock:CreateProvisionedModel
-    ```
-
-    ```py
+    
     Throughput",
-    ```
-
-    ```py
+    
                    "bedrock:UpdateProvisionedModel
-    ```
-
-    ```py
+    
     Throughput",
-    ```
-
-    ```py
+    
                    "bedrock:GetProvisionedModel
-    ```
-
-    ```py
+    
     Throughput",
-    ```
-
-    ```py
+    
                    "bedrock:ListProvisionedModel
-    ```
-
-    ```py
+    
     Throughputs",
-    ```
-
-    ```py
+    
                    "bedrock:ListTagsForResource",
-    ```
-
-    ```py
+    
                    "bedrock:UntagResource",
-    ```
-
-    ```py
+    
                    "bedrock:TagResource"
-    ```
-
-    ```py
+    
                 ],
-    ```
-
-    ```py
+    
                 "Resource": "*"
-    ```
-
-    ```py
+    
             },
-    ```
-
-    ```py
+    
             {
-    ```
-
-    ```py
+    
                 "Sid": "AllowConsoleS3AccessForModelEvaluation",
-    ```
-
-    ```py
+    
                 "Effect": "Allow",
-    ```
-
-    ```py
+    
                 "Action": [
-    ```
-
-    ```py
+    
                   "s3:GetObject",
-    ```
-
-    ```py
+    
                   "s3:GetBucketCORS",
-    ```
-
-    ```py
+    
                   "s3:ListBucket",
-    ```
-
-    ```py
+    
                   "s3:ListBucketVersions",
-    ```
-
-    ```py
+    
                   "s3:GetBucketLocation"
-    ```
-
-    ```py
+    
                 ],
-    ```
-
-    ```py
+    
                 "Resource": "*"
-    ```
-
-    ```py
+    
             }
-    ```
-
-    ```py
+    
         ]
-    ```
-
-    ```py
+    
     }
     ```
 
@@ -447,13 +367,9 @@ CORS 策略是一组规则，指定哪些来源（域名或网站）允许访问
 
     ```py
     {"prompt":"What is the process that converts raw materials into finished goods?", "category":"Manufacturing", "referenceResponse":"Manufacturing"}
-    ```
-
-    ```py
+    
     {"prompt":"What is the study of methods to improve workplace efficiency?", "category":"Manufacturing", "referenceResponse":"Industrial Engineering"}
-    ```
-
-    ```py
+    
     {"prompt":"What is the assembly of parts into a final product?", "category":"Manufacturing", "referenceResponse":"Assembly"}
     ```
 
@@ -817,9 +733,7 @@ Amazon EventBridge 提供了一种在近乎实时的情况下跟踪和响应事�
 1.  创建一个具有以下事件模式的 Amazon EventBridge 规则：
 
     ```py
-       ```
-
-    ```py
+       
 
     ```
 
@@ -845,9 +759,7 @@ Amazon EventBridge 提供了一种在近乎实时的情况下跟踪和响应事�
 
     ```py
 
-    ```
-
-    ```py
+    
     ```
 
 1.  将 SNS 主题设置为规则的目标。

@@ -63,9 +63,7 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     tokenizer = pipe.tokenizer
-    ```
-
-    ```py
+    
     text_encoder = pipe.text_encoder
     ```
 
@@ -73,25 +71,15 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     tokens = tokenizer(
-    ```
-
-    ```py
+    
         prompt,
-    ```
-
-    ```py
+    
         truncation = False,
-    ```
-
-    ```py
+    
         return_tensors = 'pt'
-    ```
-
-    ```py
+    
     )["input_ids"]
-    ```
-
-    ```py
+    
     print(len(tokens[0]))
     ```
 
@@ -121,9 +109,7 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     print(tokenizer._convert_id_to_token(49406))
-    ```
-
-    ```py
+    
     print(tokenizer._convert_id_to_token(49407))
     ```
 
@@ -131,9 +117,7 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     <|startoftext|>
-    ```
-
-    ```py
+    
     <|endoftext|>
     ```
 
@@ -159,13 +143,9 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     # step 1\. take out the tokenizer and text encoder
-    ```
-
-    ```py
+    
     tokenizer = pipe.tokenizer
-    ```
-
-    ```py
+    
     text_encoder = pipe.text_encoder
     ```
 
@@ -175,65 +155,35 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     # step 2\. encode whatever size prompt to tokens by setting 
-    ```
-
-    ```py
+    
     # truncation = False.
-    ```
-
-    ```py
+    
     tokens = tokenizer(
-    ```
-
-    ```py
+    
         prompt,
-    ```
-
-    ```py
+    
         truncation = False
-    ```
-
-    ```py
+    
     )["input_ids"]
-    ```
-
-    ```py
+    
     print("token length:", len(tokens))
-    ```
-
-    ```py
+    
     # step 2.2\. encode whatever size neg_prompt, 
-    ```
-
-    ```py
+    
     # padding it to the size of prompt.
-    ```
-
-    ```py
+    
     negative_ids = pipe.tokenizer(
-    ```
-
-    ```py
+    
         neg_prompt,
-    ```
-
-    ```py
+    
         truncation    = False,
-    ```
-
-    ```py
+    
         padding       = "max_length",
-    ```
-
-    ```py
+    
         max_length    = len(tokens)
-    ```
-
-    ```py
+    
     ).input_ids
-    ```
-
-    ```py
+    
     print("neg_token length:", len(negative_ids))
     ```
 
@@ -253,9 +203,7 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     tokens = tokens[1:-1]
-    ```
-
-    ```py
+    
     negative_ids = negative_ids[1:-1]
     ```
 
@@ -265,125 +213,65 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     # step 4\. Pop out the head 77 tokens, 
-    ```
-
-    ```py
+    
     # and encode the 77 tokens to embeddings.
-    ```
-
-    ```py
+    
     embeds,neg_embeds = [],[]
-    ```
-
-    ```py
+    
     chunk_size = 75
-    ```
-
-    ```py
+    
     bos = pipe.tokenizer.bos_token_id
-    ```
-
-    ```py
+    
     eos = pipe.tokenizer.eos_token_id
-    ```
-
-    ```py
+    
     for i in range(0, len(tokens), chunk_size):
-    ```
-
-    ```py
+    
     # Add the beginning and end token to the 75 chunked tokens to 
-    ```
-
-    ```py
+    
     # make a 77-token list
-    ```
-
-    ```py
+    
         sub_tokens = [bos] + tokens[i:i + chunk_size] + [eos]
-    ```
-
-    ```py
+    
     # text_encoder support torch.Size([1,x]) input tensor
-    ```
-
-    ```py
+    
     # that is why use [sub_tokens], 
-    ```
-
-    ```py
+    
     # instead of simply give sub_tokens.
-    ```
-
-    ```py
+    
         tensor_tokens = torch.tensor(
-    ```
-
-    ```py
+    
             [sub_tokens],
-    ```
-
-    ```py
+    
             dtype = torch.long,
-    ```
-
-    ```py
+    
             device = pipe.device
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         chunk_embeds = text_encoder(tensor_tokens)[0]
-    ```
-
-    ```py
+    
         embeds.append(chunk_embeds)
-    ```
-
-    ```py
+    
     # Add the begin and end token to the 75 chunked neg tokens to 
-    ```
-
-    ```py
+    
     # make a 77 token list
-    ```
-
-    ```py
+    
         sub_neg_tokens = [bos] + negative_ids[i:i + chunk_size] + \
-    ```
-
-    ```py
+    
             [eos]
-    ```
-
-    ```py
+    
         tensor_neg_tokens = torch.tensor(
-    ```
-
-    ```py
+    
             [sub_neg_tokens],
-    ```
-
-    ```py
+    
             dtype = torch.long,
-    ```
-
-    ```py
+    
             device = pipe.device
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         neg_chunk_embeds= text_encoder(tensor_neg_tokens)[0]
-    ```
-
-    ```py
+    
         neg_embeds.append(neg_chunk_embeds)
     ```
 
@@ -405,13 +293,9 @@ a photo (cat:1.5) and a dog driving an aircraft
 
     ```py
     # step 5\. Stack the embeddings to a [1,x,768] size torch tensor.
-    ```
-
-    ```py
+    
     prompt_embeds = torch.cat(embeds, dim = 1)
-    ```
-
-    ```py
+    
     prompt_neg_embeds = torch.cat(neg_embeds, dim = 1)
     ```
 
@@ -567,225 +451,115 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     def parse_prompt_attention(text):
-    ```
-
-    ```py
+    
         import re
-    ```
-
-    ```py
+    
         re_attention = re.compile(
-    ```
-
-    ```py
+    
             r"""
-    ```
-
-    ```py
+    
                 \\\(|\\\)|\\\[|\\]|\\\\|\\|\(|\[|:([+-]?[.\d]+)\)|
-    ```
-
-    ```py
+    
                 \)|]|[^\\()\[\]:]+|:
-    ```
-
-    ```py
+    
             """
-    ```
-
-    ```py
+    
             , re.X
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         re_break = re.compile(r"\s*\bBREAK\b\s*", re.S)
-    ```
-
-    ```py
+    
         res = []
-    ```
-
-    ```py
+    
         round_brackets = []
-    ```
-
-    ```py
+    
         square_brackets = []
-    ```
-
-    ```py
+    
         round_bracket_multiplier = 1.1
-    ```
-
-    ```py
+    
         square_bracket_multiplier = 1 / 1.1
-    ```
-
-    ```py
+    
         def multiply_range(start_position, multiplier):
-    ```
-
-    ```py
+    
             for p in range(start_position, len(res)):
-    ```
-
-    ```py
+    
                 res[p][1] *= multiplier
-    ```
-
-    ```py
+    
         for m in re_attention.finditer(text):
-    ```
-
-    ```py
+    
             text = m.group(0)
-    ```
-
-    ```py
+    
             weight = m.group(1)
-    ```
-
-    ```py
+    
             if text.startswith('\\'):
-    ```
-
-    ```py
+    
                 res.append([text[1:], 1.0])
-    ```
-
-    ```py
+    
             elif text == '(':
-    ```
-
-    ```py
+    
                 round_brackets.append(len(res))
-    ```
-
-    ```py
+    
             elif text == '[':
-    ```
-
-    ```py
+    
                 square_brackets.append(len(res))
-    ```
-
-    ```py
+    
             elif weight is not None and len(round_brackets) > 0:
-    ```
-
-    ```py
+    
                 multiply_range(round_brackets.pop(), float(weight))
-    ```
-
-    ```py
+    
             elif text == ')' and len(round_brackets) > 0:
-    ```
-
-    ```py
+    
                 multiply_range(round_brackets.pop(), \
-    ```
-
-    ```py
+    
                     round_bracket_multiplier)
-    ```
-
-    ```py
+    
             elif text == ']' and len(square_brackets) > 0:
-    ```
-
-    ```py
+    
                 multiply_range(square_brackets.pop(), \
-    ```
-
-    ```py
+    
                     square_bracket_multiplier)
-    ```
-
-    ```py
+    
             else:
-    ```
-
-    ```py
+    
                 parts = re.split(re_break, text)
-    ```
-
-    ```py
+    
                 for i, part in enumerate(parts):
-    ```
-
-    ```py
+    
                     if i > 0:
-    ```
-
-    ```py
+    
                         res.append(["BREAK", -1])
-    ```
-
-    ```py
+    
                     res.append([part, 1.0])
-    ```
-
-    ```py
+    
         for pos in round_brackets:
-    ```
-
-    ```py
+    
             multiply_range(pos, round_bracket_multiplier)
-    ```
-
-    ```py
+    
         for pos in square_brackets:
-    ```
-
-    ```py
+    
             multiply_range(pos, square_bracket_multiplier)
-    ```
-
-    ```py
+    
         if len(res) == 0:
-    ```
-
-    ```py
+    
             res = [["", 1.0]]
-    ```
-
-    ```py
+    
         # merge runs of identical weights
-    ```
-
-    ```py
+    
         i = 0
-    ```
-
-    ```py
+    
         while i + 1 < len(res):
-    ```
-
-    ```py
+    
             if res[i][1] == res[i + 1][1]:
-    ```
-
-    ```py
+    
                 res[i][0] += res[i + 1][0]
-    ```
-
-    ```py
+    
                 res.pop(i + 1)
-    ```
-
-    ```py
+    
             else:
-    ```
-
-    ```py
+    
                 i += 1
-    ```
-
-    ```py
+    
         return res
     ```
 
@@ -807,9 +581,7 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     tokens: [1,2,3...]
-    ```
-
-    ```py
+    
     weights: [1.0, 1.0, 1.0...]
     ```
 
@@ -817,109 +589,57 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     # step 2\. get prompts with weights
-    ```
-
-    ```py
+    
     # this function works for both prompt and negative prompt
-    ```
-
-    ```py
+    
     def get_prompts_tokens_with_weights(
-    ```
-
-    ```py
+    
         pipe: StableDiffusionPipeline,
-    ```
-
-    ```py
+    
         prompt: str
-    ```
-
-    ```py
+    
     ):
-    ```
-
-    ```py
+    
         texts_and_weights = parse_prompt_attention(prompt)
-    ```
-
-    ```py
+    
         text_tokens,text_weights = [],[]
-    ```
-
-    ```py
+    
         for word, weight in texts_and_weights:
-    ```
-
-    ```py
+    
             # tokenize and discard the starting and the ending token
-    ```
-
-    ```py
+    
             token = pipe.tokenizer(
-    ```
-
-    ```py
+    
                 word,
-    ```
-
-    ```py
+    
                 # so that tokenize whatever length prompt
-    ```
-
-    ```py
+    
                 truncation = False
-    ```
-
-    ```py
+    
             ).input_ids[1:-1]
-    ```
-
-    ```py
+    
             # the returned token is a 1d list: [320, 1125, 539, 320]
-    ```
-
-    ```py
+    
             # use merge the new tokens to the all tokens holder: 
-    ```
-
-    ```py
+    
             # text_tokens
-    ```
-
-    ```py
+    
             text_tokens = [*text_tokens,*token]
-    ```
-
-    ```py
+    
             # each token chunk will come with one weight, like ['red 
-    ```
-
-    ```py
+    
             # cat', 2.0]
-    ```
-
-    ```py
+    
             # need to expand the weight for each token.
-    ```
-
-    ```py
+    
             chunk_weights = [weight] * len(token)
-    ```
-
-    ```py
+    
             # append the weight back to the weight holder: text_
-    ```
-
-    ```py
+    
             # weights
-    ```
-
-    ```py
+    
             text_weights = [*text_weights, *chunk_weights]
-    ```
-
-    ```py
+    
         return text_tokens,text_weights
     ```
 
@@ -933,13 +653,9 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     prompt = "a (white) cat"
-    ```
-
-    ```py
+    
     tokens, weights = get_prompts_tokens_with_weights(pipe, prompt)
-    ```
-
-    ```py
+    
     print(tokens,weights)
     ```
 
@@ -971,37 +687,21 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     # encode "white" only
-    ```
-
-    ```py
+    
     white_token = 1579
-    ```
-
-    ```py
+    
     white_token_tensor = torch.tensor(
-    ```
-
-    ```py
+    
         [[white_token]],
-    ```
-
-    ```py
+    
         dtype = torch.long,
-    ```
-
-    ```py
+    
         device = pipe.device
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     white_embed = pipe.text_encoder(white_token_tensor)[0]
-    ```
-
-    ```py
+    
     print(white_embed[0][0])
     ```
 
@@ -1009,37 +709,21 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     # encode "white cat"
-    ```
-
-    ```py
+    
     white_token, cat_token = 1579, 2369
-    ```
-
-    ```py
+    
     white_cat_token_tensor = torch.tensor(
-    ```
-
-    ```py
+    
         [[white_token, cat_token]],
-    ```
-
-    ```py
+    
         dtype = torch.long,
-    ```
-
-    ```py
+    
         device = pipe.device
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     white_cat_embeds = pipe.text_encoder(white_cat_token_tensor)[0]
-    ```
-
-    ```py
+    
     print(white_cat_embeds[0][0])
     ```
 
@@ -1049,125 +733,65 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     # step 3\. padding tokens
-    ```
-
-    ```py
+    
     def pad_tokens_and_weights(
-    ```
-
-    ```py
+    
         token_ids: list,
-    ```
-
-    ```py
+    
         weights: list
-    ```
-
-    ```py
+    
     ):
-    ```
-
-    ```py
+    
         bos,eos = 49406,49407
-    ```
-
-    ```py
+    
         # this will be a 2d list
-    ```
-
-    ```py
+    
         new_token_ids = []
-    ```
-
-    ```py
+    
         new_weights   = []
-    ```
-
-    ```py
+    
         while len(token_ids) >= 75:
-    ```
-
-    ```py
+    
             # get the first 75 tokens
-    ```
-
-    ```py
+    
             head_75_tokens = [token_ids.pop(0) for _ in range(75)]
-    ```
-
-    ```py
+    
             head_75_weights = [weights.pop(0) for _ in range(75)]
-    ```
-
-    ```py
+    
             # extract token ids and weights
-    ```
-
-    ```py
+    
             temp_77_token_ids = [bos] + head_75_tokens + [eos]
-    ```
-
-    ```py
+    
             temp_77_weights   = [1.0] + head_75_weights + [1.0]
-    ```
-
-    ```py
+    
             # add 77 tokens and weights chunks to the holder list
-    ```
-
-    ```py
+    
             new_token_ids.append(temp_77_token_ids)
-    ```
-
-    ```py
+    
             new_weights.append(temp_77_weights)
-    ```
-
-    ```py
+    
         # padding the left
-    ```
-
-    ```py
+    
         if len(token_ids) > 0:
-    ```
-
-    ```py
+    
             padding_len = 75 - len(token_ids)
-    ```
-
-    ```py
+    
             padding_len = 0
-    ```
-
-    ```py
+    
             temp_77_token_ids = [bos] + token_ids + [eos] * \
-    ```
-
-    ```py
+    
                 padding_len + [eos]
-    ```
-
-    ```py
+    
             new_token_ids.append(temp_77_token_ids)
-    ```
-
-    ```py
+    
             temp_77_weights = [1.0] + weights   + [1.0] * \
-    ```
-
-    ```py
+    
                 padding_len + [1.0]
-    ```
-
-    ```py
+    
             new_weights.append(temp_77_weights)
-    ```
-
-    ```py
+    
         # return
-    ```
-
-    ```py
+    
         return new_token_ids, new_weights
     ```
 
@@ -1175,13 +799,9 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     t,w = pad_tokens_and_weights(tokens.copy(), weights.copy())
-    ```
-
-    ```py
+    
     print(t)
-    ```
-
-    ```py
+    
     print(w)
     ```
 
@@ -1195,9 +815,7 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     [[49406, 320, 1579, 2368, 49407]]
-    ```
-
-    ```py
+    
     [[1.0, 1.0, 1.1, 1.0, 1.0]]
     ```
 
@@ -1207,357 +825,181 @@ a \(word\) - use literal () characters in prompt
 
     ```py
     def get_weighted_text_embeddings(
-    ```
-
-    ```py
+    
         pipe: StableDiffusionPipeline,
-    ```
-
-    ```py
+    
         prompt : str      = "",
-    ```
-
-    ```py
+    
         neg_prompt: str   = ""
-    ```
-
-    ```py
+    
     ):
-    ```
-
-    ```py
+    
         eos = pipe.tokenizer.eos_token_id
-    ```
-
-    ```py
+    
         prompt_tokens, prompt_weights = \ 
-    ```
-
-    ```py
+    
             get_prompts_tokens_with_weights(
-    ```
-
-    ```py
+    
             pipe, prompt
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         neg_prompt_tokens, neg_prompt_weights = \
-    ```
-
-    ```py
+    
             get_prompts_tokens_with_weights(pipe, neg_prompt)
-    ```
-
-    ```py
+    
         # padding the shorter one
-    ```
-
-    ```py
+    
         prompt_token_len        = len(prompt_tokens)
-    ```
-
-    ```py
+    
         neg_prompt_token_len    = len(neg_prompt_tokens)
-    ```
-
-    ```py
+    
         if prompt_token_len > neg_prompt_token_len:
-    ```
-
-    ```py
+    
             # padding the neg_prompt with eos token
-    ```
-
-    ```py
+    
             neg_prompt_tokens   = (
-    ```
-
-    ```py
+    
                 neg_prompt_tokens  + \
-    ```
-
-    ```py
+    
                 [eos] * abs(prompt_token_len - neg_prompt_token_len)
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             neg_prompt_weights  = (
-    ```
-
-    ```py
+    
                 neg_prompt_weights +
-    ```
-
-    ```py
+    
                 [1.0] * abs(prompt_token_len - neg_prompt_token_len)
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
         else:
-    ```
-
-    ```py
+    
             # padding the prompt
-    ```
-
-    ```py
+    
             prompt_tokens       = (
-    ```
-
-    ```py
+    
                 prompt_tokens \
-    ```
-
-    ```py
+    
                 + [eos] * abs(prompt_token_len - \
-    ```
-
-    ```py
+    
                 neg_prompt_token_len)
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             prompt_weights      = (
-    ```
-
-    ```py
+    
                 prompt_weights \
-    ```
-
-    ```py
+    
                 + [1.0] * abs(prompt_token_len - \
-    ```
-
-    ```py
+    
                 neg_prompt_token_len)
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
         embeds = []
-    ```
-
-    ```py
+    
         neg_embeds = []
-    ```
-
-    ```py
+    
         prompt_token_groups ,prompt_weight_groups = \
-    ```
-
-    ```py
+    
             pad_tokens_and_weights(
-    ```
-
-    ```py
+    
                 prompt_tokens.copy(),
-    ```
-
-    ```py
+    
                 prompt_weights.copy()
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         neg_prompt_token_groups, neg_prompt_weight_groups = \
-    ```
-
-    ```py
+    
             pad_tokens_and_weights(
-    ```
-
-    ```py
+    
                 neg_prompt_tokens.copy(),
-    ```
-
-    ```py
+    
                 neg_prompt_weights.copy()
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
         # get prompt embeddings one by one is not working.
-    ```
-
-    ```py
+    
         for i in range(len(prompt_token_groups)):
-    ```
-
-    ```py
+    
             # get positive prompt embeddings with weights
-    ```
-
-    ```py
+    
             token_tensor = torch.tensor(
-    ```
-
-    ```py
+    
                 [prompt_token_groups[i]],
-    ```
-
-    ```py
+    
                 dtype = torch.long, device = pipe.device
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             weight_tensor = torch.tensor(
-    ```
-
-    ```py
+    
                 prompt_weight_groups[i],
-    ```
-
-    ```py
+    
                 dtype     = torch.float16,
-    ```
-
-    ```py
+    
                 device    = pipe.device
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             token_embedding = \
-    ```
-
-    ```py
+    
                 pipe.text_encoder(token_tensor)[0].squeeze(0)
-    ```
-
-    ```py
+    
             for j in range(len(weight_tensor)):
-    ```
-
-    ```py
+    
                 token_embedding[j] = token_embedding[j] * 
-    ```
-
-    ```py
+    
                     weight_tensor[j]
-    ```
-
-    ```py
+    
             token_embedding = token_embedding.unsqueeze(0)
-    ```
-
-    ```py
+    
             embeds.append(token_embedding)
-    ```
-
-    ```py
+    
             # get negative prompt embeddings with weights
-    ```
-
-    ```py
+    
             neg_token_tensor = torch.tensor(
-    ```
-
-    ```py
+    
                 [neg_prompt_token_groups[i]],
-    ```
-
-    ```py
+    
                 dtype = torch.long, device = pipe.device
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             neg_weight_tensor = torch.tensor(
-    ```
-
-    ```py
+    
                 neg_prompt_weight_groups[i],
-    ```
-
-    ```py
+    
                 dtype     = torch.float16,
-    ```
-
-    ```py
+    
                 device    = pipe.device
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             neg_token_embedding = \
-    ```
-
-    ```py
+    
                 pipe.text_encoder(neg_token_tensor)[0].squeeze(0)
-    ```
-
-    ```py
+    
             for z in range(len(neg_weight_tensor)):
-    ```
-
-    ```py
+    
                 neg_token_embedding[z] = (
-    ```
-
-    ```py
+    
                     neg_token_embedding[z] * neg_weight_tensor[z]
-    ```
-
-    ```py
+    
                 )
-    ```
-
-    ```py
+    
             neg_token_embedding = neg_token_embedding.unsqueeze(0)
-    ```
-
-    ```py
+    
             neg_embeds.append(neg_token_embedding)
-    ```
-
-    ```py
+    
         prompt_embeds       = torch.cat(embeds, dim = 1)
-    ```
-
-    ```py
+    
         neg_prompt_embeds   = torch.cat(neg_embeds, dim = 1)
-    ```
-
-    ```py
+    
         return prompt_embeds, neg_prompt_embeds
     ```
 
@@ -1614,33 +1056,19 @@ image
 
     ```py
     from diffusers import DiffusionPipeline
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     model_id_or_path = "stablediffusionapi/deliberate-v2"
-    ```
-
-    ```py
+    
     pipe = DiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         model_id_or_path,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         custom_pipeline = "lpw_stable_diffusion"
-    ```
-
-    ```py
+    
     ).to("cuda:0")
     ```
 
@@ -1650,37 +1078,21 @@ image
 
     ```py
     prompt = "photo, cute cat running on the grass" * 10
-    ```
-
-    ```py
+    
     prompt = prompt + ",pure (white:1.5) cat" * 10
-    ```
-
-    ```py
+    
     neg_prompt = "low resolution, bad anatomy"
-    ```
-
-    ```py
+    
     image = pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 
@@ -1692,33 +1104,19 @@ image
 
     ```py
     from diffusers import DiffusionPipeline
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     model_id_or_path = "stabilityai/stable-diffusion-xl-base-1.0"
-    ```
-
-    ```py
+    
     pipe = DiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         model_id_or_path,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         custom_pipeline = "lpw_stable_diffusion_xl",
-    ```
-
-    ```py
+    
     ).to("cuda:0")
     ```
 
@@ -1726,37 +1124,21 @@ image
 
     ```py
     prompt = "photo, cute cat running on the grass" * 10
-    ```
-
-    ```py
+    
     prompt = prompt + ",pure (white:1.5) cat" * 10
-    ```
-
-    ```py
+    
     neg_prompt = "low resolution, bad anatomy"
-    ```
-
-    ```py
+    
     image = pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(7)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 

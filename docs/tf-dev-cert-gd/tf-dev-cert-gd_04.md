@@ -144,25 +144,15 @@ F1 分数 = 2 *  0.4 * 0.5 _ (0.4 + 0.5)  = 0.44
 
     ```py
     # import tensorflow
-    ```
-
-    ```py
+    
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow import keras
-    ```
-
-    ```py
+    
     from tensorflow.keras import Sequential
-    ```
-
-    ```py
+    
     from tensorflow.keras.layers import Dense
-    ```
-
-    ```py
+    
     print(tf.__version__)
     ```
 
@@ -176,49 +166,27 @@ F1 分数 = 2 *  0.4 * 0.5 _ (0.4 + 0.5)  = 0.44
 
     ```py
     #import additional libraries
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     # For visualizations
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     import seaborn as sns
-    ```
-
-    ```py
+    
     #for splitting the data into training and test set
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     # For Normalization
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import MinMaxScaler
-    ```
-
-    ```py
+    
     # Confusion matrix
-    ```
-
-    ```py
+    
     from sklearn.metrics import confusion_matrix, classification_report
     ```
 
@@ -228,13 +196,9 @@ F1 分数 = 2 *  0.4 * 0.5 _ (0.4 + 0.5)  = 0.44
 
     ```py
     #Loading data from the course GitHub repository
-    ```
-
-    ```py
+    
     df=pd.read_csv('https://raw.githubusercontent.com/PacktPublishing/TensorFlow-Developer-Certificate/main/Chapter%204/Students-Dropout-Prediction.csv', index_col=0)
-    ```
-
-    ```py
+    
     df.head()
     ```
 
@@ -276,9 +240,7 @@ F1 分数 = 2 *  0.4 * 0.5 _ (0.4 + 0.5)  = 0.44
 
     ```py
     plt.hist(df['Graduated'])
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -292,21 +254,13 @@ F1 分数 = 2 *  0.4 * 0.5 _ (0.4 + 0.5)  = 0.44
 
     ```py
     sns.set(style="darkgrid")
-    ```
-
-    ```py
+    
     tdc =sns.scatterplot(x ='Library', y ='GPA',
-    ```
-
-    ```py
+    
         data = df, hue ='Graduated')
-    ```
-
-    ```py
+    
     tdc.legend(loc='center left',
-    ```
-
-    ```py
+    
         bbox_to_anchor=(1.0, 0.5), ncol=1)
     ```
 
@@ -335,13 +289,9 @@ len(df[(df['GPA']>=3.50)&(df['Graduated']=="Drop out")])
 
     ```py
     #Replace the classes in the graduate column
-    ```
-
-    ```py
+    
     df['Graduated'] = df['Graduated'].replace(
-    ```
-
-    ```py
+    
         ['Graduated', 'Drop out'],[1,0])
     ```
 
@@ -365,13 +315,9 @@ len(df[(df['GPA']>=3.50)&(df['Graduated']=="Drop out")])
 
     ```py
     #Converting categorical variables to numeric values
-    ```
-
-    ```py
+    
     df = pd.get_dummies(df, drop_first=True)
-    ```
-
-    ```py
+    
     df.head()
     ```
 
@@ -385,13 +331,9 @@ len(df[(df['GPA']>=3.50)&(df['Graduated']=="Drop out")])
 
     ```py
     tagret_corr= df.corr()
-    ```
-
-    ```py
+    
     tagret_corr
-    ```
-
-    ```py
+    
     tagret_corr['Graduated'].sort_values(ascending=False)
     ```
 
@@ -405,13 +347,9 @@ len(df[(df['GPA']>=3.50)&(df['Graduated']=="Drop out")])
 
     ```py
     # We split the attributes and labels into X and y variables
-    ```
-
-    ```py
+    
     X = df.drop("Graduated", axis=1)
-    ```
-
-    ```py
+    
     y = df["Graduated"]
     ```
 
@@ -419,25 +357,15 @@ len(df[(df['GPA']>=3.50)&(df['Graduated']=="Drop out")])
 
     ```py
     # create a scaler object
-    ```
-
-    ```py
+    
     scaler = MinMaxScaler()
-    ```
-
-    ```py
+    
     # fit and transform the data
-    ```
-
-    ```py
+    
     X_norm = pd.DataFrame(scaler.fit_transform(X),
-    ```
-
-    ```py
+    
         columns=X.columns)
-    ```
-
-    ```py
+    
     X_norm.head()
     ```
 

@@ -114,9 +114,7 @@ wget https://github.com/PacktPublishing/The-Regularization-Cookbook/blob/main/ch
 
     ```py
     # Load the data as a DataFrame
-    ```
-
-    ```py
+    
     df = pd.read_csv('train.csv')
     ```
 
@@ -126,9 +124,7 @@ wget https://github.com/PacktPublishing/The-Regularization-Cookbook/blob/main/ch
 
     ```py
     # Display the first 5 rows of the dataset
-    ```
-
-    ```py
+    
     df.head()
     ```
 
@@ -277,29 +273,17 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     # Import the train_test_split function
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     # Split the data
-    ```
-
-    ```py
+    
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         df.drop(columns=['Survived']), df['Survived'],
-    ```
-
-    ```py
+    
         test_size=0.2, stratify=df['Survived'],
-    ```
-
-    ```py
+    
         random_state=0)
     ```
 
@@ -363,9 +347,7 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     from sklearn.impute import SimpleImputer
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import StandardScaler
     ```
 
@@ -373,17 +355,11 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     quanti_columns = ['Pclass', 'Age', 'Fare', 'SibSp', 'Parch']
-    ```
-
-    ```py
+    
     # Get the quantitative columns
-    ```
-
-    ```py
+    
     X_train_quanti = X_train[quanti_columns]
-    ```
-
-    ```py
+    
     X_test_quanti = X_test[quanti_columns]
     ```
 
@@ -391,9 +367,7 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     # Impute missing quantitative values with mean feature value
-    ```
-
-    ```py
+    
     quanti_imputer = SimpleImputer(strategy='mean')
     ```
 
@@ -401,17 +375,11 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     # Fit and impute the training set
-    ```
-
-    ```py
+    
     X_train_quanti = quanti_imputer.fit_transform(X_train_quanti)
-    ```
-
-    ```py
+    
     # Just impute the test set
-    ```
-
-    ```py
+    
     X_test_quanti = quanti_imputer.transform(X_test_quanti)
     ```
 
@@ -419,9 +387,7 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     # Instantiate the standard scaler
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
     ```
 
@@ -429,17 +395,11 @@ pandas 库允许执行具有不同输入类型的 I/O 操作。欲了解更多�
 
     ```py
     # Fit and transform the training set
-    ```
-
-    ```py
+    
     X_train_quanti = scaler.fit_transform(X_train_quanti)
-    ```
-
-    ```py
+    
     # Just transform the test set
-    ```
-
-    ```py
+    
     X_test_quanti = scaler.transform(X_test_quanti)
     ```
 
@@ -506,13 +466,9 @@ scikit-learn 中有几种可用的填充器。完整列表请见这里：[`sciki
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     from sklearn.impute import SimpleImputer
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import OneHotEncoder
     ```
 
@@ -520,17 +476,11 @@ scikit-learn 中有几种可用的填充器。完整列表请见这里：[`sciki
 
     ```py
     quali_columns = ['Sex', 'Embarked']
-    ```
-
-    ```py
+    
     # Get the quantitative columns
-    ```
-
-    ```py
+    
     X_train_quali = X_train[quali_columns]
-    ```
-
-    ```py
+    
     X_test_quali = X_test[quali_columns]
     ```
 
@@ -538,9 +488,7 @@ scikit-learn 中有几种可用的填充器。完整列表请见这里：[`sciki
 
     ```py
     # Impute missing qualitative values with most frequent feature value
-    ```
-
-    ```py
+    
     quali_imputer =SimpleImputer(strategy='most_frequent')
     ```
 
@@ -548,17 +496,11 @@ scikit-learn 中有几种可用的填充器。完整列表请见这里：[`sciki
 
     ```py
     # Fit and impute the training set
-    ```
-
-    ```py
+    
     X_train_quali = quali_imputer.fit_transform(X_train_quali)
-    ```
-
-    ```py
+    
     # Just impute the test set
-    ```
-
-    ```py
+    
     X_test_quali = quali_imputer.transform(X_test_quali)
     ```
 
@@ -580,17 +522,11 @@ scikit-learn 中有几种可用的填充器。完整列表请见这里：[`sciki
 
     ```py
     # Fit and transform the training set
-    ```
-
-    ```py
+    
     X_train_quali = encoder.fit_transform(X_train_quali).toarray()
-    ```
-
-    ```py
+    
     # Just encode the test set
-    ```
-
-    ```py
+    
     X_test_quali = encoder.transform(X_test_quali).toarray()
     ```
 
@@ -602,17 +538,11 @@ scikit-learn 中有几种可用的填充器。完整列表请见这里：[`sciki
 
     ```py
     # Concatenate the data back together
-    ```
-
-    ```py
+    
     X_train = np.concatenate([X_train_quanti,
-    ```
-
-    ```py
+    
         X_train_quali], axis=1)
-    ```
-
-    ```py
+    
     X_test = np.concatenate([X_test_quanti, X_test_quali], axis=1)
     ```
 
@@ -706,9 +636,7 @@ pickle.dump((X_train, X_test, y_train, y_test),
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     lr = LogisticRegression()
     ```
 
@@ -716,9 +644,7 @@ pickle.dump((X_train, X_test, y_train, y_test),
 
     ```py
     # Fit on the training data
-    ```
-
-    ```py
+    
     lr.fit(X_train, y_train)
     ```
 
@@ -726,9 +652,7 @@ pickle.dump((X_train, X_test, y_train, y_test),
 
     ```py
     # Compute and store predictions on the test data
-    ```
-
-    ```py
+    
     y_pred = lr.predict(X_test)
     ```
 
@@ -900,33 +824,19 @@ param_grid = { 'C': [0.01, 0.03, 0.1] }
 
     ```py
     # Instantiate the grid search object
-    ```
-
-    ```py
+    
     grid = GridSearchCV(
-    ```
-
-    ```py
+    
         LogisticRegression(),
-    ```
-
-    ```py
+    
         param_grid,
-    ```
-
-    ```py
+    
         scoring='accuracy',
-    ```
-
-    ```py
+    
         cv=5,
-    ```
-
-    ```py
+    
         return_train_score=True
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -934,21 +844,13 @@ param_grid = { 'C': [0.01, 0.03, 0.1] }
 
     ```py
     # Fit and wait
-    ```
-
-    ```py
+    
     grid.fit(X_train, y_train)
-    ```
-
-    ```py
+    
     GridSearchCV(cv=5, estimator=LogisticRegression(),
-    ```
-
-    ```py
+    
         param_grid={'C': [0.01, 0.03, 0.1]},
-    ```
-
-    ```py
+    
         return_train_score=True, scoring='accuracy')
     ```
 
@@ -974,9 +876,7 @@ param_grid = { 'C': [0.01, 0.03, 0.1] }
 
     ```py
     print('Hyperparameter optimized accuracy:',
-    ```
-
-    ```py
+    
         accuracy_score(y_pred, y_test))
     ```
 

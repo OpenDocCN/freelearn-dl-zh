@@ -98,9 +98,7 @@
 
     ```py
     # Load the Iris dataset
-    ```
-
-    ```py
+    
     X, y = load_iris(return_X_y=True)
     ```
 
@@ -108,13 +106,9 @@
 
     ```py
     # Split the data
-    ```
-
-    ```py
+    
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X, y, random_state=0)
     ```
 
@@ -122,17 +116,11 @@
 
     ```py
     # Rescale the data
-    ```
-
-    ```py
+    
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -146,21 +134,13 @@
 
     ```py
     # Print the R2-score on train and test
-    ```
-
-    ```py
+    
     print('R2-score on train set:',
-    ```
-
-    ```py
+    
         perc.score(X_train, y_train))
-    ```
-
-    ```py
+    
     print('R2-score on test set:',
-    ```
-
-    ```py
+    
         perc.score(X_test, y_test))
     ```
 
@@ -175,9 +155,7 @@ R2-score on test set: 0.8421052631578947
 
     ```py
     print('weights:', perc.coef_)
-    ```
-
-    ```py
+    
     print('bias:', perc.intercept_)
     ```
 
@@ -381,21 +359,13 @@ pip install torch
 
     ```py
     from sklearn.datasets import fetch_california_housing
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import StandardScaler
-    ```
-
-    ```py
+    
     from sklearn.metrics import r2_score
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
     ```
 
@@ -435,13 +405,9 @@ pip install torch
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X.astype(np.float32), y.astype(np.float32),
-    ```
-
-    ```py
+    
            test_size=0.2, random_state=0)
     ```
 
@@ -449,13 +415,9 @@ pip install torch
 
     ```py
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -504,33 +466,19 @@ class CaliforniaDataset(Dataset):
 
     ```py
     # Instantiate datasets
-    ```
-
-    ```py
+    
     training_data = CaliforniaDataset(X_train, y_train)
-    ```
-
-    ```py
+    
     test_data = CaliforniaDataset(X_test, y_test)
-    ```
-
-    ```py
+    
     # Instantiate data loaders
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(training_data,
-    ```
-
-    ```py
+    
         batch_size=64, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_data, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -642,25 +590,15 @@ class CaliforniaDataset(Dataset):
 
     ```py
     # Instantiate the network
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1])
-    ```
-
-    ```py
+    
     # Generate one random sample of 8 features
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, X_train.shape[1]))
-    ```
-
-    ```py
+    
     # Compute the forward
-    ```
-
-    ```py
+    
     propagationprint(net(random_data))
     ```
 
@@ -676,9 +614,7 @@ tensor([[-0.0003]], grad_fn=<AddmmBackward0>)
 
     ```py
     criterion = nn.MSELoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     ```
 
@@ -690,113 +626,59 @@ tensor([[-0.0003]], grad_fn=<AddmmBackward0>)
 
     ```py
     losses = []
-    ```
-
-    ```py
+    
     # Loop over the dataset multiple times
-    ```
-
-    ```py
+    
     for epoch in range(10):
-    ```
-
-    ```py
+    
         # Reset the loss for this epoch
-    ```
-
-    ```py
+    
         running_loss = 0.
-    ```
-
-    ```py
+    
         For I, data in enumerate(train_dataloader, 0):
-    ```
-
-    ```py
+    
             # Get the inputs per batch: data is a list of [inputs, labels]
-    ```
-
-    ```py
+    
             inputs, labels = data
-    ```
-
-    ```py
+    
             # Zero the parameter gradients
-    ```
-
-    ```py
+    
             optimizer.zero_grad()
-    ```
-
-    ```py
+    
             # Forward propagate + backward + optimize
-    ```
-
-    ```py
+    
             outputs = net(inputs)
-    ```
-
-    ```py
+    
             # Unsqueeze for dimension matching
-    ```
-
-    ```py
+    
             labels = labels.unsqueeze(1)
-    ```
-
-    ```py
+    
             # Compute the loss
-    ```
-
-    ```py
+    
             Loss = criterion(outputs, labels)
-    ```
-
-    ```py
+    
             # Backpropagate and update the weights
-    ```
-
-    ```py
+    
             loss.backward()
-    ```
-
-    ```py
+    
             optimizer.step()
-    ```
-
-    ```py
+    
             # Add this loss to the running loss
-    ```
-
-    ```py
+    
             running_loss += loss.item()
-    ```
-
-    ```py
+    
          # Compute the loss for this epoch and add it to the list
-    ```
-
-    ```py
+    
         epoch_loss = running_loss / len(
-    ```
-
-    ```py
+    
             train_dataloader)
-    ```
-
-    ```py
+    
         losses.append(epoch_loss)
-    ```
-
-    ```py
+    
         # Print the epoch and training loss
-    ```
-
-    ```py
+    
         print(f'[epoch {epoch + 1}] loss: {
-    ```
-
-    ```py
+    
             epoch_loss:.3f}')print('Finished Training')
     ```
 
@@ -822,13 +704,9 @@ tensor([[-0.0003]], grad_fn=<AddmmBackward0>)
 
     ```py
     plt.plot(losses)
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (MSE)')plt.show()
     ```
 
@@ -846,45 +724,25 @@ tensor([[-0.0003]], grad_fn=<AddmmBackward0>)
 
     ```py
     # Compute the predictions with the trained neural
-    ```
-
-    ```py
+    
     Network
-    ```
-
-    ```py
+    
     y_train_pred = net(torch.tensor((
-    ```
-
-    ```py
+    
         X_train))).detach().numpy()
-    ```
-
-    ```py
+    
     y_test_pred = net(torch.tensor((
-    ```
-
-    ```py
+    
         X_test))).detach().numpy()
-    ```
-
-    ```py
+    
     # Compute the R2-score
-    ```
-
-    ```py
+    
     print('R2-score on training set:',
-    ```
-
-    ```py
+    
         r2_score(y_train, y_train_pred))
-    ```
-
-    ```py
+    
     print('R2-score on test set:',
-    ```
-
-    ```py
+    
         r2_score(y_test, y_test_pred))
     ```
 
@@ -1016,33 +874,19 @@ plt.show()
 
     ```py
     from sklearn.datasets import load_breast_cancer
-    ```
-
-    ```py
+    
     from sklearn.model_selection import train_test_split
-    ```
-
-    ```py
+    
     from sklearn.preprocessing import StandardScaler
-    ```
-
-    ```py
+    
     from sklearn.metrics import accuracy_score
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     import torchimport torch.nn as nn
-    ```
-
-    ```py
+    
     import torch.nn.functional as F
-    ```
-
-    ```py
+    
     from torch.utils.data import Dataset, DataLoader
     ```
 
@@ -1056,13 +900,9 @@ plt.show()
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X.astype(np.float32), y.astype(np.float32),
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0)
     ```
 
@@ -1070,61 +910,33 @@ plt.show()
 
     ```py
     class BreastCancerDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, X: np.array, y: np.array,
-    ```
-
-    ```py
+    
             x_scaler: StandardScaler = None):
-    ```
-
-    ```py
+    
                 if x_scaler is None:
-    ```
-
-    ```py
+    
                     self.x_scaler = StandardScaler()
-    ```
-
-    ```py
+    
                     X = self.x_scaler.fit_transform(X)
-    ```
-
-    ```py
+    
                 else:
-    ```
-
-    ```py
+    
                     self.x_scaler = x_scaler
-    ```
-
-    ```py
+    
                     X = self.x_scaler.transform(X)
-    ```
-
-    ```py
+    
                 self.X = torch.from_numpy(X)
-    ```
-
-    ```py
+    
                 self.y = torch.from_numpy(y)
-    ```
-
-    ```py
+    
         def __len__(self) -> int:
-    ```
-
-    ```py
+    
             return len(self.X)
-    ```
-
-    ```py
+    
         def __getitem__(self, idx: int) -> tuple[torch.Tensor]:
-    ```
-
-    ```py
+    
             return self.X[idx], self.y[idx]
     ```
 
@@ -1136,29 +948,17 @@ plt.show()
 
     ```py
     training_data = BreastCancerDataset(X_train, y_train)
-    ```
-
-    ```py
+    
     test_data = BreastCancerDataset(X_test, y_test,
-    ```
-
-    ```py
+    
         training_data.x_scaler)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(training_data,
-    ```
-
-    ```py
+    
         batch_size=64, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_data, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -1166,77 +966,41 @@ plt.show()
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
             hidden_units: int = 24):
-    ```
-
-    ```py
+    
                 super(Net, self).__init__()
-    ```
-
-    ```py
+    
                     self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
                     self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                         self.hidden_units)
-    ```
-
-    ```py
+    
                     self.fc2 = nn.Linear(
-    ```
-
-    ```py
+    
                         self.hidden_units,
-    ```
-
-    ```py
+    
                         self.hidden_units)
-    ```
-
-    ```py
+    
                     self.output = nn.Linear(
-    ```
-
-    ```py
+    
                         self.hidden_units, 1)
-    ```
-
-    ```py
+    
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-    ```
-
-    ```py
+    
             x = self.fc1(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.fc2(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             output = torch.sigmoid(self.output(x))
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -1244,25 +1008,15 @@ plt.show()
 
     ```py
     # Instantiate the network
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1])
-    ```
-
-    ```py
+    
     # Generate one random sample
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, X_train.shape[1]))
-    ```
-
-    ```py
+    
     # Compute the forward propagation
-    ```
-
-    ```py
+    
     print(net(random_data))
     ```
 
@@ -1276,13 +1030,9 @@ tensor([[0.4487]], grad_fn=<SigmoidBackward0>)
 
     ```py
     criterion = nn.BCELoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
     ```
 
@@ -1504,21 +1254,13 @@ tensor([[0.4487]], grad_fn=<SigmoidBackward0>)
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')plt.ylabel('loss (BCE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1718,29 +1460,17 @@ PyTorch 上可用的优化器列表：[`pytorch.org/docs/stable/optim.xhtml#algo
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     import torch.nn as nn
-    ```
-
-    ```py
+    
     import torch.nn.functional as F
-    ```
-
-    ```py
+    
     from torch.utils.data import DataLoader
-    ```
-
-    ```py
+    
     from torchvision.datasets import MNIST
-    ```
-
-    ```py
+    
     import torchvision.transforms as transforms
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
     ```
 
@@ -1772,33 +1502,19 @@ PyTorch 上可用的优化器列表：[`pytorch.org/docs/stable/optim.xhtml#algo
 
     ```py
     trainset = MNIST('./data', train=True, download=True,
-    ```
-
-    ```py
+    
         transform=transform)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(trainset, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
-    ```
-
-    ```py
+    
     testset = MNIST('./data', train=False, download=True,
-    ```
-
-    ```py
+    
         transform=transform)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(testset, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -1806,85 +1522,45 @@ PyTorch 上可用的优化器列表：[`pytorch.org/docs/stable/optim.xhtml#algo
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
             hidden_units: int = 24):
-    ```
-
-    ```py
+    
                 super(Net, self).__init__()
-    ```
-
-    ```py
+    
                 self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
                 self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc2 = nn.Linear(
-    ```
-
-    ```py
+    
                     self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.output = nn.Linear(
-    ```
-
-    ```py
+    
                     self.hidden_units, 10)
-    ```
-
-    ```py
+    
         def forward(self,
-    ```
-
-    ```py
+    
             x: torch.Tensor) -> torch.Tensor:
-    ```
-
-    ```py
+    
                 x = self.fc1(x)
-    ```
-
-    ```py
+    
                 x = F.relu(x)
-    ```
-
-    ```py
+    
                 x = self.fc2(x)
-    ```
-
-    ```py
+    
                 x = F.relu(x)
-    ```
-
-    ```py
+    
                 output = torch.softmax(self.output(x),
-    ```
-
-    ```py
+    
                     dim=1)
-    ```
-
-    ```py
+    
                 return output
     ```
 
@@ -1892,29 +1568,17 @@ PyTorch 上可用的优化器列表：[`pytorch.org/docs/stable/optim.xhtml#algo
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     net = Net(784)
-    ```
-
-    ```py
+    
     # Generate randomly one random 28x28 image as a 784 values tensor
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, 784))
-    ```
-
-    ```py
+    
     result = net(random_data)
-    ```
-
-    ```py
+    
     print('Resulting output tensor:', result)
-    ```
-
-    ```py
+    
     print('Sum of the output tensor:', result.sum())
     ```
 
@@ -1932,13 +1596,9 @@ Resulting output tensor: tensor([[0.0918, 0.0960, 0.0924, 0.0945, 0.0931, 0.0745
 
     ```py
     criterion = nn.CrossEntropyLoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
     ```
 
@@ -1946,85 +1606,45 @@ Resulting output tensor: tensor([[0.0918, 0.0960, 0.0924, 0.0945, 0.0931, 0.0745
 
     ```py
     def epoch_step(net, dataloader, training_set: bool):
-    ```
-
-    ```py
+    
         running_loss = 0.
-    ```
-
-    ```py
+    
         Correct = 0.
-    ```
-
-    ```py
+    
         For i, data in enumerate(dataloader, 0):
-    ```
-
-    ```py
+    
             # Get the inputs: data is a list of [inputs, labels]
-    ```
-
-    ```py
+    
             inputs, labels = data
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 # Zero the parameter gradients
-    ```
-
-    ```py
+    
                 optimizer.zero_grad()
-    ```
-
-    ```py
+    
                 # Forward + backward + optimize
-    ```
-
-    ```py
+    
                 outputs = net(inputs)
-    ```
-
-    ```py
+    
                 loss = criterion(outputs, labels)
-    ```
-
-    ```py
+    
                 if training_set:
-    ```
-
-    ```py
+    
                     loss.backward()
-    ```
-
-    ```py
+    
                     optimizer.step()
-    ```
-
-    ```py
+    
                 # Add correct predictions for this batch
-    ```
-
-    ```py
+    
                 correct += (outputs.argmax(
-    ```
-
-    ```py
+    
                     dim=1) == labels).float().sum()
-    ```
-
-    ```py
+    
                 # Compute loss for this batch
-    ```
-
-    ```py
+    
                 running_loss += loss.item()
-    ```
-
-    ```py
+    
         return running_loss, correct
     ```
 
@@ -2074,17 +1694,11 @@ print('Finished Training')
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()plt.show()
     ```
 
@@ -2100,17 +1714,11 @@ print('Finished Training')
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')plt.legend()plt.show()
     ```
 

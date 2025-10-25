@@ -240,117 +240,61 @@ except:
 
     ```py
     name: CI/CD Pipeline
-    ```
-
-    ```py
+    
     on:
-    ```
-
-    ```py
+    
       push:
-    ```
-
-    ```py
+    
         branches:
-    ```
-
-    ```py
+    
           - main
-    ```
-
-    ```py
+    
     jobs:
-    ```
-
-    ```py
+    
       build-and-test:
-    ```
-
-    ```py
+    
         runs-on: ubuntu-latest
-    ```
-
-    ```py
+    
       steps:
-    ```
-
-    ```py
+    
         - name: Checkout code
-    ```
-
-    ```py
+    
           uses: actions/checkout@v4
-    ```
-
-    ```py
+    
         - name: Build Docker image
-    ```
-
-    ```py
+    
       # assumes the Dockerfile is in the root (.)
-    ```
-
-    ```py
+    
           run: docker build -t stylesprint .
-    ```
-
-    ```py
+    
         - name: Run tests
-    ```
-
-    ```py
+    
       # assumes a set of unit tests were defined
-    ```
-
-    ```py
+    
           run: docker run stylesprint python -m unittest discover
-    ```
-
-    ```py
+    
     deploy:
-    ```
-
-    ```py
+    
       needs: build-and-test
-    ```
-
-    ```py
+    
       runs-on: ubuntu-latest
-    ```
-
-    ```py
+    
       steps:
-    ```
-
-    ```py
+    
         - name: Checkout code
-    ```
-
-    ```py
+    
           uses: actions/checkout@v4
-    ```
-
-    ```py
+    
         - name: Login to DockerHub
-    ```
-
-    ```py
+    
           run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-    ```
-
-    ```py
+    
         - name: Push Docker image
-    ```
-
-    ```py
+    
           run: |
-    ```
-
-    ```py
+    
             docker tag stylesprint:latest ${{ secrets.DOCKER_USERNAME }}/stylesprint:latest
-    ```
-
-    ```py
+    
             docker push ${{ secrets.DOCKER_USERNAME }}/stylesprint:latest
     ```
 
@@ -478,17 +422,11 @@ torch.cuda.is_available()
 
     ```py
     import os
-    ```
-
-    ```py
+    
     os.environ['OPENAI_API_KEY'] = 'your_openai_api_key_here'
-    ```
-
-    ```py
+    
     os.environ['HUGGINGFACEHUB_API_TOKEN'] = 
-    ```
-
-    ```py
+    
         'your_huggingface_token_here'
     ```
 
@@ -496,41 +434,23 @@ torch.cuda.is_available()
 
     ```py
     !pip install openai langchain[llms] huggingface_hub
-    ```
-
-    ```py
+    
     from langchain.llms import OpenAI, HuggingFaceHub
-    ```
-
-    ```py
+    
     # Loading GPT-3
-    ```
-
-    ```py
+    
     llm_gpt3 = OpenAI(model_name='text-davinci-003',
-    ```
-
-    ```py
+    
                       temperature=0.9,
-    ```
-
-    ```py
+    
                       max_tokens = 256)
-    ```
-
-    ```py
+    
     # Loading Neo from Hugging Face
-    ```
-
-    ```py
+    
     llm_neo = HuggingFaceHub(repo_id=' EleutherAI/gpt-neo-2.7B',
-    ```
-
-    ```py
+    
                              model_kwargs={"temperature":0.9}
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -792,17 +712,11 @@ for i, (gen_score, ref_score) in enumerate(
 
     ```py
     fastapi==0.68.0
-    ```
-
-    ```py
+    
     uvicorn==0.15.0
-    ```
-
-    ```py
+    
     openai==0.27.0
-    ```
-
-    ```py
+    
     langchain==0.1.0
     ```
 
@@ -810,57 +724,31 @@ for i, (gen_score, ref_score) in enumerate(
 
     ```py
     # Use an official Python runtime as a base image
-    ```
-
-    ```py
+    
     FROM python:3.8-slim-buster
-    ```
-
-    ```py
+    
     # Set the working directory in the container to /app
-    ```
-
-    ```py
+    
     WORKDIR /app
-    ```
-
-    ```py
+    
     # Copy the current directory contents into the container at /app
-    ```
-
-    ```py
+    
     COPY . /app
-    ```
-
-    ```py
+    
     # Install any needed packages specified in requirements.txt
-    ```
-
-    ```py
+    
     RUN pip install --no-cache-dir -r requirements.txt
-    ```
-
-    ```py
+    
     # Make port 80 available to the world outside this container
-    ```
-
-    ```py
+    
     EXPOSE 80
-    ```
-
-    ```py
+    
     # Define environment variable
-    ```
-
-    ```py
+    
     ENV NAME World
-    ```
-
-    ```py
+    
     # Run app.py when the container launches
-    ```
-
-    ```py
+    
     CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
     ```
 
@@ -868,77 +756,41 @@ for i, (gen_score, ref_score) in enumerate(
 
     ```py
     from fastapi import FastAPI, HTTPException, Request
-    ```
-
-    ```py
+    
     from langchain.llms import OpenAI
-    ```
-
-    ```py
+    
     import os
-    ```
-
-    ```py
+    
     # Initialize FastAPI app
-    ```
-
-    ```py
+    
     app = FastAPI()
-    ```
-
-    ```py
+    
     # Setup Langchain with GPT-3.5
-    ```
-
-    ```py
+    
     llm = OpenAI(model_name='text-davinci-003',
-    ```
-
-    ```py
+    
                  temperature=0.7,
-    ```
-
-    ```py
+    
                  max_tokens=256,
-    ```
-
-    ```py
+    
                  api_key=os.environ['OPENAI_API_KEY'])
-    ```
-
-    ```py
+    
     @app.post("/generate/")
-    ```
-
-    ```py
+    
     async def generate_text(request: Request):
-    ```
-
-    ```py
+    
         data = await request.json()
-    ```
-
-    ```py
+    
         prompt = data.get('prompt')
-    ```
-
-    ```py
+    
         if not prompt:
-    ```
-
-    ```py
+    
             raise HTTPException(status_code=400,
-    ```
-
-    ```py
+    
                 detail="Prompt is required")
-    ```
-
-    ```py
+    
         response = llm(prompt)
-    ```
-
-    ```py
+    
         return {"generated_text": response}
     ```
 

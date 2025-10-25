@@ -70,25 +70,15 @@ W′= W + αΔW
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     pipeline = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda:0")
     ```
 
@@ -96,33 +86,19 @@ W′= W + αΔW
 
     ```py
     prompt = """
-    ```
-
-    ```py
+    
     shukezouma, shuimobysim, a branch of flower, traditional chinese ink painting
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     image = pipeline(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda:0").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(image)
     ```
 
@@ -138,25 +114,15 @@ W′= W + αΔW
 
     ```py
     # load LoRA to the pipeline
-    ```
-
-    ```py
+    
     pipeline.load_lora_weights(
-    ```
-
-    ```py
+    
         "andrewzhu/MoXinV1",
-    ```
-
-    ```py
+    
         weight_name   = "MoXinV1.safetensors",
-    ```
-
-    ```py
+    
         adapter_name  = "MoXinV1"
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -166,21 +132,13 @@ W′= W + αΔW
 
     ```py
     image = pipeline(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda:0").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(image)
     ```
 

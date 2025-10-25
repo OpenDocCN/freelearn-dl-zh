@@ -241,81 +241,43 @@ image
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import (
-    ```
-
-    ```py
+    
         StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline)
-    ```
-
-    ```py
+    
     # load base model
-    ```
-
-    ```py
+    
     base_model_checkpoint_path = \ 
-    ```
-
-    ```py
+    
         r"path/to/sd_xl_base_1.0.safetensors"
-    ```
-
-    ```py
+    
     base_pipe = StableDiffusionXLPipeline.from_single_file(
-    ```
-
-    ```py
+    
         base_model_checkpoint_path,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         use_safetensors = True
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     # load refiner model
-    ```
-
-    ```py
+    
     refiner_model_checkpoint_path = \
-    ```
-
-    ```py
+    
         r"path/to/sd_xl_refiner_1.0.safetensors"
-    ```
-
-    ```py
+    
     refiner_pipe = \
-    ```
-
-    ```py
+    
         StableDiffusionXLImg2ImgPipeline.from_single_file(
-    ```
-
-    ```py
+    
         refiner_model_checkpoint_path,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         use_safetensors = True
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -323,69 +285,37 @@ image
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import (
-    ```
-
-    ```py
+    
         StableDiffusionXLPipeline,
-    ```
-
-    ```py
+    
         StableDiffusionXLImg2ImgPipeline
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     # load base model
-    ```
-
-    ```py
+    
     base_model_id = "stabilityai/stable-diffusion-xl-base-1.0"
-    ```
-
-    ```py
+    
     base_pipe = StableDiffusionXLPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         base_model_id,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     # load refiner model
-    ```
-
-    ```py
+    
     refiner_model_id = "stabilityai/stable-diffusion-xl-refiner-1.0"
-    ```
-
-    ```py
+    
     refiner_pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         refiner_model_id,
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -393,81 +323,43 @@ image
 
     ```py
     # move model to cuda and generate base image latent
-    ```
-
-    ```py
+    
     from diffusers import EulerDiscreteScheduler
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     analog photograph of a cat in a spacesuit taken inside the cockpit of a stealth fighter jet,
-    ```
-
-    ```py
+    
     Fujifilm, Kodak Portra 400, vintage photography
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     neg_prompt = """
-    ```
-
-    ```py
+    
     paint, watermark, 3D render, illustration, drawing,worst quality, low quality
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     base_pipe.to("cuda")
-    ```
-
-    ```py
+    
     base_pipe.scheduler = EulerDiscreteScheduler.from_config(
-    ```
-
-    ```py
+    
         base_pipe.scheduler.config)
-    ```
-
-    ```py
+    
     with torch.no_grad():
-    ```
-
-    ```py
+    
         base_latents = base_pipe(
-    ```
-
-    ```py
+    
             prompt = prompt,
-    ```
-
-    ```py
+    
             negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
             output_type = "latent"
-    ```
-
-    ```py
+    
         ).images[0]
-    ```
-
-    ```py
+    
     base_pipe.to("cpu")
-    ```
-
-    ```py
+    
     torch.cuda.empty_cache()
     ```
 
@@ -477,53 +369,29 @@ image
 
     ```py
     # refine the image
-    ```
-
-    ```py
+    
     refiner_pipe.to("cuda")
-    ```
-
-    ```py
+    
     refiner_pipe.scheduler = EulerDiscreteScheduler.from_config(
-    ```
-
-    ```py
+    
         refiner_pipe.scheduler.config)
-    ```
-
-    ```py
+    
     with torch.no_grad():
-    ```
-
-    ```py
+    
         image = refiner_pipe(
-    ```
-
-    ```py
+    
             prompt = prompt,
-    ```
-
-    ```py
+    
             negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
             image = [base_latents]
-    ```
-
-    ```py
+    
         ).images[0]
-    ```
-
-    ```py
+    
     refiner_pipe.to("cpu")
-    ```
-
-    ```py
+    
     torch.cuda.empty_cache()
-    ```
-
-    ```py
+    
     image
     ```
 

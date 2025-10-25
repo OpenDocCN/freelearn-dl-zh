@@ -111,41 +111,23 @@ print(response_body.get("completions")[0].get("data").get("text"))
 
     ```py
     prompt = """
-    ```
-
-    ```py
+    
     Human: Write a descriptive and engaging travel guide section about a lesser-known but beautiful destination, capturing the local culture, cuisine, and must-see attractions in a way that inspires wanderlust.
-    ```
-
-    ```py
+    
     Assistant:"""
-    ```
-
-    ```py
+    
     body = json.dumps({"prompt": prompt,"max_tokens_to_sample": 500})
-    ```
-
-    ```py
+    
     modelId = "anthropic.claude-v2"  # change this to use a different version from the model provider
-    ```
-
-    ```py
+    
     accept = «application/json»
-    ```
-
-    ```py
+    
     contentType = «application/json»
-    ```
-
-    ```py
+    
     response = bedrock_runtime.invoke_model(body=body, modelId=modelId, accept=accept, contentType=contentType)
-    ```
-
-    ```py
+    
     response_body = json.loads(response.get("body").read())
-    ```
-
-    ```py
+    
     print(response_body.get("completion"))
     ```
 
@@ -161,85 +143,45 @@ print(response_body.get("completions")[0].get("data").get("text"))
 
     ```py
     prompt = """
-    ```
-
-    ```py
+    
     Human: Here are some examples of product descriptions:
-    ```
-
-    ```py
+    
     Example 1:
-    ```
-
-    ```py
+    
     Product: Apple iPhone 13 Pro
-    ```
-
-    ```py
+    
     Description: The iPhone 13 Pro is a smartphone designed and manufactured by Apple Inc. It features a 6.1-inch Super Retina XDR display, a powerful A15 Bionic chip, and an advanced triple-camera system with improved low-light performance and 3x optical zoom. The phone also boasts 5G connectivity, longer battery life, and a durable Ceramic Shield front cover.
-    ```
-
-    ```py
+    
     Example 2:
-    ```
-
-    ```py
+    
     Product: Sony WH-1000XM4 Noise Cancelling Headphones
-    ```
-
-    ```py
+    
     Description: Experience exceptional audio quality with the Sony WH-1000XM4 Noise Cancelling Headphones. These over-ear headphones feature industry-leading noise cancellation technology, allowing you to immerse yourself in your music without distractions. The responsive touch controls and long-lasting battery life make them ideal for everyday use, while the comfortable design ensures hours of listening pleasure.
-    ```
-
-    ```py
+    
     Example 3:
-    ```
-
-    ```py
+    
     Product: Instant Pot Duo Crisp + Air Fryer
-    ```
-
-    ```py
+    
     Description: The Instant Pot Duo Crisp + Air Fryer is a versatile kitchen appliance that combines the functions of an electric pressure cooker, air fryer, and more. With its EvenCrisp technology, you can achieve crispy, golden results using little to no oil. The easy-to-use control panel and 11 built-in smart programs allow you to cook a wide variety of dishes with ease, making it a must-have for any modern kitchen.
-    ```
-
-    ```py
+    
     Your task: Generate a product description for the following product:
-    ```
-
-    ```py
+    
     Product: Sony A7 III Mirrorless Camera
-    ```
-
-    ```py
+    
     Assistant:"""
-    ```
-
-    ```py
+    
     body = json.dumps({"prompt": prompt, "max_tokens_to_sample": 500})
-    ```
-
-    ```py
+    
     modelId = "anthropic.claude-v2"
-    ```
-
-    ```py
+    
     accept = "application/json"
-    ```
-
-    ```py
+    
     contentType = "application/json"
-    ```
-
-    ```py
+    
     response = bedrock_runtime.invoke_model(body=body, modelId=modelId, accept=accept, contentType=contentType)
-    ```
-
-    ```py
+    
     response_body = json.loads(response.get("body").read())
-    ```
-
-    ```py
+    
     print(response_body.get("completion"))
     ```
 
@@ -274,85 +216,45 @@ Figure 6*.6*):
 
     ```py
     from langchain_community.llms import Bedrock
-    ```
-
-    ```py
+    
     inference_modifier = {'max_tokens_to_sample':4096, "temperature":0.5, "top_k":250, "top_p":1, "stop_sequences": ["\n\nHuman"]}
-    ```
-
-    ```py
+    
     llm = Bedrock(model_id = "anthropic.claude-v2", client = boto3_bedrock, model_kwargs = inference_modifier)
-    ```
-
-    ```py
+    
     from langchain.prompts import PromptTemplate
-    ```
-
-    ```py
+    
     product_description_prompt = PromptTemplate(   input_variables=["product_name", "product_category", "key_features"],
-    ```
-
-    ```py
+    
         template="""
-    ```
-
-    ```py
+    
     You are a professional copywriter tasked with creating an engaging and informative product description for a new Amazon product.
-    ```
-
-    ```py
+    
     Product Name: {product_name}
-    ```
-
-    ```py
+    
     Product Category: {product_category}
-    ```
-
-    ```py
+    
     Key Features: {key_features}
-    ```
-
-    ```py
+    
     Write a compelling product description that highlights the key features and benefits of the product, while keeping the tone engaging and persuasive for potential customers.
-    ```
-
-    ```py
+    
     Product Description:
-    ```
-
-    ```py
+    
     «»»
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     prompt = product_description_prompt.format(
-    ```
-
-    ```py
+    
         product_name="Smart Home Security Camera",
-    ```
-
-    ```py
+    
         product_category="Home Security",
-    ```
-
-    ```py
+    
         key_features="- 1080p HD video recording\n- Motion detection alerts\n- Two-way audio communication\n- Night vision capabilities\n- Cloud storage for recorded footage")
-    ```
-
-    ```py
+    
     response = llm(prompt)
-    ```
-
-    ```py
+    
     product = response[response.index('\n')+1:]
-    ```
-
-    ```py
+    
     print(product)
     ```
 

@@ -551,33 +551,19 @@ print(generated_response_body.get("results")[0].get("outputText").strip())
 
     ```py
     from langchain import PromptTemplate, LLMChain
-    ```
-
-    ```py
+    
     from langchain_community.llms import Bedrock
-    ```
-
-    ```py
+    
     # Define the prompt template
-    ```
-
-    ```py
+    
     template = """You are a helpful travel assistant. You will be provided with information about a user's travel plans, and your task is to provide relevant suggestions and recommendations based on their preferences and requirements.
-    ```
-
-    ```py
+    
     Travel Details: {travel_details}
-    ```
-
-    ```py
+    
     Using the information provided, suggest some activities, attractions, restaurants, or any other recommendations that would enhance the user's travel experience. Provide your response in a conversational and friendly tone."""
-    ```
-
-    ```py
+    
     # Create the prompt template object
-    ```
-
-    ```py
+    
     prompt = PromptTemplate(template=template, input_variables=["travel_details"])
     ```
 
@@ -585,9 +571,7 @@ print(generated_response_body.get("results")[0].get("outputText").strip())
 
     ```py
     # Sample user input
-    ```
-
-    ```py
+    
     user_travel_details = """I'm planning a 5-day trip to Paris with my family (two adults and two children, ages 8 and 12). We're interested in exploring the city's history, architecture, and cultural attractions. We also enjoy trying local cuisine and engaging in family-friendly activities."""
     ```
 

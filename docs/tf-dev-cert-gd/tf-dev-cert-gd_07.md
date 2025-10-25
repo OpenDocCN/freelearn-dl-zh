@@ -200,13 +200,9 @@
 
     ```py
     import tensorflow as tf
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
     ```
 
@@ -234,21 +230,13 @@
 
     ```py
     # Reshape the images(batch_size, height, width, channels)
-    ```
-
-    ```py
+    
     x_train = x_train.reshape(x_train.shape[0],
-    ```
-
-    ```py
+    
         28, 28, 1).astype('float32')
-    ```
-
-    ```py
+    
     x_test = x_test.reshape(x_test.shape[0],
-    ```
-
-    ```py
+    
         28, 28, 1).astype('float32')
     ```
 
@@ -258,13 +246,9 @@
 
     ```py
     # Normalize the pixel values
-    ```
-
-    ```py
+    
     x_train /= 255
-    ```
-
-    ```py
+    
     x_test /= 255
     ```
 
@@ -286,65 +270,35 @@ y_test = tf.keras.utils.to_categorical(y_test, 10)
 
     ```py
     # Build the Sequential model
-    ```
-
-    ```py
+    
     model = tf.keras.models.Sequential()
-    ```
-
-    ```py
+    
     # Add convolutional layer
-    ```
-
-    ```py
+    
     model.add(tf.keras.layers.Conv2D(64,kernel_size=(3,3),
-    ```
-
-    ```py
+    
         activation='relu',
-    ```
-
-    ```py
+    
         input_shape=(28, 28, 1)))
-    ```
-
-    ```py
+    
     # Add max pooling layer
-    ```
-
-    ```py
+    
     model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2)))
-    ```
-
-    ```py
+    
     # Flatten the data
-    ```
-
-    ```py
+    
     model.add(tf.keras.layers.Flatten())
-    ```
-
-    ```py
+    
     # Add fully connected layer
-    ```
-
-    ```py
+    
     model.add(tf.keras.layers.Dense(128,
-    ```
-
-    ```py
+    
                                     activation='relu'))
-    ```
-
-    ```py
+    
     # Apply softmax
-    ```
-
-    ```py
+    
     model.add(tf.keras.layers.Dense(10,
-    ```
-
-    ```py
+    
                                     activation='softmax'))
     ```
 
@@ -354,21 +308,13 @@ y_test = tf.keras.utils.to_categorical(y_test, 10)
 
     ```py
     # Compile and fit the model
-    ```
-
-    ```py
+    
     model.compile(loss='categorical_crossentropy',
-    ```
-
-    ```py
+    
                   optimizer='adam', metrics=['accuracy'])
-    ```
-
-    ```py
+    
     model.fit(x_train, y_train, epochs=10,
-    ```
-
-    ```py
+    
               validation_split=0.2)
     ```
 
@@ -418,9 +364,7 @@ _________________________________________________________________
 
     ```py
     # Evaluate the model
-    ```
-
-    ```py
+    
     score = model.evaluate(x_test, y_test)
     ```
 
@@ -448,41 +392,23 @@ _________________________________________________________________
 
     ```py
     import os
-    ```
-
-    ```py
+    
     import pathlib
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     import matplotlib.image as mpimg
-    ```
-
-    ```py
+    
     import random
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow import keras
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.image import ImageDataGenerator
     ```
 
@@ -494,17 +420,11 @@ _________________________________________________________________
 
     ```py
     for dirpath, dirnames, filenames in os.walk(root_dir):
-    ```
-
-    ```py
+    
         print(f"Directory: {dirpath}")
-    ```
-
-    ```py
+    
         print(f"Number of images: {len(filenames)}")
-    ```
-
-    ```py
+    
         print()
     ```
 
@@ -520,65 +440,35 @@ _________________________________________________________________
 
     ```py
     def retrieve_labels(train_dir, test_dir, val_dir):
-    ```
-
-    ```py
+    
         # Retrieve labels from training directory
-    ```
-
-    ```py
+    
         train_labels = os.listdir(train_dir)
-    ```
-
-    ```py
+    
         print(f"Training labels: {train_labels}")
-    ```
-
-    ```py
+    
         print(f"Number of training labels: {len(train_labels)}")
-    ```
-
-    ```py
+    
         print()
-    ```
-
-    ```py
+    
         # Retrieve labels from test directory
-    ```
-
-    ```py
+    
         test_labels = os.listdir(test_dir)
-    ```
-
-    ```py
+    
         print(f"Test labels: {test_labels}")
-    ```
-
-    ```py
+    
         print(f"Number of test labels: {len(test_labels)}")
-    ```
-
-    ```py
+    
         print()
-    ```
-
-    ```py
+    
         # Retrieve labels from validation directory
-    ```
-
-    ```py
+    
         val_labels = os.listdir(val_dir)
-    ```
-
-    ```py
+    
         print(f"Validation labels: {val_labels}")
-    ```
-
-    ```py
+    
         print(f"Number of validation labels: {len(val_labels)}")
-    ```
-
-    ```py
+    
         print()
     ```
 
@@ -586,17 +476,11 @@ _________________________________________________________________
 
     ```py
     train_dir = "/content/drive/MyDrive/weather dataset/train"
-    ```
-
-    ```py
+    
     test_dir = "/content/drive/MyDrive/weather dataset/test"
-    ```
-
-    ```py
+    
     val_dir = "/content/drive/MyDrive/weather dataset/validation"
-    ```
-
-    ```py
+    
     retrieve_labels(train_dir, test_dir, val_dir)
     ```
 
@@ -615,117 +499,61 @@ Number of validation labels: 4
 
     ```py
     def view_random_images(target_dir, num_images):
-    ```
-
-    ```py
+    
       """
-    ```
-
-    ```py
+    
       View num_images random images from the subdirectories of target_dir as a subplot.
-    ```
-
-    ```py
+    
       """
-    ```
-
-    ```py
+    
       # Get list of subdirectories
-    ```
-
-    ```py
+    
         subdirs = [d for d in os.listdir(
-    ```
-
-    ```py
+    
             target_dir) if os.path.isdir(os.path.join(
-    ```
-
-    ```py
+    
                 target_dir, d))]
-    ```
-
-    ```py
+    
       # Select num_images random subdirectories
-    ```
-
-    ```py
+    
         random.shuffle(subdirs)
-    ```
-
-    ```py
+    
         selected_subdirs = subdirs[:num_images]
-    ```
-
-    ```py
+    
       # Create a subplot
-    ```
-
-    ```py
+    
         fig, axes = plt.subplots(1, num_images, figsize=(15,9))
-    ```
-
-    ```py
+    
         for i, subdir in enumerate(selected_subdirs):
-    ```
-
-    ```py
+    
           # Get list of images in subdirectory
-    ```
-
-    ```py
+    
             image_paths = [f for f in os.listdir(
-    ```
-
-    ```py
+    
                 os.path.join(target_dir, subdir))]
-    ```
-
-    ```py
+    
           # Select a random image
-    ```
-
-    ```py
+    
             image_path = random.choice(image_paths)
-    ```
-
-    ```py
+    
           # Load image
-    ```
-
-    ```py
+    
             image = plt.imread(os.path.join(target_dir,
-    ```
-
-    ```py
+    
                 subdir, image_path))
-    ```
-
-    ```py
+    
           # Display image in subplot
-    ```
-
-    ```py
+    
             axes[i].imshow(image)
-    ```
-
-    ```py
+    
             axes[i].axis("off")
-    ```
-
-    ```py
+    
             axes[i].set_title(subdir)
-    ```
-
-    ```py
+    
         print(f"Shape of image: {image.shape}")    
-    ```
-
-    ```py
+    
         #width,height, colour chDNNels
-    ```
-
-    ```py
+    
         plt.show()
     ```
 

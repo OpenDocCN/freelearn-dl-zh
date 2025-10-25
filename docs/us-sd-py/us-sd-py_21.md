@@ -242,9 +242,7 @@ Hugging Face的`Accelerate`是一个库，它提供了对不同的PyTorch分布�
 
     ```py
     from accelerate import utils
-    ```
-
-    ```py
+    
     utils.write_basic_config()
     ```
 
@@ -252,25 +250,15 @@ Hugging Face的`Accelerate`是一个库，它提供了对不同的PyTorch分布�
 
     ```py
     from accelerate import Accelerator
-    ```
-
-    ```py
+    
     accelerator = Accelerator()
-    ```
-
-    ```py
+    
     device = accelerator.device
-    ```
-
-    ```py
+    
     x_input.to(device)
-    ```
-
-    ```py
+    
     y_output.to(device)
-    ```
-
-    ```py
+    
     model.to(device)
     ```
 
@@ -278,9 +266,7 @@ Hugging Face的`Accelerate`是一个库，它提供了对不同的PyTorch分布�
 
     ```py
     # loss.backward
-    ```
-
-    ```py
+    
     accelerator.backward(loss)
     ```
 

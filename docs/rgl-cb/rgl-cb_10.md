@@ -200,37 +200,21 @@ import torchvision.transforms as transforms
 
     ```py
     # Will download the dataset at first
-    ```
-
-    ```py
+    
     trainset = CIFAR10('./data', train=True,
-    ```
-
-    ```py
+    
         download=True, transform=transform)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(trainset, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
-    ```
-
-    ```py
+    
     testset = CIFAR10('./data', train=False,
-    ```
-
-    ```py
+    
         download=True, transform=transform)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(testset, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -238,49 +222,27 @@ import torchvision.transforms as transforms
 
     ```py
     # Get a batch of images and labels
-    ```
-
-    ```py
+    
     images, labels = next(iter(train_dataloader))
-    ```
-
-    ```py
+    
     # Denormalize the images
-    ```
-
-    ```py
+    
     images = images / 2 + 0.5
-    ```
-
-    ```py
+    
     # Compute a grid image for visualization
-    ```
-
-    ```py
+    
     images = make_grid(images)
-    ```
-
-    ```py
+    
     # Switch from channel first to channel last
-    ```
-
-    ```py
+    
     images = np.transpose(images.numpy(), (1, 2, 0))
-    ```
-
-    ```py
+    
     # Display the result
-    ```
-
-    ```py
+    
     plt.figure(figsize=(14, 8))
-    ```
-
-    ```py
+    
     plt.imshow(images)
-    ```
-
-    ```py
+    
     plt.axis('off')
     ```
 
@@ -294,97 +256,51 @@ import torchvision.transforms as transforms
 
     ```py
     class LeNet5(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, n_classes: int):
-    ```
-
-    ```py
+    
             super(LeNet5, self).__init__()
-    ```
-
-    ```py
+    
             self.n_classes = n_classes
-    ```
-
-    ```py
+    
             self.c1 = nn.Conv2d(3, 6, kernel_size=5,
-    ```
-
-    ```py
+    
                 stride=1, padding=0)
-    ```
-
-    ```py
+    
             self.s2 = nn.MaxPool2d(kernel_size=2)
-    ```
-
-    ```py
+    
             self.c3 = nn.Conv2d(6, 16, kernel_size=5,
-    ```
-
-    ```py
+    
                 stride=1, padding=0)
-    ```
-
-    ```py
+    
             self.s4 = nn.MaxPool2d(kernel_size=2)
-    ```
-
-    ```py
+    
             self.c5 = nn.Linear(400, 120)
-    ```
-
-    ```py
+    
             self.f6 = nn.Linear(120, 84)
-    ```
-
-    ```py
+    
             self.output = nn.Linear(84, self.n_classes)
-    ```
-
-    ```py
+    
         def forward(self, x):
-    ```
-
-    ```py
+    
             x = F.relu(self.c1(x))
-    ```
-
-    ```py
+    
             x = self.s2(x)
-    ```
-
-    ```py
+    
             x = F.relu(self.c3(x))
-    ```
-
-    ```py
+    
             x = self.s4(x)
-    ```
-
-    ```py
+    
             # Flatten the 2D-array
-    ```
-
-    ```py
+    
             x = torch.flatten(x, 1)
-    ```
-
-    ```py
+    
             x = F.relu(self.c5(x))
-    ```
-
-    ```py
+    
             x = F.relu(self.f6(x))
-    ```
-
-    ```py
+    
             output = F.softmax(self.output(x), dim=1)
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -402,41 +318,23 @@ import torchvision.transforms as transforms
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     lenet5 = LeNet5(10)
-    ```
-
-    ```py
+    
     # check device
-    ```
-
-    ```py
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    ```
-
-    ```py
+    
     lenet5 = lenet5.to(device)
-    ```
-
-    ```py
+    
     # Generate randomly one random 32x32 RGB image
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, 3, 32, 32), device=device)
-    ```
-
-    ```py
+    
     result = lenet5(random_data)
-    ```
-
-    ```py
+    
     print('Resulting output tensor:', result)
-    ```
-
-    ```py
+    
     print('Sum of the output tensor:', result.sum())
     ```
 
@@ -452,9 +350,7 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     criterion = nn.CrossEntropyLoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(lenet5.parameters(), lr=0.001)
     ```
 
@@ -462,77 +358,41 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     def epoch_step_cifar(model, dataloader, device,
-    ```
-
-    ```py
+    
     training_set : bool) :
-    ```
-
-    ```py
+    
         running_loss = 0.
-    ```
-
-    ```py
+    
         correct = 0.
-    ```
-
-    ```py
+    
         for i, data in enumerate(dataloader, 0):
-    ```
-
-    ```py
+    
             inputs, labels = data
-    ```
-
-    ```py
+    
             inputs = inputs.to(device)
-    ```
-
-    ```py
+    
             labels = labels.to(device)
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 optimizer.zero_grad()
-    ```
-
-    ```py
+    
             outputs = model(inputs)
-    ```
-
-    ```py
+    
             loss = criterion(outputs, labels)
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 loss.backward()
-    ```
-
-    ```py
+    
                 optimizer.step()
-    ```
-
-    ```py
+    
             correct += (outputs.argmax(
-    ```
-
-    ```py
+    
                 dim=1) == labels).float().sum().cpu()
-    ```
-
-    ```py
+    
             running_loss += loss.item()
-    ```
-
-    ```py
+    
         return running_loss, correct
     ```
 
@@ -540,177 +400,91 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     def train_cifar_classifier(model, train_dataloader,
-    ```
-
-    ```py
+    
         test_dataloader, criterion, device, epochs):
-    ```
-
-    ```py
+    
             # Create empty lists to store the losses and accuracies
-    ```
-
-    ```py
+    
             train_losses = []
-    ```
-
-    ```py
+    
             test_losses = []
-    ```
-
-    ```py
+    
             train_accuracy = []
-    ```
-
-    ```py
+    
             test_accuracy = []
-    ```
-
-    ```py
+    
             # Loop over epochs
-    ```
-
-    ```py
+    
             for epoch in range(epochs):
-    ```
-
-    ```py
+    
                 ## Train the model on the training set
-    ```
-
-    ```py
+    
                 running_train_loss = 0.
-    ```
-
-    ```py
+    
                 correct = 0.
-    ```
-
-    ```py
+    
                 lenet5.train()
-    ```
-
-    ```py
+    
                 running_train_loss,
-    ```
-
-    ```py
+    
                 correct = epoch_step_cifar(
-    ```
-
-    ```py
+    
                     model, train_dataloader, device,
-    ```
-
-    ```py
+    
                     training_set=True
-    ```
-
-    ```py
+    
                 )
-    ```
-
-    ```py
+    
                 # Compute and store loss and accuracy for this epoch
-    ```
-
-    ```py
+    
             train_epoch_loss = running_train_loss / len(
-    ```
-
-    ```py
+    
                 train_dataloader)
-    ```
-
-    ```py
+    
             train_losses.append(train_epoch_loss)
-    ```
-
-    ```py
+    
             train_epoch_accuracy = correct / len(trainset)
-    ```
-
-    ```py
+    
             train_accuracy.append(train_epoch_accuracy)
-    ```
-
-    ```py
+    
             ## Evaluate the model on the test set
-    ```
-
-    ```py
+    
             running_test_loss = 0.
-    ```
-
-    ```py
+    
             correct = 0.
-    ```
-
-    ```py
+    
             lenet5.eval()
-    ```
-
-    ```py
+    
             with torch.no_grad():
-    ```
-
-    ```py
+    
                 running_test_loss,
-    ```
-
-    ```py
+    
                 correct = epoch_step_cifar(
-    ```
-
-    ```py
+    
                     model, test_dataloader, device,
-    ```
-
-    ```py
+    
                     training_set=False
-    ```
-
-    ```py
+    
                 )
-    ```
-
-    ```py
+    
                 test_epoch_loss = running_test_loss / len(
-    ```
-
-    ```py
+    
                     test_dataloader)
-    ```
-
-    ```py
+    
                 test_losses.append(test_epoch_loss)
-    ```
-
-    ```py
+    
                 test_epoch_accuracy = correct / len(testset)
-    ```
-
-    ```py
+    
                 test_accuracy.append(test_epoch_accuracy)
-    ```
-
-    ```py
+    
             # Print stats
-    ```
-
-    ```py
+    
             print(f'[epoch {epoch + 1}] Training: loss={train_epoch_loss:.3f} accuracy={train_epoch_accuracy:.3f} |\
-    ```
-
-    ```py
+    
         \t Test: loss={test_epoch_loss:.3f} accuracy={test_epoch_accuracy:.3f}')
-    ```
-
-    ```py
+    
         return train_losses, test_losses, train_accuracy,
-    ```
-
-    ```py
+    
             test_accuracy
     ```
 
@@ -718,17 +492,11 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_cifar_classifier(lenet5,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=50)
     ```
 
@@ -742,25 +510,15 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -776,25 +534,15 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -986,113 +734,59 @@ pip install numpy matplotlib torch torchvision
 
     ```py
     class LeNet5(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, n_classes: int):
-    ```
-
-    ```py
+    
             super(LeNet5, self).__init__()
-    ```
-
-    ```py
+    
             self.n_classes = n_classes
-    ```
-
-    ```py
+    
             self.c1 = nn.Conv2d(3, 6, kernel_size=5,
-    ```
-
-    ```py
+    
                 stride=1, padding=0, )
-    ```
-
-    ```py
+    
             self.s2 = nn.MaxPool2d(kernel_size=2)
-    ```
-
-    ```py
+    
             self.bnorm2 = nn.BatchNorm2d(6)
-    ```
-
-    ```py
+    
             self.c3 = nn.Conv2d(6, 16, kernel_size=5,
-    ```
-
-    ```py
+    
                 stride=1, padding=0)
-    ```
-
-    ```py
+    
             self.s4 = nn.MaxPool2d(kernel_size=2)
-    ```
-
-    ```py
+    
             self.bnorm4 = nn.BatchNorm1d(400)
-    ```
-
-    ```py
+    
             self.c5 = nn.Linear(400, 120)
-    ```
-
-    ```py
+    
             self.bnorm5 = nn.BatchNorm1d(120)
-    ```
-
-    ```py
+    
             self.f6 = nn.Linear(120, 84)
-    ```
-
-    ```py
+    
             self.bnorm6 = nn.BatchNorm1d(84)
-    ```
-
-    ```py
+    
             self.output = nn.Linear(84, self.n_classes)
-    ```
-
-    ```py
+    
         def forward(self, x):
-    ```
-
-    ```py
+    
             x = F.relu(self.c1(x))
-    ```
-
-    ```py
+    
             x = self.bnorm2(self.s2(x))
-    ```
-
-    ```py
+    
             x = F.relu(self.c3(x))
-    ```
-
-    ```py
+    
             x = self.s4(x)
-    ```
-
-    ```py
+    
             # Flatten the 2D-array
-    ```
-
-    ```py
+    
             x = self.bnorm4(torch.flatten(x, 1))
-    ```
-
-    ```py
+    
             x = self.bnorm5(F.relu(self.c5(x)))
-    ```
-
-    ```py
+    
             x = self.bnorm6(F.relu(self.f6(x)))
-    ```
-
-    ```py
+    
             output = F.softmax(self.output(x), dim=1)
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -1110,33 +804,19 @@ pip install numpy matplotlib torch torchvision
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     lenet5 = LeNet5(10)
-    ```
-
-    ```py
+    
     # check device
-    ```
-
-    ```py
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    ```
-
-    ```py
+    
     lenet5 = lenet5.to(device)
-    ```
-
-    ```py
+    
     # Instantiate loss and optimizer
-    ```
-
-    ```py
+    
     criterion = nn.CrossEntropyLoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(lenet5.parameters(), lr=0.001)
     ```
 
@@ -1144,17 +824,11 @@ pip install numpy matplotlib torch torchvision
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_cifar_classifier(lenet5,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=20)
     ```
 
@@ -1162,25 +836,15 @@ pip install numpy matplotlib torch torchvision
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1196,25 +860,15 @@ pip install numpy matplotlib torch torchvision
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1451,37 +1105,21 @@ traffic
 
     ```py
     plt.figure(figsize=(14, 10))
-    ```
-
-    ```py
+    
     # Get all images paths
-    ```
-
-    ```py
+    
     images = glob('datasets/traffic/images/train/*.jpg')
-    ```
-
-    ```py
+    
     # Plot 8 of them
-    ```
-
-    ```py
+    
     for i, path in enumerate(images[:8]):
-    ```
-
-    ```py
+    
         img = plt.imread(path)
-    ```
-
-    ```py
+    
         plt.subplot(2, 4, i+1)
-    ```
-
-    ```py
+    
         plt.imshow(img)
-    ```
-
-    ```py
+    
         plt.axis('off')
     ```
 
@@ -1497,13 +1135,9 @@ traffic
 
     ```py
     with open('datasets/traffic/labels/train/00 (10).txt') as file:
-    ```
-
-    ```py
+    
         print(file.read())
-    ```
-
-    ```py
+    
         file.close()
     ```
 
@@ -1576,21 +1210,13 @@ plot_labels(
 
     ```py
     train: traffic/images/train
-    ```
-
-    ```py
+    
     val: traffic/images/val
-    ```
-
-    ```py
+    
     nc: 7
-    ```
-
-    ```py
+    
     names: ['Car', 'Number Plate', 'Blur Number Plate',
-    ```
-
-    ```py
+    
         'Two Wheeler', 'Auto', 'Bus', 'Truck']
     ```
 
@@ -1618,13 +1244,9 @@ plot_labels(
 
     ```py
     # Train the model for 100 epochs
-    ```
-
-    ```py
+    
     model.train(data='dataset.yaml', epochs=100,
-    ```
-
-    ```py
+    
         name='untrained_traffic')
     ```
 
@@ -1646,17 +1268,11 @@ plot_labels(
 
     ```py
     plt.figure(figsize=(14, 10))
-    ```
-
-    ```py
+    
     plt.imshow(plt.imread(
-    ```
-
-    ```py
+    
         'runs/detect/untrained_traffic/results.png'))
-    ```
-
-    ```py
+    
     plt.axis('off')
     ```
 
@@ -1674,49 +1290,27 @@ plot_labels(
 
     ```py
     def plot_results_one_image(result):
-    ```
-
-    ```py
+    
         image = result[0].orig_img.copy()
-    ```
-
-    ```py
+    
         raw_res = result[0].boxes.data
-    ```
-
-    ```py
+    
         for detection in raw_res:
-    ```
-
-    ```py
+    
             x1, y1, x2, y2, p,
-    ```
-
-    ```py
+    
             cls = detection.cpu().tolist()
-    ```
-
-    ```py
+    
             cv2.rectangle(image, (int(x1), int(y1)),
-    ```
-
-    ```py
+    
                 (int(x2), int(y2)), (255,0,0), 2)
-    ```
-
-    ```py
+    
             cv2.putText(image, f'{classes[int(cls)]}',
-    ```
-
-    ```py
+    
                 (int(x1), int(y1) - 10),
-    ```
-
-    ```py
+    
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
-    ```
-
-    ```py
+    
         plt.imshow(image)
     ```
 
@@ -1724,21 +1318,13 @@ plot_labels(
 
     ```py
     # Compute the model inference on a test image
-    ```
-
-    ```py
+    
     result = model.predict(
-    ```
-
-    ```py
+    
         'datasets/traffic/images/test/00 (100).png')
-    ```
-
-    ```py
+    
     # Plot the results
-    ```
-
-    ```py
+    
     plot_results_one_image(result)
     ```
 
@@ -1768,21 +1354,13 @@ plot_labels(
 
     ```py
     # Load a pretrained YOLO model
-    ```
-
-    ```py
+    
     pretrained_model = YOLO('yolov8n.pt')
-    ```
-
-    ```py
+    
     # Train the model for 100 epochs
-    ```
-
-    ```py
+    
     pretrained_model.train(data='dataset.yaml',
-    ```
-
-    ```py
+    
         epochs=100, name='pretrained_traffic')
     ```
 
@@ -1790,17 +1368,11 @@ plot_labels(
 
     ```py
     plt.figure(figsize=(14, 10))
-    ```
-
-    ```py
+    
     plt.imshow(plt.imread(
-    ```
-
-    ```py
+    
         'runs/detect/pretrained_traffic/results.png'))
-    ```
-
-    ```py
+    
     plt.axis('off')
     ```
 
@@ -1816,13 +1388,9 @@ plot_labels(
 
     ```py
     result = pretrained_model.predict(
-    ```
-
-    ```py
+    
         'datasets/traffic/images/test/00 (100).png')
-    ```
-
-    ```py
+    
     plot_results_one_image(result)
     ```
 
@@ -1992,45 +1560,25 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     from torch.utils.data import DataLoader, Dataset
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     import torchvision.transforms as transforms
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import tqdm
-    ```
-
-    ```py
+    
     from glob import glob
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     import segmentation_models_pytorch as smp
-    ```
-
-    ```py
+    
     import torch.nn as nn
-    ```
-
-    ```py
+    
     import torch.optim as optim
     ```
 
@@ -2038,117 +1586,61 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     class DroneDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, images_path: str,
-    ```
-
-    ```py
+    
             masks_path: str, transform, train: bool,
-    ```
-
-    ```py
+    
             num_classes: int = 5):
-    ```
-
-    ```py
+    
                 self.images_path = sorted(glob(
-    ```
-
-    ```py
+    
                     f'{images_path}/*.png'))
-    ```
-
-    ```py
+    
                 self.masks_path = sorted(glob(
-    ```
-
-    ```py
+    
                     f'{masks_path}/*.png'))
-    ```
-
-    ```py
+    
                 self.num_classes = num_classes
-    ```
-
-    ```py
+    
                 if train:
-    ```
-
-    ```py
+    
                     self.images_path = self.images_path[
-    ```
-
-    ```py
+    
                        :int(.8*len(self.images_path))]
-    ```
-
-    ```py
+    
                     Self.masks_path = self.masks_path[
-    ```
-
-    ```py
+    
                         :int(.8*len(self.masks_path))]
-    ```
-
-    ```py
+    
                 else:
-    ```
-
-    ```py
+    
                     self.images_path = self.images_path[
-    ```
-
-    ```py
+    
                         int(.8*len(self.images_path)):]
-    ```
-
-    ```py
+    
                     self.masks_path = self.masks_path[
-    ```
-
-    ```py
+    
                         int(.8*len(self.masks_path)):]
-    ```
-
-    ```py
+    
                 self.transform = transform
-    ```
-
-    ```py
+    
         def __len__(self):
-    ```
-
-    ```py
+    
             return len(self.images_path)
-    ```
-
-    ```py
+    
         def __getitem__(self, idx):
-    ```
-
-    ```py
+    
             image = np.array(Image.open(
-    ```
-
-    ```py
+    
                 self.images_path[idx]))
-    ```
-
-    ```py
+    
             mask = np.array(Image.open(
-    ```
-
-    ```py
+    
                 self.masks_path[idx]))
-    ```
-
-    ```py
+    
             return self.transform(image), torch.tensor(
-    ```
-
-    ```py
+    
                 mask, dtype=torch.long)
     ```
 
@@ -2160,21 +1652,13 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     transform = transforms.Compose([
-    ```
-
-    ```py
+    
         transforms.ToTensor(),
-    ```
-
-    ```py
+    
         transforms.Normalize((0.5, 0.5, 0.5),
-    ```
-
-    ```py
+    
             (0.5, 0.5, 0.5))
-    ```
-
-    ```py
+    
     ])
     ```
 
@@ -2182,25 +1666,15 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     batch_size = 4
-    ```
-
-    ```py
+    
     learning_rate = 0.005
-    ```
-
-    ```py
+    
     classes = ['obstacles', 'water', 'soft-surfaces',
-    ```
-
-    ```py
+    
         'moving-objects', 'landing-zones']
-    ```
-
-    ```py
+    
     device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
     ```
 
@@ -2208,65 +1682,35 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     train_dataset = DroneDataset(
-    ```
-
-    ```py
+    
         'classes_dataset/classes_dataset/original_images/',
-    ```
-
-    ```py
+    
         'classes_dataset/classes_dataset/label_images_semantic/',
-    ```
-
-    ```py
+    
         transform,
-    ```
-
-    ```py
+    
         train=True
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(train_dataset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataset = DroneDataset(
-    ```
-
-    ```py
+    
         'classes_dataset/classes_dataset/original_images/',
-    ```
-
-    ```py
+    
         'classes_dataset/classes_dataset/label_images_semantic/',
-    ```
-
-    ```py
+    
         transform,
-    ```
-
-    ```py
+    
         train=False
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_dataset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
     ```
 
@@ -2274,33 +1718,19 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     # Get a batch of images and labels
-    ```
-
-    ```py
+    
     images, labels = next(iter(train_dataloader))
-    ```
-
-    ```py
+    
     # Plot the image and overlay the labels
-    ```
-
-    ```py
+    
     plt.figure(figsize=(12, 10))
-    ```
-
-    ```py
+    
     plt.imshow(images[0].permute(
-    ```
-
-    ```py
+    
         1, 2, 0).cpu().numpy() * 0.5 + 0.5)
-    ```
-
-    ```py
+    
     plt.imshow(labels[0], alpha = 0.8)
-    ```
-
-    ```py
+    
     plt.axis('off')
     ```
 
@@ -2326,25 +1756,15 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     model = smp.Unet(
-    ```
-
-    ```py
+    
         encoder_name='efficientnet-b5',
-    ```
-
-    ```py
+    
         encoder_weights='imagenet',
-    ```
-
-    ```py
+    
         in_channels=3,
-    ```
-
-    ```py
+    
         classes=len(classes),
-    ```
-
-    ```py
+    
         )
     ```
 
@@ -2352,17 +1772,11 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     optimizer = optim.Adam(model.parameters(),
-    ```
-
-    ```py
+    
         lr=learning_rate)
-    ```
-
-    ```py
+    
     criterion = smp.losses.DiceLoss(
-    ```
-
-    ```py
+    
         smp.losses.MULTICLASS_MODE, from_logits=True)
     ```
 
@@ -2370,41 +1784,23 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     def compute_metrics(stats):
-    ```
-
-    ```py
+    
         tp = torch.cat([x["tp"] for x in stats])
-    ```
-
-    ```py
+    
         fp = torch.cat([x["fp"] for x in stats])
-    ```
-
-    ```py
+    
         fn = torch.cat([x["fn"] for x in stats])
-    ```
-
-    ```py
+    
         tn = torch.cat([x["tn"] for x in stats])
-    ```
-
-    ```py
+    
         iou = smp.metrics.iou_score(tp, fp, fn, tn,
-    ```
-
-    ```py
+    
             reduction='micro')
-    ```
-
-    ```py
+    
         f1_score = smp.metrics.f1_score(tp, fp, fn, tn,
-    ```
-
-    ```py
+    
             reduction='micro')
-    ```
-
-    ```py
+    
         return iou, f1_score
     ```
 
@@ -2412,89 +1808,47 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     def epoch_step_unet(model, dataloader, device,
-    ```
-
-    ```py
+    
         num_classes, training_set: bool):
-    ```
-
-    ```py
+    
             stats = []
-    ```
-
-    ```py
+    
             for i, data in tqdm.tqdm(enumerate(
-    ```
-
-    ```py
+    
                 dataloader, 0)):
-    ```
-
-    ```py
+    
                 inputs, labels = data
-    ```
-
-    ```py
+    
                 inputs = inputs.to(device)
-    ```
-
-    ```py
+    
                 labels = labels.to(device)
-    ```
-
-    ```py
+    
                 if training_set:
-    ```
-
-    ```py
+    
                     optimizer.zero_grad()
-    ```
-
-    ```py
+    
                     outputs = model(inputs)
-    ```
-
-    ```py
+    
                     loss = criterion(outputs, labels)
-    ```
-
-    ```py
+    
                 if training_set:
-    ```
-
-    ```py
+    
                     loss.backward()
-    ```
-
-    ```py
+    
                     optimizer.step()
-    ```
-
-    ```py
+    
             tp, fp, fn, tn = smp.metrics.get_stats(
-    ```
-
-    ```py
+    
                 torch.argmax(outputs, dim=1), labels,
-    ```
-
-    ```py
+    
                 mode='multiclass',
-    ```
-
-    ```py
+    
                 num_classes=num_classes)
-    ```
-
-    ```py
+    
             stats.append({'tp': tp, 'fp': fp, 'fn':fn,
-    ```
-
-    ```py
+    
                 'tn': tn, 'loss': loss.item()})
-    ```
-
-    ```py
+    
         return stats
     ```
 
@@ -2502,173 +1856,89 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     def train_unet(model, train_dataloader,
-    ```
-
-    ```py
+    
         test_dataloader, criterion, device,
-    ```
-
-    ```py
+    
         epochs: int = 10, num_classes: int = 5,
-    ```
-
-    ```py
+    
         scheduler=None):
-    ```
-
-    ```py
+    
         train_metrics = {'loss': [], 'iou': [], 'f1': [],
-    ```
-
-    ```py
+    
             'lr': []}
-    ```
-
-    ```py
+    
         test_metrics = {'loss': [], 'iou': [], 'f1': []}
-    ```
-
-    ```py
+    
         model = model.to(device)
-    ```
-
-    ```py
+    
         for epoch in range(epochs):
-    ```
-
-    ```py
+    
       # loop over the dataset multiple times
-    ```
-
-    ```py
+    
             # Train
-    ```
-
-    ```py
+    
             model.train()
-    ```
-
-    ```py
+    
             #running_loss = 0.0
-    ```
-
-    ```py
+    
             train_stats = epoch_step_unet(model,
-    ```
-
-    ```py
+    
                 train_dataloader, device, num_classes,
-    ```
-
-    ```py
+    
                 training_set=True)
-    ```
-
-    ```py
+    
             # Eval
-    ```
-
-    ```py
+    
             model.eval()
-    ```
-
-    ```py
+    
             with torch.no_grad():
-    ```
-
-    ```py
+    
                 test_stats = epoch_step_unet(model,
-    ```
-
-    ```py
+    
                     test_dataloader, device, num_classes,
-    ```
-
-    ```py
+    
                     training_set=False)
-    ```
-
-    ```py
+    
             if scheduler is not None:
-    ```
-
-    ```py
+    
                 train_metrics['lr'].append(
-    ```
-
-    ```py
+    
                     scheduler.get_last_lr())
-    ```
-
-    ```py
+    
                 scheduler.step()
-    ```
-
-    ```py
+    
             train_metrics['loss'].append(sum(
-    ```
-
-    ```py
+    
                 [x['loss'] for x in train_stats]) / len(
-    ```
-
-    ```py
+    
                     train_dataloader))
-    ```
-
-    ```py
+    
             test_metrics['loss'].append(sum(
-    ```
-
-    ```py
+    
                 [x['loss'] for x in test_stats]) / len(
-    ```
-
-    ```py
+    
                     test_dataloader))
-    ```
-
-    ```py
+    
             iou, f1 = compute_metrics(train_stats)
-    ```
-
-    ```py
+    
             train_metrics['iou'].append(iou)
-    ```
-
-    ```py
+    
             train_metrics['f1'].append(f1)
-    ```
-
-    ```py
+    
             iou, f1 = compute_metrics(test_stats)
-    ```
-
-    ```py
+    
             test_metrics['iou'].append(iou)
-    ```
-
-    ```py
+    
             test_metrics['f1'].append(f1)
-    ```
-
-    ```py
+    
             print(f"[{epoch + 1}] train loss: {train_metrics['loss'][-1]:.3f} IoU: {train_metrics['iou'][-1]:.3f} | \
-    ```
-
-    ```py
+    
                     test loss: {
-    ```
-
-    ```py
+    
                         test_metrics['loss'][-1]:.3f} IoU:
-    ```
-
-    ```py
+    
                         {test_metrics['iou'][-1]:.3f}")
-    ```
-
-    ```py
+    
         return train_metrics, test_metrics
     ```
 
@@ -2688,13 +1958,9 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     train_metrics, test_metrics = train_unet(model,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=50, num_classes=len(classes))
     ```
 
@@ -2702,73 +1968,39 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     plt.figure(figsize=(10, 10))
-    ```
-
-    ```py
+    
     plt.subplot(3, 1, 1)
-    ```
-
-    ```py
+    
     plt.plot(train_metrics['loss'], label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_metrics['loss'], label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('Dice loss')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.subplot(3, 1, 2)
-    ```
-
-    ```py
+    
     plt.plot(train_metrics['iou'], label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_metrics['iou'], label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('IoU')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.subplot(3, 1, 3)
-    ```
-
-    ```py
+    
     plt.plot(train_metrics['f1'], label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_metrics['f1'], label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('F1-score')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -2790,49 +2022,27 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     def freeze_encoder(model, max_level: int = None):
-    ```
-
-    ```py
+    
         for I, child in enumerate(model.encoder.children()):
-    ```
-
-    ```py
+    
             if max_level is not None and i >= max_level:
-    ```
-
-    ```py
+    
                     return
-    ```
-
-    ```py
+    
             for param in child.parameters():
-    ```
-
-    ```py
+    
                 param.requires_grad = False
-    ```
-
-    ```py
+    
         return
-    ```
-
-    ```py
+    
     def unfreeze(model):
-    ```
-
-    ```py
+    
         for child in model.children():
-    ```
-
-    ```py
+    
             for param in child.parameters():
-    ```
-
-    ```py
+    
                 param.requires_grad = True
-    ```
-
-    ```py
+    
         return
     ```
 
@@ -2840,29 +2050,17 @@ pip install matplotlib pillow torch torchvision segmentation-models-pytorch
 
     ```py
     model = smp.Unet(
-    ```
-
-    ```py
+    
         encoder_name='efficientnet-b5',
-    ```
-
-    ```py
+    
         encoder_weights='imagenet',
-    ```
-
-    ```py
+    
         in_channels=3,
-    ```
-
-    ```py
+    
         classes=len(classes),
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
     print''Total number of trainable parameters'', sum(p.numel() for p in model.parameters() if p.requires_grad))
     ```
 
@@ -2878,13 +2076,9 @@ Total number of trainable parameters: 31216581
 
     ```py
     # Freeze the of the encoder
-    ```
-
-    ```py
+    
     freeze_encoder(model, 3)
-    ```
-
-    ```py
+    
     print('Total number of trainable parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad))
     ```
 
@@ -2900,17 +2094,11 @@ Total number of trainable parameters: 3928469
 
     ```py
     optimizer = optim.Adam(model.parameters(),
-    ```
-
-    ```py
+    
         lr=learning_rate)
-    ```
-
-    ```py
+    
     scheduler = optim.lr_scheduler.ExponentialLR(
-    ```
-
-    ```py
+    
         optimizer, gamma=0.95)
     ```
 
@@ -2918,17 +2106,11 @@ Total number of trainable parameters: 3928469
 
     ```py
     train_metrics, test_metrics = train_unet(model,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         device, epochs=20, num_classes=len(classes),
-    ```
-
-    ```py
+    
         scheduler=scheduler)
     ```
 
@@ -2938,9 +2120,7 @@ Total number of trainable parameters: 3928469
 
     ```py
     unfreeze(model)
-    ```
-
-    ```py
+    
     print('Total number of trainable parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad))
     ```
 
@@ -2956,17 +2136,11 @@ Total number of trainable parameters: 31216581
 
     ```py
     train_metrics_unfreeze, test_metrics_unfreeze = train_unet(
-    ```
-
-    ```py
+    
     model, train_dataloader, test_dataloader,
-    ```
-
-    ```py
+    
         criterion, device, epochs=30,
-    ```
-
-    ```py
+    
         num_classes=len(classes), scheduler=scheduler)
     ```
 
@@ -2974,73 +2148,39 @@ Total number of trainable parameters: 31216581
 
     ```py
     plt.figure(figsize=(10, 10))
-    ```
-
-    ```py
+    
     plt.subplot(3, 1, 1)
-    ```
-
-    ```py
+    
     plt.plot(train_metrics['loss'] + train_metrics_unfreeze['loss'], label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_metrics['loss'] + test_metrics_unfreeze['loss'], label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('Dice loss')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.subplot(3, 1, 2)
-    ```
-
-    ```py
+    
     plt.plot(train_metrics['iou'] + train_metrics_unfreeze['iou'], label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_metrics['iou'] + test_metrics_unfreeze['iou'], label='test')
-    ```
-
-    ```py
+    
     plt.ylabel('IoU')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.subplot(3, 1, 3)
-    ```
-
-    ```py
+    
     plt.plot(train_metrics['f1'] + train_metrics_unfreeze['f1'], label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_metrics['f1'] + test_metrics_unfreeze['f1'], label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('F1-score')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -3058,17 +2198,11 @@ Total number of trainable parameters: 31216581
 
     ```py
     plt.plot(train_metrics['lr'] + train_metrics_unfreeze['lr'])
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Learning rate')
-    ```
-
-    ```py
+    
     plt.show()
     ```
 

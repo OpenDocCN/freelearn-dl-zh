@@ -723,21 +723,13 @@ tf.matmul(a,tf.transpose(a, perm=[1,0]))
 
     ```py
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow import keras
-    ```
-
-    ```py
+    
     from tensorflow.keras import Sequential
-    ```
-
-    ```py
+    
     from tensorflow.keras.layers import Dense
-    ```
-
-    ```py
+    
     print(tf.__version__)
     ```
 
@@ -747,13 +739,9 @@ tf.matmul(a,tf.transpose(a, perm=[1,0]))
 
     ```py
     #import additional libraries
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
     ```
 
@@ -763,17 +751,11 @@ tf.matmul(a,tf.transpose(a, perm=[1,0]))
 
     ```py
     # Hours of study
-    ```
-
-    ```py
+    
     X = [20,23,25,28,30,37,40,43,46]
-    ```
-
-    ```py
+    
     # Test Scores
-    ```
-
-    ```py
+    
     y = [45, 51, 55, 61, 65, 79, 85, 91, 97]
     ```
 
@@ -781,21 +763,13 @@ tf.matmul(a,tf.transpose(a, perm=[1,0]))
 
     ```py
     plt.plot(X, y)
-    ```
-
-    ```py
+    
     plt.title("Exam Performance graph")
-    ```
-
-    ```py
+    
     plt.xlabel('Hours of Study')
-    ```
-
-    ```py
+    
     plt.ylabel('Test Score')
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -811,25 +785,15 @@ tf.matmul(a,tf.transpose(a, perm=[1,0]))
 
     ```py
     study_model = Sequential([Dense(units=1,
-    ```
-
-    ```py
+    
         input_shape=[1])])
-    ```
-
-    ```py
+    
     study_model.compile(optimizer='adam',
-    ```
-
-    ```py
+    
         loss='mean_squared_error')
-    ```
-
-    ```py
+    
     X= np.array(X, dtype=int)
-    ```
-
-    ```py
+    
     y= np.array(y, dtype=int)
     ```
 
@@ -839,9 +803,7 @@ tf.matmul(a,tf.transpose(a, perm=[1,0]))
 
     ```py
     #fitting the model
-    ```
-
-    ```py
+    
     history= study_model.fit(X, y, epochs=2500)
     ```
 

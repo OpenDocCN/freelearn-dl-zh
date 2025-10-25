@@ -770,33 +770,23 @@ Google Research 宣布了 Pathways（[`blog.google/technology/ai/introducing-pat
       print('> Examples in Portuguese:')
     for en in en_examples.numpy():
       print(en.decode('utf-8')) 
-    ```
-
-    ```py
+    
     and when you improve searchability , you actually take away the one advantage of print , which is serendipity .
     but what if it were active ?
     but they did n't test for curiosity . 
-    ```
-
-    ```py
+    
     encoded = tokenizers.en.tokenize(en_examples)
     for row in encoded.to_list():
       print(row) 
-    ```
-
-    ```py
+    
     [2, 72, 117, 79, 1259, 1491, 2362, 13, 79, 150, 184, 311, 71, 103, 2308, 74, 2679, 13, 148, 80, 55, 4840, 1434, 2423, 540, 15, 3]
     [2, 87, 90, 107, 76, 129, 1852, 30, 3]
     [2, 87, 83, 149, 50, 9, 56, 664, 85, 2512, 15, 3] 
-    ```
-
-    ```py
+    
     round_trip = tokenizers.en.detokenize(encoded)
     for line in round_trip.numpy():
       print(line.decode('utf-8')) 
-    ```
-
-    ```py
+    
     and when you improve searchability , you actually take away the one advantage of print , which is serendipity .
     but what if it were active ?
     but they did n ' t test for curiosity . 
@@ -1346,27 +1336,17 @@ Google Research 宣布了 Pathways（[`blog.google/technology/ai/introducing-pat
 
     ```py
     generator("Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone") 
-    ```
-
-    ```py
+    
     Setting 'pad_token_id' to 50256 (first 'eos_token_id') to generate sequence
     [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone and Eight for the Dwarves in their halls of rock! Three new Rings of the Elven-kings under the sky, Seven for'}] 
-    ```
-
-    ```py
+    
     generator ("The original theory of relativity is based upon the premise that all coordinate systems in relative uniform translatory motion to each other are equally valid and equivalent ") 
-    ```
-
-    ```py
+    
     Setting 'pad_token_id' to 50256 (first 'eos_token_id') to generate sequence
     [{'generated_text': 'The original theory of relativity is based upon the premise that all coordinate systems in relative uniform translatory motion to each other are equally valid and equivalent \xa0to one another. In other words, they can all converge, and therefore all the laws are valid'}] 
-    ```
-
-    ```py
+    
     generator ("It takes a great deal of bravery to stand up to our enemies") 
-    ```
-
-    ```py
+    
     Setting 'pad_token_id' to 50256 (first 'eos_token_id') to generate sequence
     [{'generated_text': 'It takes a great deal of bravery to stand up to our enemies that day. She still has a lot to learn from it, or it could take decades to do.\n\nWhile some braver men struggle, many are not as lucky'}] 
     ```
@@ -1382,9 +1362,7 @@ Hugging Face 在帮助开发者自动化尽可能多的步骤方面做得非常�
     ```py
     from transformers import TFAutoModelForSequenceClassification
     model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased") 
-    ```
-
-    ```py
+    
     Downloading: 100%|█████████████████████████████| 483/483 [00:00<00:00, 68.9kB/s]
     Downloading: 100%|███████████████████████████| 347M/347M [01:05<00:00, 5.59MB/s]
     … 
@@ -1399,9 +1377,7 @@ Hugging Face 在帮助开发者自动化尽可能多的步骤方面做得非常�
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     sequence = "The original theory of relativity is based upon the premise that all coordinate systems"
     print(tokenizer(sequence)) 
-    ```
-
-    ```py
+    
     {'input_ids': [101, 1996, 2434, 3399, 1997, 20805, 2003, 2241, 2588, 1996, 18458, 2008, 2035, 13530, 3001, 102], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]} 
     ```
 

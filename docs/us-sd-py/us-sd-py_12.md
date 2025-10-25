@@ -288,41 +288,23 @@ g = lambda p: get_learned_conditioning_prompt_schedules([p], steps)[0]
 
     ```py
     [[1, 'cat'],
-    ```
-
-    ```py
+    
      [2, 'dog'],
-    ```
-
-    ```py
+    
      [3, 'cat'],
-    ```
-
-    ```py
+    
      [4, 'dog'],
-    ```
-
-    ```py
+    
      [5, 'cat'],
-    ```
-
-    ```py
+    
      [6, 'dog'],
-    ```
-
-    ```py
+    
      [7, 'cat'],
-    ```
-
-    ```py
+    
      [8, 'dog'],
-    ```
-
-    ```py
+    
      [9, 'cat'],
-    ```
-
-    ```py
+    
      [10, 'dog']]
     ```
 
@@ -529,17 +511,11 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     if self.scheduler._class_name == "PNDMScheduler":
-    ```
-
-    ```py
+    
         self.scheduler = EulerDiscreteScheduler.from_config(
-    ```
-
-    ```py
+    
             self.scheduler.config
-    ```
-
-    ```py
+    
         )
     ```
 
@@ -547,9 +523,7 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     device = self._execution_device
-    ```
-
-    ```py
+    
     do_classifier_free_guidance = guidance_scale > 1.0
     ```
 
@@ -563,85 +537,45 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     embedding_list = []
-    ```
-
-    ```py
+    
     if len(prompt_list) == 1:
-    ```
-
-    ```py
+    
         prompt_embeds = self._encode_prompt(
-    ```
-
-    ```py
+    
             prompt,
-    ```
-
-    ```py
+    
             device,
-    ```
-
-    ```py
+    
             num_images_per_prompt,
-    ```
-
-    ```py
+    
             do_classifier_free_guidance,
-    ```
-
-    ```py
+    
             negative_prompt,
-    ```
-
-    ```py
+    
             negative_prompt_embeds=negative_prompt_embeds,
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
     else:
-    ```
-
-    ```py
+    
         for prompt in prompt_list:
-    ```
-
-    ```py
+    
             prompt_embeds = self._encode_prompt(
-    ```
-
-    ```py
+    
                 prompt,
-    ```
-
-    ```py
+    
                 device,
-    ```
-
-    ```py
+    
                 num_images_per_prompt,
-    ```
-
-    ```py
+    
                 do_classifier_free_guidance,
-    ```
-
-    ```py
+    
                 negative_prompt,
-    ```
-
-    ```py
+    
                 negative_prompt_embeds=negative_prompt_embeds,
-    ```
-
-    ```py
+    
             )
-    ```
-
-    ```py
+    
             embedding_list.append(prompt_embeds)
     ```
 
@@ -651,9 +585,7 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     self.scheduler.set_timesteps(num_inference_steps, device=device)
-    ```
-
-    ```py
+    
     timesteps = self.scheduler.timesteps
     ```
 
@@ -661,49 +593,27 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     num_channels_latents = self.unet.in_channels
-    ```
-
-    ```py
+    
     batch_size = 1
-    ```
-
-    ```py
+    
     latents = self.prepare_latents(
-    ```
-
-    ```py
+    
         batch_size * num_images_per_prompt,
-    ```
-
-    ```py
+    
         num_channels_latents,
-    ```
-
-    ```py
+    
         height,
-    ```
-
-    ```py
+    
         width,
-    ```
-
-    ```py
+    
         prompt_embeds.dtype,
-    ```
-
-    ```py
+    
         device,
-    ```
-
-    ```py
+    
         generator,
-    ```
-
-    ```py
+    
         latents,
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -711,173 +621,89 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     num_warmup_steps = len(timesteps) - num_inference_steps * \ 
-    ```
-
-    ```py
+    
         self.scheduler.order
-    ```
-
-    ```py
+    
     with self.progress_bar(total=num_inference_steps) as \ 
-    ```
-
-    ```py
+    
         progress_bar:
-    ```
-
-    ```py
+    
         for i, t in enumerate(timesteps):
-    ```
-
-    ```py
+    
             # custom code to enable Prompt Scheduling, 
-    ```
-
-    ```py
+    
             # will only function when
-    ```
-
-    ```py
+    
             # when there is a prompt_embeds_l provided.
-    ```
-
-    ```py
+    
             prompt_embeds_l_len = len(embedding_list)
-    ```
-
-    ```py
+    
             if prompt_embeds_l_len > 0:
-    ```
-
-    ```py
+    
                 # ensure no None prompt will be used
-    ```
-
-    ```py
+    
                 pe_index = (i)%prompt_embeds_l_len
-    ```
-
-    ```py
+    
                 prompt_embeds = embedding_list[pe_index]
-    ```
-
-    ```py
+    
             # expand the latents if we are doing 
-    ```
-
-    ```py
+    
             # classifier free guidance
-    ```
-
-    ```py
+    
             latent_model_input = torch.cat([latents] * 2) 
-    ```
-
-    ```py
+    
                 if do_classifier_free_guidance else latents
-    ```
-
-    ```py
+    
             latent_model_input = 
-    ```
-
-    ```py
+    
                 self.scheduler.scale_model_input(
-    ```
-
-    ```py
+    
                     latent_model_input, t)
-    ```
-
-    ```py
+    
             # predict the noise residual
-    ```
-
-    ```py
+    
             noise_pred = self.unet(
-    ```
-
-    ```py
+    
                 latent_model_input,
-    ```
-
-    ```py
+    
                 t,
-    ```
-
-    ```py
+    
                 encoder_hidden_states=prompt_embeds,
-    ```
-
-    ```py
+    
                 cross_attention_kwargs=cross_attention_kwargs,
-    ```
-
-    ```py
+    
             ).sample
-    ```
-
-    ```py
+    
             # perform guidance
-    ```
-
-    ```py
+    
             if do_classifier_free_guidance:
-    ```
-
-    ```py
+    
                 noise_pred_uncond, noise_pred_text = \
-    ```
-
-    ```py
+    
                     noise_pred.chunk(2)
-    ```
-
-    ```py
+    
                 noise_pred = noise_pred_uncond + guidance_scale * \
-    ```
-
-    ```py
+    
                     (noise_pred_text - noise_pred_uncond)
-    ```
-
-    ```py
+    
             # compute the previous noisy sample x_t -> x_t-1
-    ```
-
-    ```py
+    
             latents = self.scheduler.step(noise_pred, t, 
-    ```
-
-    ```py
+    
                 latents).prev_sample
-    ```
-
-    ```py
+    
             # call the callback, if provided
-    ```
-
-    ```py
+    
             if i == len(timesteps) - 1 or ((i + 1) > 
-    ```
-
-    ```py
+    
                 num_warmup_steps and (i + 1) % 
-    ```
-
-    ```py
+    
                 self.scheduler.order == 0):
-    ```
-
-    ```py
+    
                 progress_bar.update()
-    ```
-
-    ```py
+    
                 if callback is not None and i % callback_steps == 0:
-    ```
-
-    ```py
+    
                     callback(i, t, latents)
     ```
 
@@ -887,17 +713,11 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     image = self.decode_latents(latents)
-    ```
-
-    ```py
+    
     image = self.numpy_to_pil(image)
-    ```
-
-    ```py
+    
     return StableDiffusionPipelineOutput(images=image, 
-    ```
-
-    ```py
+    
         nsfw_content_detected=None)
     ```
 
@@ -907,53 +727,29 @@ class StableDiffusionPipeline_EXT(StableDiffusionPipeline):
 
     ```py
     pipeline = StableDiffusionPipeline_EXT.from_pretrained(
-    ```
-
-    ```py
+    
         "stablediffusionapi/deliberate-v2",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16,
-    ```
-
-    ```py
+    
         safety_checker = None
-    ```
-
-    ```py
+    
     ).to("cuda:0")
-    ```
-
-    ```py
+    
     prompt = "high quality, 4k, details, A realistic photo of cute \ [cat:dog:0.6]"
-    ```
-
-    ```py
+    
     neg_prompt = "paint, oil paint, animation, blur, low quality, \ bad glasses"
-    ```
-
-    ```py
+    
     image = pipeline.scheduler_call(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 

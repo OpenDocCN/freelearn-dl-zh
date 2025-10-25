@@ -82,17 +82,11 @@ Stable Diffusion UNet虽然有效于生成单个图像，但由于其缺乏上�
 
     ```py
     from diffusers import MotionAdapter
-    ```
-
-    ```py
+    
     adapter = MotionAdapter.from_pretrained(
-    ```
-
-    ```py
+    
         "guoyww/animatediff-motion-adapter-v1-5-2"
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -100,25 +94,15 @@ Stable Diffusion UNet虽然有效于生成单个图像，但由于其缺乏上�
 
     ```py
     from diffusers import AnimateDiffPipeline
-    ```
-
-    ```py
+    
     pipe = AnimateDiffPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "digiplay/majicMIX_realistic_v6",
-    ```
-
-    ```py
+    
         motion_adapter    = adapterm,
-    ```
-
-    ```py
+    
         safety_checker    = None
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -126,45 +110,25 @@ Stable Diffusion UNet虽然有效于生成单个图像，但由于其缺乏上�
 
     ```py
     from diffusers import EulerAncestralDiscreteScheduler
-    ```
-
-    ```py
+    
     scheduler = EulerAncestralDiscreteScheduler.from_pretrained(
-    ```
-
-    ```py
+    
         model_path,
-    ```
-
-    ```py
+    
         subfolder         = "scheduler",
-    ```
-
-    ```py
+    
         clip_sample       = False,
-    ```
-
-    ```py
+    
         timestep_spacing  = "linspace",
-    ```
-
-    ```py
+    
         steps_offset      = 1
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     pipe.scheduler = scheduler
-    ```
-
-    ```py
+    
     pipe.enable_vae_slicing()
-    ```
-
-    ```py
+    
     pipe.enable_model_cpu_offload()
     ```
 
@@ -174,77 +138,41 @@ Stable Diffusion UNet虽然有效于生成单个图像，但由于其缺乏上�
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers.utils import export_to_gif, export_to_video
-    ```
-
-    ```py
+    
     prompt = """photorealistic, 1girl, dramatic lighting"""
-    ```
-
-    ```py
+    
     neg_prompt = """worst quality, low quality, normal quality, lowres, bad anatomy, bad hands, monochrome, grayscale watermark, moles"""
-    ```
-
-    ```py
+    
     #pipe.to("cuda:0")
-    ```
-
-    ```py
+    
     output = pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         height = 256,
-    ```
-
-    ```py
+    
         width = 256,
-    ```
-
-    ```py
+    
         num_frames = 16,
-    ```
-
-    ```py
+    
         num_inference_steps = 30,
-    ```
-
-    ```py
+    
         guidance_scale= 8.5,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(7)
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     frames = output.frames[0]
-    ```
-
-    ```py
+    
     torch.cuda.empty_cache()
-    ```
-
-    ```py
+    
     export_to_gif(frames, "animation_origin_256_wo_lora.gif")
-    ```
-
-    ```py
+    
     export_to_video(frames, "animation_origin_256_wo_lora.mp4")
     ```
 

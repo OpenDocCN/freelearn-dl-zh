@@ -76,29 +76,17 @@
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     import torch.nn as nn
-    ```
-
-    ```py
+    
     import torch.nn.functional as F
-    ```
-
-    ```py
+    
     from torch.utils.data import DataLoader
-    ```
-
-    ```py
+    
     from torchvision.datasets import MNIST
-    ```
-
-    ```py
+    
     import torchvision.transforms as transforms
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
     ```
 
@@ -126,33 +114,19 @@ transform = transforms.Compose([transforms.ToTensor(),
 
     ```py
     trainset = MNIST('./data', train=True, download=True,
-    ```
-
-    ```py
+    
         transform=transform)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(trainset, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
-    ```
-
-    ```py
+    
     testset = MNIST('./data', train=False, download=True,
-    ```
-
-    ```py
+    
         transform=transform)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(testset, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -160,73 +134,39 @@ transform = transforms.Compose([transforms.ToTensor(),
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
         hidden_units: int = 24):
-    ```
-
-    ```py
+    
             super(Net, self).__init__()
-    ```
-
-    ```py
+    
             self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
             self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                 self.hidden_units)
-    ```
-
-    ```py
+    
             self.fc2 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                 self.hidden_units)
-    ```
-
-    ```py
+    
             self.output = nn.Linear(self.hidden_units, 10)
-    ```
-
-    ```py
+    
         def forward(self,
-    ```
-
-    ```py
+    
             x: torch.Tensor) -> torch.Tensor:
-    ```
-
-    ```py
+    
                 x = self.fc1(x)
-    ```
-
-    ```py
+    
                 x = F.relu(x)
-    ```
-
-    ```py
+    
                 x = self.fc2(x)
-    ```
-
-    ```py
+    
                 x = F.relu(x)
-    ```
-
-    ```py
+    
                 output = torch.softmax(self.output(x), dim=1)
-    ```
-
-    ```py
+    
                 return output
     ```
 
@@ -234,29 +174,17 @@ transform = transforms.Compose([transforms.ToTensor(),
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     net = Net(784)
-    ```
-
-    ```py
+    
     # Generate randomly one random 28x28 image as a 784 values tensor
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, 784))
-    ```
-
-    ```py
+    
     result = net(random_data)
-    ```
-
-    ```py
+    
     print('Resulting output tensor:', result)
-    ```
-
-    ```py
+    
     print('Sum of the output tensor:', result.sum())
     ```
 
@@ -272,13 +200,9 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     criterion = nn.CrossEntropyLoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001, weight_decay=0.001)
     ```
 
@@ -286,85 +210,45 @@ Sum of the output tensor: tensor(1.0000, grad_fn=<SumBackward0>)
 
     ```py
     def epoch_step(net, dataloader, training_set: bool):
-    ```
-
-    ```py
+    
         running_loss = 0.
-    ```
-
-    ```py
+    
         correct = 0.
-    ```
-
-    ```py
+    
         for i, data in enumerate(dataloader, 0):
-    ```
-
-    ```py
+    
             # Get the inputs: data is a list of [inputs, labels]
-    ```
-
-    ```py
+    
             inputs, labels = data
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 # Zero the parameter gradients
-    ```
-
-    ```py
+    
                 optimizer.zero_grad()
-    ```
-
-    ```py
+    
             # Forward + backward + optimize
-    ```
-
-    ```py
+    
             outputs = net(inputs)
-    ```
-
-    ```py
+    
             loss = criterion(outputs, labels)
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 loss.backward()
-    ```
-
-    ```py
+    
                 optimizer.step()
-    ```
-
-    ```py
+    
             # Add correct predictions for this batch
-    ```
-
-    ```py
+    
             correct += (outputs.argmax(
-    ```
-
-    ```py
+    
                 dim=1) == labels).float().sum()
-    ```
-
-    ```py
+    
             # Compute loss for this batch
-    ```
-
-    ```py
+    
             running_loss += loss.item()
-    ```
-
-    ```py
+    
         return running_loss, correct
     ```
 
@@ -423,25 +307,15 @@ Finished Training
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -457,25 +331,15 @@ Finished Training
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -582,13 +446,9 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     X_train, X_val, y_train, y_val = train_test_split(
-    ```
-
-    ```py
+    
         X.astype(np.float32), y.astype(np.float32),
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0)
     ```
 
@@ -596,61 +456,33 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     class BreastCancerDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, X: np.array, y: np.array,
-    ```
-
-    ```py
+    
             x_scaler: StandardScaler = None):
-    ```
-
-    ```py
+    
                 if x_scaler is None:
-    ```
-
-    ```py
+    
                     self.x_scaler = StandardScaler()
-    ```
-
-    ```py
+    
                     X = self.x_scaler.fit_transform(X)
-    ```
-
-    ```py
+    
                 else:
-    ```
-
-    ```py
+    
                     self.x_scaler = x_scaler
-    ```
-
-    ```py
+    
                     X = self.x_scaler.transform(X)
-    ```
-
-    ```py
+    
                 self.X = torch.from_numpy(X)
-    ```
-
-    ```py
+    
                 self.y = torch.from_numpy(y)
-    ```
-
-    ```py
+    
         def __len__(self) -> int:
-    ```
-
-    ```py
+    
             return len(self.X)
-    ```
-
-    ```py
+    
         def __getitem__(self, idx: int) -> tuple[torch.Tensor]:
-    ```
-
-    ```py
+    
             return self.X[idx], self.y[idx]
     ```
 
@@ -658,29 +490,17 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     training_data = BreastCancerDataset(X_train, y_train)
-    ```
-
-    ```py
+    
     val_data = BreastCancerDataset(X_val, y_val,
-    ```
-
-    ```py
+    
         training_data.x_scaler)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(training_data,
-    ```
-
-    ```py
+    
         batch_size=64, shuffle=True)
-    ```
-
-    ```py
+    
     val_dataloader = DataLoader(val_data, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -688,77 +508,41 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
             hidden_units: int = 36):
-    ```
-
-    ```py
+    
                 super(Net, self).__init__()
-    ```
-
-    ```py
+    
                 self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
                 self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc2 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.output = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     1)
-    ```
-
-    ```py
+    
         def forward(self, x: torch.Tensor) ->
-    ```
-
-    ```py
+    
             torch.Tensor:
-    ```
-
-    ```py
+    
                 x = self.fc1(x)
-    ```
-
-    ```py
+    
                 x = F.relu(x)
-    ```
-
-    ```py
+    
                 x = self.fc2(x)
-    ```
-
-    ```py
+    
                 x = F.relu(x)
-    ```
-
-    ```py
+    
                 output = torch.sigmoid(self.output(x))
-    ```
-
-    ```py
+    
                 return output
     ```
 
@@ -766,25 +550,15 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1])
-    ```
-
-    ```py
+    
     # Generate randomly one random 28x28 image as a 784 values tensor
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, X_train.shape[1]))
-    ```
-
-    ```py
+    
     result = net(random_data)
-    ```
-
-    ```py
+    
     print('Resulting output tensor:', result)
     ```
 
@@ -798,13 +572,9 @@ Resulting output tensor: tensor([[0.5674]], grad_fn=<SigmoidBackward0>)
 
     ```py
     criterion = nn.BCELoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
     ```
 
@@ -812,89 +582,47 @@ Resulting output tensor: tensor([[0.5674]], grad_fn=<SigmoidBackward0>)
 
     ```py
     def epoch_step(net, dataloader, training_set: bool):
-    ```
-
-    ```py
+    
         running_loss = 0.
-    ```
-
-    ```py
+    
         correct = 0.
-    ```
-
-    ```py
+    
         for i, data in enumerate(dataloader, 0):
-    ```
-
-    ```py
+    
             # Get the inputs: data is a list of [inputs, labels]
-    ```
-
-    ```py
+    
             inputs, labels = data
-    ```
-
-    ```py
+    
             labels = labels.unsqueeze(1)
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 # Zero the parameter gradients
-    ```
-
-    ```py
+    
                 optimizer.zero_grad()
-    ```
-
-    ```py
+    
             # Forward + backward + optimize
-    ```
-
-    ```py
+    
             outputs = net(inputs)
-    ```
-
-    ```py
+    
             loss = criterion(outputs, labels)
-    ```
-
-    ```py
+    
             if training_set:
-    ```
-
-    ```py
+    
                 loss.backward()
-    ```
-
-    ```py
+    
                 optimizer.step()
-    ```
-
-    ```py
+    
             # Add correct predictions for this batch
-    ```
-
-    ```py
+    
             correct += ((
-    ```
-
-    ```py
+    
                 outputs > 0.5) == labels).float().sum()
-    ```
-
-    ```py
+    
             # Compute loss for this batch
-    ```
-
-    ```py
+    
             running_loss += loss.item()
-    ```
-
-    ```py
+    
         return running_loss, correct
     ```
 
@@ -976,25 +704,15 @@ train_losses, val_losses, train_accuracy,
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(val_losses, label='valid')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1028,13 +746,9 @@ train_losses, val_losses, train_accuracy,
 
     ```py
     # Instantiate a fresh model
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1])
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     ```
 
@@ -1042,21 +756,13 @@ train_losses, val_losses, train_accuracy,
 
     ```py
     train_losses, val_losses, train_accuracy,
-    ```
-
-    ```py
+    
         val_accuracy = train_model(
-    ```
-
-    ```py
+    
             net, train_dataloader, val_dataloader,
-    ```
-
-    ```py
+    
             criterion, optimizer, patience=30, epochs=500
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -1072,25 +778,15 @@ train_losses, val_losses, train_accuracy,
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(val_losses, label='validation')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (BCE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1179,13 +875,9 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X.astype(np.float32), y.astype(np.float32),
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0)
     ```
 
@@ -1193,13 +885,9 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     scaler = StandardScaler()
-    ```
-
-    ```py
+    
     X_train = scaler.fit_transform(X_train)
-    ```
-
-    ```py
+    
     X_test = scaler.transform(X_test)
     ```
 
@@ -1207,33 +895,19 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     class CaliforniaDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, X: np.array, y: np.array):
-    ```
-
-    ```py
+    
             self.X = torch.from_numpy(X)
-    ```
-
-    ```py
+    
             self.y = torch.from_numpy(y)
-    ```
-
-    ```py
+    
         def __len__(self) -> int:
-    ```
-
-    ```py
+    
             return len(self.X)
-    ```
-
-    ```py
+    
         def __getitem__(self, idx: int) ->
-    ```
-
-    ```py
+    
             tuple[torch.Tensor]: return self.X[idx], self.y[idx]
     ```
 
@@ -1241,33 +915,19 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     # Instantiate datasets
-    ```
-
-    ```py
+    
     training_data = CaliforniaDataset(X_train, y_train)
-    ```
-
-    ```py
+    
     test_data = CaliforniaDataset(X_test, y_test)
-    ```
-
-    ```py
+    
     # Instantiate data loaders
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(training_data,
-    ```
-
-    ```py
+    
         batch_size=64, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_data, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -1275,117 +935,61 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
             hidden_units: int = 128):
-    ```
-
-    ```py
+    
                 super(Net, self).__init__()
-    ```
-
-    ```py
+    
                 self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
                 self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc2 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc3 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc4 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc5 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.output = nn.Linear(self.hidden_units, 1)
-    ```
-
-    ```py
+    
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-    ```
-
-    ```py
+    
             x = self.fc1(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.fc2(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.fc3(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.fc4(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.fc5(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             output = self.output(x)
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -1393,29 +997,17 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     # Instantiate the network
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1])
-    ```
-
-    ```py
+    
     # Generate one random sample of 8 features
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, X_train.shape[1]))
-    ```
-
-    ```py
+    
     # Compute the forward propagation
-    ```
-
-    ```py
+    
     print(net(random_data))
-    ```
-
-    ```py
+    
     tensor([[0.0674]], grad_fn=<AddmmBackward0>)
     ```
 
@@ -1423,9 +1015,7 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     criterion = nn.MSELoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     ```
 
@@ -1433,13 +1023,9 @@ from torch.utils.data import Dataset, DataLoader
 
     ```py
     train_losses, test_losses = train_model(net,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         optimizer, 500)
     ```
 
@@ -1454,25 +1040,15 @@ Finished Training
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (MSE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1488,41 +1064,23 @@ Finished Training
 
     ```py
     # Compute the predictions with the trained neural network
-    ```
-
-    ```py
+    
     y_train_pred = net(
-    ```
-
-    ```py
+    
         torch.tensor((X_train))).detach().numpy()
-    ```
-
-    ```py
+    
     y_test_pred = net(
-    ```
-
-    ```py
+    
         torch.tensor((X_test))).detach().numpy()
-    ```
-
-    ```py
+    
     # Compute the R2-score
-    ```
-
-    ```py
+    
     print('R2-score on training set:', r2_score(y_train,
-    ```
-
-    ```py
+    
          y_train_pred))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', r2_score(y_test,
-    ```
-
-    ```py
+    
         y_test_pred))
     ```
 
@@ -1549,69 +1107,37 @@ R2-score on test set: 0.7610035849523354
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
             hidden_units: int = 16):
-    ```
-
-    ```py
+    
                 super(Net, self).__init__()
-    ```
-
-    ```py
+    
             self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
             self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                 self.hidden_units)
-    ```
-
-    ```py
+    
             self.fc2 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                 self.hidden_units)
-    ```
-
-    ```py
+    
             self.output = nn.Linear(self.hidden_units, 1)
-    ```
-
-    ```py
+    
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-    ```
-
-    ```py
+    
             x = self.fc1(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.fc2(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             output = self.output(x)
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -1619,17 +1145,11 @@ R2-score on test set: 0.7610035849523354
 
     ```py
     # Instantiate the network
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1])
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(),
-    ```
-
-    ```py
+    
         lr=0.001)
     ```
 
@@ -1637,21 +1157,13 @@ R2-score on test set: 0.7610035849523354
 
     ```py
     train_losses, test_losses = train_model(net,
-    ```
-
-    ```py
+    
         train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
         optimizer, 500)
-    ```
-
-    ```py
+    
     [epoch 500] Training: loss=0.248 | Test: loss=0.273
-    ```
-
-    ```py
+    
     Finished Training
     ```
 
@@ -1659,25 +1171,15 @@ R2-score on test set: 0.7610035849523354
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (MSE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -1693,41 +1195,23 @@ R2-score on test set: 0.7610035849523354
 
     ```py
     # Compute the predictions with the trained neural network
-    ```
-
-    ```py
+    
     y_train_pred = net(
-    ```
-
-    ```py
+    
         torch.tensor((X_train))).detach().numpy()
-    ```
-
-    ```py
+    
     y_test_pred = net(
-    ```
-
-    ```py
+    
         torch.tensor((X_test))).detach().numpy()
-    ```
-
-    ```py
+    
     # Compute the R2-score
-    ```
-
-    ```py
+    
     print('R2-score on training set:', r2_score(y_train,
-    ```
-
-    ```py
+    
         y_train_pred))
-    ```
-
-    ```py
+    
     print('R2-score on test set:', r2_score(y_test,
-    ```
-
-    ```py
+    
         y_test_pred))
     ```
 
@@ -1853,13 +1337,9 @@ import matplotlib.pyplot as plt
 
     ```py
     X_train, X_test, y_train, y_test = train_test_split(
-    ```
-
-    ```py
+    
         X.astype(np.float32), y.astype(np.int64),
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0)
     ```
 
@@ -1867,33 +1347,19 @@ import matplotlib.pyplot as plt
 
     ```py
     class DigitsDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, X: np.array, y: np.array):
-    ```
-
-    ```py
+    
             self.X = torch.from_numpy(X/255)
-    ```
-
-    ```py
+    
             self.y = torch.from_numpy(y)
-    ```
-
-    ```py
+    
         def __len__(self) -> int:
-    ```
-
-    ```py
+    
             return len(self.X)
-    ```
-
-    ```py
+    
         def __getitem__(self, idx: int) -> tuple[torch.Tensor]:
-    ```
-
-    ```py
+    
             return self.X[idx], self.y[idx]
     ```
 
@@ -1901,33 +1367,19 @@ import matplotlib.pyplot as plt
 
     ```py
     # Instantiate datasets
-    ```
-
-    ```py
+    
     training_data = DigitsDataset(X_train, y_train)
-    ```
-
-    ```py
+    
     test_data = DigitsDataset(X_test, y_test)
-    ```
-
-    ```py
+    
     # Instantiate data loaders
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(training_data,
-    ```
-
-    ```py
+    
         batch_size=64, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_data, batch_size=64,
-    ```
-
-    ```py
+    
         shuffle=True)
     ```
 
@@ -1935,105 +1387,55 @@ import matplotlib.pyplot as plt
 
     ```py
     class Net(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, input_shape: int,
-    ```
-
-    ```py
+    
             hidden_units: int = 128,
-    ```
-
-    ```py
+    
             dropout: float = 0.25):
-    ```
-
-    ```py
+    
                 super(Net, self).__init__()
-    ```
-
-    ```py
+    
                 self.hidden_units = hidden_units
-    ```
-
-    ```py
+    
                 self.fc1 = nn.Linear(input_shape,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc2 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.fc3 = nn.Linear(self.hidden_units,
-    ```
-
-    ```py
+    
                     self.hidden_units)
-    ```
-
-    ```py
+    
                 self.dropout = nn.Dropout(p=dropout)
-    ```
-
-    ```py
+    
                 self.output = nn.Linear(self.hidden_units, 10)
-    ```
-
-    ```py
+    
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-    ```
-
-    ```py
+    
             x = self.fc1(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.dropout(x)
-    ```
-
-    ```py
+    
             x = self.fc2(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.dropout(x)
-    ```
-
-    ```py
+    
             x = self.fc3(x)
-    ```
-
-    ```py
+    
             x = F.relu(x)
-    ```
-
-    ```py
+    
             x = self.dropout(x)
-    ```
-
-    ```py
+    
             output = torch.softmax(self.output(x), dim=1)
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -2051,29 +1453,17 @@ import matplotlib.pyplot as plt
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1], dropout=0)
-    ```
-
-    ```py
+    
     # Generate randomly one random 28x28 image as a 784 values tensor
-    ```
-
-    ```py
+    
     random_data = torch.rand((1, 64))
-    ```
-
-    ```py
+    
     result = net(random_data)
-    ```
-
-    ```py
+    
     print('Resulting output tensor:', result)
-    ```
-
-    ```py
+    
     print('Sum of the output tensor:', result.sum())
     ```
 
@@ -2089,9 +1479,7 @@ Sum of the output tensor: tensor(1., grad_fn=<SumBackward0>)
 
     ```py
     criterion = nn.CrossEntropyLoss()
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     ```
 
@@ -2099,21 +1487,13 @@ Sum of the output tensor: tensor(1., grad_fn=<SumBackward0>)
 
     ```py
     train_losses, test_losses, train_accuracy,
-    ```
-
-    ```py
+    
         test_accuracy = train_model(
-    ```
-
-    ```py
+    
             net, train_dataloader, test_dataloader,
-    ```
-
-    ```py
+    
             criterion, optimizer, epochs=500
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -2128,25 +1508,15 @@ Finished Training
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -2160,25 +1530,15 @@ Finished Training
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -2198,13 +1558,9 @@ Finished Training
 
     ```py
     # Instantiate the model
-    ```
-
-    ```py
+    
     net = Net(X_train.shape[1], dropout=0.25)
-    ```
-
-    ```py
+    
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     ```
 
@@ -2212,25 +1568,15 @@ Finished Training
 
     ```py
     train_losses, test_losses, train_accuracy, test_accuracy = train_model(
-    ```
-
-    ```py
+    
         net, train_dataloader, test_dataloader, criterion,
-    ```
-
-    ```py
+    
             optimizer, epochs=500
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     [epoch 500] Training: loss=1.472 accuracy=0.990 |       Test: loss=1.488 accuracy=0.975
-    ```
-
-    ```py
+    
     Finished Training
     ```
 
@@ -2238,25 +1584,15 @@ Finished Training
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_losses, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('loss (CE)')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 
@@ -2272,25 +1608,15 @@ Finished Training
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(test_accuracy, label='test')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch')
-    ```
-
-    ```py
+    
     plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend()
-    ```
-
-    ```py
+    
     plt.show()
     ```
 

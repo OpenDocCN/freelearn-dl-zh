@@ -74,57 +74,31 @@
 
     ```py
     #Import necessary libraries
-    ```
-
-    ```py
+    
     import os
-    ```
-
-    ```py
+    
     import pathlib
-    ```
-
-    ```py
+    
     import matplotlib.pyplot as plt
-    ```
-
-    ```py
+    
     import matplotlib.image as mpimg
-    ```
-
-    ```py
+    
     import random
-    ```
-
-    ```py
+    
     import numpy as np
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     import pandas as pd
-    ```
-
-    ```py
+    
     import tensorflow as tf
-    ```
-
-    ```py
+    
     from tensorflow import keras
-    ```
-
-    ```py
+    
     from tensorflow.keras.preprocessing.image import ImageDataGenerator
-    ```
-
-    ```py
+    
     from tensorflow.keras.callbacks import EarlyStopping
-    ```
-
-    ```py
+    
     from tensorflow.keras import regularizer
     ```
 
@@ -152,21 +126,13 @@
 
     ```py
     root_dir = "/content/dataset"
-    ```
-
-    ```py
+    
     for dirpath, dirnames, filenames in os.walk(root_dir):
-    ```
-
-    ```py
+    
         print(f"Directory: {dirpath}")
-    ```
-
-    ```py
+    
         print(f"Number of images: {len(filenames)}")
-    ```
-
-    ```py
+    
         print()
     ```
 
@@ -176,9 +142,7 @@
 
     ```py
     view_random_images(
-    ```
-
-    ```py
+    
         target_dir="/content/dataset/train",num_images=4)
     ```
 
@@ -192,9 +156,7 @@
 
     ```py
     train_datagen = ImageDataGenerator(rescale=1./255)
-    ```
-
-    ```py
+    
     valid_datagen = ImageDataGenerator(rescale=1./255)
     ```
 
@@ -202,17 +164,11 @@
 
     ```py
     # Set up the train and test directories
-    ```
-
-    ```py
+    
     train_dir = "/content/dataset/train/"
-    ```
-
-    ```py
+    
     val_dir = "/content/dataset/val"
-    ```
-
-    ```py
+    
     test_dir = "/content/dataset/test"
     ```
 
@@ -220,49 +176,27 @@
 
     ```py
     train_data=train_datagen.flow_from_directory(
-    ```
-
-    ```py
+    
         train_dir,target_size=(224,224),
-    ```
-
-    ```py
+    
     # convert all images to be 224 x 224
-    ```
-
-    ```py
+    
         class_mode="binary")
-    ```
-
-    ```py
+    
     valid_data=valid_datagen.flow_from_directory(val_dir,
-    ```
-
-    ```py
+    
         target_size=(224,224),
-    ```
-
-    ```py
+    
         class_mode="binary",
-    ```
-
-    ```py
+    
         shuffle=False)
-    ```
-
-    ```py
+    
     test_data=valid_datagen.flow_from_directory(test_dir,
-    ```
-
-    ```py
+    
         target_size=(224,224),
-    ```
-
-    ```py
+    
         class_mode="binary",
-    ```
-
-    ```py
+    
         shuffle=False)
     ```
 

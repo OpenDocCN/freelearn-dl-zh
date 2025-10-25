@@ -82,9 +82,7 @@ GPU和CPU之间将进行大量的数据传输，一些Stable Diffusion模型可�
 
     ```py
     sudo apt-get purge nvidia*
-    ```
-
-    ```py
+    
     sudo apt-get autoremove
     ```
 
@@ -159,25 +157,15 @@ python -m pip install --upgrade pip
 
     ```py
     sudo apt-get install software-properties-common
-    ```
-
-    ```py
+    
     sudo add-apt-repository ppa:deadsnakes/ppa
-    ```
-
-    ```py
+    
     sudo apt-get update
-    ```
-
-    ```py
+    
     sudo apt-get install python3.10
-    ```
-
-    ```py
+    
     sudo apt-get install python3.10-dev
-    ```
-
-    ```py
+    
     sudo apt-get install python3.10-distutils
     ```
 
@@ -185,9 +173,7 @@ python -m pip install --upgrade pip
 
     ```py
     curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-    ```
-
-    ```py
+    
     python3.10 get-pip.py
     ```
 
@@ -195,13 +181,9 @@ python -m pip install --upgrade pip
 
     ```py
     python3.10 -m pip install --user virtualenv
-    ```
-
-    ```py
+    
     python3.10 -m virtualenv venv_ubuntu_p310
-    ```
-
-    ```py
+    
     . venv_ubuntu_p310/bin/activate
     ```
 
@@ -263,9 +245,7 @@ nvidia-smi
 
     ```py
     pip install diffusers
-    ```
-
-    ```py
+    
     pip install transformers scipy ftfy accelerate
     ```
 
@@ -273,25 +253,15 @@ nvidia-smi
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     pipe = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         torch_dtype=torch.float16)
-    ```
-
-    ```py
+    
     pipe.to("cuda") # mps for mac
     ```
 
@@ -301,21 +271,13 @@ nvidia-smi
 
     ```py
     prompt = "a photo of an astronaut riding a horse on mars,blazing fast, wind and sand moving back"
-    ```
-
-    ```py
+    
     image = pipe(
-    ```
-
-    ```py
+    
         prompt, num_inference_steps=30
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 
@@ -363,9 +325,7 @@ nvidia-smi
 
     ```py
     !pip install diffusers
-    ```
-
-    ```py
+    
     !pip install transformers scipy ftfy accelerate ipywidgets
     ```
 
@@ -373,25 +333,15 @@ nvidia-smi
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     pipe = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
          torch_dtype=torch.float16)
-    ```
-
-    ```py
+    
     pipe.to("cuda")
     ```
 
@@ -399,21 +349,13 @@ nvidia-smi
 
     ```py
     prompt = "a photo of an astronaut riding a horse on mars,blazing fast, wind and sand moving back"
-    ```
-
-    ```py
+    
     image = pipe(
-    ```
-
-    ```py
+    
         prompt, num_inference_steps=30
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     image
     ```
 

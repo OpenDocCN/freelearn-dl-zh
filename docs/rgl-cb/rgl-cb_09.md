@@ -121,13 +121,9 @@ import nltk
 
     ```py
     # Will take a while the first time, need to download about 1.6GB of the model
-    ```
-
-    ```py
+    
     word2vec_model = gensim.downloader.load('
-    ```
-
-    ```py
+    
         word2vec-google-news-300')
     ```
 
@@ -141,13 +137,9 @@ import nltk
 
     ```py
     # Split data into train and test sets train_data, 
-    ```
-
-    ```py
+    
         test_data = train_test_split(data, test_size=0.2,
-    ```
-
-    ```py
+    
             random_state=0)
     ```
 
@@ -155,129 +147,67 @@ import nltk
 
     ```py
     # Define dataset class
-    ```
-
-    ```py
+    
     class TextClassificationDataset(Dataset):
-    ```
-
-    ```py
+    
         def __init__(self, data, word2vec_model,
-    ```
-
-    ```py
+    
             max_words):
-    ```
-
-    ```py
+    
             self.data = data
-    ```
-
-    ```py
+    
             self.word2vec_model = word2vec_model
-    ```
-
-    ```py
+    
             self.max_words = max_words
-    ```
-
-    ```py
+    
             self.embeddings = data['review'].apply(
-    ```
-
-    ```py
+    
                 self.embed)
-    ```
-
-    ```py
+    
             le = LabelEncoder()
-    ```
-
-    ```py
+    
             self.labels = torch.tensor(le.fit_transform(
-    ```
-
-    ```py
+    
                 data['sentiment']).astype(np.float32))
-    ```
-
-    ```py
+    
         def __len__(self):
-    ```
-
-    ```py
+    
             return len(self.data)
-    ```
-
-    ```py
+    
         def __getitem__(self, index):
-    ```
-
-    ```py
+    
             return self.embeddings.iloc[index],
-    ```
-
-    ```py
+    
                 self.labels[index]
-    ```
-
-    ```py
+    
         def embed(self, text):
-    ```
-
-    ```py
+    
             tokens = nltk.word_tokenize(text)
-    ```
-
-    ```py
+    
             return self.tokens_to_embeddings(tokens)
-    ```
-
-    ```py
+    
         def tokens_to_embeddings(self, tokens):
-    ```
-
-    ```py
+    
             embeddings = []
-    ```
-
-    ```py
+    
             for i, token in enumerate(tokens):
-    ```
-
-    ```py
+    
                 if i >= self.max_words:
-    ```
-
-    ```py
+    
                     break
-    ```
-
-    ```py
+    
                 if token not in self.word2vec_model:
-    ```
-
-    ```py
+    
                     continue
-    ```
-
-    ```py
+    
                 embeddings.append(
-    ```
-
-    ```py
+    
                     self.word2vec_model[token])
-    ```
-
-    ```py
+    
             while len(embeddings) < self.max_words:
-    ```
-
-    ```py
+    
                 embeddings.append(np.zeros((300, )))
-    ```
-
-    ```py
+    
             return np.array(embeddings, dtype=np.float32)
     ```
 
@@ -291,41 +221,23 @@ import nltk
 
     ```py
     batch_size = 64 max_words = 64
-    ```
-
-    ```py
+    
     # Initialize datasets and dataloaders
-    ```
-
-    ```py
+    
     Train_dataset = TextClassificationDataset(train_data,
-    ```
-
-    ```py
+    
         word2vec_model, max_words)
-    ```
-
-    ```py
+    
     test_dataset = TextClassificationDataset(test_data,
-    ```
-
-    ```py
+    
         word2vec_model, max_words)
-    ```
-
-    ```py
+    
     train_dataloader = DataLoader(train_dataset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
-    ```
-
-    ```py
+    
     test_dataloader = DataLoader(test_dataset,
-    ```
-
-    ```py
+    
         batch_size=batch_size, shuffle=True)
     ```
 
@@ -333,81 +245,43 @@ import nltk
 
     ```py
     # Define RNN model
-    ```
-
-    ```py
+    
     class GRUClassifier(nn.Module):
-    ```
-
-    ```py
+    
         def __init__(self, embedding_dim, hidden_size,
-    ```
-
-    ```py
+    
             output_size, num_layers=3):
-    ```
-
-    ```py
+    
                 super(GRUClassifier, self).__init__()
-    ```
-
-    ```py
+    
                 self.hidden_size = hidden_size
-    ```
-
-    ```py
+    
                 self.num_layers = num_layers
-    ```
-
-    ```py
+    
                 self.gru = nn.GRU(
-    ```
-
-    ```py
+    
                     input_size=embedding_dim,
-    ```
-
-    ```py
+    
                     hidden_size=hidden_size,
-    ```
-
-    ```py
+    
                     num_layers=num_layers,
-    ```
-
-    ```py
+    
                     batch_first=True)
-    ```
-
-    ```py
+    
             self.fc = nn.Linear(hidden_size, output_size)
-    ```
-
-    ```py
+    
         def forward(self, inputs):
-    ```
-
-    ```py
+    
             batch_size = inputs.size(0)
-    ```
-
-    ```py
+    
             zero_hidden = torch.zeros(self.num_layers,
-    ```
-
-    ```py
+    
                 batch_size, self.hidden_size).to(device)
-    ```
-
-    ```py
+    
             output, hidden = self.gru(inputs, zero_hidden)
-    ```
-
-    ```py
+    
             output = torch.sigmoid(self.fc(output[:, -1]))
-    ```
-
-    ```py
+    
             return output
     ```
 
@@ -415,37 +289,21 @@ import nltk
 
     ```py
     embedding_dim = 300
-    ```
-
-    ```py
+    
     hidden_dim = 32
-    ```
-
-    ```py
+    
     output_size = 1
-    ```
-
-    ```py
+    
     # Optionally, set the device to GPU if you have one device = torch.device(
-    ```
-
-    ```py
+    
         'cuda' if torch.cuda.is_available() else 'cpu')
-    ```
-
-    ```py
+    
     model = GRUClassifier(
-    ```
-
-    ```py
+    
         embedding_dim=ebedding_dim,
-    ```
-
-    ```py
+    
         hidden_siz=hidden_dim,
-    ```
-
-    ```py
+    
         output_size=output_size, ).to(device)
     ```
 
@@ -453,9 +311,7 @@ import nltk
 
     ```py
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-    ```
-
-    ```py
+    
     criterion = nn.BCELoss()
     ```
 
@@ -463,17 +319,11 @@ import nltk
 
     ```py
     train_losses, test_losses, train_accuracy, 
-    ```
-
-    ```py
+    
     test_accuracy = train_model(
-    ```
-
-    ```py
+    
         model, train_dataloader, test_dataloader,
-    ```
-
-    ```py
+    
         criterion, optimizer, device, epochs=20)
     ```
 
@@ -487,17 +337,11 @@ import nltk
 
     ```py
     plt.plot(train_losses, label='train')
-    ```
-
-    ```py
+    
     plt.plot(testlosse, label=''test'')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('loss (BCE)')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -513,17 +357,11 @@ import nltk
 
     ```py
     plt.plot(train_accuracy, label='train')
-    ```
-
-    ```py
+    
     plt.plot(testaccurcy, label=''test'')
-    ```
-
-    ```py
+    
     plt.xlabel('epoch') plt.ylabel('Accuracy')
-    ```
-
-    ```py
+    
     plt.legend() plt.show()
     ```
 
@@ -567,9 +405,7 @@ import nltk
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     import gensim.downloader
     ```
 
@@ -577,13 +413,9 @@ import nltk
 
     ```py
     # Load the Word2Vec model
-    ```
-
-    ```py
+    
     word2vec_model = gensim.downloader.load(
-    ```
-
-    ```py
+    
         'word2vec-google-news-300')
     ```
 
@@ -591,121 +423,63 @@ import nltk
 
     ```py
     def replace_words_with_similar(text, model,
-    ```
-
-    ```py
+    
         sim_threshold: float = 0.5,
-    ```
-
-    ```py
+    
         probability: float = 0.5,
-    ```
-
-    ```py
+    
         top_similar: int = 3,
-    ```
-
-    ```py
+    
         stop_words: list[str] = []):
-    ```
-
-    ```py
+    
         # Split in words
-    ```
-
-    ```py
+    
         words = text.split()
-    ```
-
-    ```py
+    
         # Create an empty list of the output words
-    ```
-
-    ```py
+    
         new_words = []
-    ```
-
-    ```py
+    
         # Loop over the words
-    ```
-
-    ```py
+    
         for word in words:
-    ```
-
-    ```py
+    
             added = False
-    ```
-
-    ```py
+    
             # If the word is in the vocab, not in stop words, and above probability, then...
-    ```
-
-    ```py
+    
             if word in model and word not in stop_words and np.random.uniform(0, 1) > probability:
-    ```
-
-    ```py
+    
                 # Get the top_similar most similar words
-    ```
-
-    ```py
+    
                 similar_words = model.most_similar(word,
-    ```
-
-    ```py
+    
                     topn=top_similar)
-    ```
-
-    ```py
+    
                 # Randomly pick one of those words
-    ```
-
-    ```py
+    
                 idx = np.random.randint(len(similar_words))
-    ```
-
-    ```py
+    
                 # Get the similar word and similarity score
-    ```
-
-    ```py
+    
                 sim_word, sim_score = similar_words[idx]
-    ```
-
-    ```py
+    
                 # If the similary score is above threshold, add the word
-    ```
-
-    ```py
+    
                 if sim_score > sim_threshold:
-    ```
-
-    ```py
+    
                     new_words.append(sim_word)
-    ```
-
-    ```py
+    
                     added = True
-    ```
-
-    ```py
+    
             if not added:
-    ```
-
-    ```py
+    
                 # If no similar word is added, add the original word
-    ```
-
-    ```py
+    
                 new_words.append(word)
-    ```
-
-    ```py
+    
         # Return the list as a string
-    ```
-
-    ```py
+    
         return ' '.join(new_words)
     ```
 
@@ -745,21 +519,13 @@ import nltk
 
     ```py
     original_text = "The quick brown fox jumps over the lazy dog"
-    ```
-
-    ```py
+    
     generated_text = replace_words_with_similar(
-    ```
-
-    ```py
+    
         original_text, word2vec_model, top_words=['the'])
-    ```
-
-    ```py
+    
     print(""Original text: {}"".format(original_text))
-    ```
-
-    ```py
+    
     print("New text: {}".format(generated_text))
     ```
 
@@ -868,13 +634,9 @@ from transformers import pipeline
 
     ```py
     # Load dat
-    ```
-
-    ```py
+    
     Data = pd.read_csv(''Tweets.csv'')
-    ```
-
-    ```py
+    
     data[['airline_sentiment', 'text']].head()
     ```
 
@@ -888,13 +650,9 @@ from transformers import pipeline
 
     ```py
     # Split data into train and test sets
-    ```
-
-    ```py
+    
     Train_data, test_data = train_test_split(data,
-    ```
-
-    ```py
+    
         test_size=0.2, random_state=0)
     ```
 
@@ -926,53 +684,29 @@ Classifier = pipeline(task=""zero-shot-classification"",
 
     ```py
     # Create an empty list to store the predictions
-    ```
-
-    ```py
+    
     preds = [] # Loop over the data
-    ```
-
-    ```py
+    
     for i in range(len(test_data)):
-    ```
-
-    ```py
+    
         # Compute the classifier results
-    ```
-
-    ```py
+    
         res = classifier(
-    ```
-
-    ```py
+    
             test_data['text'].iloc[i],
-    ```
-
-    ```py
+    
             candidate_labels=candidate_labels,
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         # Apply softmax to the results to get the predicted class
-    ```
-
-    ```py
+    
         pred = np.array(res['scores']).argmax()
-    ```
-
-    ```py
+    
         labels = res['labels']
-    ```
-
-    ```py
+    
         # Store the results in the list
-    ```
-
-    ```py
+    
         preds.append(labels[pred])
     ```
 
@@ -1124,13 +858,9 @@ from transformers import BertConfig, BertModel, BertTokenizer import pandas as p
 
     ```py
     # Split data into train and test sets train_data, 
-    ```
-
-    ```py
+    
         test_data = train_test_split(data, test_size=0.2,
-    ```
-
-    ```py
+    
             random_state=0)
     ```
 
@@ -1207,13 +937,9 @@ with torch.no_grad():
 
     ```py
     lr = LogisticRegression(C=0.5, max_iter=10000)
-    ```
-
-    ```py
+    
     lr.fit(train_embeddings.cpu(),
-    ```
-
-    ```py
+    
         train_data['airline_sentiment'])
     ```
 
@@ -1221,25 +947,15 @@ with torch.no_grad():
 
     ```py
     print('train accuracy:',
-    ```
-
-    ```py
+    
         lr.score(train_embeddings.cpu(),
-    ```
-
-    ```py
+    
         train_data['airline_sentiment']))
-    ```
-
-    ```py
+    
     print('test accuracy:',
-    ```
-
-    ```py
+    
         lr.score(test_embeddings.cpu(),
-    ```
-
-    ```py
+    
         test_data['airline_sentiment']))
     ```
 
@@ -1365,45 +1081,25 @@ embeddings = openai.Embedding.create(input = [input_text],
 
     ```py
     positive_examples = openai.ChatCompletion.create(
-    ```
-
-    ```py
+    
         model="gpt-3.5-turbo",
-    ```
-
-    ```py
+    
         messages=[
-    ```
-
-    ```py
+    
             {"role": "system", 
-    ```
-
-    ```py
+    
                 "content": "You watched a movie you loved."},
-    ```
-
-    ```py
+    
             {"role": "user", "content": "Write a short,
-    ```
-
-    ```py
+    
                 100-words review about this movie"},
-    ```
-
-    ```py
+    
         ],
-    ```
-
-    ```py
+    
         max_tokens=128,
-    ```
-
-    ```py
+    
         temperature=0.5,
-    ```
-
-    ```py
+    
         n=3, )
     ```
 
@@ -1429,21 +1125,13 @@ embeddings = openai.Embedding.create(input = [input_text],
 
     ```py
     for i in range(len(positive_examples['choices'])):
-    ```
-
-    ```py
+    
         print(f'\n\nGenerated sentence {i+1}: \n')
-    ```
-
-    ```py
+    
         print(positive_examples['choices'][i]['message']['content'])
-    ```
-
-    ```py
+    
     The following is the output of the three positive reviews generated by GPT-3.5:
-    ```
-
-    ```py
+    
     Generated sentence 1:   I recently watched the movie "Inception" and was blown away by its intricate plot and stunning visuals. The film follows a team of skilled thieves who enter people's dreams to steal their secrets. The concept of dream-sharing is fascinating and the execution of the idea is flawless. The cast, led by Leonardo DiCaprio, delivers outstanding performances that add depth to the characters. The action scenes are thrilling and the special effects are mind-bending. The film's score by Hans Zimmer is also noteworthy, adding to the overall immersive experience. "Inception" is a masterpiece that will leave you pondering its themes long after the credits roll.   Generated sentence 2:   I recently watched the movie "The Shawshank Redemption" and absolutely loved it. The story follows the life of a man named Andy Dufresne, who is wrongfully convicted of murder and sent to Shawshank prison. The movie beautifully portrays the struggles and hardships faced by prisoners, and the importance of hope and friendship in such a harsh environment. The acting by Tim Robbins and Morgan Freeman is outstanding, and the plot twists keep you engaged throughout the movie. Overall, "The Shawshank Redemption" is a must-watch for anyone who loves a good drama and a heartwarming story about the power of the human spirit.   Generated sentence 3:   I recently watched the movie "Parasite" and it blew me away. The story revolves around a poor family who slowly infiltrates the lives of a wealthy family, but things take a dark turn. The movie is a masterclass in storytelling, with each scene building tension and adding layers to the plot. The acting is superb, with standout performances from the entire cast. The cinematography is also stunning, with each shot expertly crafted to enhance the mood and atmosphere of the film. "Parasite" is a must-watch for anyone who loves a good thriller with a twist.
     ```
 
@@ -1451,77 +1139,41 @@ embeddings = openai.Embedding.create(input = [input_text],
 
     ```py
     # Generate the generated examples
-    ```
-
-    ```py
+    
     ngative_examples = openai.ChatCompletion.create(
-    ```
-
-    ```py
+    
         model="gpt-3.5-turbo",
-    ```
-
-    ```py
+    
         messages=[
-    ```
-
-    ```py
+    
             {"role": "system",
-    ```
-
-    ```py
+    
              "content": "You watched a movie you hated."},
-    ```
-
-    ```py
+    
             {"role": "user",
-    ```
-
-    ```py
+    
              "content": "Write a short,
-    ```
-
-    ```py
+    
                 100-wordsreview about this movie"},
-    ```
-
-    ```py
+    
         ],
-    ```
-
-    ```py
+    
         max_tokens=128,
-    ```
-
-    ```py
+    
         temperature=0.5,
-    ```
-
-    ```py
+    
         n=3, )
-    ```
-
-    ```py
+    
     # Display the generated examples
-    ```
-
-    ```py
+    
     for i in range(len(
-    ```
-
-    ```py
+    
         negative_examples['choices'])):
-    ```
-
-    ```py
+    
         print(f'\n\nGenerated sentence {i+1}: \n')
-    ```
-
-    ```py
+    
         print(negative_examples[
-    ```
-
-    ```py
+    
             'choices'][i]['message']['content'])
     ```
 

@@ -491,9 +491,7 @@ OpenAI 推荐以下步骤来微调 GPT-3 模型。
 
     ```py
     api_key =<your API key>
-    ```
-
-    ```py
+    
     openai.api_key = api_key
     ```
 
@@ -501,13 +499,9 @@ OpenAI 推荐以下步骤来微调 GPT-3 模型。
 
     ```py
     {"prompt":"this film is extraordinarily horrendous and i'm not going to waste any more words on it . ","completion":" negative"}
-    ```
-
-    ```py
+    
     {"prompt":"9 : its pathetic attempt at \" improving \" on a shakespeare classic . 8 : its just another piece of teen fluff . 7 : kids in high school are not that witty . … ","completion":" negative"}
-    ```
-
-    ```py
+    
     {"prompt":"claire danes , giovanni ribisi , and omar epps make a likable trio of protagonists , …","completion":" negative"}
     ```
 

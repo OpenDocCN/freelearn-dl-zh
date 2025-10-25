@@ -36,25 +36,15 @@ SDXL中使用的VAE是一个重新训练的版本，它使用相同的自动编�
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers.models import AutoencoderKL
-    ```
-
-    ```py
+    
     vae_model = AutoencoderKL.from_pretrained(
-    ```
-
-    ```py
+    
         "stabilityai/stable-diffusion-xl-base-1.0",
-    ```
-
-    ```py
+    
         subfolder = "vae"
-    ```
-
-    ```py
+    
     ).to("cuda:0")
     ```
 
@@ -62,41 +52,23 @@ SDXL中使用的VAE是一个重新训练的版本，它使用相同的自动编�
 
     ```py
     from diffusers.utils import load_image
-    ```
-
-    ```py
+    
     from diffusers.image_processor import VaeImageProcessor
-    ```
-
-    ```py
+    
     image = load_image("/path/to/cat.png")
-    ```
-
-    ```py
+    
     image_processor = VaeImageProcessor()
-    ```
-
-    ```py
+    
     prep_image = image_processor.preprocess(image)
-    ```
-
-    ```py
+    
     prep_image = prep_image.to("cuda:0")
-    ```
-
-    ```py
+    
     with torch.no_grad():
-    ```
-
-    ```py
+    
         image_latent = vae_model.encode(prep_image
-    ```
-
-    ```py
+    
             ).latent_dist.sample()
-    ```
-
-    ```py
+    
     image_latent.shape
     ```
 
@@ -104,29 +76,17 @@ SDXL中使用的VAE是一个重新训练的版本，它使用相同的自动编�
 
     ```py
     with torch.no_grad():
-    ```
-
-    ```py
+    
         decode_image = vae_model.decode(
-    ```
-
-    ```py
+    
             image_latent,
-    ```
-
-    ```py
+    
             return_dict = False
-    ```
-
-    ```py
+    
         )[0]
-    ```
-
-    ```py
+    
     image = image_processor.postprocess(image = decode_image)[0]
-    ```
-
-    ```py
+    
     image
     ```
 

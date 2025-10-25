@@ -104,13 +104,9 @@ pip install diffusers==0.20.0
 
     ```py
     from diffusers.utils import load_image
-    ```
-
-    ```py
+    
     image = load_image("dog.png")
-    ```
-
-    ```py
+    
     display(image)
     ```
 
@@ -118,25 +114,15 @@ pip install diffusers==0.20.0
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     # convert image object to array and 
-    ```
-
-    ```py
+    
     # convert pixel data from 0 ~ 255 to 0 ~ 1
-    ```
-
-    ```py
+    
     image_array = np.array(image).astype(np.float32)/255.0
-    ```
-
-    ```py
+    
     # convert the number from 0 ~ 1 to -1 ~ 1
-    ```
-
-    ```py
+    
     image_array = image_array * 2.0 - 1.0
     ```
 
@@ -144,13 +130,9 @@ pip install diffusers==0.20.0
 
     ```py
     # transform the image array from width,height,
-    ```
-
-    ```py
+    
     # channel to channel,width,height
-    ```
-
-    ```py
+    
     image_array_cwh = image_array.transpose(2,0,1)
     ```
 
@@ -162,9 +144,7 @@ pip install diffusers==0.20.0
 
     ```py
     # add batch dimension
-    ```
-
-    ```py
+    
     image_array_cwh = np.expand_dims(image_array_cwh, axis = 0)
     ```
 
@@ -172,29 +152,17 @@ pip install diffusers==0.20.0
 
     ```py
     # load image with torch
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     image_array_cwh = torch.from_numpy(image_array_cwh)
-    ```
-
-    ```py
+    
     image_array_cwh_cuda = image_array_cwh.to(
-    ```
-
-    ```py
+    
         "cuda",
-    ```
-
-    ```py
+    
         dtype=torch.float16
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -202,33 +170,19 @@ pip install diffusers==0.20.0
 
     ```py
     # Initialize VAE model
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     from diffusers import AutoencoderKL
-    ```
-
-    ```py
+    
     vae_model = AutoencoderKL.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         subfolder = "vae",
-    ```
-
-    ```py
+    
         torch_dtype=torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda")
     ```
 
@@ -236,9 +190,7 @@ pip install diffusers==0.20.0
 
     ```py
     latents = vae_model.encode(
-    ```
-
-    ```py
+    
         image_array_cwh_cuda).latent_dist.sample()
     ```
 
@@ -246,9 +198,7 @@ pip install diffusers==0.20.0
 
     ```py
     print(latents[0])
-    ```
-
-    ```py
+    
     print(latents[0].shape)
     ```
 
@@ -260,101 +210,53 @@ pip install diffusers==0.20.0
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     def latent_to_img(latents_input, scale_rate = 1):
-    ```
-
-    ```py
+    
         latents_2 = (1 / scale_rate) * latents_input
-    ```
-
-    ```py
+    
         # decode image
-    ```
-
-    ```py
+    
         with torch.no_grad():
-    ```
-
-    ```py
+    
             decode_image = vae_model.decode(
-    ```
-
-    ```py
+    
             latents_input, 
-    ```
-
-    ```py
+    
             return_dict = False
-    ```
-
-    ```py
+    
             )[0][0]
-    ```
-
-    ```py
+    
         decode_image =  (decode_image / 2 + 0.5).clamp(0, 1)
-    ```
-
-    ```py
+    
         # move latent data from cuda to cpu
-    ```
-
-    ```py
+    
         decode_image = decode_image.to("cpu")
-    ```
-
-    ```py
+    
         # convert torch tensor to numpy array
-    ```
-
-    ```py
+    
         numpy_img = decode_image.detach().numpy()
-    ```
-
-    ```py
+    
         # covert image array from (width, height, channel) 
-    ```
-
-    ```py
+    
         # to (channel, width, height)
-    ```
-
-    ```py
+    
         numpy_img_t = numpy_img.transpose(1,2,0)
-    ```
-
-    ```py
+    
         # map image data to 0, 255, and convert to int number
-    ```
-
-    ```py
+    
         numpy_img_t_01_255 = \ 
-    ```
-
-    ```py
+    
             (numpy_img_t*255).round().astype("uint8")
-    ```
-
-    ```py
+    
         # shape the pillow image object from the numpy array
-    ```
-
-    ```py
+    
         return Image.fromarray(numpy_img_t_01_255)
-    ```
-
-    ```py
+    
     pil_img = latent_to_img(latents_input)
-    ```
-
-    ```py
+    
     pil_img
     ```
 
@@ -368,61 +270,33 @@ pip install diffusers==0.20.0
 
     ```py
     input_prompt = "a running dog"
-    ```
-
-    ```py
+    
     # input tokenizer and clip embedding model
-    ```
-
-    ```py
+    
     import torch
-    ```
-
-    ```py
+    
     from transformers import CLIPTokenizer,CLIPTextModel
-    ```
-
-    ```py
+    
     # initialize tokenizer
-    ```
-
-    ```py
+    
     clip_tokenizer = CLIPTokenizer.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         subfolder = "tokenizer",
-    ```
-
-    ```py
+    
         dtype     = torch.float16
-    ```
-
-    ```py
+    
     )
-    ```
-
-    ```py
+    
     input_tokens = clip_tokenizer(
-    ```
-
-    ```py
+    
         input_prompt,
-    ```
-
-    ```py
+    
         return_tensors = "pt"
-    ```
-
-    ```py
+    
     )["input_ids"]
-    ```
-
-    ```py
+    
     input_tokens
     ```
 
@@ -432,41 +306,23 @@ pip install diffusers==0.20.0
 
     ```py
     # initialize CLIP text encoder model
-    ```
-
-    ```py
+    
     clip_text_encoder = CLIPTextModel.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         subfolder="text_encoder",
-    ```
-
-    ```py
+    
         # dtype=torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda")
-    ```
-
-    ```py
+    
     # encode token ids to embeddings
-    ```
-
-    ```py
+    
     prompt_embeds = clip_text_encoder(
-    ```
-
-    ```py
+    
         input_tokens.to("cuda")
-    ```
-
-    ```py
+    
     )[0]
     ```
 
@@ -474,9 +330,7 @@ pip install diffusers==0.20.0
 
     ```py
     print(prompt_embeds)
-    ```
-
-    ```py
+    
     print(prompt_embeds.shape)
     ```
 
@@ -484,25 +338,15 @@ pip install diffusers==0.20.0
 
     ```py
     tensor([[[-0.3884,0.0229, -0.0522,..., -0.4899, -0.3066,0.0675],
-    ```
-
-    ```py
+    
         [ 0.0290, -1.3258,  0.3085,..., -0.5257,0.9768,0.6652],
-    ```
-
-    ```py
+    
         [ 1.4642,0.2696,0.7703,..., -1.7454, -0.3677,0.5046],
-    ```
-
-    ```py
+    
         [-1.2369,0.4149,1.6844,..., -2.8617, -1.3217,0.3220],
-    ```
-
-    ```py
+    
         [-1.0182,0.7156,0.4969,..., -1.4992, -1.1128, -0.2895]]],
-    ```
-
-    ```py
+    
         device='cuda:0', grad_fn=<NativeLayerNormBackward0>)
     ```
 
@@ -512,69 +356,37 @@ pip install diffusers==0.20.0
 
     ```py
     # prepare neg prompt embeddings
-    ```
-
-    ```py
+    
     uncond_tokens = "blur"
-    ```
-
-    ```py
+    
     # get the prompt embedding length
-    ```
-
-    ```py
+    
     max_length = prompt_embeds.shape[1]
-    ```
-
-    ```py
+    
     # generate negative prompt tokens with the same length of prompt
-    ```
-
-    ```py
+    
     uncond_input_tokens = clip_tokenizer(
-    ```
-
-    ```py
+    
         uncond_tokens,
-    ```
-
-    ```py
+    
         padding = "max_length",
-    ```
-
-    ```py
+    
         max_length = max_length,
-    ```
-
-    ```py
+    
         truncation = True,
-    ```
-
-    ```py
+    
         return_tensors = "pt"
-    ```
-
-    ```py
+    
     )["input_ids"]
-    ```
-
-    ```py
+    
     # generate the negative embeddings
-    ```
-
-    ```py
+    
     with torch.no_grad():
-    ```
-
-    ```py
+    
         negative_prompt_embeds = clip_text_encoder(
-    ```
-
-    ```py
+    
             uncond_input_tokens.to("cuda")
-    ```
-
-    ```py
+    
         )[0]
     ```
 
@@ -582,9 +394,7 @@ pip install diffusers==0.20.0
 
     ```py
     prompt_embeds = torch.cat([negative_prompt_embeds, 
-    ```
-
-    ```py
+    
         prompt_embeds])
     ```
 
@@ -600,25 +410,15 @@ pip install diffusers==0.20.0
 
     ```py
     from diffusers import EulerDiscreteScheduler as Euler
-    ```
-
-    ```py
+    
     # initialize scheduler from a pretrained checkpoint
-    ```
-
-    ```py
+    
     scheduler = Euler.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         subfolder = "scheduler"
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -626,33 +426,19 @@ pip install diffusers==0.20.0
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     from diffusers import EulerDiscreteScheduler as Euler
-    ```
-
-    ```py
+    
     text2img_pipe = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "runwayml/stable-diffusion-v1-5",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda:0")
-    ```
-
-    ```py
+    
     scheduler = Euler.from_config(text2img_pipe.scheduler.config)
     ```
 
@@ -662,21 +448,13 @@ pip install diffusers==0.20.0
 
     ```py
     inference_steps = 20
-    ```
-
-    ```py
+    
     scheduler.set_timesteps(inference_steps, device = "cuda")
-    ```
-
-    ```py
+    
     timesteps = scheduler.timesteps
-    ```
-
-    ```py
+    
     for t in timesteps:
-    ```
-
-    ```py
+    
         print(t)
     ```
 
@@ -684,85 +462,45 @@ pip install diffusers==0.20.0
 
     ```py
     ...
-    ```
-
-    ```py
+    
     tensor(999., device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(946.4211, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(893.8421, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(841.2632, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(788.6842, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(736.1053, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(683.5263, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(630.9474, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(578.3684, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(525.7895, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(473.2105, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(420.6316, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(368.0526, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(315.4737, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(262.8947, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(210.3158, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(157.7368, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(105.1579, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(52.5789, device='cuda:0', dtype=torch.float64)
-    ```
-
-    ```py
+    
     tensor(0., device='cuda:0', dtype=torch.float64)
     ```
 
@@ -796,33 +534,19 @@ unet = UNet2DConditionModel.from_pretrained(
 
     ```py
     # prepare noise latents
-    ```
-
-    ```py
+    
     shape = torch.Size([1, 4, 64, 64])
-    ```
-
-    ```py
+    
     device = "cuda"
-    ```
-
-    ```py
+    
     noise_tensor = torch.randn(
-    ```
-
-    ```py
+    
         shape,
-    ```
-
-    ```py
+    
         generator = None,
-    ```
-
-    ```py
+    
         dtype     = torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda")
     ```
 
@@ -830,13 +554,9 @@ unet = UNet2DConditionModel.from_pretrained(
 
     ```py
     # scale the initial noise by the standard deviation required by 
-    ```
-
-    ```py
+    
     # the scheduler
-    ```
-
-    ```py
+    
     latents = noise_tensor * scheduler.init_noise_sigma
     ```
 
@@ -844,89 +564,47 @@ unet = UNet2DConditionModel.from_pretrained(
 
     ```py
     guidance_scale = 7.5
-    ```
-
-    ```py
+    
     latents_sd = torch.clone(latents)
-    ```
-
-    ```py
+    
     for i,t in enumerate(timesteps):
-    ```
-
-    ```py
+    
         # expand the latents if we are doing classifier free guidance
-    ```
-
-    ```py
+    
         latent_model_input = torch.cat([latents_sd] * 2)
-    ```
-
-    ```py
+    
         latent_model_input = scheduler.scale_model_input(
-    ```
-
-    ```py
+    
             latent_model_input, t)
-    ```
-
-    ```py
+    
         # predict the noise residual
-    ```
-
-    ```py
+    
         with torch.no_grad():
-    ```
-
-    ```py
+    
             noise_pred = unet(
-    ```
-
-    ```py
+    
                 latent_model_input,
-    ```
-
-    ```py
+    
                 t,
-    ```
-
-    ```py
+    
                 encoder_hidden_states=prompt_embeds,
-    ```
-
-    ```py
+    
                 return_dict = False,
-    ```
-
-    ```py
+    
             )[0]
-    ```
-
-    ```py
+    
         # perform guidance
-    ```
-
-    ```py
+    
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-    ```
-
-    ```py
+    
         noise_pred = noise_pred_uncond + guidance_scale *
-    ```
-
-    ```py
+    
             (noise_pred_text - noise_pred_uncond)
-    ```
-
-    ```py
+    
         # compute the previous noisy sample x_t -> x_t-1
-    ```
-
-    ```py
+    
         latents_sd = scheduler.step(noise_pred, t,
-    ```
-
-    ```py
+    
             latents_sd, return_dict=False)[0]
     ```
 
@@ -954,97 +632,51 @@ unet = UNet2DConditionModel.from_pretrained(
 
     ```py
     import numpy as np
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     def latent_to_img(latents_input):
-    ```
-
-    ```py
+    
         # decode image
-    ```
-
-    ```py
+    
         with torch.no_grad():
-    ```
-
-    ```py
+    
             decode_image = vae_model.decode(
-    ```
-
-    ```py
+    
                 latents_input,
-    ```
-
-    ```py
+    
                 return_dict = False
-    ```
-
-    ```py
+    
             )[0][0]
-    ```
-
-    ```py
+    
         decode_image =  (decode_image / 2 + 0.5).clamp(0, 1)
-    ```
-
-    ```py
+    
         # move latent data from cuda to cpu
-    ```
-
-    ```py
+    
         decode_image = decode_image.to("cpu")
-    ```
-
-    ```py
+    
         # convert torch tensor to numpy array
-    ```
-
-    ```py
+    
         numpy_img = decode_image.detach().numpy()
-    ```
-
-    ```py
+    
         # covert image array from (channel, width, height) 
-    ```
-
-    ```py
+    
         # to (width, height, channel)
-    ```
-
-    ```py
+    
         numpy_img_t = numpy_img.transpose(1,2,0)
-    ```
-
-    ```py
+    
         # map image data to 0, 255, and convert to int number
-    ```
-
-    ```py
+    
         numpy_img_t_01_255 = \ 
-    ```
-
-    ```py
+    
             (numpy_img_t*255).round().astype("uint8")
-    ```
-
-    ```py
+    
         # shape the pillow image object from the numpy array
-    ```
-
-    ```py
+    
         return Image.fromarray(numpy_img_t_01_255)
-    ```
-
-    ```py
+    
     latents_2 = (1 / 0.18215) * latents_sd
-    ```
-
-    ```py
+    
     pil_img = latent_to_img(latents_2)
     ```
 

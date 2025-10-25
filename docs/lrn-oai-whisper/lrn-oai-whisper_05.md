@@ -192,9 +192,7 @@ OpenAI 决定开源 Whisper，催生了创新和定制化的进程。通过提�
         Explore venture capital world with U3 Unifund or move your money with the M3 Mover, our sophisticated monetary transfer module.
         At Quirk, Quid, Quill, Inc., we turn complex finance into creative solutions.
         Join us in redefining financial services.
-        ```
-
-    ```py
+        
     This results in the following:
 
     ```
@@ -229,9 +227,7 @@ OpenAI 决定开源 Whisper，催生了创新和定制化的进程。通过提�
         It's kind of like a breakfast as well as whiskey.
         So that should be fun.
         And I'm really looking forward to spending time with my friends, Amy and Sean.
-        ```
-
-    ```py
+        
     This results in the following:
 
     ```
@@ -260,9 +256,7 @@ OpenAI 决定开源 Whisper，催生了创新和定制化的进程。通过提�
 
     ```py
 
-    ```
-
-    ```py
+    
 
     ```
 

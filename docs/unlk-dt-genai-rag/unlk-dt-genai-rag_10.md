@@ -435,9 +435,7 @@ LLMs 和 RAG 系统之间的协同作用源于这两种技术的互补优势。R
 
     ```py
     import openai
-    ```
-
-    ```py
+    
     ChatOpenAI is used to interact with OpenAI’s chat models, and OpenAIEmbeddings is used for generating embeddings from text.
     ```
 
@@ -451,13 +449,9 @@ LLMs 和 RAG 系统之间的协同作用源于这两种技术的互补优势。R
 
     ```py
     os.environ['OPENAI_API_KEY'] = os.getenv(
-    ```
-
-    ```py
+    
      'OPENAI_API_KEY')
-    ```
-
-    ```py
+    
     OPENAI_API_KEY. Then, we set the OpenAI API key for the openai library using the retrieved value from the environment variable. At this point, we can use the OpenAI integration with LangChain to call the LLM that is hosted at OpenAI with the proper access.
     ```
 
@@ -465,9 +459,7 @@ LLMs 和 RAG 系统之间的协同作用源于这两种技术的互补优势。R
 
     ```py
     llm = ChatOpenAI(model_name="gpt-4o-mini",
-    ```
-
-    ```py
+    
      temperature=0)
     ```
 
@@ -501,9 +493,7 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     from langchain_together import ChatTogether
-    ```
-
-    ```py
+    
     ChatTogether integration and loads the API key (don’t forget to add it to the env.txt file before running this line of code!).
     ```
 
@@ -511,9 +501,7 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     os.environ['TOGETHER_API_KEY'] = os.getenv(
-    ```
-
-    ```py
+    
      'TOGETHER_API_KEY')
     ```
 
@@ -525,33 +513,19 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     llama3llm = ChatTogether(
-    ```
-
-    ```py
+    
      together_api_key=os.environ['TOGETHER_API_KEY'],
-    ```
-
-    ```py
+    
     **model="meta-llama/Llama-3-70b-chat-hf",**
-    ```
-
-    ```py
+    
     **)**
-    ```
-
-    ```py
+    
     **mistralexpertsllm = ChatTogether(**
-    ```
-
-    ```py
+    
      **together_api_key=os.environ['TOGETHER_API_KEY'],**
-    ```
-
-    ```py
+    
      **model="mistralai/Mixtral-8x22B-Instruct-v0.1",**
-    ```
-
-    ```py
+    
     **)**
     the results.
     ```
@@ -560,89 +534,47 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     llama3_rag_chain_from_docs = (
-    ```
-
-    ```py
+    
      RunnablePassthrough.assign(context=(lambda x:
-    ```
-
-    ```py
+    
      format_docs(x["context"])))
-    ```
-
-    ```py
+    
      | RunnableParallel(
-    ```
-
-    ```py
+    
      {"relevance_score": (
-    ```
-
-    ```py
+    
      RunnablePassthrough()
-    ```
-
-    ```py
+    
      | (lambda x: relevance_prompt_template.
-    ```
-
-    ```py
+    
      format(
-    ```
-
-    ```py
+    
      question=x['question'],
-    ```
-
-    ```py
+    
      retrieved_context=x['context']))
-    ```
-
-    ```py
+    
      | llama3llm
-    ```
-
-    ```py
+    
      | StrOutputParser()
-    ```
-
-    ```py
+    
      ), "answer": (
-    ```
-
-    ```py
+    
      RunnablePassthrough()
-    ```
-
-    ```py
+    
      | prompt
-    ```
-
-    ```py
+    
      | llama3llm
-    ```
-
-    ```py
+    
      | StrOutputParser()
-    ```
-
-    ```py
+    
      )}
-    ```
-
-    ```py
+    
      )
-    ```
-
-    ```py
+    
      | RunnablePassthrough().assign(
-    ```
-
-    ```py
+    
      final_answer=conditional_answer)
-    ```
-
-    ```py
+    
      )
     ```
 
@@ -650,17 +582,11 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     llama3_rag_chain_with_source = RunnableParallel(
-    ```
-
-    ```py
+    
      {"context": ensemble_retriever,
-    ```
-
-    ```py
+    
      "question": RunnablePassthrough()}
-    ```
-
-    ```py
+    
     ).assign(answer=llama3_rag_chain_from_docs)
     ```
 
@@ -670,61 +596,33 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     llama3_result = llama3_rag_chain_with_source.invoke(
-    ```
-
-    ```py
+    
     **user_query)**
-    ```
-
-    ```py
+    
     **llama3_retrieved_docs = llama3_result['context']**
-    ```
-
-    ```py
+    
     **print(f"Original Question: {user_query}\n")**
-    ```
-
-    ```py
+    
     **print(f"Relevance Score:**
-    ```
-
-    ```py
+    
      **{llama3_result['answer']['relevance_score']}\n")**
-    ```
-
-    ```py
+    
     **print(f"Final Answer:**
-    ```
-
-    ```py
+    
      **\n{llama3_result['answer']['final_answer']}\n\n")**
-    ```
-
-    ```py
+    
     **print("Retrieved Documents:")**
-    ```
-
-    ```py
+    
     **for i, doc in enumerate(llama3_retrieved_docs,**
-    ```
-
-    ```py
+    
      **start=1):**
-    ```
-
-    ```py
+    
     **print(f"Document {i}: Document ID:**
-    ```
-
-    ```py
+    
      **{doc.metadata['id']} source:**
-    ```
-
-    ```py
+    
      **{doc.metadata['source']}")**
-    ```
-
-    ```py
+    
     `What are Google's environmental initiatives?` is as follows:
 
     ```
@@ -756,81 +654,43 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     mistralexperts_rag_chain_from_docs = (
-    ```
-
-    ```py
+    
     **RunnablePassthrough.assign(context=(lambda x:**
-    ```
-
-    ```py
+    
      **format_docs(x["context"])))**
-    ```
-
-    ```py
+    
      **| RunnableParallel(**
-    ```
-
-    ```py
+    
      **{"relevance_score": (RunnablePassthrough()**
-    ```
-
-    ```py
+    
      **| (lambda x: relevance_prompt_template.format(**
-    ```
-
-    ```py
+    
      **question=x['question'],**
-    ```
-
-    ```py
+    
      **retrieved_context=x['context']))**
-    ```
-
-    ```py
+    
      **| mistralexpertsllm**
-    ```
-
-    ```py
+    
      **| StrOutputParser()**
-    ```
-
-    ```py
+    
      **), "answer": (**
-    ```
-
-    ```py
+    
     ****RunnablePassthrough()****
-    ```
-
-    ```py
+    
      ****| prompt****
-    ```
-
-    ```py
+    
      ****| mistralexpertsllm****
-    ```
-
-    ```py
+    
      ****| StrOutputParser()****
-    ```
-
-    ```py
+    
      ****)}****
-    ```
-
-    ```py
+    
      ****)****
-    ```
-
-    ```py
+    
      ****| RunnablePassthrough().assign(****
-    ```
-
-    ```py
+    
      ****final_answer=conditional_answer)****
-    ```
-
-    ```py
+    
     ****)****
     ```
 
@@ -838,13 +698,9 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     ****mistralexperts_rag_chain_with_source = RunnableParallel(****
-    ```
-
-    ```py
+    
      ****{"context": ensemble_retriever, "question": RunnablePassthrough()}****
-    ```
-
-    ```py
+    
     ****).assign(answer=mistralexperts_rag_chain_from_docs)****
     ```
 
@@ -854,45 +710,25 @@ OpenAI 最昂贵的模型 `gpt-4-32k`，其速度和能力并不如 `gpt-4o-mini
 
     ```py
     ****mistralexperts_result = mistralexperts_rag_chain_with_source.invoke(user_query)****
-    ```
-
-    ```py
+    
     ****mistralexperts_retrieved_docs = mistralexperts_result[****
-    ```
-
-    ```py
+    
      ****'context']****
-    ```
-
-    ```py
+    
     ****print(f"Original Question: {user_query}\n")****
-    ```
-
-    ```py
+    
     ****print(f"Relevance Score: {mistralexperts_result['answer']['relevance_score']}\n")****
-    ```
-
-    ```py
+    
     ****print(f"Final Answer:\n{mistralexperts_result['answer']['final_answer']}\n\n")****
-    ```
-
-    ```py
+    
     ****print("Retrieved Documents:")****
-    ```
-
-    ```py
+    
     ****for i, doc in enumerate(mistralexperts_retrieved_docs, start=1):****
-    ```
-
-    ```py
+    
      ****print(f"Document {i}: Document ID:****
-    ```
-
-    ```py
+    
     ****{doc.metadata['id']} source: {doc.metadata['source']}")****
-    ```
-
-    ```py
+    
     **`What are Google's environmental initiatives?` Is the following:
 
     ```

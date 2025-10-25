@@ -250,101 +250,53 @@ Amazon Bedrock 提供了多个 API，允许您创建、监控和停止定制作�
 
     ```py
     import boto3
-    ```
-
-    ```py
+    
     import json
-    ```
-
-    ```py
+    
     llm = boto3.client(service_name='bedrock')
-    ```
-
-    ```py
+    
     # Setting customization type
-    ```
-
-    ```py
+    
     customizationType = "FINE_TUNING"
-    ```
-
-    ```py
+    
     # Creating customization job
-    ```
-
-    ```py
+    
     llm.create_model_customization_job(
-    ```
-
-    ```py
+    
         jobName="fine-tuning-job",
-    ```
-
-    ```py
+    
         customModelName="fine-tuned model",
-    ```
-
-    ```py
+    
         roleArn="arn:aws:iam::arn-for-MyBedrockModelCustomizationRole",
-    ```
-
-    ```py
+    
         baseModelIdentifier="arn:aws:bedrock:us-east-1::foundation-model/foundation-model-id",
-    ```
-
-    ```py
+    
         hyperParameters={
-    ```
-
-    ```py
+    
             "epochCount": "1",
-    ```
-
-    ```py
+    
             "batchSize": "1",
-    ```
-
-    ```py
+    
             "learningRate": "0.007",
-    ```
-
-    ```py
+    
             "learningRateWarmupSteps": "0"
-    ```
-
-    ```py
+    
         },
-    ```
-
-    ```py
+    
         trainingDataConfig={"s3Uri": "s3://bucket/path/to/train.jsonl"},
-    ```
-
-    ```py
+    
         validationDataConfig={
-    ```
-
-    ```py
+    
             "validators": [{
-    ```
-
-    ```py
+    
                 "s3Uri": "s3://bucket/folder/validation-file.jsonl"
-    ```
-
-    ```py
+    
             }]
-    ```
-
-    ```py
+    
         },
-    ```
-
-    ```py
+    
         outputDataConfig={"s3Uri": "s3://bucket/folder/outputdataconfig/"}
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -354,13 +306,9 @@ Amazon Bedrock 提供了多个 API，允许您创建、监控和停止定制作�
 
     ```py
     import boto3
-    ```
-
-    ```py
+    
     llm = boto3.client(service_name='bedrock')
-    ```
-
-    ```py
+    
     llm.list_model_customization_jobs()
     ```
 
@@ -368,17 +316,11 @@ Amazon Bedrock 提供了多个 API，允许您创建、监控和停止定制作�
 
     ```py
     import boto3
-    ```
-
-    ```py
+    
     llm = boto3.client(service_name='bedrock')
-    ```
-
-    ```py
+    
     fine_tune_job = llm.get_model_customization_job(jobIdentifier='arn:aws:bedrock:job-arn-from-create-model-customization')
-    ```
-
-    ```py
+    
     print(fine_tune_job['status'])
     ```
 
@@ -388,13 +330,9 @@ Amazon Bedrock 提供了多个 API，允许您创建、监控和停止定制作�
 
     ```py
     import boto3
-    ```
-
-    ```py
+    
     llm = boto3.client(service_name='bedrock')
-    ```
-
-    ```py
+    
     llm.stop_model_customization_job(jobIdentifier='arn:aws:bedrock:job-arn-from-create-model-customization')
     ```
 

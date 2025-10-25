@@ -64,65 +64,35 @@
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionPipeline
-    ```
-
-    ```py
+    
     text2img_pipe = StableDiffusionPipeline.from_pretrained(
-    ```
-
-    ```py
+    
         "stablediffusionapi/deliberate-v2",
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     ).to("cuda:0")
-    ```
-
-    ```py
+    
     prompt = "a realistic photo of beautiful woman face"
-    ```
-
-    ```py
+    
     neg_prompt = "NSFW, bad anatomy"
-    ```
-
-    ```py
+    
     raw_image = text2img_pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         height = 256,
-    ```
-
-    ```py
+    
         width = 256,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(3)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(raw_image)
     ```
 
@@ -146,17 +116,11 @@ raw_image.save(file_name_256x256)
 
     ```py
     def get_width_height(width, height):
-    ```
-
-    ```py
+    
         width = (width//8)*8
-    ```
-
-    ```py
+    
         height = (height//8)*8
-    ```
-
-    ```py
+    
         return width,height
     ```
 
@@ -164,65 +128,35 @@ raw_image.save(file_name_256x256)
 
     ```py
     from diffusers.utils import load_image
-    ```
-
-    ```py
+    
     from PIL import Image
-    ```
-
-    ```py
+    
     def resize_img(img_path,upscale_times):
-    ```
-
-    ```py
+    
         img             = load_image(img_path)
-    ```
-
-    ```py
+    
         if upscale_times <=0:
-    ```
-
-    ```py
+    
             return img
-    ```
-
-    ```py
+    
         width,height = img.size
-    ```
-
-    ```py
+    
         width = width * upscale_times
-    ```
-
-    ```py
+    
         height = height * upscale_times
-    ```
-
-    ```py
+    
         width,height = get_width_height(int(width),int(height))
-    ```
-
-    ```py
+    
         img = img.resize(
-    ```
-
-    ```py
+    
             (width,height),
-    ```
-
-    ```py
+    
             resample = Image.LANCZOS if upscale_times > 1 \
-    ```
-
-    ```py
+    
                 else Image.AREA
-    ```
-
-    ```py
+    
         )
-    ```
-
-    ```py
+    
         return img
     Image.LANCZOS interpolation method.
     ```
@@ -239,25 +173,15 @@ raw_image.save(file_name_256x256)
 
     ```py
     sr_prompt = """8k, best quality, masterpiece, realistic, photo-realistic, ultra detailed, sharp focus, raw photo, """
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     a realistic photo of beautiful woman face
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
     ```
 
@@ -265,49 +189,27 @@ raw_image.save(file_name_256x256)
 
     ```py
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
-    ```
-
-    ```py
+    
     img2image_3x = img2img_pipe(
-    ```
-
-    ```py
+    
         image = resized_raw_image,
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         strength = 0.3,
-    ```
-
-    ```py
+    
         num_inference_steps = 80,
-    ```
-
-    ```py
+    
         guidance_scale = 8,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     img2image_3x
     ```
 
@@ -342,9 +244,7 @@ img2image_3x.save(file_name_768x768)
 
     ```py
     resized_raw_image = resize_img(file_name_768x768, 2.0)
-    ```
-
-    ```py
+    
     display(resized_raw_image)
     ```
 
@@ -352,65 +252,35 @@ img2image_3x.save(file_name_768x768)
 
     ```py
     sr_prompt = "8k, best quality, masterpiece, realistic, photo-realistic, ultra detailed, sharp focus, raw photo,"
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     a realistic photo of beautiful woman face
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
-    ```
-
-    ```py
+    
     img2image_6x = img2img_pipe(
-    ```
-
-    ```py
+    
         image = resized_raw_image,
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         strength = 0.3,
-    ```
-
-    ```py
+    
         num_inference_steps = 80,
-    ```
-
-    ```py
+    
         guidance_scale = 7.5,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(1)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     img2image_6x
     ```
 
@@ -466,29 +336,17 @@ ControlNet 与图像到图像的 Stable Diffusion 流水线相似，但具有显
 
     ```py
     import torch
-    ```
-
-    ```py
+    
     from diffusers import ControlNetModel
-    ```
-
-    ```py
+    
     controlnet = ControlNetModel.from_pretrained(
-    ```
-
-    ```py
+    
         'takuma104/control_v11',
-    ```
-
-    ```py
+    
         subfolder = 'control_v11f1e_sd15_tile',
-    ```
-
-    ```py
+    
         torch_dtype = torch.float16
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -498,37 +356,21 @@ ControlNet 与图像到图像的 Stable Diffusion 流水线相似，但具有显
 
     ```py
     # load controlnet tile
-    ```
-
-    ```py
+    
     from diffusers import StableDiffusionControlNetImg2ImgPipeline
-    ```
-
-    ```py
+    
     # load checkpoint model with controlnet
-    ```
-
-    ```py
+    
     pipeline = StableDiffusionControlNetImg2ImgPipeline. \ 
-    ```
-
-    ```py
+    
     from_pretrained(
-    ```
-
-    ```py
+    
         "stablediffusionapi/deliberate-v2",
-    ```
-
-    ```py
+    
         torch_dtype    = torch.float16,
-    ```
-
-    ```py
+    
         controlnet     = controlnet
-    ```
-
-    ```py
+    
     )
     ```
 
@@ -538,17 +380,11 @@ ControlNet 与图像到图像的 Stable Diffusion 流水线相似，但具有显
 
     ```py
     image_name = "woman_face"
-    ```
-
-    ```py
+    
     file_name_256x256 = f"input_images/{image_name}_256x256.png"
-    ```
-
-    ```py
+    
     resized_raw_image = resize_img(file_name_256x256, 3.0)
-    ```
-
-    ```py
+    
     resized_raw_image
     ```
 
@@ -556,81 +392,43 @@ ControlNet 与图像到图像的 Stable Diffusion 流水线相似，但具有显
 
     ```py
     Image super-resolution using ControlNet Tile
-    ```
-
-    ```py
+    
     # upscale
-    ```
-
-    ```py
+    
     sr_prompt = "8k, best quality, masterpiece, realistic, photo-realistic, ultra detailed, sharp focus, raw photo,"
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     a realistic photo of beautiful woman face
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
-    ```
-
-    ```py
+    
     pipeline.to("cuda")
-    ```
-
-    ```py
+    
     cn_tile_upscale_img = pipeline(
-    ```
-
-    ```py
+    
         image = resized_raw_image,
-    ```
-
-    ```py
+    
         control_image = resized_raw_image,
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         strength = 0.8,
-    ```
-
-    ```py
+    
         guidance_scale = 7,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda"),
-    ```
-
-    ```py
+    
         num_inference_steps = 50
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     cn_tile_upscale_img
     ```
 
@@ -664,153 +462,79 @@ ControlNet Tile 超分辨率可以为各种照片和图像产生显著的结果�
 
     ```py
     # step 1\. generate an image
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     Raw, analog a portrait of an 43 y.o. man ,
-    ```
-
-    ```py
+    
     beautiful photo with highly detailed face by greg rutkowski and magali villanueve
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     neg_prompt = "NSFW, bad anatomy"
-    ```
-
-    ```py
+    
     text2img_pipe.to("cuda")
-    ```
-
-    ```py
+    
     raw_image = text2img_pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         height = 256,
-    ```
-
-    ```py
+    
         width = 256,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(3)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(raw_image)
-    ```
-
-    ```py
+    
     image_name = "man"
-    ```
-
-    ```py
+    
     file_name_256x256 = f"input_images/{image_name}_256x256.png"
-    ```
-
-    ```py
+    
     raw_image.save(file_name_256x256)
-    ```
-
-    ```py
+    
     # step 2\. resize image
-    ```
-
-    ```py
+    
     resized_raw_image = resize_img(file_name_256x256, 3.0)
-    ```
-
-    ```py
+    
     display(resized_raw_image)
-    ```
-
-    ```py
+    
     # step 3\. upscale image
-    ```
-
-    ```py
+    
     sr_prompt = "8k, best quality, masterpiece, realistic, photo-realistic, ultra detailed, sharp focus, raw photo,"
-    ```
-
-    ```py
+    
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
-    ```
-
-    ```py
+    
     pipeline.to("cuda")
-    ```
-
-    ```py
+    
     cn_tile_upscale_img = pipeline(
-    ```
-
-    ```py
+    
         image = resized_raw_image,
-    ```
-
-    ```py
+    
         control_image = resized_raw_image,
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         strength = 0.8,
-    ```
-
-    ```py
+    
         guidance_scale = 7,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda"),
-    ```
-
-    ```py
+    
         num_inference_steps = 50,
-    ```
-
-    ```py
+    
         # controlnet_conditioning_scale = 0.8
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(cn_tile_upscale_img)
     ```
 
@@ -824,149 +548,77 @@ ControlNet Tile 超分辨率可以为各种照片和图像产生显著的结果�
 
     ```py
     # step 1\. generate an image
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     A realistic photo of an old man, standing in the garden, flower and green trees around, face view
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     neg_prompt = "NSFW, bad anatomy"
-    ```
-
-    ```py
+    
     text2img_pipe.to("cuda")
-    ```
-
-    ```py
+    
     raw_image = text2img_pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         height = 256,
-    ```
-
-    ```py
+    
         width = 256,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(3)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(raw_image)
-    ```
-
-    ```py
+    
     image_name = "man"
-    ```
-
-    ```py
+    
     file_name_256x256 = f"input_images/{image_name}_256x256.png"
-    ```
-
-    ```py
+    
     raw_image.save(file_name_256x256)
-    ```
-
-    ```py
+    
     # step 2\. resize image
-    ```
-
-    ```py
+    
     resized_raw_image = resize_img(file_name_256x256, 4.0)
-    ```
-
-    ```py
+    
     display(resized_raw_image)
-    ```
-
-    ```py
+    
     # step 3\. upscale image
-    ```
-
-    ```py
+    
     sr_prompt = "8k, best quality, masterpiece, realistic, photo-realistic, ultra detailed, sharp focus, raw photo,"
-    ```
-
-    ```py
+    
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
-    ```
-
-    ```py
+    
     pipeline.to("cuda")
-    ```
-
-    ```py
+    
     cn_tile_upscale_img = pipeline(
-    ```
-
-    ```py
+    
         image = resized_raw_image,
-    ```
-
-    ```py
+    
         control_image = resized_raw_image,
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         strength = 0.8,
-    ```
-
-    ```py
+    
         guidance_scale = 7,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda"),
-    ```
-
-    ```py
+    
         num_inference_steps = 50,
-    ```
-
-    ```py
+    
         # controlnet_conditioning_scale = 0.8
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(cn_tile_upscale_img)
     ```
 
@@ -980,157 +632,81 @@ ControlNet Tile 超分辨率可以为各种照片和图像产生显著的结果�
 
     ```py
     # step 1\. generate an image
-    ```
-
-    ```py
+    
     prompt = """
-    ```
-
-    ```py
+    
     upper body photo of royal female, elegant, pretty face, majestic dress,
-    ```
-
-    ```py
+    
     sitting on a majestic chair, in a grand fantasy castle hall, shallow depth of field, cinematic lighting, Nikon D850,
-    ```
-
-    ```py
+    
     film still, HDR, 8k
-    ```
-
-    ```py
+    
     """
-    ```
-
-    ```py
+    
     neg_prompt = "NSFW, bad anatomy"
-    ```
-
-    ```py
+    
     text2img_pipe.to("cuda")
-    ```
-
-    ```py
+    
     raw_image = text2img_pipe(
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         height = 256,
-    ```
-
-    ```py
+    
         width = 256,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda").manual_seed(7)
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(raw_image)
-    ```
-
-    ```py
+    
     image_name = "man"
-    ```
-
-    ```py
+    
     file_name_256x256 = f"input_images/{image_name}_256x256.png"
-    ```
-
-    ```py
+    
     raw_image.save(file_name_256x256)
-    ```
-
-    ```py
+    
     # step 2\. resize image
-    ```
-
-    ```py
+    
     resized_raw_image = resize_img(file_name_256x256, 4.0)
-    ```
-
-    ```py
+    
     display(resized_raw_image)
-    ```
-
-    ```py
+    
     # step 3\. upscale image
-    ```
-
-    ```py
+    
     sr_prompt = "8k, best quality, masterpiece, realistic, photo-realistic, ultra detailed, sharp focus, raw photo,"
-    ```
-
-    ```py
+    
     prompt = f"{sr_prompt}{prompt}"
-    ```
-
-    ```py
+    
     neg_prompt = "worst quality, low quality, lowres, bad anatomy"
-    ```
-
-    ```py
+    
     pipeline.to("cuda")
-    ```
-
-    ```py
+    
     cn_tile_upscale_img = pipeline(
-    ```
-
-    ```py
+    
         image = resized_raw_image,
-    ```
-
-    ```py
+    
         control_image = resized_raw_image,
-    ```
-
-    ```py
+    
         prompt = prompt,
-    ```
-
-    ```py
+    
         negative_prompt = neg_prompt,
-    ```
-
-    ```py
+    
         strength = 0.8,
-    ```
-
-    ```py
+    
         guidance_scale = 7,
-    ```
-
-    ```py
+    
         generator = torch.Generator("cuda"),
-    ```
-
-    ```py
+    
         num_inference_steps = 50,
-    ```
-
-    ```py
+    
         # controlnet_conditioning_scale = 0.8
-    ```
-
-    ```py
+    
     ).images[0]
-    ```
-
-    ```py
+    
     display(cn_tile_upscale_img)
     ```
 
