@@ -1,4 +1,4 @@
-# 第一章：*第一章*：深度学习生命周期与 MLOps 挑战
+# 第一章：深度学习生命周期与 MLOps 挑战
 
 近年来，**深度学习**（**DL**）在解决实际业务、工业和科学问题方面取得了巨大成功，特别是在**自然语言处理**（**NLP**）、图像、视频、语音识别和对话理解等任务中。尽管这些领域的研究取得了巨大的进展，但将这些深度学习模型从离线实验推广到生产环境，并持续改进模型以提供可持续的价值，仍然是一个挑战。例如，VentureBeat 最近的一篇文章（[`venturebeat.com/2019/07/19/why-do-87-of-data-science-projects-never-make-it-into-production/`](https://venturebeat.com/2019/07/19/why-do-87-of-data-science-projects-never-make-it-into-production/)）发现，87%的数据科学项目从未进入生产。虽然这种低生产率可能有商业原因，但一个主要的因素是缺乏实验管理和成熟的模型生产与反馈平台所带来的困难。
 

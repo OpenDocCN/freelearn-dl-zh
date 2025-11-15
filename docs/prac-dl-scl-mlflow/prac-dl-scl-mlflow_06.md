@@ -1,4 +1,4 @@
-# 第四章：*第四章*：跟踪代码和数据版本
+# 第四章：跟踪代码和数据版本
 
 深度学习（DL）模型不仅仅是模型——它们与训练和测试模型的代码，以及用于训练和测试的数据密切相关。如果我们不跟踪用于模型的代码和数据，就无法重现模型或改进它。此外，近期在整个行业范围内对**数据中心 AI**的觉醒和范式转变（[`www.forbes.com/sites/gilpress/2021/06/16/andrew-ng-launches-a-campaign-for-data-centric-ai/?sh=5cbacdc574f5`](https://www.forbes.com/sites/gilpress/2021/06/16/andrew-ng-launches-a-campaign-for-data-centric-ai/?sh=5cbacdc574f5)）使得数据在构建机器学习（ML）和特别是深度学习（DL）模型中的重要性被提升为首要要素。因此，在本章节中，我们将学习如何使用 MLflow 跟踪代码和数据版本。我们将学习如何跟踪代码和管道版本，并了解如何使用 Delta Lake 进行数据版本管理。在本章节结束时，您将能够理解并实现使用 MLflow 跟踪代码和数据的技巧。
 

@@ -1,4 +1,4 @@
-# 第二章：*第二章*：介绍 Amazon Textract
+# 第二章：介绍 Amazon Textract
 
 在上一章中，您了解了企业如何利用自然语言处理（NLP）从文本中获取洞察力，并简要介绍了 *AWS ML 堆栈*。接下来，我们将详细介绍 **Amazon Textract**，并提供动手示例代码和说明。Amazon Textract 是一项 AWS AI 服务，可以在几乎没有机器学习（ML）技能的情况下，从文档和图像中提取文本。在了解 Textract 能做什么之前，我们将首先讨论一些文档处理中的挑战。然后，我们将讲解 Textract 如何帮助克服这些挑战。我们还将讨论使用 Amazon Textract 的好处以及其产品特点。最后，我们将介绍如何将 Amazon Textract 快速集成到您的应用程序中。
 

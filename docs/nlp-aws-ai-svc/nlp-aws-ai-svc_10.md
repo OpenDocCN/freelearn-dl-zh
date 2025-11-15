@@ -1,4 +1,4 @@
-# 第八章：*第八章*：利用自然语言处理（NLP）赚取您的媒体内容
+# 第八章：利用自然语言处理（NLP）赚取您的媒体内容
 
 正如我们在本书中所见，人工智能（AI），特别是 NLP，由于数据的快速增长和云计算下机器学习（ML）的民主化，已经在传统 IT 领域有了广泛的应用。在上一章中，我们看到了一个很酷的例子，通过运行客户语音分析和情感检测，可以为社交媒体评论和其他形式的文本数据增添色彩。我们看到如何使用 AWS Glue 从 Amazon S3 中抓取原始数据，使用 Amazon Athena 交互式查询这些数据，使用 PySpark（[`spark.apache.org/docs/latest/api/python/index.html`](http://spark.apache.org/docs/latest/api/python/index.html)）在 AWS Glue 作业中转换原始数据，调用 Amazon Comprehend API（提供预训练的 NLP 模型）对评论进行情感分析，将数据转换为 Parquet 格式，并按情感分区（[`docs.aws.amazon.com/athena/latest/ug/partitions.html`](https://docs.aws.amazon.com/athena/latest/ug/partitions.html)）以优化分析查询。在本章中，我们将转向关注一个因流媒体内容的广泛采用而在近年来广受欢迎的用例，具体来说是如何赚取内容。
 

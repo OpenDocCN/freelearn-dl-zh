@@ -1,4 +1,4 @@
-# 第七章：*第七章*：理解客户声音分析
+# 第七章：理解客户声音分析
 
 在前面的章节中，为了展示如何提升客户服务，我们构建了一个 AI 解决方案，利用**AWS NLP**服务**Amazon Comprehend**首先分析历史客户服务记录，使用 Amazon Comprehend 主题建模提取关键话题，并训练一个定制的分类模型，通过**Amazon Comprehend Custom Classification**预测呼叫路由的主题。最后，我们使用**Amazon Comprehend detect sentiment**来理解客户反馈的情感方面。
 

@@ -1,4 +1,4 @@
-# 第六章：*第六章*：利用 NLP 提升客户服务效率
+# 第六章：利用 NLP 提升客户服务效率
 
 到目前为止，我们已经看到了一些有趣的现实世界 NLP 应用案例，比如在*第四章*中用于贷款申请的智能文档处理解决方案，*自动化文档处理工作流*，以及在*第五章*中构建的智能搜索索引，*创建 NLP 搜索*。基于 NLP 的内容搜索索引正变得越来越流行，因为它弥补了传统基于关键词的搜索与自然语言搜索之间的差距。传统的关键词搜索可能让人感到沮丧，除非你知道要使用的确切关键词，而自然语言搜索则可以帮助快速找到你感兴趣的内容。我们还看到，如何利用 Amazon Textract 和 Amazon Comprehend 与如 Amazon Elasticsearch([`aws.amazon.com/elasticsearch-service/`](https://aws.amazon.com/elasticsearch-service/))这样的服务进行集成，Amazon Elasticsearch 是由 AWS 完全管理的服务，提供开源 Elasticsearch 提供的搜索和分析功能，但无需处理设置 Elasticsearch 集群时的基础设施负担、安装或维护问题；以及 Amazon Kendra([`aws.amazon.com/kendra/`](https://aws.amazon.com/kendra/))，这是一个由机器学习驱动的完全托管企业搜索引擎，提供基于 NLP 的搜索功能，可以用来创建端到端的智能搜索解决方案。在本章中，我们将讨论一个普遍存在的用例，它已经存在了几十年，甚至几个世纪，但对于任何企业来说依然非常重要——那就是客户服务的改进。
 

@@ -1,4 +1,4 @@
-# 第三章：*第三章*：介绍 Amazon Comprehend
+# 第三章：介绍 Amazon Comprehend
 
 在上一章中，我们介绍了如何使用**Amazon Textract**进行**光学字符识别**（**OCR**）并深入探讨了它的功能和特定的 API 实现。在本章中，你将详细了解**Amazon Comprehend**和**Amazon Comprehend Medical**，它们的功能是什么，创建它们的业务挑战是什么，它们具有哪些功能，适用于哪些用户需求，以及如何轻松地将 Comprehend 与不同的**AWS**服务集成，如**AWS Lambda**，以构建业务应用程序。
 

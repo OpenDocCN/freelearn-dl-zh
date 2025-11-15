@@ -1,4 +1,4 @@
-# 第十八章：*第十八章*：构建安全、可靠和高效的 NLP 解决方案
+# 第十八章：构建安全、可靠和高效的 NLP 解决方案
 
 感谢亲爱的读者在这段（希望对您有帮助的）旅程中陪伴我们，帮助组织构建最佳的**自然语言处理**（**NLP**）解决方案，以从文本数据中发现洞察。本书的写作目的是让人们意识到，**人工智能**（**AI**）已经成为主流，我们正处于一个巨大的人工智能采用浪潮的边缘，许多企业都在朝着这个方向前进。这项激动人心的技术不仅能帮助你提升职业生涯，还为你提供了探索以前无法实现的创新领域的机会。例如，根据 BBC 的一篇文章（[`www.bbc.com/future/article/20181129-the-ai-transforming-the-way-aircraft-are-built`](https://www.bbc.com/future/article/20181129-the-ai-transforming-the-way-aircraft-are-built)），**Autodesk**（[`www.autodesk.com/`](https://www.autodesk.com/)）这家全球领先的设计和制造技术公司，使用**生成式人工智能**（[`www.amazon.com/Generative-AI-Python-TensorFlow-Transformer/dp/1800200889`](https://www.amazon.com/Generative-AI-Python-TensorFlow-Transformer/dp/1800200889)）帮助飞机制造商设计更高效的机身框架，这是减少燃油消耗的关键要求。
 

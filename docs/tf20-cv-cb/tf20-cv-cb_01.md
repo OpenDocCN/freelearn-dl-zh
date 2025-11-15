@@ -1,4 +1,4 @@
-# 第一章：*第一章*：使用 TensorFlow 2.x 进行计算机视觉入门
+# 第一章：使用 TensorFlow 2.x 进行计算机视觉入门
 
 TensorFlow 2.x 最棒的特点之一是，它终于将 Keras 纳入了高层 API。这为什么如此重要呢？虽然 Keras 和 TensorFlow 之间已经有很好的兼容性，但它们依然是独立的库，拥有不同的开发周期，这导致了频繁的兼容性问题。如今，这两个极为流行的工具关系正式确立，它们将朝着同一个方向发展，遵循同一条路线图，实现无缝的互操作性。最终，Keras 就是 TensorFlow，TensorFlow 也就是 Keras。
 

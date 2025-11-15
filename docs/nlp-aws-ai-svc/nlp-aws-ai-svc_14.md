@@ -1,4 +1,4 @@
-# 第十二章：*第十二章*：医疗行业中的 AI 和 NLP
+# 第十二章：医疗行业中的 AI 和 NLP
 
 在上一章中，我们讨论了如何使用 AWS AI 服务，通过**Amazon Lex**和**Amazon Kendra**为您的文档工作流设置聊天机器人。在这一章中，我们将讨论**Amazon Textract**和**Amazon Comprehend Medical**如何帮助数字化医疗索赔。我们将讨论医疗行业的索赔处理系统，以及为什么自动化医疗索赔如此重要。接着，我们将引导您如何使用 Amazon Textract 将这些纸质索赔数字化，并使用后处理进行验证。然后，我们将展示如何使用 Amazon Comprehend Medical API 从这些索赔中提取 NLP 洞察，例如判断个人是否患有糖尿病。
 
