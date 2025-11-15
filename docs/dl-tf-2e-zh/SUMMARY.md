@@ -7,5 +7,5 @@
 +   [六、RNN 和梯度消失或爆炸问题](ch06.md)
 +   [七、TensorFlow GPU 配置](ch07.md)
 +   [八、TFLearn](ch08.md)
-+   [九、使用协同过滤的电影推荐](ch09.md)
++   [九、协同过滤和电影推荐](ch09.md)
 +   [十、OpenAI Gym](ch10.md)

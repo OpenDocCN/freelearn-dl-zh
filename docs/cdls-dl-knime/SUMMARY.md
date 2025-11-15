@@ -2,7 +2,7 @@
 +   [前言](cdls-dl-knime_00.md)
 +   [第一部分：前馈神经网络与 KNIME 深度学习扩展](cdls-dl-knime_01.md)
 +   [第一章：*第一章:* 使用 KNIME Analytics Platform 入门深度学习](cdls-dl-knime_02.md)
-+   [第二章：*第二章*：使用 KNIME 分析平台进行数据访问和预处理](cdls-dl-knime_03.md)
++   [第二章：使用 KNIME 分析平台进行数据访问和预处理](cdls-dl-knime_03.md)
 +   [第三章：*第三章:* 神经网络入门](cdls-dl-knime_04.md)
 +   [第四章：*第四章：* 构建和训练前馈神经网络](cdls-dl-knime_05.md)
 +   [第二部分：深度学习网络](cdls-dl-knime_06.md)
