@@ -417,13 +417,13 @@
 
 1.  就这些。将`AITankController`脚本添加到`CompleteAITank`预制件中，并连接所有必需的元素。您可以在以下屏幕截图中看到`AITankController`组件应该看起来是什么样子：
 
-![图 12.9 – 检查器中的 AI 坦克控制器脚本![图 B17984_12_9.jpg](img/B17984_12_9.jpg)
+![图 B17984_12_9.jpg](img/B17984_12_9.jpg)
 
 图 12.9 – 检查器中的 AI 坦克控制器脚本
 
 记得也将预制件的层设置为**AI**。
 
-![图 12.10 – CompleteTankAI 预制件的层配置![图 B17984_12_10.jpg](img/B17984_12_10.jpg)
+![图 B17984_12_10.jpg](img/B17984_12_10.jpg)
 
 图 12.10 – CompleteTankAI 预制件的层配置
 
