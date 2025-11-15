@@ -80,7 +80,9 @@ pix2pix 类似于我们在第四章")中讨论的**条件 GAN**（**CGAN**）[4]
 
 这两个损失的和被称为循环一致性损失：
 
-![CycleGAN 模型](img/B08956_07_003.jpg)![CycleGAN 模型](img/B08956_07_004.jpg)
+![CycleGAN 模型](img/B08956_07_003.jpg)
+
+![CycleGAN 模型](img/B08956_07_004.jpg)
 
 （公式 7.1.6）
 
