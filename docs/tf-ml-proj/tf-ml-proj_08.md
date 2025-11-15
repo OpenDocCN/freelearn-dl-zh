@@ -24,15 +24,14 @@
 
 我们都已经理解了贝叶斯规则的基础知识，如第六章所解释的，*使用高斯过程回归预测股价*。
 
-对于贝叶斯机器学习，我们使用与贝叶斯规则相同的公式来从给定数据中学习模型参数（![](img/f5d0830f-24cd-4bde-a545-131fa87abb6c.png)），![](img/839c249a-4c94-4cc9-9f42-a5eefc53e68f.png)。因此，公式如下所示：
+对于贝叶斯机器学习，我们使用与贝叶斯规则相同的公式来从给定数据中学习模型参数（`w`），`X`。因此，公式如下所示：
 
 ![](img/1ca7cadc-8435-47da-9f98-f28d27c21001.png)
 
-在这里，![](img/b4360234-8459-431a-8283-360b9fd20244.png) 或者观测数据的概率也叫做证据。这通常很难计算。一种暴力方法是将![](img/a534dbd7-1960-4d32-9cb1-d54dabe39401.png) 对所有模型参数值进行积分，但显然这在计算上代价太高。![](img/610582f1-80be-46ca-b3d8-625b3794d4a0.png) 是参数的先验，在大多数情况下它只是参数的随机初始化值。通常，我们不在乎先验设置得是否完美，因为我们期望推断过程能够收敛到正确的参数值。
+在这里，`P(X)`或者观测数据的概率也叫做证据。这通常很难计算。一种暴力方法是将`P(X|w)` 对所有模型参数值进行积分，但显然这在计算上代价太高。`P(w)`是参数的先验，在大多数情况下它只是参数的随机初始化值。通常，我们不在乎先验设置得是否完美，因为我们期望推断过程能够收敛到正确的参数值。
 
-![](img/614510dd-708d-4882-a251-6cb8cfec80bf.png) 被称为给定建模参数下的数据似然性。实际上，它显示了在给定模型参数时，获得数据中给定观察值的可能性。我们使用似然性作为评估不同模型的标准。似然性越高，模型越好。
-
-最终，![](img/18494e17-11f3-433a-ab12-e82727d65da9.png)，后验，是我们想要计算的内容。它是基于给定数据得到的模型参数的概率分布。一旦我们获得了模型参数的不确定性，我们就可以用它们来量化模型预测的不确定性。
+`P(X|w)`  被称为给定建模参数下的数据似然性。实际上，它显示了在给定模型参数时，获得数据中给定观察值的可能性。我们使用似然性作为评估不同模型的标准。似然性越高，模型越好。
+`P(w|X)`，后验，是我们想要计算的内容。它是基于给定数据得到的模型参数的概率分布。一旦我们获得了模型参数的不确定性，我们就可以用它们来量化模型预测的不确定性。
 
 通常，在机器学习中，我们使用**最大似然估计**（**MLE**）([`ocw.mit.edu/courses/mathematics/18-05-introduction-to-probability-and-statistics-spring-2014/readings/MIT18_05S14_Reading10b.pdf`](https://ocw.mit.edu/courses/mathematics/18-05-introduction-to-probability-and-statistics-spring-2014/readings/MIT18_05S14_Reading10b.pdf)) 来获得模型参数的估计。然而，在贝叶斯深度学习的情况下，我们从先验和该过程估计后验，这一过程被称为**最大后验估计**（**MAP**）([`ocw.mit.edu/courses/sloan-school-of-management/15-097-prediction-machine-learning-and-statistics-spring-2012/lecture-notes/MIT15_097S12_lec15.pdf`](https://ocw.mit.edu/courses/sloan-school-of-management/15-097-prediction-machine-learning-and-statistics-spring-2012/lecture-notes/MIT15_097S12_lec15.pdf))。
 
@@ -62,7 +61,7 @@
 
 +   **Tfp.distributions.categorical**：这是一个标准的类别分布，其特点是对 K 个类别的概率或对数概率。在这个项目中，我们有来自 43 种不同交通标志的交通标志图像。我们将在本项目中定义一个覆盖 43 个类别的类别分布。
 
-+   **概率层**：构建在 TensorFlow 层实现之上，概率层将它们所表示的函数中的不确定性融入其中。实际上，它们将不确定性融入神经网络的权重中。它们具有通过从权重分布的后验进行采样，前向传播输入的功能（![](img/3dc23fbc-1c62-49e1-afff-1457bbdbb861.png)）。具体来说，我们将使用 Convolutional2DFlipout 层（[`www.tensorflow.org/probability/api_docs/python/tfp/layers/Convolution2DFlipout`](https://www.tensorflow.org/probability/api_docs/python/tfp/layers/Convolution2DFlipout)），它能够通过从模型权重参数的后验进行采样，计算前向传播。
++   **概率层**：构建在 TensorFlow 层实现之上，概率层将它们所表示的函数中的不确定性融入其中。实际上，它们将不确定性融入神经网络的权重中。它们具有通过从权重分布的后验进行采样，前向传播输入的功能（`P(w|X)`）。具体来说，我们将使用 Convolutional2DFlipout 层（[`www.tensorflow.org/probability/api_docs/python/tfp/layers/Convolution2DFlipout`](https://www.tensorflow.org/probability/api_docs/python/tfp/layers/Convolution2DFlipout)），它能够通过从模型权重参数的后验进行采样，计算前向传播。
 
 +   **Kullback-Leibler (KL) 散度**：如果我们想要衡量两个数字之间的差异，只需将它们相减。那么，如果我们想要衡量两个概率分布之间的差异呢？在这种情况下，相减的等价物是什么？在概率和统计的情况下，我们通常会用一个更简单的近似分布来替代观察数据或复杂的分布。KL 散度帮助我们衡量在选择近似时丢失了多少信息。从本质上讲，它是衡量一个概率分布与其他分布之间差异的度量。KL 散度为 0 表示两个分布是相同的。如果你想了解更多关于 KL 散度的数学原理，请参考 MIT 开放课程中的精彩解释，链接为 [`ocw.mit.edu/courses/sloan-school-of-management/15-097-prediction-machine-learning-and-statistics-spring-2012/lecture-notes/MIT15_097S12_lec15.pdf`](https://ocw.mit.edu/courses/sloan-school-of-management/15-097-prediction-machine-learning-and-statistics-spring-2012/lecture-notes/MIT15_097S12_lec15.pdf)。
 
@@ -130,7 +129,9 @@
 
 1.  首先，通过直方图均衡化对数据集中存在的图像进行转换。这一步很重要，因为数据集中的每张图像可能具有不同的光照强度。从以下两张图片中可以看到，同样的交通标志在不同的光照下有很大的差异。直方图均衡化有助于标准化这些差异，使训练数据更加一致：
 
-![](img/564c6534-4274-47d0-844e-7337c1db8f30.png)![](img/fabef10e-3b86-4de1-a49d-3f0d9f745e8a.png)
+![](img/564c6534-4274-47d0-844e-7337c1db8f30.png)
+
+![](img/fabef10e-3b86-4de1-a49d-3f0d9f745e8a.png)
 
 一旦完成均衡化操作，裁剪图像以仅聚焦于标志，并将图像大小调整为 32 x 32，以符合我们的学习算法要求：
 

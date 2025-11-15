@@ -120,7 +120,9 @@ import matplotlib.pyplot as plt
 
 本书中所有练习和活动的代码都可以通过 Jupyter Notebook 执行。您需要先安装 Anaconda Navigator，它是一个可以访问 Jupyter 笔记本的界面。Anaconda Navigator 会作为 Anaconda Individual Edition 的一部分安装，Anaconda 是一个适用于 Windows、macOS 和 Linux 的开源 Python 分发平台。安装 Anaconda 时也会安装 Python。请前往 [`www.anaconda.com/distribution/`](https://www.anaconda.com/distribution/)：
 
-1.  在打开的页面中，点击 `Download` 按钮（由 *1* 标注）。确保下载的是 `Individual Edition`。![图 0.3：Anaconda 主页    ](img/B16341_0_03.jpg)
+1.  在打开的页面中，点击 `Download` 按钮（由 *1* 标注）。确保下载的是 `Individual Edition`。
+
+    ![图 0.3：Anaconda 主页    ](img/B16341_0_03.jpg)
 
     图 0.3：Anaconda 主页
 
@@ -128,7 +130,9 @@ import matplotlib.pyplot as plt
 
     图 0.4: 根据操作系统下载 Anaconda
 
-1.  请按照屏幕上显示的安装步骤进行操作。![图 0.5: Anaconda 设置    ](img/B16341_0_05.jpg)
+1.  请按照屏幕上显示的安装步骤进行操作。
+
+    ![图 0.5: Anaconda 设置    ](img/B16341_0_05.jpg)
 
     图 0.5: Anaconda 设置
 
@@ -160,27 +164,37 @@ import matplotlib.pyplot as plt
 
 打开 Anaconda Navigator 后，你可以从这个界面启动 Jupyter Notebook。以下步骤将指导你如何操作：
 
-1.  打开 Anaconda Navigator，你应该能看到以下界面：![图 0.10：Anaconda Navigator 界面    ](img/B16341_0_10.jpg)
+1.  打开 Anaconda Navigator，你应该能看到以下界面：
+
+    ![图 0.10：Anaconda Navigator 界面    ](img/B16341_0_10.jpg)
 
     图 0.10：Anaconda Navigator 界面
 
-1.  现在，点击 `Launch` 在 `Jupyter Notebook` 面板下启动本地系统上的 Jupyter Notebook 界面：![图 0.11：Jupyter Notebook 启动选项    ](img/B16341_0_11.jpg)
+1.  现在，点击 `Launch` 在 `Jupyter Notebook` 面板下启动本地系统上的 Jupyter Notebook 
+
+    ![图 0.11：Jupyter Notebook 启动选项    ](img/B16341_0_11.jpg)
 
     图 0.11：Jupyter Notebook 启动选项
 
-1.  点击 `Launch` 按钮后，你会注意到，尽管前面截图显示的窗口没有变化，但在默认浏览器中会打开一个新标签页。这就是所谓的*Notebook Dashboard*。它会默认打开到你的根目录。对于 Windows 用户，这个路径类似于 `C:\Users\<用户名>`。在 macOS 和 Linux 上，它会是 `/home/<用户名>/`。![图 0.12：Notebook Dashboard    ](img/B16341_0_12.jpg)
+1.  点击 `Launch` 按钮后，你会注意到，尽管前面截图显示的窗口没有变化，但在默认浏览器中会打开一个新标签页。这就是所谓的*Notebook Dashboard*。它会默认打开到你的根目录。对于 Windows 用户，这个路径类似于 `C:\Users\<用户名>`。在 macOS 和 Linux 上，它会是 `/home/<用户名>/`。
+
+    ![图 0.12：Notebook Dashboard    ](img/B16341_0_12.jpg)
 
     图 0.12：Notebook Dashboard
 
     请注意，你也可以通过在终端或命令提示符中运行 `jupyter notebook` 命令来直接打开 Jupyter Notebook，或者像在*图 0.8*中那样，在应用程序中搜索 `Jupyter Notebook`。
 
-1.  你可以使用这个仪表板作为文件浏览器，导航到你下载或存储书中代码文件的目录（关于如何从 GitHub 下载文件，请参考*下载代码包*章节）。一旦你导航到目标目录，就可以开始创建新的笔记本。或者，如果你已经从我们的代码库下载了代码，也可以打开现有的笔记本（笔记本文件扩展名为 `.inpyb`）。这里的菜单非常简便易用：![图 0.13：Jupyter Notebook 导航菜单选项介绍    ](img/B16341_0_13.jpg)
+1.  你可以使用这个仪表板作为文件浏览器，导航到你下载或存储书中代码文件的目录（关于如何从 GitHub 下载文件，请参考*下载代码包*章节）。一旦你导航到目标目录，就可以开始创建新的笔记本。或者，如果你已经从我们的代码库下载了代码，也可以打开现有的笔记本（笔记本文件扩展名为 `.inpyb`）。这里的菜单非常简便易用：
+
+    ![图 0.13：Jupyter Notebook 导航菜单选项介绍    ](img/B16341_0_13.jpg)
 
     图 0.13：Jupyter Notebook 导航菜单选项介绍
 
     如果你通过操作系统的文件资源管理器更改了目录，但在 Jupyter Notebook 导航器中没有显示更改后的文件，可以点击`刷新笔记本列表`按钮（标注为*1*）。要退出，点击`退出按钮`（标注为*2*）。要创建一个新文件（一个新的 Jupyter 笔记本），你可以点击`新建`按钮（标注为*3*）。
 
-1.  点击`New`按钮将会弹出如下的下拉菜单：![图 0.14：创建一个新的 Jupyter 笔记本    ](img/B16341_0_14.jpg)
+1.  点击`New`
+
+    ![图 0.14：创建一个新的 Jupyter 笔记本    ](img/B16341_0_14.jpg)
 
 图 0.14：创建一个新的 Jupyter 笔记本
 
