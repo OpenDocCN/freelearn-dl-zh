@@ -1890,7 +1890,9 @@ Prec  : 0.81
 
 1.  在你喜欢的电子表格中打开`.csv`文件。所有推文应具有得分和猜测的类别，格式符合标准标注格式。
 
-1.  首先按`GUESS`列进行升序或降序排序，然后按`SCORE`列进行降序排序。结果应是每个类别的得分从高到低排列。这就是我们如何设置自上而下的标注。![如何操作...](img/4672OS_03_01.jpg)
+1.  首先按`GUESS`列进行升序或降序排序，然后按`SCORE`列进行降序排序。结果应是每个类别的得分从高到低排列。这就是我们如何设置自上而下的标注。
+
+    ![如何操作...](img/4672OS_03_01.jpg)
 
     为自上而下的标注设置数据排序。所有类别被分组在一起，并根据得分进行降序排序。
 
@@ -2030,7 +2032,7 @@ public ScoredClassification classify(E input) {
   List<ScoredObject<String>> scores 
       = new ArrayList<ScoredObject<String>>();
   for (int i = 0; i < classification.size(); ++i) {
-    String category = classification.category(i);     Double score = classification.score(i);
+    String category = classification.category(i);    Double score = classification.score(i);
      if (category.equals("p") && score < .76d) {
        score = 0.0;
      }
@@ -2186,17 +2188,23 @@ Prec  : 0.29
 
     +   如果推文没有注释，即`TRUTH`列没有条目，那么它是使用所有可用的训练数据进行分类的。显示的电子表格中的所有其他示例都是这种处理方式。它们不会对评估产生任何影响。我们将注释这些推文，以帮助提高分类器的性能。
 
-1.  接下来，我们将注释高置信度的推文，不管它们属于哪个类别，如下截图所示：![如何操作...](img/4672OS_03_04.jpg)
+1.  接下来，我们将注释高置信度的推文，不管它们属于哪个类别，如下截图所示：
+
+    ![如何操作...](img/4672OS_03_04.jpg)
 
     活跃学习输出的修正结果。注意`o`类别的主导地位。
 
 1.  注释到第 19 行时，我们会注意到大多数推文是`o`，它们主导了整个过程。只有三个`p`，没有`n`。我们需要一些`n`注释。
 
-1.  我们可以通过选择整个表格（不包括标题），然后按**B**列或`GUESS`列排序，来专注于可能的`n`注释。滚动到`n`猜测时，我们应该看到最高置信度的示例。在下图中，我们已经注释了所有的`n`猜测，因为该类别需要数据。我们的注释位于`data/activeLearningCompleted/disneySentimentDedupe.1.csv`中。如果你想严格按照本教程操作，你需要将该文件复制到`activeLearning`目录中。![如何操作…](img/4672OS_03_05.jpg)
+1.  我们可以通过选择整个表格（不包括标题），然后按**B**列或`GUESS`列排序，来专注于可能的`n`注释。滚动到`n`猜测时，我们应该看到最高置信度的示例。在下图中，我们已经注释了所有的`n`猜测，因为该类别需要数据。我们的注释位于`data/activeLearningCompleted/disneySentimentDedupe.1.csv`中。如果你想严格按照本教程操作，你需要将该文件复制到`activeLearning`目录中。
+
+    ![如何操作…](img/4672OS_03_05.jpg)
 
     按类别排序的注释中，负例或`n`类别非常少。
 
-1.  滚动到`p`猜测，我们也注释了一些。![如何操作…](img/4672OS_03_06.jpg)
+1.  滚动到`p`猜测，我们也注释了一些。
+
+    ![如何操作…](img/4672OS_03_06.jpg)
 
     带有修正的正例标签和令人惊讶的负例数量
 

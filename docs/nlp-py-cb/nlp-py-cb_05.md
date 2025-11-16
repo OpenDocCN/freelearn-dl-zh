@@ -396,7 +396,13 @@ learnLookupTagger(testSentence)
 
 1.  输入以下源代码：
 
-![1.  保存文件。1.  使用 Python 解释器运行程序。1.  你将看到以下输出：![](img/e2cf88f7-b8f8-4e8e-b538-ca05208ac5f3.png)
+1.  保存文件。
+
+1.  使用 Python 解释器运行程序。
+
+1.  你将看到以下输出：
+
+    ![](img/e2cf88f7-b8f8-4e8e-b538-ca05208ac5f3.png)
 
 # 它是如何工作的...
 

@@ -243,7 +243,9 @@ pool.close()
 
 1.  对于输出数据，请输入 `s3://doc-processing-bucket-MMDD` S3 桶。
 
-1.  对于访问权限，在 **NameSuffix** 中选择 `classifydoc`。![图 15.6 – Amazon Comprehend 自定义分类 IAM 设置    ](img/B17528_15_06.jpg)
+1.  对于访问权限，在 **NameSuffix** 中选择 `classifydoc`。
+
+    ![图 15.6 – Amazon Comprehend 自定义分类 IAM 设置    ](img/B17528_15_06.jpg)
 
     图 15.6 – Amazon Comprehend 自定义分类 IAM 设置
 
@@ -261,7 +263,9 @@ pool.close()
 
 1.  访问此链接，https://console.aws.amazon.com/comprehend/v2/home?region=us-east-1#endpoints，并点击 **创建端点**。
 
-1.  输入 `classify-doc` 作为端点名称，设置我们在上一步中训练的 `doc-classifier`，并将**推理单元**设置为 **1**。![图 15.7 – Amazon Comprehend 创建实时端点 UI    ](img/B17528_15_07.jpg)
+1.  输入 `classify-doc` 作为端点名称，设置我们在上一步中训练的 `doc-classifier`，并将**推理单元**设置为 **1**。
+
+    ![图 15.7 – Amazon Comprehend 创建实时端点 UI    ](img/B17528_15_07.jpg)
 
     图 15.7 – Amazon Comprehend 创建实时端点 UI
 
@@ -269,7 +273,9 @@ pool.close()
 
     在笔记本的清理部分删除此端点，以避免产生费用。
 
-1.  现在，复制下一张截图中显示的**ARN**，然后前往 Jupyter Notebook 链接：![图 15.8 – Comprehend 自定义分类终端节点 ARN    ](img/B17528_15_08.jpg)
+1.  现在，复制下一张截图中显示的**ARN**，然后前往 Jupyter Notebook 链接：
+
+    ![图 15.8 – Comprehend 自定义分类终端节点 ARN    ](img/B17528_15_08.jpg)
 
     图 15.8 – Comprehend 自定义分类终端节点 ARN
 
@@ -437,7 +443,9 @@ pool.close()
 
     图 15.11 – 亚马逊 A2I 登录控制台
 
-1.  选择**任务标题**并点击**开始工作**；你将被重定向到分类任务 UI。![图 15.12 – 亚马逊 A2I 示例分类任务 UI    ](img/B17528_15_12.jpg)
+1.  选择**任务标题**并点击**开始工作**；你将被重定向到分类任务 UI。
+
+    ![图 15.12 – 亚马逊 A2I 示例分类任务 UI    ](img/B17528_15_12.jpg)
 
     图 15.12 – 亚马逊 A2I 示例分类任务 UI
 

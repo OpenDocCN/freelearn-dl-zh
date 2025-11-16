@@ -187,7 +187,9 @@
 
 在此步骤中，我们将使用 Amazon SageMaker 标注工作团队控制台创建一个私有团队，并将自己添加为该私有团队的工作人员。这样做是为了在我们进入此解决方案中的 Amazon A2I 步骤时，能够登录到标注任务的用户界面。请执行以下任务：
 
-1.  如果尚未登录 AWS 管理控制台，请登录（更多详细信息，请参考本章开头的 *技术要求* 部分），在 **服务** 搜索栏中输入 `amazon sagemaker`，然后进入 Amazon SageMaker 控制台。进入后，在 UI 左侧点击 **Ground Truth**，再点击 **Labeling workforces**。在此页面，选择顶部标签中的 **Private**，然后点击 **Create private team**。![图 14.2 – SageMaker 标注工作团队    ](img/B17528_14_02.jpg)
+1.  如果尚未登录 AWS 管理控制台，请登录（更多详细信息，请参考本章开头的 *技术要求* 部分），在 **服务** 搜索栏中输入 `amazon sagemaker`，然后进入 Amazon SageMaker 控制台。进入后，在 UI 左侧点击 **Ground Truth**，再点击 **Labeling workforces**。在此页面，选择顶部标签中的 **Private**，然后点击 **Create private team**。
+
+    ![图 14.2 – SageMaker 标注工作团队    ](img/B17528_14_02.jpg)
 
     图 14.2 – SageMaker 标注工作团队
 
@@ -199,7 +201,9 @@
     WORKTEAM_ARN= '<workteam-arn>'
     ```
 
-1.  接下来，向下滚动到前一页面，进入 `no-reply@verificationemail.com`。按照指示完成注册过程。![图 14.3 – 邀请新工作人员    ](img/B17528_14_03.jpg)
+1.  接下来，向下滚动到前一页面，进入 `no-reply@verificationemail.com`。按照指示完成注册过程。
+
+    ![图 14.3 – 邀请新工作人员    ](img/B17528_14_03.jpg)
 
     图 14.3 – 邀请新工作人员
 
@@ -442,11 +446,15 @@
     print('https://' + sagemaker.describe_workteam(WorkteamName=workteamName)['Workteam']['SubDomain'])
     ```
 
-1.  登录后，您将看到一个**贷款申请审核**任务。选择它并点击**开始工作**：![图 14.7 – 亚马逊 A2I 任务列表    ](img/B17528_14_07.jpg)
+1.  登录后，您将看到一个**贷款申请审核**任务。选择它并点击**开始工作**：
+
+    ![图 14.7 – 亚马逊 A2I 任务列表    ](img/B17528_14_07.jpg)
 
     图 14.7 – 亚马逊 A2I 任务列表
 
-1.  您应该能够看到亚马逊 A2I 标签 UI，其中显示了由 Comprehend 自定义实体识别高亮的实体列表及其标签，如下图所示：![图 14.8 – 亚马逊 A2I 标签 UI 准备好供人工审核](img/B17528_14_08.jpg)
+1.  您应该能够看到亚马逊 A2I 标签 UI，其中显示了由 Comprehend 自定义实体识别高亮的实体列表及其标签，如下图所示：
+
+    ![图 14.8 – 亚马逊 A2I 标签 UI 准备好供人工审核](img/B17528_14_08.jpg)
 
     图 14.8 – Amazon A2I 标签界面准备好进行人工审核
 

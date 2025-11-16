@@ -400,7 +400,7 @@ None
 
 你还将看到以下图表弹出：
 
->![](img/d21e36af-4aae-4c1c-97a9-fe2f637fefe2.png)
+![](img/d21e36af-4aae-4c1c-97a9-fe2f637fefe2.png)
 
 # 它是如何工作的…
 
