@@ -162,7 +162,7 @@ distances = pd.read_csv('PeMSD7_W_228.csv.csv', names=range(0,228))
 
 ![](img/Formula_B19153_15_001.jpg)
 
-在这里，![](img/Formula_B19153_15_002.png)表示从节点 ![](img/Formula_B19153_15_003.png) 到节点 ![](img/Formula_B19153_15_004.png) 的边的权重，![](img/Formula_B19153_15_005.png) 是这两个节点之间的距离，![](img/Formula_B19153_15_006.png) 和 ![](img/Formula_B19153_15_007.png) 是两个阈值，用来控制邻接矩阵的分布和稀疏度。[2]的官方实现可以在 GitHub 上找到（[`github.com/VeritasYin/STGCN_IJCAI-18`](https://github.com/VeritasYin/STGCN_IJCAI-18)）。我们将重用相同的阈值 ![](img/Formula_B19153_15_008.png) 和 ![](img/Formula_B19153_15_009.png)。
+在这里，`W[ij]`表示从节点`i` 到节点`j`的边的权重，`d[ij]`是这两个节点之间的距离，`σ²`和`ε`是两个阈值，用来控制邻接矩阵的分布和稀疏度。[2]的官方实现可以在 GitHub 上找到（[`github.com/VeritasYin/STGCN_IJCAI-18`](https://github.com/VeritasYin/STGCN_IJCAI-18)）。我们将重用相同的阈值`σ² = 0.1`和`ε = 0.5`。
 
 让我们用 Python 实现并绘制结果的邻接矩阵：
 
@@ -205,7 +205,31 @@ distances = pd.read_csv('PeMSD7_W_228.csv.csv', names=range(0,228))
 
 我们得到以下图形：
 
-![图 15.5 – PeMS-M 数据集的加权邻接矩阵图 15.5 – PeMS-M 数据集的加权邻接矩阵这是一种很好地总结第一步处理的方法。我们可以将其与之前绘制的距离矩阵进行比较，以查找相似之处。1.  我们还可以直接使用`networkx`将其绘制为图形。在这种情况下，连接是二进制的，因此我们可以简单地将每个权重大于 0 的连接考虑进去。我们可以使用边标签显示这些值，但图形将变得极其难以阅读：    ```py    import networkx as nx    def plot_graph(adj):        plt.figure(figsize=(10,5))        rows, cols = np.where(adj > 0)        edges = zip(rows.tolist(), cols.tolist())        G = nx.Graph()        G.add_edges_from(edges)        nx.draw(G, with_labels=True)        plt.show()    ```1.  即使没有标签，生成的图形也不容易阅读：    ```py    plot_graph(adj)    ```它给出了以下输出：![图 15.6 – PeMS-M 数据集作为图形（每个节点代表一个传感器站）](img/B19153_15_006.jpg)
+![图 15.5 – PeMS-M 数据集的加权邻接矩阵](img/B19153_15_005.jpg)
+
+这是一种很好地总结第一步处理的方法。我们可以将其与之前绘制的距离矩阵进行比较，以查找相似之处。1.  我们还可以直接使用`networkx`将其绘制为图形。在这种情况下，连接是二进制的，因此我们可以简单地将每个权重大于 0 的连接考虑进去。我们可以使用边标签显示这些值，但图形将变得极其难以阅读：    
+
+```py
+    import networkx as nx
+    def plot_graph(adj):
+        plt.figure(figsize=(10,5))
+        rows, cols = np.where(adj > 0)
+        edges = zip(rows.tolist(), cols.tolist())
+        G = nx.Graph()
+        G.add_edges_from(edges)
+        nx.draw(G, with_labels=True)
+        plt.show()
+```
+
+1.  即使没有标签，生成的图形也不容易阅读：    
+
+```py
+    plot_graph(adj)
+```
+
+它给出了以下输出：
+
+![图 15.6 – PeMS-M 数据集作为图形（每个节点代表一个传感器站）](img/B19153_15_006.jpg)
 
 图 15.6 – PeMS-M 数据集作为图形（每个节点代表一个传感器站）
 
@@ -240,7 +264,7 @@ distances = pd.read_csv('PeMSD7_W_228.csv.csv', names=range(0,228))
 
 图 15.7 – 标准化速度值的示例
 
-这些值已经正确标准化。现在，我们可以使用它们为每个节点创建时间序列。我们希望在每个时间步输入![](img/Formula_B19153_15_016.png)数据样本，![](img/Formula_B19153_15_017.png)，以预测![](img/Formula_B19153_15_018.png)时的速度值。较多的输入数据样本也会增加数据集的内存占用。![](img/Formula_B19153_15_019.png)的值，也称为预测范围，取决于我们想要执行的任务：短期或长期交通预测。
+这些值已经正确标准化。现在，我们可以使用它们为每个节点创建时间序列。我们希望在每个时间步输入`n`数据样本，`t`，以预测`t + h`时的速度值。较多的输入数据样本也会增加数据集的内存占用。`h`的值，也称为预测范围，取决于我们想要执行的任务：短期或长期交通预测。
 
 在这个示例中，我们取一个较高的值 48 来预测 4 小时后的交通速度：
 
@@ -253,7 +277,7 @@ distances = pd.read_csv('PeMSD7_W_228.csv.csv', names=range(0,228))
     ys = []
     ```
 
-1.  对于每个时间步![](img/Formula_B19153_15_020.png)，我们将存储之前的 12 个值（lags）在`xs`中，当前时刻![](img/Formula_B19153_15_021.png)的值存储在`ys`中：
+1.  对于每个时间步`t`，我们将存储之前的 12 个值（lags）在`xs`中，当前时刻`t + h`的值存储在`ys`中：
 
     ```py
     for i in range(lags, speeds_norm.shape[0]-horizon):
@@ -360,9 +384,9 @@ A3T-GCN 是对**时序 GCN**（**TGCN**）架构的改进。TGCN 是一个结合
 
 现在我们的模型已经训练完成，我们需要对其进行评估。除了经典的指标如**均方根误差**（**RMSE**）和**平均绝对误差**（**MAE**），将我们的模型与时间序列数据的基准解决方案进行比较也特别有帮助。在接下来的列表中，我们将介绍两种方法：
 
-+   使用**随机游走**（**RW**）作为一个简单的预测器。在这种情况下，RW 指的是使用最后一个观察值作为预测值。换句话说，![](img/Formula_B19153_15_022.png)处的值与![](img/Formula_B19153_15_023.png)处的值相同。
++   使用**随机游走**（**RW**）作为一个简单的预测器。在这种情况下，RW 指的是使用最后一个观察值作为预测值。换句话说，`t`处的值与`t + h`处的值相同。
 
-+   使用**历史平均值**（**HA**）作为略微更进化的解决方案。在这种情况下，我们计算前![](img/Formula_B19153_15_024.png)个样本的平均交通速度，作为![](img/Formula_B19153_15_025.png)处的值。在这个示例中，我们将使用滞后的数量作为我们的![](img/Formula_B19153_15_026.png)值，但我们也可以采用总体历史平均值。
++   使用**历史平均值**（**HA**）作为略微更进化的解决方案。在这种情况下，我们计算前`k`个样本的平均交通速度，作为`t + h`处的值。在这个示例中，我们将使用滞后的数量作为我们的`k`值，但我们也可以采用总体历史平均值。
 
 我们首先评估模型在测试集上的预测：
 
@@ -456,7 +480,7 @@ A3T-GCN 是对**时序 GCN**（**TGCN**）架构的改进。TGCN 是一个结合
     std = speeds.std(axis=1)
     ```
 
-1.  我们绘制了带有标准差的平均交通速度，并将其与预测值进行比较（![](img/Formula_B19153_15_027.png)小时）：
+1.  我们绘制了带有标准差的平均交通速度，并将其与预测值进行比较（`t + 4`小时）：
 
     ```py
     plt.figure(figsize=(10,5), dpi=300)
