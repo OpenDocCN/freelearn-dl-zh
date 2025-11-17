@@ -70,7 +70,7 @@ EvolveGCN-H 通常使用 **门控递归单元** (**GRU**) 代替普通的 RNN。
 
 ![](img/Formula_B19153_13_010.png)
 
-其中，![](img/Formula_B19153_13_011.png) 是包含自环的邻接矩阵，![](img/Formula_B19153_13_012.png) 是包含自环的度矩阵。
+其中，`A_tilde` 是包含自环的邻接矩阵，`D_tilde`是包含自环的度矩阵。
 
 这些步骤在下图中进行了总结。
 
@@ -90,7 +90,9 @@ EvolveGCN-H 可以通过 GRU 来实现，GRU 接收两个扩展：
 
 生成的 GCN 权重矩阵以相同方式使用，以产生下一层的节点嵌入：
 
-![](img/Formula_B19153_13_015.jpg)![](img/Formula_B19153_13_016.jpg)
+![](img/Formula_B19153_13_015.jpg)
+
+![](img/Formula_B19153_13_016.jpg)
 
 这个实现更为简单，因为时间维度完全依赖于一个普通的 LSTM 网络。下图展示了 EvolveGCN-O 如何更新权重矩阵 ![](img/Formula_B19153_13_017.png) 并计算节点嵌入 ![](img/Formula_B19153_13_018.png)：
 
@@ -132,7 +134,7 @@ PyTorch Geometric 本身不支持带有时间信号的静态或动态图。幸�
     from torch_geometric_temporal.nn.recurrent import EvolveGCNH
     ```
 
-1.  我们加载了 WikiMaths 数据集，这是一个`StaticGraphTemporalSignal`对象。在这个对象中，`dataset[0]`描述了时间点![](img/Formula_B19153_13_019.png)的图（在此上下文中也称为快照），而`dataset[500]`描述了时间点![](img/Formula_B19153_13_020.png)的图。我们还创建了一个训练集和测试集的划分，比例为`0.5`。训练集由较早时间段的快照组成，而测试集则重新组织了较晚时间段的快照：
+1.  我们加载了 WikiMaths 数据集，这是一个`StaticGraphTemporalSignal`对象。在这个对象中，`dataset[0]`描述了时间点`t = 0`的图（在此上下文中也称为快照），而`dataset[500]`描述了时间点`t = 500`的图。我们还创建了一个训练集和测试集的划分，比例为`0.5`。训练集由较早时间段的快照组成，而测试集则重新组织了较晚时间段的快照：
 
     ```py
     dataset = WikiMathsDatasetLoader().get_dataset() train_dataset, test_dataset = temporal_signal_split(dataset, train_ratio=0.5)
