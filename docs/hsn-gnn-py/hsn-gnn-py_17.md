@@ -300,17 +300,21 @@ LightGCN [4] 架构旨在通过图上的特征平滑来学习节点的表示。�
 
 图 17.6 – 带有卷积和层组合的 LightGCN 模型架构
 
-然而，`LightGCN` 采用了简单的加权和聚合器，而不是像 GCN 或 GAT 等其他模型中使用的特征变换或非线性激活。轻量级图卷积操作计算 ![](img/Formula_B19153_17_001.png) 处的用户和项嵌入 ![](img/Formula_B19153_17_002.png) 和 ![](img/Formula_B19153_17_003.png)，计算方式如下：
+然而，`LightGCN` 采用了简单的加权和聚合器，而不是像 GCN 或 GAT 等其他模型中使用的特征变换或非线性激活。轻量级图卷积操作计算`k + 1`处的用户和项嵌入`e[u]^(k + 1)`和`e[i]^(k + 1)`，计算方式如下：
 
-![](img/Formula_B19153_17_004.jpg)![](img/Formula_B19153_17_005.jpg)
+![](img/Formula_B19153_17_004.jpg)
+
+![](img/Formula_B19153_17_005.jpg)
 
 对称归一化项确保嵌入的尺度不会随着图卷积操作而增加。与其他模型不同，`LightGCN` 仅聚合连接的邻居节点，并不包含自连接。
 
-实际上，它通过使用层组合操作来实现相同的效果。这个机制由每层使用用户和项嵌入的加权和组成。它通过以下方程式产生最终的嵌入 ![](img/Formula_B19153_17_006.png) 和 ![](img/Formula_B19153_17_007.png)：
+实际上，它通过使用层组合操作来实现相同的效果。这个机制由每层使用用户和项嵌入的加权和组成。它通过以下方程式产生最终的嵌入`e[u]`和`e[i]`：
 
-![](img/Formula_B19153_17_008.jpg)![](img/Formula_B19153_17_009.jpg)
+![](img/Formula_B19153_17_008.jpg)
 
-这里，第 ![](img/Formula_B19153_17_010.png) 层的贡献由变量 ![](img/Formula_B19153_17_011.png) 加权。`LightGCN` 的作者建议将其设置为 ![](img/Formula_B19153_17_012.png)。
+![](img/Formula_B19153_17_009.jpg)
+
+这里，第`k`层的贡献由变量`a[k] >= 0`加权。`LightGCN` 的作者建议将其设置为`1/(K + 1)`。
 
 *图 17.6*中显示的预测对应于评分或排名分数。它是通过用户和项目最终表示的内积得到的：
 
@@ -326,7 +330,7 @@ LightGCN [4] 架构旨在通过图上的特征平滑来学习节点的表示。�
             super().__init__()
     ```
 
-1.  我们存储用户和项目的数量，并创建用户和项目的嵌入层。`emb_users`或![](img/Formula_B19153_17_014.png)的形状是![](img/Formula_B19153_17_015.png)，而`emb_items`或![](img/Formula_B19153_17_016.png)的形状是![](img/Formula_B19153_17_017.png)：
+1.  我们存储用户和项目的数量，并创建用户和项目的嵌入层。`emb_users`或`eᵤ⁽⁰⁾`的形状是`(num_users, dm_h)` ，而`emb_items`或`eᵢ⁽⁰⁾`的形状是`(num_items, dm_h)`：
 
     ```py
             self.num_users = num_users
@@ -335,7 +339,7 @@ LightGCN [4] 架构旨在通过图上的特征平滑来学习节点的表示。�
             self.emb_items = nn.Embedding(num_embeddings=self.num_items, embedding_dim=dim_h)
     ```
 
-1.  我们使用 PyTorch Geometric 的`LGConv()`创建一个包含`num_layers`（之前称为![](img/Formula_B19153_17_018.png)）个`LightGCN`层的列表。这将用于执行轻量图卷积操作：
+1.  我们使用 PyTorch Geometric 的`LGConv()`创建一个包含`num_layers`（之前称为`K`）个`LightGCN`层的列表。这将用于执行轻量图卷积操作：
 
     ```py
             self.convs = nn.ModuleList(LGConv() for _ in range(num_layers))
@@ -348,7 +352,7 @@ LightGCN [4] 架构旨在通过图上的特征平滑来学习节点的表示。�
             nn.init.normal_(self.emb_items.weight, std=0.01)
     ```
 
-1.  `forward()`方法接收一个边索引张量，并返回最终的用户和项目嵌入向量，![](img/Formula_B19153_17_019.png) 和 ![](img/Formula_B19153_17_020.png)。它首先将用户和项目的嵌入层拼接在一起，并将结果存储在`emb`张量中。然后，它创建一个列表`embs`，将`emb`作为其第一个元素：
+1.  `forward()`方法接收一个边索引张量，并返回最终的用户和项目嵌入向量，`eᵤ⁽ᴷ⁾` 和`eᵢ⁽ᴷ⁾`。它首先将用户和项目的嵌入层拼接在一起，并将结果存储在`emb`张量中。然后，它创建一个列表`embs`，将`emb`作为其第一个元素：
 
     ```py
         def forward(self, edge_index):
@@ -370,7 +374,7 @@ LightGCN [4] 架构旨在通过图上的特征平滑来学习节点的表示。�
     emb_final = torch.mean(torch.stack(embs, dim=1), dim=1)
     ```
 
-1.  我们将`emb_final`拆分为用户和项目嵌入向量（![](img/Formula_B19153_17_021.png) 和 ![](img/Formula_B19153_17_022.png)），并与![](img/Formula_B19153_17_023.png) 和 ![](img/Formula_B19153_17_024.png)一起返回：
+1.  我们将`emb_final`拆分为用户和项目嵌入向量（`eᵤ` 和`eᵢ`），并与`eᵤ⁽⁰⁾`和`eᵢ⁽⁰⁾`一起返回：
 
     ```py
             emb_users_final, emb_items_final = torch.split(emb_final, [self.num_users, self.num_items])
@@ -387,7 +391,7 @@ LightGCN [4] 架构旨在通过图上的特征平滑来学习节点的表示。�
 
 ![](img/Formula_B19153_17_025.jpg)
 
-这里，![](img/Formula_B19153_17_026.png)是第![](img/Formula_B19153_17_027.png)层的嵌入矩阵（即初始用户和项目嵌入的连接），![](img/Formula_B19153_17_030.png)表示正则化强度，![](img/Formula_B19153_17_028.png)对应于正项的预测评分，![](img/Formula_B19153_17_029.png)代表负项的预测评分。
+这里，`E⁽⁰⁾`是第`0`层的嵌入矩阵（即初始用户和项目嵌入的连接），`λ`表示正则化强度，`y_hat[ui]`对应于正项的预测评分，`y_hat[uj]`代表负项的预测评分。
 
 我们使用以下函数在 PyTorch 中实现它：
 
