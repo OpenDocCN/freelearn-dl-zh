@@ -429,7 +429,7 @@ def accuracy(y_pred, y_true):
             self.linear = Linear(dim_in, dim_out, bias=False)
     ```
 
-1.  我们执行两个操作——线性变换，然后与邻接矩阵 ![](img/Formula_B19153_05_014.png) 相乘：
+1.  我们执行两个操作——线性变换，然后与邻接矩阵`A_hat`相乘：
 
     ```py
         def forward(self, x, adjacency):
