@@ -225,7 +225,7 @@ TF-IDF是一种数值统计量，用于衡量一个词在文档集合中相对�
 
 +   **词频（TF）**：一个词*t*在文档*d*中的TF表示该词在文档中出现的次数，除以文档中单词的总数。TF可以使用以下公式计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>T</mi><mi>F</mi><mo>(</mo><mi>t</mi><mo>,</mo><mi>d</mi><mo>)</mo><mo>=</mo><mo>(</mo><mi>N</mi><mi>u</mi><mi>m</mi><mi>b</mi><mi>e</mi><mi>r</mi><mi>o</mi><mi>f</mi><mi>t</mi><mi>i</mi><mi>m</mi><mi>e</mi><mi>s</mi><mi>w</mi><mi>o</mi><mi>r</mi><mi>d</mi><mo>′</mo><mi>t</mi><mo>′</mo><mi>a</mi><mi>p</mi><mi>p</mi><mi>e</mi><mi>a</mi><mi>r</mi><mi>s</mi><mi>i</mi><mi>n</mi><mi>g</mi><mi>d</mi><mi>o</mi><mi>c</mi><mi>u</mi><mi>m</mi><mi>e</mi><mi>n</mi><mi>t</mi><mo>′</mo><mi>d</mi><mo>′</mo><mo>)</mo><mo>/</mo><mo>(</mo><mi>T</mi><mi>o</mi><mi>t</mi><mi>a</mi><mi>l</mi><mi>n</mi><mi>u</mi><mi>m</mi><mi>b</mi><mi>e</mi><mi>r</mi><mi>o</mi><mi>f</mi><mi>w</mi><mi>o</mi><mi>r</mi><mi>d</mi><mi>s</mi><mi>i</mi><mi>n</mi><mi>g</mi><mi>o</mi><mi>c</mi><mi>u</mi><mi>m</mi><mi>e</mi><mi>n</mi><mi>t</mi><mo>′</mo><mi>d</mi><mo>′</mo><mo>)</mo></mrow></mrow></mrow></math>](img/259.png)
+![](img/259.png)
 
 TF 衡量一个单词在特定文档中的重要性。
 
@@ -237,7 +237,7 @@ TF 衡量一个单词在特定文档中的重要性。
 
 +   **TF-IDF 计算**：文档中单词 *t* 的 TF-IDF 值可以通过将文档中该单词的 TF 与整个文档集合中该单词的 IDF 相乘来计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>T</mi><mi>F</mi><mo>−</mo><mi>I</mi><mi>D</mi><mi>F</mi><mo>(</mo><mi>t</mi><mo>,</mo><mi>d</mi><mo>)</mo><mo>=</mo><mi>T</mi><mi>F</mi><mo>(</mo><mi>t</mi><mo>,</mo><mi>d</mi><mo>)</mo><mi mathvariant="normal">*</mi><mi>I</mi><mi>D</mi><mi>F</mi><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow></mrow></math>](img/260.png)
+![](img/260.png)
 
 结果的 TF-IDF 值表示一个单词在文档中的重要性，同时考虑其在文档中的频率和在整个文档集合中的稀有度。高 TF-IDF 值表示在特定文档中更重要的单词，而低 TF-IDF 值表示在所有文档中都很常见或在特定文档中很罕见的单词。
 
@@ -273,13 +273,13 @@ TF 衡量一个单词在特定文档中的重要性。
 
     例如，对于文档 4 中的单词“stori”，我们有以下内容：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>T</mi><mi>F</mi><mo>(</mo><mi mathvariant="normal">"</mi><mi>s</mi><mi>t</mi><mi>o</mi><mi>r</mi><mi>i</mi><mi mathvariant="normal">"</mi><mo>,</mo><mi>D</mi><mi>o</mi><mi>c</mi><mi>u</mi><mi>m</mi><mi>e</mi><mi>n</mi><mi>t</mi><mn>4</mn><mo>)</mo><mo>=</mo><mn>1</mn><mo>/</mo><mn>4</mn><mo>=</mo><mn>0.25</mn></mrow></mrow></mrow></math>](img/261.png)
+![](img/261.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>I</mi><mi>D</mi><mi>F</mi><mo>(</mo><mi mathvariant="normal">"</mi><mi>s</mi><mi>t</mi><mi>o</mi><mi>r</mi><mi>i</mi><mi mathvariant="normal">"</mi><mo>)</mo><mo>=</mo><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mn>4</mn><mo>/</mo><mn>3</mn><mo>)</mo><mo>≈</mo><mn>0.287</mn></mrow></mrow></mrow></math>](img/262.png)
+![](img/262.png)
 
 4. **步骤 4 – 计算TF-IDF值**：计算每个文档中每个单词的TF-IDF值。
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>T</mi><mi>F</mi><mo>−</mo><mi>I</mi><mi>D</mi><mi>F</mi><mo>(</mo><mi mathvariant="normal">"</mi><mi>s</mi><mi>t</mi><mi>o</mi><mi>r</mi><mi>i</mi><mi mathvariant="normal">"</mi><mo>)</mo><mo>=</mo><mn>0.25</mn><mi mathvariant="normal">*</mi><mn>0.287</mn><mo>≈</mo><mn>0.0717</mn></mrow></mrow></mrow></math>](img/263.png)
+![](img/263.png)
 
 对所有文档中的所有单词重复此过程，并创建一个包含TF-IDF值的特征矩阵。
 
@@ -307,25 +307,25 @@ Word2Vec 是一组基于神经网络的模型，用于创建词嵌入，这些�
 
     在 CBOW 模型中，目标是最大化观察目标词给定上下文词的平均对数概率：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mrow><mi>O</mi><mi>b</mi><mi>j</mi><mi>e</mi><mi>c</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi></mrow><mrow><mi>C</mi><mi>B</mi><mi>o</mi><mi>w</mi></mrow></msub><mo>=</mo><mfrac><mn>1</mn><mi>T</mi></mfrac><mrow><munder><mo>∑</mo><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow></munder><mrow><mi>l</mi><mi>o</mi><mi>g</mi></mrow></mrow><mo>(</mo><mi>P</mi><mo>(</mo><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi><mo>|</mo><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/264.png)
+![](img/264.png)
 
 这里，T 是文本中的总词数，P(target | context) 是在给定上下文词的情况下观察目标词的概率，它使用 softmax 函数计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced open="(" close=")"><mrow><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi><mo>|</mo><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow></mfenced><mo>=</mo><mfrac><msup><mi>e</mi><mrow><msubsup><mi mathvariant="bold">v</mi><mrow><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow><mi>T</mi></msubsup><msub><mrow><mo>∙</mo><mi mathvariant="bold">v</mi></mrow><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow></msub></mrow></msup><mrow><msub><mo>∑</mo><mi>i</mi></msub><msup><mi>e</mi><mrow><msubsup><mi mathvariant="bold">v</mi><mi>i</mi><mi>T</mi></msubsup><msub><mrow><mo>∙</mo><mi mathvariant="bold">v</mi></mrow><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow></msub></mrow></msup></mrow></mfrac></mrow></mrow></math>](img/265.png)
+![](img/265.png)
 
-这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>r</mml:mi><mml:mi>g</mml:mi><mml:mi>e</mml:mi><mml:mi>t</mml:mi></mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/266.png) 是目标词的输出向量（词嵌入），![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/267.png) 是上下文词的平均输入向量（上下文词嵌入），分母中的求和遍历了词汇表中的所有词。
+这里，![](img/266.png) 是目标词的输出向量（词嵌入），![](img/267.png) 是上下文词的平均输入向量（上下文词嵌入），分母中的求和遍历了词汇表中的所有词。
 
 +   **Skip-gram**：skip-gram 架构旨在根据目标词预测周围的上下文词。它以目标词嵌入作为输入并预测上下文词。Skip-gram 在大型数据集上表现良好，并能更准确地捕捉不常见词的意义，但与 CBOW 相比，它可能训练速度较慢。
 
     在 skip-gram 模型中，目标是最大化在给定目标词的情况下观察上下文词的平均对数概率：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>O</mml:mi><mml:mi>b</mml:mi><mml:mi>j</mml:mi><mml:mi>e</mml:mi><mml:mi>c</mml:mi><mml:mi>t</mml:mi><mml:mi>i</mml:mi><mml:mi>v</mml:mi><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>S</mml:mi><mml:mi>k</mml:mi><mml:mi>i</mml:mi><mml:mi>p</mml:mi><mml:mo>-</mml:mo><mml:mi>G</mml:mi><mml:mi>r</mml:mi><mml:mi>a</mml:mi><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:mfrac><mml:mrow><mml:munder><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:munder><mml:mrow><mml:mi mathvariant="normal">l</mml:mi><mml:mi mathvariant="normal">o</mml:mi><mml:mi mathvariant="normal">g</mml:mi><mml:mo>⁡</mml:mo><mml:mo>(</mml:mo><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>r</mml:mi><mml:mi>g</mml:mi><mml:mi>e</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:mfenced><mml:mo>)</mml:mo></mml:mrow></mml:mrow></mml:math>](img/268.png)
+![](img/268.png)
 
 在这里，T 是文本中的总单词数，P(context | target) 是在给定目标词的情况下观察上下文词的概率，该概率使用 softmax 函数计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced open="(" close=")"><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi><mo>|</mo><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></mfenced><mo>=</mo><mfrac><msup><mi>e</mi><mrow><msubsup><mi mathvariant="bold">v</mi><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow><mi>T</mi></msubsup><msub><mrow><mo>∙</mo><mi mathvariant="bold">v</mi></mrow><mrow><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></msub></mrow></msup><mrow><msub><mo>∑</mo><mi>i</mi></msub><msup><mi>e</mi><mrow><msubsup><mi mathvariant="bold">v</mi><mi>i</mi><mi>T</mi></msubsup><msub><mrow><mo>∙</mo><mi mathvariant="bold">v</mi></mrow><mrow><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></msub></mrow></msup></mrow></mfrac></mrow></mrow></math>](img/269.png)
+![](img/269.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/270.png)是上下文词的输出向量（上下文词嵌入），![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>r</mml:mi><mml:mi>g</mml:mi><mml:mi>e</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/271.png)是目标词的输入向量（词嵌入），分母中的求和遍历词汇表中的所有词。
+在这里，![](img/270.png)是上下文词的输出向量（上下文词嵌入），![](img/271.png)是目标词的输入向量（词嵌入），分母中的求和遍历词汇表中的所有词。
 
 CBOW和skip-gram的训练过程都涉及遍历文本，并使用**随机梯度下降**（**SGD**）和反向传播来更新输入和输出权重矩阵，以最小化预测词和实际词之间的差异。学习到的输入权重矩阵包含词汇表中每个词的词嵌入。
 
@@ -337,17 +337,17 @@ CBOW和skip-gram的训练过程都涉及遍历文本，并使用**随机梯度�
 
 1.  **训练Word2Vec模型**：在预处理后的文本数据上训练一个Word2Vec模型（无论是CBOW还是Skip-Gram），以创建词嵌入。Word2Vec算法学习根据上下文（CBOW）预测目标词，或者根据目标词预测上下文词（skip-gram）。训练目标是最大化在给定目标词的情况下观察上下文词的平均对数概率：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>O</mi><mi>b</mi><mi>j</mi><mi>e</mi><mi>c</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mo>=</mo><mfrac><mn>1</mn><mi>T</mi></mfrac><mrow><munder><mo>∑</mo><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow></munder><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">g</mi><mo>(</mo><mi>P</mi><mfenced open="(" close=")"><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi><mo>|</mo><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></mfenced><mo>)</mo></mrow></mrow></mrow></mrow></math>](img/272.png)
+![](img/272.png)
 
 在这里，*T* 是文本中的总单词数，*P(context | target)* 是在给定目标词的情况下观察上下文词的概率，这使用softmax函数来计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced open="(" close=")"><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi><mo>|</mo><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></mfenced><mo>=</mo><mfrac><msup><mi>e</mi><mrow><msubsup><mi mathvariant="bold">v</mi><mrow><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi></mrow><mi>T</mi></msubsup><msub><mrow><mo>∙</mo><mi mathvariant="bold">v</mi></mrow><mrow><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></msub></mrow></msup><mrow><msub><mo>∑</mo><mi>i</mi></msub><msup><mi>e</mi><mrow><msubsup><mi mathvariant="bold">v</mi><mi>i</mi><mi>T</mi></msubsup><msub><mrow><mo>∙</mo><mi mathvariant="bold">v</mi></mrow><mrow><mi>t</mi><mi>a</mi><mi>r</mi><mi>g</mi><mi>e</mi><mi>t</mi></mrow></msub></mrow></msup></mrow></mfrac></mrow></mrow></math>](img/273.png)
+![](img/273.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/274.png)是上下文词的输出向量（上下文词嵌入），![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">v</mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>r</mml:mi><mml:mi>g</mi><mml:mi>e</mml:mi><mml:mi>t</mi></mml:mrow></mml:msub></mml:math>](img/275.png)是目标词的输入向量（词嵌入），分母中的求和遍历了词汇表中的所有单词。
+在这里，![](img/274.png)是上下文词的输出向量（上下文词嵌入），![](img/275.png)是目标词的输入向量（词嵌入），分母中的求和遍历了词汇表中的所有单词。
 
 3. **创建文档嵌入**：对于数据集中的每个文档，通过计算文档中单词的词嵌入的平均值来计算文档嵌入：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>D</mi><mi>o</mi><mi>c</mi><mi>u</mi><mi>m</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>E</mi><mi>m</mi><mi>b</mi><mi>e</mi><mi>d</mi><mi>d</mi><mi>i</mi><mi>n</mi><mi>g</mi><mo>=</mo><mfrac><mn>1</mn><mi>N</mi></mfrac><mrow><munder><mo>∑</mo><mi>i</mi></munder><msub><mrow><mi mathvariant="normal">W</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">d</mi><mi mathvariant="normal">E</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">d</mi><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">g</mi></mrow><mi mathvariant="normal">i</mi></msub></mrow></mrow></mrow></math>](img/276.png)
+![](img/276.png)
 
 在这里，N是文档中的单词数量，求和遍历文档中的所有单词。请注意，根据我们的经验，使用Word2Vec进行文本分类的方法仅在文档长度较短时才有效。如果你有较长的文档或文档中有相反的词语，这种方法表现不佳。一个替代方案是将Word2Vec和CNN结合使用来获取词嵌入，然后将这些嵌入作为CNN的输入。
 
@@ -365,7 +365,7 @@ CBOW和skip-gram的训练过程都涉及遍历文本，并使用**随机梯度�
 
 +   **准确性**：准确性是分类任务中最直接的指标。它衡量所有分类记录中正确分类的记录数量。它被定义为如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>A</mi><mi>c</mi><mi>c</mi><mi>u</mi><mi>r</mi><mi>a</mi><mi>c</mi><mi>y</mi><mo>=</mo><mfrac><mrow><mo>(</mo><mi>T</mi><mi>r</mi><mi>u</mi><mi>e</mi><mi>P</mi><mi>o</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>+</mo><mi>T</mi><mi>r</mi><mi>u</mi><mi>e</mi><mi>N</mi><mi>e</mi><mi>g</mi><mi>a</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>)</mo></mrow><mrow><mo>(</mo><mi>T</mi><mi>r</mi><mi>u</mi><mi>e</mi><mi>P</mi><mi>o</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>+</mo><mi>T</mi><mi>r</mi><mi>u</mi><mi>e</mi><mi>N</mi><mi>e</mi><mi>g</mi><mi>a</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>+</mo><mi>F</mi><mi>a</mi><mi>l</mi><mi>s</mi><mi>e</mi><mi>P</mi><mi>o</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>+</mo><mi>F</mi><mi>a</mi><mi>l</mi><mi>s</mi><mi>e</mi><mi>N</mi><mi>e</mi><mi>g</mi><mi>a</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>)</mo></mrow></mfrac></mrow></mrow></math>](img/277.png)
+![](img/277.png)
 
 虽然准确性容易理解，但它可能不是不平衡数据集的最佳指标，因为在不平衡数据集中，多数类可以主导指标的值。
 
@@ -379,27 +379,27 @@ CBOW和skip-gram的训练过程都涉及遍历文本，并使用**随机梯度�
 
 +   **F1 分数**：F1 分数是精确度和召回率的调和平均值，将这两个指标整合为一个统一的价值。在不平衡数据集的上下文中，它是一个重要的指标，因为它考虑了错误正例和错误负例。F1 分数从 0 到 1 变化，1 代表最佳结果，F1 分数的数学表达式如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>F</mi><mn>1</mn><mi>S</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mo>=</mo><mn>2</mn><mfrac><mrow><mi>P</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi}s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>∙</mo><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi></mrow><mrow><mi>P</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi}s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>+</mo><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi></mrow></mfrac></mrow></mrow></math>](img/278.png)
+![](img/278.png)
 
 当处理多类分类问题时，我们有F1微平均和F1宏平均。F1微平均和F1宏平均是计算多类或多标签分类问题F1分数的两种方法。它们以不同的方式聚合精确度和召回率，导致对分类器性能的不同解释。让我们更详细地讨论每种方法：
 
 +   **F1宏平均**：F1宏平均独立计算每个类的F1分数，然后取这些值的平均值。这种方法将每个类视为同等重要，不考虑类不平衡。从数学上讲，F1宏平均定义为以下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mrow><mi>F</mi><mn>1</mn></mrow><mrow><mi>M</mi><mi>a</mi><mi>c</mi><mi>r</mi><mi>o</mi></mrow></msub><mo>=</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><mrow><munder><mo>∑</mo><mi>i</mi></munder><msub><mrow><mi>F</mi><mn>1</mn></mrow><mi>i</mi></msub></mrow></mrow></mrow></math>](img/279.png)
+![](img/279.png)
 
-在这里，*n* 是类的数量，而 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/280.png) 是第i个类的F1分数。
+在这里，*n* 是类的数量，而 ![](img/280.png) 是第i个类的F1分数。
 
 F1宏平均特别适用于当你想要评估分类器在所有类上的性能而不给多数类赋予更多权重时。然而，当类分布高度不平衡时，它可能不适用，因为它可能会提供一个过于乐观的模型性能估计。
 
 +   **F1微平均**：另一方面，F1微平均通过计算所有类的全局精确度和召回率值来聚合所有类的贡献以计算F1分数。它通过考虑每个类中的实例数量来考虑类不平衡。从数学上讲，F1微平均定义为以下：
 
-    ![F1 微型评估器的计算公式](img/281.png)
+    ![](img/281.png)
 
     这里，全局精度和全局召回率的计算方法如下：
 
-![全局精度和全局召回率的计算如下](img/282.png)
+![](img/282.png)
 
-![全局召回率的计算公式](img/283.png)
+![](img/283.png)
 
 F1 微型评估器在您希望评估分类器的整体性能并考虑类别分布时非常有用，尤其是在处理不平衡数据集时。
 
@@ -432,7 +432,7 @@ F1 微型评估器在您希望评估分类器的整体性能并考虑类别分�
 
 为了避免文本分类中的过拟合，可以考虑以下策略：
 
-+   **正则化**：引入正则化技术，例如 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="script">l</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/284.png) 或 ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msub><mi mathvariant="script">l</mi><mn>2</mn></msub></mrow></math>](img/285.png)L2正则化，这会在损失函数中添加惩罚，从而阻止模型过于复杂。
++   **正则化**：引入正则化技术，例如 ![](img/284.png) 或 ![](img/285.png)L2正则化，这会在损失函数中添加惩罚，从而阻止模型过于复杂。
 
 +   **早停法**：在此方法中，我们监控模型在验证集上的性能，一旦验证集上的性能开始变差，即使训练集上的模型性能在提高，我们也停止训练过程。这有助于我们防止过拟合。
 
@@ -576,11 +576,11 @@ LDA 的目标是找到最佳解释观察到的文档的主题-单词分布 (*φ*
 
 在给定主题-单词分布 (*φ*) 和文档-主题分布 (*θ*) 的情况下，文档中主题分配 (*z*) 和单词 (*w*) 的联合概率可以表示如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced open="(" close=")"><mrow><mi>z</mi><mo>,</mo><mi>w</mi><mo>|</mo><mi>θ</mi><mo>,</mo><mi>φ</mi></mrow></mfenced><mo>=</mo><mrow><munderover><mo>∏</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>M</mi></munderover><mrow><munderover><mo>∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>M</mi></munderover><mrow><mi>P</mi><mfenced open="(" close=")"><mrow><msub><mi>w</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>|</mo><mi>φ</mi><mo>,</mo><msub><mi>z</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow></mfenced><mi>P</mi><mfenced open="(" close=")"><mrow><msub><mi>z</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>|</mo><msub><mi>θ</mi><mi>i</mi></msub></mrow></mfenced></mrow></mrow></mrow></mrow></mrow></math>](img/286.png)
+![](img/286.png)
 
 LDA 的目标是最大化在 Dirichlet 先验 α 和 β 下观察到的单词的概率：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>α</mml:mi><mml:mo>,</mml:mo><mml:mi>β</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mrow><mml:mo stretchy="false">∫</mml:mo><mml:mrow><mml:mrow><mml:mo stretchy="false">∫</mml:mo><mml:mrow><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi><mml:mo>,</mml:mo><mml:mi>φ</mml:mi></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>θ</mml:mi></mml:mrow><mml:mrow><mml:mi>α</mml:mi></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>φ</mml:mi></mml:mrow><mml:mrow><mml:mi>β</mml:mi></mml:mrow></mml:mfenced><mml:mi>d</mml:mi><mml:mi>θ</mml:mi><mml:mi>d</mml:mi><mml:mi>φ</mml:mi></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:math>](img/287.png)
+![](img/287.png)
 
 然而，由于对潜在变量 θ 和 φ 的积分，直接计算似然是不切实际的。因此，LDA 使用近似推理算法，如吉布斯采样或变分推理，来估计后验分布 *P*(θ | w, α, β) 和 *P*(φ | w, α, β)。
 
@@ -616,11 +616,11 @@ LDA 的目标是最大化在 Dirichlet 先验 α 和 β 下观察到的单词的
 
     使用这些主题，文档-主题分布（θ）可能看起来像这样：
 
-    +   ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>θ</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/288.png) = [0.9, 0.1]（文档 1 有 90% 关于主题 1，10% 关于主题 2）
+    +   ![](img/288.png) = [0.9, 0.1]（文档 1 有 90% 关于主题 1，10% 关于主题 2）
 
-    +   ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>θ</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/289.png) = [0.8, 0.2]（文档2有80%关于主题1，20%关于主题2）
+    +   ![](img/289.png) = [0.8, 0.2]（文档2有80%关于主题1，20%关于主题2）
 
-    +   ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>θ</mml:mi></mml:mrow><mml:mrow><mml:mn>3</mml:mn></mml:mrow></mml:msub></mml:math>](img/290.png) = [0.1, 0.9]（文档3有10%关于主题1，90%关于主题2）
+    +   ![](img/290.png) = [0.1, 0.9]（文档3有10%关于主题1，90%关于主题2）
 
 在这个例子中，主题1似乎与足球和体育相关，而主题2似乎与技术和小工具相关。每个文档的主题分布显示，文档1和2主要关于足球，而文档3是关于技术的。
 
@@ -634,7 +634,7 @@ LDA 的目标是最大化在 Dirichlet 先验 α 和 β 下观察到的单词的
 
 为了提供一个全面的学习体验，我们将讨论典型机器学习项目的整个旅程。*图5.1*展示了机器学习项目的不同阶段：
 
-![图5.1 – 典型机器学习项目的范式](img/B18949_05_1.jpg)
+![](img/B18949_05_1.jpg)
 
 图5.1 – 典型机器学习项目的范式
 
@@ -756,7 +756,7 @@ CTO 从商业目标中推导出几个技术目标。其中一个目标是针对�
 
 让我们回顾流程的不同部分，如图 *图 5**.2* 所示：
 
-![图 5.2 – 典型机器学习流程的结构](img/B18949_05_2.jpg)
+![](img/B18949_05_2.jpg)
 
 图 5.2 – 典型机器学习流程的结构
 
@@ -838,19 +838,19 @@ CTO 从商业目标中推导出几个技术目标。其中一个目标是针对�
 
 我们知道，对于两个随机变量，*X* 和 *Y*，如果它们在统计上独立，那么我们得到以下结果：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>,</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo><mo>=</mo><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>)</mo><mi>P</mi><mo>(</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo><mo>,</mo><mi>f</mi><mi>o</mi><mi>r</mi><mi>e</mi><mi>v</mi><mi>e</mi><mi>r</mi><mi>y</mi><mi>x</mi><mi>a</mi><mi>n</mi><mi>d</mi><mi>y</mi></mrow></mrow></mrow></math>](img/291.png)
+![](img/291.png)
 
 或者，我们得到以下结果：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mfrac><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>,</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo></mrow><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>)</mo><mi>P</mi><mo>(</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo></mrow></mfrac><mo>=</mo><mn>1</mn><mo>,</mo></mrow></mrow></math>](img/292.png)
+![](img/292.png)
 
 这发生在每个产生非零概率的 *x, y* 值上。
 
 相反，我们可以使用贝叶斯定理：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mfrac><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>|</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo><mi>P</mi><mo>(</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo></mrow><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>)</mo><mi>P</mi><mo>(</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo></mrow></mfrac><mo>=</mo><mn>1</mn></mrow></mrow></math>](img/293.png)
+![](img/293.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mfrac><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>|</mo><mi>Y</mi><mo>=</mo><mi>y</mi><mo>)</mo></mrow><mrow><mi>P</mi><mo>(</mo><mi>X</mi><mo>=</mo><mi>x</mi><mo>)</mo></mrow></mfrac><mo>=</mo><mn>1</mn><mo>.</mo></mrow></mrow></math>](img/294.png)
+![](img/294.png)
 
 现在，让我们考虑任意两个不一定相互独立的随机变量。我们想要评估这两个变量之间是否存在统计关系。
 
@@ -858,7 +858,7 @@ CTO 从商业目标中推导出几个技术目标。其中一个目标是针对�
 
 观察最后一个等式，左侧的表达式展示了 *X* 和 *Y* 之间关系能力的非常强大的度量：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mfrac><mrow><mi>P</mi><mo>(</mo><mi>f</mi><mi>e</mi><mi>a</mi><mi>t</mi><mi>u</mi><mi>r</mi><mi>e</mi><mo>=</mo><mi>x</mi><mo>|</mo><mi>c</mi><mi>l</mi><mi>a</mi><mi>s</mi><mi>s</mi><mo>=</mo><mi>y</mi><mo>)</mo></mrow><mrow><mi>P</mi><mo>(</mo><mi>f</mi><mi>e</mi><mi>a</mi><mi>t</mi><mi>u</mi><mi>r</mi><mi>e</mi><mo>=</mo><mi>x</mi><mo>)</mo></mrow></mfrac><mo>,</mo><mi>x</mi><mo>,</mo><mi>y</mi><mi>b</mi><mi>e</mi><mi>l</mi><mi>o</mi><mi>n</mi><mi>g</mi><mi>t</mi><mi>o</mi><mo>{</mo><mn>0,1</mn><mo>}</mo><mo>.</mo></mrow></mrow></mrow></math>](img/295.png)
+![](img/295.png)
 
 它之所以强大，是因为如果特征对类别值完全没有指示性，那么在统计上，我们说这两个是统计独立的，因此这个度量将等于 1。
 
@@ -880,7 +880,7 @@ CTO 从商业目标中推导出几个技术目标。其中一个目标是针对�
 
 通过**可行性研究**，我们经常一石二鸟。因为一个成功的**可行性研究**不仅可以帮助我们确认计划，而且经常暗示我们应该采取的下一步。正如我们所看到的，一些特征是类别指示性的，我们学会了哪些是最重要的。这使我们能够减少分类模型需要划分的特征空间。我们通过保留每个类别中最具指示性的特征来实现这一点。我们选择保留的特征数量理想情况下应由计算约束（例如，过多的特征会导致模型计算时间过长）、模型能力（例如，由于共线性，过多的特征可能无法被模型很好地处理）以及训练结果的优化来决定。在我们的代码中，我们固定了这个数字，以使事情变得快速简单。
 
-应该强调的是，在许多机器学习模型中，特征选择是模型设计的一个固有部分。例如，对于**最小绝对收缩和选择算子**（**LASSO**），![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="script">l</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/296.png)范数的超参数缩放器会影响哪些特征得到零系数，从而被“排除”。有时可能且建议跳过这一部分的特征选择过程，保留所有特征，并让模型自行进行特征选择。当所有被评估和比较的模型都具有这一特性时，建议这样做。
+应该强调的是，在许多机器学习模型中，特征选择是模型设计的一个固有部分。例如，对于**最小绝对收缩和选择算子**（**LASSO**），![](img/296.png)范数的超参数缩放器会影响哪些特征得到零系数，从而被“排除”。有时可能且建议跳过这一部分的特征选择过程，保留所有特征，并让模型自行进行特征选择。当所有被评估和比较的模型都具有这一特性时，建议这样做。
 
 记住，在这个阶段，我们只是在观察训练集。既然我们已经决定保留哪些特征，我们就需要将这个选择应用到测试集上。
 

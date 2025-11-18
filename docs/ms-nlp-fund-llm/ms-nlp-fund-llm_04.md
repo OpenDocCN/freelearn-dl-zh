@@ -490,7 +490,7 @@ The companies that would be releasing their quarterly reports tomorrow are Micro
 
 *图4**.1* 展示了使用spaCy进行词性标注的示例：
 
-![图4.1 – 使用spaCy进行词性标注](img/B18949_04_1.jpg)
+![](img/B18949_04_1.jpg)
 
 图4.1 – 使用spaCy进行词性标注
 

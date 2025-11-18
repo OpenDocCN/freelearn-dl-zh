@@ -106,13 +106,13 @@
 
 标准化和转换数据是准备数据用于机器学习任务的关键步骤。这个过程涉及对数据集的数值特征进行缩放和归一化，以便更容易解释和比较。标准化和转换数据的主要目标是通过对不同尺度和范围的特性影响进行缓解，从而提高机器学习模型的准确性和性能。用于标准化数据的一种广泛使用的方法被称为“标准化”或“Z分数归一化”。这种技术涉及将每个特征转换，使其具有零均值和标准差为1。标准化的公式如下所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>x</mi><mo>′</mo><mo>=</mo><mo>(</mo><mi>x</mi><mo>−</mo><mi>m</mi><mi>e</mi><mi>a</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>/</mo><mi>s</mi><mi>t</mi><mi>d</mi><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/128.png)
+![](img/128.png)
 
 在这里，*x* 代表特征，*mean(x)* 表示特征的均值，*std(x)* 表示特征的标准差，而 *x’* 表示分配给特征的新值。通过这种方式标准化数据，每个特征的取值范围被调整为以零为中心，这使得比较特征更容易，并防止具有大值的特征主导分析。
 
 另一种转换数据的技术是“最小-最大缩放”。这种方法将数据重新缩放到一个一致的范围，通常在0到1之间。最小-最大缩放的公式如下所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>x</mi><mo>′</mo><mo>=</mo><mo>(</mo><mi>x</mi><mo>−</mo><mi>m</mi><mi>i</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>/</mo><mo>(</mo><mi>m</mi><mi>a</mi><mi>x</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>−</mo><mi>m</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/129.png)
+![](img/129.png)
 
 在这个方程中，*x* 代表特征，*min(x)* 表示特征的最低值，而 *max(x)* 表示特征的最高值。Min-max缩放在数据的精确分布不是关键，但需要标准化数据以进行不同特征之间的有意义的比较时是有益的。
 
@@ -174,9 +174,9 @@
 
 在特征选择中，卡方检验评估数据集中每个特征与目标变量之间的关系。它根据特征观察频率与预期频率之间是否存在统计上显著差异来确定显著性，假设特征与目标变量之间相互独立。具有高卡方分数的特征表现出对目标变量的更强依赖性，这使得它们在分类或回归任务中更具信息量。计算卡方的公式在以下方程中给出：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msup><mi>X</mi><mn>2</mn></msup><mo>=</mo><mo>∑</mo><mfrac><msup><mrow><mo>(</mo><msub><mi>O</mi><mi>i</mi></msub><mo>−</mo><msub><mi>E</mi><mi>i</mi></msub><mo>)</mo></mrow><mn>2</mn></msup><msub><mi>E</mi><mi>i</mi></msub></mfrac></mrow></mrow></math>](img/130.png)
+![](img/130.png)
 
-在这个公式中，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>O</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/131.png) 表示观察值，而![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>E</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/132.png) 表示期望值。计算涉及找到观察频率与期望频率之间的差异，将结果平方，然后除以期望频率。这些值在所有特征类别上的总和给出了该特征的总体卡方统计量。
+在这个公式中，![](img/131.png) 表示观察值，而![](img/132.png) 表示期望值。计算涉及找到观察频率与期望频率之间的差异，将结果平方，然后除以期望频率。这些值在所有特征类别上的总和给出了该特征的总体卡方统计量。
 
 测试的自由度取决于特征中的类别数和目标变量中的类别数。
 
@@ -188,7 +188,7 @@
 
 从数学上讲，两个离散随机变量 *X* 和 *Y* 之间的互信息可以定义为以下：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>I</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>X</mml:mi><mml:mo>;</mml:mo><mml:mi>Y</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mrow><mml:munder><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>x</mml:mi><mml:mo>∈</mml:mo><mml:mi>X</mml:mi></mml:mrow></mml:munder><mml:mrow><mml:mrow><mml:munder><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>y</mml:mi><mml:mo>∈</mml:mo><mml:mi>Y</mml:mi></mml:mrow></mml:munder><mml:mrow><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>x</mml:mi><mml:mo>,</mml:mo><mml:mi>y</mml:mi></mml:mrow></mml:mfenced><mml:mrow><mml:mi mathvariant="normal">log</mml:mi></mml:mi></mml:mrow><mml:mo>⁡</mml:mo><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mfrac><mml:mrow><mml:mi>P</mml:mi><mml:mo>(</mml:mo><mml:mi>x</mml:mi><mml:mo>,</mml:mo><mml:mi>y</mml:mi><mml:mo>)</mml:mo></mml:mrow><mml:mrow><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>x</mml:mi></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mo>(</mml:mo><mml:mi>y</mml:mi><mml:mo>)</mml:mo></mml:mrow></mml:mfrac></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:math>](img/133.png)
+![](img/133.png)
 
 在给定的方程中，*p(x, y)* 代表 *X* 和 *Y* 的联合概率质量函数，而 *p(x)* 和 *p(y)* 分别代表 *X* 和 *Y* 的边缘概率质量函数。
 
@@ -204,7 +204,7 @@
 
 在特征选择中普遍使用的相关系数是皮尔逊相关系数，也称为皮尔逊的 *r*。皮尔逊的 *r* 衡量两个连续变量之间的线性关系，范围从 -1（表示完美的负相关）到 1（表示完美的正相关），0 表示无相关。其计算涉及将两个变量的协方差除以它们标准差的乘积，如下方程所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>r</mi><mo>=</mo><mfrac><mrow><mi>c</mi><mi>o</mi><mi>v</mi><mo>(</mo><mi>X</mi><mo>,</mo><mi>Y</mi><mo>)</mo></mrow><mrow><mi>s</mi><mi>t</mi><mi>d</mi><mo>(</mo><mi>X</mi><mo>)</mo><mo>∙</mo><mi>s</mi><mi>t</mi><mi>d</mi><mo>(</mo><mi>Y</mi><mo>)</mo></mrow></mfrac></mrow></mrow></math>](img/134.png)
+![](img/134.png)
 
 在给定的方程中，*X* 和 *Y* 代表感兴趣的两个变量，*cov()* 表示协方差函数，而 *std()* 表示标准差函数。
 
@@ -220,7 +220,7 @@
 
 表 3 .1 – 皮尔逊相关值及其相关程度
 
-值得注意的是，皮尔逊相关系数（Pearson’s *r*）仅适用于识别变量之间的线性关系。如果关系是非线性的，或者如果其中一个或两个变量是分类的，那么其他相关系数，如斯皮尔曼的 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>ρ</mml:mi></mml:math>](img/135.png) 或肯德尔的相关系数 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>τ</mml:mi></mml:math>](img/136.png) 可能更合适。此外，在解释相关系数时需要谨慎，因为高相关性并不一定意味着因果关系。
+值得注意的是，皮尔逊相关系数（Pearson’s *r*）仅适用于识别变量之间的线性关系。如果关系是非线性的，或者如果其中一个或两个变量是分类的，那么其他相关系数，如斯皮尔曼的 ![](img/135.png) 或肯德尔的相关系数 ![](img/136.png) 可能更合适。此外，在解释相关系数时需要谨慎，因为高相关性并不一定意味着因果关系。
 
 ### 包装方法
 
@@ -240,11 +240,11 @@
 
 LASSO方法通过寻找以下优化问题的解来工作，这是一个最小化问题：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><munder><mi>min</mi><mi mathvariant="bold">w</mi></munder><msubsup><mfenced open="‖" close="‖"><mrow><mi mathvariant="bold">y</mi><mo>−</mo><mi mathvariant="bold">X</mi><mi mathvariant="bold">w</mi></mrow></mfenced><mn>2</mn><mn>2</mn></msubsup><mo>+</mo><mi mathvariant="bold-italic">λ</mi><msub><mfenced open="‖" close="‖"><mi mathvariant="bold">w</mi></mfenced><mn>1</mn></msub></mrow></mrow></math>](img/137.png)
+![](img/137.png)
 
-在给定的方程中，向量 *y* 代表目标变量，*X* 表示特征矩阵，*w* 表示回归系数向量，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>λ</mml:mi></mml:math>](img/138.png) 是一个超参数，用于决定惩罚项的强度，而 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mo>|</mml:mo><mml:mo>|</mml:mo><mml:mi mathvariant="bold">w</mml:mi><mml:mo>|</mml:mo><mml:mo>|</mml:mo></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/139.png) 表示系数的 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="script">l</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/140.png) 范数（即它们的绝对值之和）。
+在给定的方程中，向量 *y* 代表目标变量，*X* 表示特征矩阵，*w* 表示回归系数向量，![](img/138.png) 是一个超参数，用于决定惩罚项的强度，而 ![](img/139.png) 表示系数的 ![](img/140.png) 范数（即它们的绝对值之和）。
 
-目标函数中包含 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="script">l</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/141.png) 惩罚项促使模型精确地将某些系数置零，从而从模型中消除相关的特征。惩罚强度的程度由 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>λ</mml:mi></mml:math>](img/142.png) 超参数控制，这可以通过交叉验证进行微调。
+目标函数中包含 ![](img/141.png) 惩罚项促使模型精确地将某些系数置零，从而从模型中消除相关的特征。惩罚强度的程度由 ![](img/142.png) 超参数控制，这可以通过交叉验证进行微调。
 
 与其他特征选择方法相比，LASSO具有多个优势，例如其处理相关特征的能力以及同时执行特征选择和回归的能力。然而，LASSO也有一些局限性，例如它倾向于从一组相关特征中仅选择一个特征，并且如果特征数量远大于样本数量，其性能可能会下降。
 
@@ -254,13 +254,13 @@ LASSO方法通过寻找以下优化问题的解来工作，这是一个最小化
 
 岭回归是一种适用于特征选择的线性回归方法，它与普通最小二乘回归非常相似，但引入了惩罚项以防止过拟合。
 
-在岭回归中，成本函数通过包含一个与系数幅度的平方成正比的惩罚项而进行修改。这个惩罚项由一个超参数控制，通常表示为 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>λ</mml:mi></mml:math>](img/138.png) 或 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>α</mml:mi></mml:math>](img/144.png)，它决定了正则化的强度。当 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>α</mml:mi></mml:math>](img/144.png) 设置为零时，岭回归就退化为普通最小二乘回归。
+在岭回归中，成本函数通过包含一个与系数幅度的平方成正比的惩罚项而进行修改。这个惩罚项由一个超参数控制，通常表示为 ![](img/138.png) 或 ![](img/144.png)，它决定了正则化的强度。当 ![](img/144.png) 设置为零时，岭回归就退化为普通最小二乘回归。
 
 惩罚项的影响体现在将系数的幅度缩小到零。这有助于减轻过拟合，阻止模型过度依赖任何单个特征。实际上，惩罚项通过减少不相关特征的重要性，充当一种特征选择的形式。
 
 岭回归损失函数的方程如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><munder><mi>min</mi><mi mathvariant="bold">w</mi></munder><msubsup><mfenced open="‖" close="‖"><mrow><mi mathvariant="bold">y</mi><mo>−</mo><mi mathvariant="bold">X</mi><mi mathvariant="bold">w</mi></mrow></mfenced><mn>2</mn><mn>2</mn></msubsup><mo>+</mo><mi mathvariant="bold-italic">α</mi><msub><mfenced open="‖" close="‖"><mi mathvariant="bold">w</mi></mfenced><mn>2</mn></msub></mrow></mrow></math>](img/146.png)
+![](img/146.png)
 
 这里，我们有以下内容：
 
@@ -272,11 +272,11 @@ LASSO方法通过寻找以下优化问题的解来工作，这是一个最小化
 
 +   *w* 是待估计的回归系数向量。
 
-+   ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>α</mml:mi></mml:math>](img/147.png) 是控制惩罚项强度的正则化参数。它是一个需要调整的超参数。
++   ![](img/147.png) 是控制惩罚项强度的正则化参数。它是一个需要调整的超参数。
 
-损失函数的第一个项衡量的是预测值与真实值之间的均方误差。第二个项是![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="script">l</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/148.png)惩罚项，它将系数缩小到零。岭回归算法找到使该损失函数最小化的回归系数值。通过调整正则化参数![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>α</mml:mi></mml:math>](img/149.png)，我们可以控制模型的偏差-方差权衡，较高的α值会导致更强的正则化和较低的过拟合。
+损失函数的第一个项衡量的是预测值与真实值之间的均方误差。第二个项是![](img/148.png)惩罚项，它将系数缩小到零。岭回归算法找到使该损失函数最小化的回归系数值。通过调整正则化参数![](img/149.png)，我们可以控制模型的偏差-方差权衡，较高的α值会导致更强的正则化和较低的过拟合。
 
-岭回归可以通过检查模型产生的系数的幅度来进行特征选择。系数接近零或更小的特征被认为不太重要，可以从模型中删除。可以使用交叉验证调整![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>α</mml:mi></mml:math>](img/150.png)的值，以找到模型复杂性和准确性之间的最佳平衡。
+岭回归可以通过检查模型产生的系数的幅度来进行特征选择。系数接近零或更小的特征被认为不太重要，可以从模型中删除。可以使用交叉验证调整![](img/150.png)的值，以找到模型复杂性和准确性之间的最佳平衡。
 
 岭回归的一个主要优点是它能够处理多重共线性，当自变量之间存在强相关性时会发生多重共线性。在这种情况下，普通最小二乘回归可能会产生不稳定和不可靠的系数估计，但岭回归可以帮助稳定估计并提高模型的总体性能。
 
@@ -284,9 +284,9 @@ LASSO方法通过寻找以下优化问题的解来工作，这是一个最小化
 
 岭回归和LASSO都是线性回归中使用的正则化技术，通过惩罚模型的系数来防止模型过拟合。虽然这两种方法都旨在防止过拟合，但它们在惩罚系数的方法上有所不同。
 
-岭回归向**平方误差和**（**SSE**）添加一个惩罚项，该惩罚项与系数幅度的平方成正比。惩罚项由正则化参数![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>α</mml:mi></mml:math>](img/151.png)控制，它决定了应用于系数的收缩量。这个惩罚项将系数的值缩小到零，但不会将它们精确地设置为零。因此，岭回归可以用来减少模型中无关特征的影响，但不会完全消除它们。
+岭回归向**平方误差和**（**SSE**）添加一个惩罚项，该惩罚项与系数幅度的平方成正比。惩罚项由正则化参数![](img/151.png)控制，它决定了应用于系数的收缩量。这个惩罚项将系数的值缩小到零，但不会将它们精确地设置为零。因此，岭回归可以用来减少模型中无关特征的影响，但不会完全消除它们。
 
-另一方面，LASSO也向SSE添加一个惩罚项，但惩罚项与系数的绝对值成比例。与岭回归一样，LASSO也有一个正则化参数（![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>λ</mml:mi></mml:math>](img/152.png)），它决定了应用于系数的收缩量。然而，当正则化参数足够高时，LASSO具有将一些系数精确设置为零的独特属性。因此，LASSO可以用作特征选择，因为它可以消除无关特征并将它们的对应系数设置为0。
+另一方面，LASSO也向SSE添加一个惩罚项，但惩罚项与系数的绝对值成比例。与岭回归一样，LASSO也有一个正则化参数（![](img/152.png)），它决定了应用于系数的收缩量。然而，当正则化参数足够高时，LASSO具有将一些系数精确设置为零的独特属性。因此，LASSO可以用作特征选择，因为它可以消除无关特征并将它们的对应系数设置为0。
 
 通常，如果数据集具有许多特征，其中只有少数被认为是重要的，LASSO回归是一个更好的选择，因为它会将无关特征的系数设置为0，从而得到一个更简单、更可解释的模型。另一方面，如果预计数据集中的大多数特征都是相关的，则岭回归是一个更好的选择，因为它会将系数缩小到零，但不会将它们精确地设置为零，从而保留模型中的所有特征。
 
@@ -338,9 +338,9 @@ LDA是一种降维技术，用于机器学习中的特征选择。它通常用�
 
 1.  使用以下方程计算矩阵的特征向量和特征值：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">S</mml:mi></mml:mrow><mml:mrow><mml:mi mathvariant="bold-italic">w</mml:mi></mml:mrow><mml:mrow><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msubsup><mml:mi mathvariant="normal">*</mml:mi><mml:msub><mml:mrow><mml:mi mathvariant="bold">S</mml:mi></mml:mrow><mml:mrow><mml:mi>b</mml:mi></mml:mrow></mml:msub></mml:math>](img/153.png)
+![](img/153.png)
 
-这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">S</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/154.png)是类内散布矩阵，而![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">S</mml:mi></mml:mrow><mml:mrow><mml:mi>b</mml:mi></mml:mrow></mml:msub></mml:math>](img/155.png)是类间散布矩阵。
+这里，![](img/154.png)是类内散布矩阵，而![](img/155.png)是类间散布矩阵。
 
 7. 选择具有最高特征值的**k**个主特征向量作为新的特征空间。
 
@@ -360,7 +360,7 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 相反，t-SNE可以用来帮助识别具有相似特征的数据点簇，这可能有助于识别对特定任务重要的特征组。例如，假设你有一个包含客户人口统计信息和购买历史的数据集，你想根据他们的购买行为识别相似的客户组。你可以使用t-SNE将高维特征空间降低到二维，然后在散点图上绘制结果数据点。通过检查图表，你可能能够识别具有相似购买行为的客户簇，这可以随后指导你的特征选择过程。以下是对MNIST数据集的t-SNE示例：
 
-![图3.1 – MNIST数据集上的t-SNE](img/B18949_03_1.jpg)
+![](img/B18949_03_1.jpg)
 
 图3.1 – MNIST数据集上的t-SNE
 
@@ -382,33 +382,33 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 +   **最小-最大缩放**：也称为归一化，这种技术将特征值缩放到指定的范围，通常是介于 0 和 1 之间（对于常规机器学习模型，有时对于深度学习模型是 -1 和 1）。最小-最大缩放的公式如下所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>x</mi><mrow><mi>s</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>e</mi><mi>d</mi></mrow></msub><mo>=</mo><mo>(</mo><mi>x</mi><mo>−</mo><mi>m</mi><mi>i</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>/</mo><mo>(</mo><mi>m</mi><mi>a</mi><mi>x</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>−</mo><mi>m</mi><mi>i</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/156.png)
+![](img/156.png)
 
 在这里，*x* 是原始特征值，*min(x)* 是特征的最小值，而 *max(x)* 是特征的最大值。
 
 +   **标准化**：这种技术将特征值转换为具有 0 均值和 1 标准差。与最小-最大缩放相比，标准化受数据中异常值的影响较小。标准化的公式如下所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>x</mi><mrow><mi>s</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>e</mi><mi>d</mi></mrow></msub><mo>=</mo><mo>(</mo><mi>x</mi><mo>−</mo><mi>m</mi><mi>e</mi><mi>a</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>/</mo><mi>s</mi><mi>t</mi><mi>d</mi><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/157.png)
+![](img/157.png)
 
 在这里，*x* 是原始特征值，*mean(x)* 是特征的平均值，*std(x)* 是特征的标准差。
 
 +   **鲁棒缩放**: 这种技术与标准化类似，但使用中位数和**四分位距**（**IQR**）而不是平均值和标准差。当数据包含会显著影响平均值和标准差的外部值时，鲁棒缩放很有用。鲁棒缩放的公式如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>x</mi><mrow><mi>s</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>e</mi><mi>d</mi></mrow></msub><mo>=</mo><mo>(</mo><mi>x</mi><mo>−</mo><mi>m</mi><mi>e</mi><mi>d</mi><mi>i</mi><mi>a</mi><mi>n</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>/</mo><mo>(</mo><mi>Q</mi><mn>3</mn><mo>(</mo><mi>x</mi><mo>)</mo><mo>−</mo><mi>Q</mi><mn>1</mn><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/158.png)
+![](img/158.png)
 
 在这里，*x* 是原始特征值，*median(x)* 是特征的中位数，*Q1(x)* 是特征的第一四分位数，*Q3(x)* 是特征的第三四分位数。
 
 +   **对数变换**: 当数据高度偏斜或具有长尾时，使用此技术。通过对特征值取对数，可以使分布更加正常或对称，这可以提高某些机器学习算法的性能。对数变换的公式如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>x</mi><mrow><mi>t</mi><mi>r</mi><mi>a</mi><mi>n</mi><mi>s</mi><mi>f</mi><mi>o</mi><mi>r</mi><mi>m</mi><mi>e</mi><mi>d</mi></mrow></msub><mo>=</mo><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/159.png)
+![](img/159.png)
 
 在这里，*x* 是原始特征值。
 
 +   **幂变换**: 这种技术与对数变换类似，但允许更广泛的变换范围。最常见的幂变换是Box-Cox变换，它将特征值提升到通过最大似然估计确定的幂。Box-Cox变换的公式如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mi>x</mi><mrow><mi>t</mi><mi>r</mi><mi>a</mi><mi>n</mi><mi>s</mi><mi>f</mi><mi>o</mi><mi>r</mi><mi>m</mi><mi>e</mi><mi>d</mi></mrow></msub><mo>=</mo><mfrac><mrow><msup><mi>x</mi><mi>λ</mi></msup><mo>−</mo><mn>1</mn></mrow><mi>λ</mi></mfrac></mrow></mrow></math>](img/160.png)
+![](img/160.png)
 
-在这里，*x* 是原始特征值，而 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>λ</mml:mi></mml:math>](img/161.png) 是通过最大似然估计得到的功率参数。
+在这里，*x* 是原始特征值，而 ![](img/161.png) 是通过最大似然估计得到的功率参数。
 
 这些是机器学习中特征缩放的一些最常见方法。方法的选择取决于数据的分布、所使用的机器学习算法以及问题的具体要求。
 
@@ -418,9 +418,9 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 多项式展开是一种特征构造技术，它通过将现有特征的幂组合来创建新的特征。这种技术在机器学习中常用以建模特征与目标变量之间的非线性关系。
 
-多项式展开背后的思想是通过将现有特征提升到不同的幂次并取其乘积来创建新的特征。例如，假设我们有一个单个特征，*x*。我们可以通过取 *x* 的平方（**![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msup><mi>x</mi><mn>2</mn></msup></mrow></math>](img/162.png)**）来创建新的特征。我们还可以通过将 *x* 提升到更高的幂次来创建更高阶的多项式特征，例如 ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msup><mi>x</mi><mn>3</mn></msup></mrow></math>](img/163.png)*，* *![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msup><mi>x</mi><mn>4</mn></msup></mrow></math>](img/164.png)*，等等。一般来说，我们可以通过取原始特征的乘积和幂的所有可能组合来创建度数为 *d* 的多项式特征。
+多项式展开背后的思想是通过将现有特征提升到不同的幂次并取其乘积来创建新的特征。例如，假设我们有一个单个特征，*x*。我们可以通过取 *x* 的平方（**![](img/162.png)**）来创建新的特征。我们还可以通过将 *x* 提升到更高的幂次来创建更高阶的多项式特征，例如 ![](img/163.png)*，* *![](img/164.png)*，等等。一般来说，我们可以通过取原始特征的乘积和幂的所有可能组合来创建度数为 *d* 的多项式特征。
 
-除了从单个特征创建多项式特征外，我们还可以从多个特征创建多项式特征。例如，假设我们有两个特征，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/165.png) 和 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/166.png)。我们可以通过取它们的乘积 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/167.png)) 并将它们提升到不同的幂次（![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msubsup></mml:math>](img/168.png), ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msubsup></mml:math>](img/169.png), 等等）来创建新的多项式特征。同样，我们可以通过取原始特征的所有可能的乘积和幂次的组合来创建任何程度的多项式特征。
+除了从单个特征创建多项式特征外，我们还可以从多个特征创建多项式特征。例如，假设我们有两个特征，![](img/165.png) 和 ![](img/166.png)。我们可以通过取它们的乘积 ![](img/167.png)) 并将它们提升到不同的幂次（![](img/168.png), ![](img/169.png), 等等）来创建新的多项式特征。同样，我们可以通过取原始特征的所有可能的乘积和幂次的组合来创建任何程度的多项式特征。
 
 在使用多项式展开时，一个重要的考虑因素是它可能会迅速导致大量特征的产生，尤其是在高次多项式的情况下。这可能会使得到的模型更加复杂且难以解释，如果特征数量没有得到适当的控制，还可能导致过拟合。为了解决这个问题，通常使用正则化技术或特征选择方法来选择最有信息量的多项式特征子集。
 
@@ -430,7 +430,7 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 为了说明，假设你有一个包含一个特征*x*和一个目标变量*y*的数据集，并且你想要拟合一个多项式回归模型。目标是找到一个函数*f(x*)，它最小化预测值和实际值*y*之间的差异。
 
-可以使用多项式展开来创建基于*x*的额外特征，例如![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msup></mml:math>](img/170.png)，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>3</mml:mn></mml:mrow></mml:msup></mml:math>](img/171.png)，等等。这可以使用如`scikit-learn`这样的库来完成，它有一个`PolynomialFeatures`函数可以自动生成指定度数的多项式特征。
+可以使用多项式展开来创建基于*x*的额外特征，例如![](img/170.png)，![](img/171.png)，等等。这可以使用如`scikit-learn`这样的库来完成，它有一个`PolynomialFeatures`函数可以自动生成指定度数的多项式特征。
 
 通过添加这些多项式特征，模型变得更加具有表现力，可以捕捉*x*和*y*之间的非线性关系。然而，重要的是要注意不要过度拟合数据，因为添加过多的多项式特征可能导致模型过于复杂，在新数据上表现不佳。
 
@@ -440,7 +440,7 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 对数变换被定义为对数据进行自然对数运算的方程：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>y</mi><mo>=</mo><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/172.png)
+![](img/172.png)
 
 在这里，*y*是变换后的数据，*x*是原始数据。对数函数将原始数据映射到一个新的空间，其中值之间的关系得到保留，但尺度被压缩。对数变换对于具有大范围或呈指数分布的特征特别有用，例如产品的价格或个人的收入。
 
@@ -478,7 +478,7 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 具有一个自变量的简单线性回归方程（也称为**简单线性方程**）如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>y</mi><mo>=</mo><mi>m</mi><mi>x</mi><mo>+</mo><mi>b</mi></mrow></mrow></math>](img/173.png)
+![](img/173.png)
 
 这里，我们有以下内容：
 
@@ -494,19 +494,19 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 多元线性回归是简单线性回归的扩展，其中存在多个自变量。多元线性回归的方程如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>y</mi><mo>=</mo><msub><mi>b</mi><mn>0</mn></msub><mo>+</mo><msub><mi>b</mi><mn>1</mn></msub><msub><mi>x</mi><mn>1</mn></msub><mo>+</mo><msub><mi>b</mi><mn>2</mn></msub><msub><mi>x</mi><mn>2</mn></msub><mo>+</mo><mo>.</mo><mo>.</mo><mo>.</mo><mo>+</mo><msub><mi>b</mi><mi>n</mi></msub><msub><mi>x</mi><mi>n</mi></msub></mrow></mrow></math>](img/174.png)
+![](img/174.png)
 
 这里我们有以下内容：
 
 +   *y* 是因变量
 
-+   ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mo>.</mo><mo>.</mo><mo>.</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub></mrow></mrow></math>](img/175.png)是自变量
++   ![](img/175.png)是自变量
 
-+   ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/176.png)是y轴截距（当所有自变量都等于0时）
++   ![](img/176.png)是y轴截距（当所有自变量都等于0时）
 
-+   ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>b</mi><mn>1</mn></msub><mo>,</mo><msub><mi>b</mi><mn>2</mn></msub><mo>,</mo><mo>.</mo><mo>.</mo><mo>.</mo><mo>,</mo><msub><mi>b</mi><mi>n</mi></msub></mrow></mrow></math>](img/177.png)是系数（当每个自变量变化时，*y*的变化量）
++   ![](img/177.png)是系数（当每个自变量变化时，*y*的变化量）
 
-与简单的线性回归类似，多重线性回归的目标是找到![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>b</mi><mn>0</mn></msub><mo>,</mo><msub><mi>b</mi><mn>1</mn></msub><mo>,</mo><msub><mi>b</mi><mn>2</mn></msub><mo>,</mo><mo>.</mo><mo>.</mo><mo>.</mo><mo>,</mo><msub><mi>b</mi><mi>n</mi></msub></mrow></mrow></math>](img/178.png)![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>b</mi><mn>0</mn></msub><mo>,</mo><msub><mi>b</mi><mn>1</mn></msub><mo>,</mo><msub><mi>b</mi><mn>2</mn></msub><mo>,</mo><mo>.</mo><mo>.</mo><mo>.</mo><mo>,</mo><msub><mi>b</mi><mi>n</mi></msub></mrow></mrow></math>](img/179.png)的值，以最小化预测值与依赖变量实际值之间的差异。
+与简单的线性回归类似，多重线性回归的目标是找到![](img/178.png)![](img/179.png)的值，以最小化预测值与依赖变量实际值之间的差异。
 
 线性回归的优点如下：
 
@@ -536,15 +536,15 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 逻辑回归模型假设输入变量与输出变量之间的关系在 logit（对数几率）空间中是线性的。对数几率函数定义为以下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>l</mi><mi>o</mi><mi>g</mi><mi>i</mi><mi>t</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>=</mo><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mi>p</mi><mo>/</mo><mo>(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/180.png)
+![](img/180.png)
 
 在这里，*p* 是正结果的概率（即事件发生的概率）。
 
 逻辑回归模型可以用以下数学公式表示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>l</mi><mi>o</mi><mi>g</mi><mi>i</mi><mi>t</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>=</mo><msub><mi>β</mi><mn>0</mn></msub><mo>+</mo><msub><mi>β</mi><mn>1</mn></msub><mi mathvariant="normal">*</mi><msub><mi>x</mi><mn>1</mn></msub><mo>+</mo><msub><mi>β</mi><mn>2</mn></msub><mi mathvariant="normal">*</mi><msub><mi>x</mi><mn>2</mn></msub><mo>+</mo><mo>..</mo><mo>.</mo><mo>+</mo><msub><mi>β</mi><mi>n</mi></msub><mi mathvariant="normal">*</mi><msub><mi>x</mi><mi>n</mi></msub></mrow></mrow></mrow></math>](img/181.png)
+![](img/181.png)
 
-在这里，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>β</mi><mn>0</mn></msub><mo>,</mo><msub><mi>β</mi><mn>1</mn></msub><mo>,</mo><msub><mi>β</mi><mn>2</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>β</mi><mi>n</mi></msub></mrow></mrow></math>](img/182.png) 是模型的系数，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub></mrow></mrow></math>](img/183.png) 是输入变量，而 *logit(p)* 是正结果概率的对数几率函数。
+在这里，![](img/182.png) 是模型的系数，![](img/183.png) 是输入变量，而 *logit(p)* 是正结果概率的对数几率函数。
 
 逻辑回归模型使用带标签的示例数据集进行训练，其中每个示例由一组输入变量和一个二元标签组成，表示正结果是否发生。模型的系数通过最大似然估计来估计，该估计旨在找到使观察数据的似然性最大化的系数值。
 
@@ -572,15 +572,15 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 决策树的方程涉及在每个决策点计算每个潜在分割的信息增益（或另一个分割标准，如基尼不纯度或熵）。具有最高信息增益的属性被选为该节点的分割标准。信息增益的概念公式如下所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>I</mi><mi>n</mi><mi>f</mi><mi>o</mi><mi>r</mi><mi>m</mi><mi>a</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>g</mi><mi>a</mi><mi>i</mi><mi>n</mi><mo>=</mo><mi>e</mi><mi>n</mi><mi>t</mi><mi>r</mi><mi>o</mi><mi>p</mi><mi>y</mi><mo>(</mo><mi>p</mi><mi>a</mi><mi>r</mi><mi>e</mi><mi>n</mi><mi>t</mi><mo>)</mo><mo>−</mo><mo>[</mo><mi>w</mi><mi>e</mi><mi>i</mi><mi>g</mi><mi>h</mi><mi>t</mi><mi>e</mi><mi>d</mi><mi>a</mi><mi>v</mi><mi>e</mi><mi>r</mi><mi>a</mi><mi>g</mi><mi>e</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>r</mi><mi>o</mi><mi>p</mi><mi>i</mi><mi>e</mi><mi>s</mi><mi>o</mi><mi>f</mi><mi>p</mi><mi>a</mi><mi>t</mi><mi>e</mi><mi>n</mi><mrow><mi>t</mi><mo>′</mo></mrow><mi>s</mi><mi>c</mi><mi>h</mi><mi>i</mi><mi>l</mi><mi>d</mi><mi>r</mi><mi>e</mi><mi>n</mi><mo>]</mo></mrow></mrow></mrow></math>](img/184.png)
+![]</mo></mrow></mrow></mrow></math>](img/184.png)
 
 在这里，*熵* 是衡量系统不纯度或随机性的度量。在决策树的情况下，熵用于衡量树中节点的杂乱程度。
 
 节点的 *熵* 计算如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>E</mi><mi>n</mi><mi>t</mi><mi>r</mi><mi>o</mi><mi>p</mi><mi>y</mi><mo>=</mo><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>c</mi></munderover><mrow><mo>−</mo><msub><mi>p</mi><mi>i</mi></msub><msub><mrow><mi>l</mi><mi>o</mi><mi>g</mi></mrow><mn>2</mn></msub><msub><mi>p</mi><mi>i</mi></msub></mrow></mrow></mrow></mrow></math>](img/185.png)
+![](img/185.png)
 
-在这里，*c* 是类的数量，而 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/186.png) 是属于节点类 *i* 的样本比例。
+在这里，*c* 是类的数量，而 ![](img/186.png) 是属于节点类 *i* 的样本比例。
 
 节点的熵值范围从 0 到 1，其中 0 表示纯节点（即所有样本都属于同一类），1 表示节点在所有类别之间均匀分割。
 
@@ -628,19 +628,19 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 给定一个包含 *N* 个样本和 *M* 个特征的样本集 *D*，我们通过应用前面的步骤创建 *T* 个决策树 {树1, 树2, … , 树T}。每个决策树都是使用数据集 *D* 的自助样本 *D’*（大小为 *N’*（N’ <= N））和特征子集 *F’*（大小为 *m*（m <= M））构建的。对于决策树中的每个分割，我们从 *F’* 中随机选择 *k*（k < m）个特征，并根据一个不纯度度量（例如，基尼指数或熵）选择最佳特征来分割数据。决策树会构建到满足停止标准（例如，最大深度或叶节点中的最小样本数）为止。
 
-对于新样本 *x* 的最终预测，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover accent="true"><mml:mrow><mml:mi mathvariant="bold">y</mml:mi></mml:mrow><mml:mo>^</mml:mo></mml:mover></mml:math>](img/187.png)，是通过聚合所有决策树的预测得到的。
+对于新样本 *x* 的最终预测，![](img/187.png)，是通过聚合所有决策树的预测得到的。
 
-对于分类，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover accent="true"><mml:mrow><mml:mi mathvariant="bold">y</mml:mi></mml:mrow><mml:mo>^</mml:mo></mml:mover></mml:math>](img/188.png) 是从所有决策树中获得最多投票的类别：
+对于分类，![](img/188.png) 是从所有决策树中获得最多投票的类别：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mover><mi mathvariant="bold">y</mi><mo stretchy="true">ˆ</mo></mover><mo>=</mo><mi>a</mi><mi>r</mi><mi>g</mi><mi>m</mi><mi>a</mi><msub><mi>x</mi><mi>j</mi></msub><mrow><munder><mo>∑</mo><mi>i</mi></munder><mrow><mi>I</mi><mo>(</mo><msub><mi>y</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><mo>=</mo><mn>1</mn><mo>)</mo></mrow></mrow></mrow></mrow></math>](img/189.png)
+![](img/189.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:math>](img/190.png) 是第 *j* 个决策树对第 *i* 个样本的预测，而 *I()* 是指示函数，当条件为真时返回 1，否则返回 0。
+在这里，![](img/190.png) 是第 *j* 个决策树对第 *i* 个样本的预测，而 *I()* 是指示函数，当条件为真时返回 1，否则返回 0。
 
-对于回归，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover accent="true"><mml:mrow><mml:mi mathvariant="bold">y</mml:mi></mml:mrow><mml:mo>^</mml:mo></mml:mover></mml:math>](img/188.png) 是所有决策树预测的平均值：
+对于回归，![](img/188.png) 是所有决策树预测的平均值：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mover><mi mathvariant="bold">y</mi><mo stretchy="true">ˆ</mo></mover><mo>=</mo><mo>(</mo><mn>1</mn><mo>/</mo><mi>T</mi><mo>)</mo><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>T</mi></munderover><msub><mi>y</mi><mi>i</mi></msub></mrow></mrow></mrow></mrow></math>](img/192.png)
+![](img/192.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/193.png) 是对新样本 *x* 的第 *i* 个决策树的预测。
+在这里，![](img/193.png) 是对新样本 *x* 的第 *i* 个决策树的预测。
 
 总结来说，随机森林是一种强大的机器学习算法，可以处理高维和噪声数据集。它通过使用数据的自助样本和特征子集构建多个决策树，然后汇总所有决策树的预测来做出最终预测。该算法可扩展、易于使用，并提供特征重要性的度量，使其成为许多机器学习应用的流行选择。
 
@@ -672,25 +672,25 @@ t-SNE是一种通过将其降低到低维空间来可视化高维数据的有力
 
 ## 支持向量机（SVMs）
 
-SVMs 被认为是鲁棒的有监督学习算法，可以执行分类和回归任务。它们在具有复杂决策边界的场景中表现出色，超越了线性模型的限制。在核心上，SVMs 的目标是识别一个多维空间中的超平面，该超平面最大限度地分离了类别。这个超平面定位在最大化其与每个类中最近点的距离，这些点称为支持向量。以下是 SVMs 在二元分类问题中的工作方式。给定一组训练数据，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mo>{</mo><mo>(</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>y</mi><mn>1</mn></msub><mo>)</mo><mo>,</mo><mo>(</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><msub><mi>y</mi><mn>2</mn></msub><mo>)</mo><mo>,</mo><mo>...</mo><mo>,</mo><mo>(</mo><msub><mi>x</mi><mi>n</mi></msub><mo>,</mo><msub><mi>y</mi><mi>n</mi></msub><mo>)</mo><mo>}</mo></mrow></mrow></mrow></math>](img/194.png)，其中 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/195.png) 是一个 d 维特征向量，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/196.png) 是二进制类别标签（+1 或 -1），SVM 的目标是找到一个超平面，该超平面以最大的间隔分离两个类别。间隔定义为超平面与每个类中最近数据点之间的距离：
+SVMs 被认为是鲁棒的有监督学习算法，可以执行分类和回归任务。它们在具有复杂决策边界的场景中表现出色，超越了线性模型的限制。在核心上，SVMs 的目标是识别一个多维空间中的超平面，该超平面最大限度地分离了类别。这个超平面定位在最大化其与每个类中最近点的距离，这些点称为支持向量。以下是 SVMs 在二元分类问题中的工作方式。给定一组训练数据，![](img/194.png)，其中 ![](img/195.png) 是一个 d 维特征向量，![](img/196.png) 是二进制类别标签（+1 或 -1），SVM 的目标是找到一个超平面，该超平面以最大的间隔分离两个类别。间隔定义为超平面与每个类中最近数据点之间的距离：
 
-![图 3.2 – SVM 边界](img/B18949_03_2.jpg)
+![](img/B18949_03_2.jpg)
 
 图 3.2 – SVM 边界
 
 超平面由权重向量 *w* 和偏置项 *b* 定义，对于任何新的数据点 *x*，预测的类别标签 *y* 由以下方程给出：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="normal">y</mml:mi><mml:mo>=</mml:mo><mml:mi>s</mml:mi><mml:mi>i</mml:mi><mml:mi>g</mml:mi><mml:mi>n</mml:mi><mml:mo>(</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="bold">w</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msup><mml:mi mathvariant="bold">x</mml:mi></mml:math>](img/197.png)+b)
+![](img/197.png)+b)
 
 在这里，*符号函数*是返回+1如果参数为正，否则返回-1的函数。
 
 SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这可以表述为一个优化问题：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>m</mi><mi>i</mi><mi>n</mi><mi>i</mi><mi>m</mi><mi>i</mi><mi>z</mi><mi>e</mi><mn>1</mn><mo>/</mo><mn>2</mn><msup><mrow><mo>|</mo><mo>|</mo><mi mathvariant="bold">w</mi><mo>|</mo><mo>|</mo></mrow><mn>2</mn></msup></mrow></mrow></math>](img/198.png)
+![](img/198.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>s</mi><mi>u</mi><mi>b</mi><mi>j</mi><mi>e</mi><mi>c</mi><mi>t</mi><mi>t</mi><mi>o</mi><msub><mi>y</mi><mi>i</mi></msub><mo>(</mo><msup><mi mathvariant="bold">w</mi><mi>T</mi></msup><msub><mi mathvariant="bold">x</mi><mi>i</mi></msub><mo>+</mo><mi>b</mi><mo>)</mo><mo>≥</mo><mn>1</mn><mi>f</mi><mi>o</mi><mi>r</mi><mi>i</mi><mo>=</mo><mn>1,2</mn><mo>,</mo><mo>...</mo><mo>,</mo><mi>n</mi></mrow></mrow></mrow></math>](img/199.png)
+![](img/199.png)
 
-这里，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msup><mrow><mo>|</mo><mo>|</mo><mi mathvariant="bold">w</mi><mo>|</mo><mo>|</mo></mrow><mn>2</mn></msup></mrow></math>](img/200.png) 是权重向量 *w* 的欧几里得范数的平方。约束条件确保所有数据点都被正确分类，并且边缘被最大化。
+这里，![](img/200.png) 是权重向量 *w* 的欧几里得范数的平方。约束条件确保所有数据点都被正确分类，并且边缘被最大化。
 
 这里是 SVM 的一些优点：
 
@@ -722,15 +722,15 @@ SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这�
 
 神经网络从人脑的结构和功能中汲取灵感。它们代表一类机器学习模型，擅长各种任务，如分类、回归等。这些网络由称为神经元的相互连接的多层节点组成，能够熟练地处理和操作数据。每一层的输出被输入到下一层，创建了一个特征表示的层次结构。第一层的输入是原始数据，最后一层的输出是预测。一个简单的神经网络，根据一个人的身高和体重检测其性别，如图 *3**.3* 所示：
 
-![图 3.3 – 简单神经网络](img/B18949_03_3.jpg)
+![](img/B18949_03_3.jpg)
 
 图 3.3 – 简单神经网络
 
 神经网络中单个神经元的操作可以用以下方程表示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>y</mi><mo>=</mo><mi>f</mi><mfenced open="(" close=")"><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mrow><msub><mi>w</mi><mi>i</mi></msub><msub><mi>x</mi><mi>i</mi></msub><mo>+</mo><mi>b</mi></mrow></mrow></mfenced></mrow></mrow></math>](img/201.png)
+![](img/201.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/202.png) 是输入值，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/203.png) 是神经元之间的连接权重，*b* 是偏差项，*f* 是激活函数。激活函数将非线性变换应用于加权输入和偏差项的总和。
+在这里，![](img/202.png) 是输入值，![](img/203.png) 是神经元之间的连接权重，*b* 是偏差项，*f* 是激活函数。激活函数将非线性变换应用于加权输入和偏差项的总和。
 
 训练神经网络涉及调整神经元的权重和偏差以最小化损失函数。这通常是通过使用随机梯度下降等优化算法来完成的。
 
@@ -746,15 +746,15 @@ SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这�
 
 自注意力操作可以用以下方程表示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>Q</mi><mo>=</mo><mi>X</mi><msub><mi>W</mi><mi>Q</mi></msub></mrow></mrow></math>](img/204.png)
+![](img/204.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>K</mi><mo>=</mo><mi>X</mi><msub><mi>W</mi><mi>K</mi></msub></mrow></mrow></math>](img/205.png)
+![](img/205.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>V</mi><mo>=</mo><mi>X</mi><msub><mi>W</mi><mi>V</mi></msub></mrow></mrow></math>](img/206.png)
+![](img/206.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>A</mi><mo>(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo>)</mo><mo>=</mo><mi>s</mi><mi>o</mi><mi>f</mi><mi>t</mi><mi>t</mi><mi>m</mi><mi>a</mi><mi>x</mi><mfenced open="(" close=")"><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi>T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>K</mi></msub></msqrt></mfrac></mfenced><mi>V</mi></mrow></mrow></mrow></math>](img/207.png)
+![](img/207.png)
 
-在这里，*X* 是输入序列，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mi>Q</mml:mi></mml:mrow></mml:msub></mml:math>](img/208.png)，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mi>K</mml:mi></mml:mrow></mml:msub></mml:math>](img/209.png)，和![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi></mml:mrow></mml:msub></mml:math>](img/210.png)分别是查询、键和值向量的学习投影矩阵，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>K</mml:mi></mml:mrow></mml:msub></mml:math>](img/211.png)是键向量的维度，而![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mi>Q</mml:mi></mml:mrow></mml:msub></mml:math>](img/212.png)是一个将注意力机制的输出映射到最终输出的学习投影矩阵。
+在这里，*X* 是输入序列，![](img/208.png)，![](img/209.png)，和![](img/210.png)分别是查询、键和值向量的学习投影矩阵，![](img/211.png)是键向量的维度，而![](img/212.png)是一个将注意力机制的输出映射到最终输出的学习投影矩阵。
 
 变压器的优点包括其处理可变长度输入序列的能力、捕捉数据中长距离依赖关系的能力以及在许多NLP任务上的最先进性能。
 
@@ -768,19 +768,19 @@ SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这�
 
 当模型过于简单，无法正确捕捉数据中的潜在模式时，就会发生欠拟合。换句话说，模型无法正确学习特征与目标变量之间的关系。这可能导致训练和测试数据上的性能较差。例如，在 *图 3.4* 中，我们可以看到模型欠拟合，它无法很好地呈现数据。这不是我们希望在机器学习模型中看到的，我们通常希望看到一个精确的模型，如图 *图 3.5* 所示：
 
-![图 3.4 – 机器学习模型在训练数据上的欠拟合](img/B18949_03_4.jpg)
+![](img/B18949_03_4.jpg)
 
 图 3.4 – 机器学习模型在训练数据上的欠拟合
 
 当模型训练不当或模型复杂度不足以捕捉数据中的潜在模式时，就会发生欠拟合。为了解决这个问题，我们可以使用更复杂的模型，并继续训练过程：
 
-![图 3.5 – 机器学习模型在训练数据上的最佳拟合](img/B18949_03_5.jpg)
+![](img/B18949_03_5.jpg)
 
 图 3.5 – 机器学习模型在训练数据上的最佳拟合
 
 当模型很好地捕捉到数据中的模式但不过拟合每个样本时，就会发生最佳拟合。这有助于模型在未见数据上更好地工作：
 
-![图 3.6 – 在训练数据上过拟合模型](img/B18949_03_6.jpg)
+![](img/B18949_03_6.jpg)
 
 图 3.6 – 在训练数据上过拟合模型
 
@@ -788,19 +788,19 @@ SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这�
 
 理解欠拟合和过拟合之间的权衡的一个有用方法是偏差-方差权衡。偏差是指模型预测值与训练数据中实际值之间的差异。高偏差意味着模型复杂度不足以捕捉数据中的潜在模式，并且欠拟合数据（*图 3.7*）。欠拟合模型在训练和测试数据上的性能都较差：
 
-![图 3.7 – 高偏差](img/B18949_03_7.jpg)
+![](img/B18949_03_7.jpg)
 
 图 3.7 – 高偏差
 
 另一方面，方差是指模型对训练数据中微小波动的敏感度。高方差意味着模型过于复杂，过度拟合了数据，这导致在新数据上的泛化性能较差。一个过拟合的模型在训练数据上表现良好，但在测试数据上表现较差：
 
-![图3.8 – 正好合适（既不高偏差，也不高方差）](img/B18949_03_8.jpg)
+![](img/B18949_03_8.jpg)
 
 图3.8 – 正好合适（既不高偏差，也不高方差）
 
 为了在偏差和方差之间取得平衡，我们需要选择一个既不太简单也不太复杂的模型。如前所述，这通常被称为偏差-方差权衡（*图3**.8*）。具有高偏差和低方差的模型可以通过增加模型的复杂性来改进，而具有高方差和低偏差的模型可以通过减少模型的复杂性来改进：
 
-![图3.9 – 高方差](img/B18949_03_9.jpg)
+![](img/B18949_03_9.jpg)
 
 图3.9 – 高方差
 
@@ -820,7 +820,7 @@ SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这�
 
 +   **提前停止**：提前停止是一种在验证数据的模型性能开始下降时停止训练过程的技术。这有助于通过在模型已经达到最大性能时停止其从训练数据中继续学习来防止过拟合。这种技术通常用于迭代算法，如深度学习方法，其中模型被训练多个迭代（周期）。要使用提前停止，我们通常在评估模型在训练和验证子集上的性能的同时训练模型。随着训练的增加，模型的性能通常在训练集上提高，但由于模型尚未看到验证集，验证错误通常最初会下降，并在某个时刻开始再次增加。这一点是模型开始过拟合的地方。通过在训练过程中可视化模型的训练和验证错误，我们可以识别并在此点停止模型（*图 3**.10*）：
 
-![图 3.10 – 提前停止](img/B18949_03_10.jpg)
+![](img/B18949_03_10.jpg)
 
 图 3.10 – 提前停止
 
@@ -842,7 +842,7 @@ SVM 的目标函数是在最大化间隔的约束下最小化分类误差。这�
 
 当我们的训练数据量有限时，分割数据的一种更高级的方法是k折交叉验证。在这个方法中，数据被分为*k*个大小相等的“折”，模型被训练和测试*k*次，每个折被用作测试集一次，其余的折用作训练集。然后，将每个折的结果平均，以获得模型性能的整体度量。K折交叉验证对于小数据集很有用，因为训练-测试分割可能会导致性能评估的大幅波动。在这种情况下，我们报告模型在每个*k*个折上的平均、最小和最大性能，如图*3.11*所示。
 
-![图3.11 – K折交叉验证](img/B18949_03_11.jpg)
+![](img/B18949_03_11.jpg)
 
 图3.11 – K折交叉验证
 
@@ -850,7 +850,7 @@ k折交叉验证的另一种变体是分层k折交叉验证，它确保目标变
 
 时间序列数据在分割时需要特别注意。在这种情况下，我们通常使用一种称为时间序列交叉验证的方法，该方法保留了数据的时序顺序。在这个方法中，数据被分割成多个段，每个段代表一个固定的时间间隔。然后，模型在历史数据上训练并在未来数据上测试。这有助于评估模型在实际场景中的性能。您可以在*图3.12*中看到一个如何分割时间序列数据示例：
 
-![图3.12 – 时间序列数据分割](img/B18949_03_12.jpg)
+![](img/B18949_03_12.jpg)
 
 图3.12 – 时间序列数据分割
 
@@ -868,7 +868,7 @@ k折交叉验证的另一种变体是分层k折交叉验证，它确保目标变
 
 贝叶斯优化利用过去的评估结果，以概率地将超参数映射到目标函数得分，如下面的方程所示：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>P</mi><mo>(</mo><mi>s</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mo>|</mo><mi>h</mi><mi>y</mi><mi>p</mi><mi>e</mi><mi>r</mi><mi>p</mi><mi>a</mi><mi>r</mi><mi>a</mi><mi>m</mi><mi>e</mi><mi>t</mi><mi>e</mi><mi>r</mi><mi>s</mi><mo>)</mo></mrow></mrow></mrow></math>](img/213.png)
+![](img/213.png)
 
 下面是贝叶斯优化采取的步骤：
 
@@ -918,15 +918,15 @@ Bagging 算法可以概括如下：
 
 基础模型的预测聚合方程取决于问题的类型（分类或回归）。对于分类，通过多数投票获得集成预测：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>Y</mi><mrow><mi>e</mi><mi>n</mi><mi}s</mi><mi>e</mi><mi>m</mi><mi>b</mi><mi>l</mi><mi>e</mi></mrow></msub><mo>=</mo><msub><mrow><mi>a</mi><mi>r</mi><mi>g</mi><mi>m</mi><mi>a</mi><mi>x</mi></mrow><mi>j</mi></msub><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>m</mi></munderover><mrow><mi>I</mi><mo>(</mo><msub><mi>y</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow></mrow><mo>=</mo><mi>j</mi><mo>)</mo></mrow></mrow></mrow></math>](img/214.png)
+![](img/214.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:math>](img/215.png) 是![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/216.png) 基础模型对![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>j</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/217.png) 实例的预测类别，而 *I()* 是指示函数（如果 x 为真，则等于 1，否则为 0）。
+在这里，![](img/215.png) 是![](img/216.png) 基础模型对![](img/217.png) 实例的预测类别，而 *I()* 是指示函数（如果 x 为真，则等于 1，否则为 0）。
 
 对于回归，通过取平均分数来获得集成预测：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mi>Y</mi><mrow><mi>e</mi><mi>n</mi><mi}s</mi><mi>e</mi><mi>m</mi><mi>b</mi><mi>l</mi><mi>l</mi><mi>e</mi></mrow></msub><mo>=</mo><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>m</mi></munderover><msub><mi>y</mi><mi>i</mi></msub></mrow></mrow></mrow></math>](img/218.png)
+![](img/218.png)
 
-在这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/193.png) 是![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/220.png) 基础模型的预测值。
+在这里，![](img/193.png) 是![](img/220.png) 基础模型的预测值。
 
 套袋法的优点如下：
 
@@ -968,23 +968,23 @@ Bagging 算法可以概括如下：
 
 最终分类器是弱分类器的加权组合。每个弱分类器的重要性由其加权错误率决定，该错误率按以下方程计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mrow><mi>E</mi><mi>R</mi><mi>R</mi><mi>O</mi><mi>R</mi></mrow><mi>m</mi></msub><mo>=</mo><mfrac><mrow><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></msubsup><mrow><msub><mi>w</mi><mi>i</mi></msub><mi>I</mi><mo>(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><msub><mi>h</mi><mi>m</mi></msub><mo>(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>)</mo></mrow></mrow><mo>)</mo></mrow><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></msubsup><msub><mi>w</mi><mi>i</mi></msub></mrow></mfrac></mrow></mrow></math>](img/221.png)
+![](img/221.png)
 
-在这里，*m* 是弱分类器的索引，*N* 是训练样本的数量，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/222.png) 是 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/220.png) 训练样本的权重，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/196.png) 是 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/220.png) 训练样本的真实标签，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:mo>(</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>)</mml:mo></mml:math>](img/226.png) 是 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>m</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/227.png) 弱分类器对 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/220.png) 训练样本的预测，并且 ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>I</mi><mo>(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><msub><mi>h</mi><mi>m</mi></msub><mfenced open="(" close=")"><msub><mi>x</mi><mi>i</mi></msub></mfenced><mo>)</mo></mrow></mrow></mrow></math>](img/229.png) 是一个指示函数，如果弱分类器的预测错误则返回 1，否则返回 0。
+在这里，*m* 是弱分类器的索引，*N* 是训练样本的数量，![](img/222.png) 是 ![](img/220.png) 训练样本的权重，![](img/196.png) 是 ![](img/220.png) 训练样本的真实标签，![](img/226.png) 是 ![](img/227.png) 弱分类器对 ![](img/220.png) 训练样本的预测，并且 ![](img/229.png) 是一个指示函数，如果弱分类器的预测错误则返回 1，否则返回 0。
 
 弱分类器的重要性通过以下公式计算：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mi mathvariant="normal">α</mi><mi>m</mi></msub><mo>=</mo><mi>ln</mi><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mrow><mi>e</mi><mi>r</mi><mi>r</mi><mi>o</mi><mi>r</mi></mrow><mi>r</mi></msub></mrow><msub><mrow><mi>e</mi><mi>r</mi><mi>r</mi><mi>o</mi><mi>r</mi></mrow><mi>r</mi></msub></mfrac></mrow></mrow></math>](img/230.png)
+![](img/230.png)
 
 样本的权重根据其重要性进行更新：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mi>w</mi><mi>i</mi></msub><mo>=</mo><msubsup><mi>w</mi><mi>i</mi><mrow><msub><mi mathvariant="normal">α</mi><mi>m</mi></msub><mi>I</mi><mfenced open="(" close=")"><mrow><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><msub><mi>h</mi><mi>m</mi></msub><mfenced open="(" close=")"><msub><mi>x</mi><mi>i</mi></msub></mfenced></mrow></mfenced></mrow></msubsup></mrow></mrow></math>](img/231.png)
+![](img/231.png)
 
 最终分类器是通过组合弱分类器得到的：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:msub><mml:mrow><mml:mi>H</mml:mi></mml:mrow><mml:mrow><mml:mi>x</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>s</mml:mi><mml:mi>i</mml:mi><mml:mi>g</mml:mi><mml:mi>n</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>m</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="normal">α</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:mo>(</mml:mo><mml:mi>x</mml:mi><mml:mo>)</mml:mo></mml:mrow></mml:mrow></mml:mrow></mml:mfenced></mml:math>](img/232.png)
+![](img/232.png)
 
-在这里，*M* 是弱分类器的总数，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:mo>(</mml:mo><mml:mi>x</mml:mi><mml:mo>)</mml:mo></mml:math>](img/233.png) 是第 *m* 个弱分类器的预测，`sign()` 是一个函数，如果其参数为正则返回 +1，否则返回 -1。
+在这里，*M* 是弱分类器的总数，![](img/233.png) 是第 *m* 个弱分类器的预测，`sign()` 是一个函数，如果其参数为正则返回 +1，否则返回 -1。
 
 让我们来看看增强学习的优点：
 
@@ -1036,21 +1036,21 @@ Stacking是一种流行的集成学习技术，通过在基础模型的预测上
 
 首先，我们使用一个常数值初始化模型：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>F</mi><mn>0</mn></msub><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mi>a</mi><mi>r</mi><mi>g</mi><mi>m</mi><mi>i</mi><msub><mi>n</mi><mi>c</mi></msub><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><mrow><mi>L</mi><mo>(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>,</mo><mi>c</mi><mo>)</mo></mrow></mrow></mrow></mrow></mrow></math>](img/234.png)
+![](img/234.png)
 
-在这里，*c* 是一个常数，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/196.png) 是第 *i* 个样本的真实标签，*N* 是样本数量，*L* 是损失函数，它用于衡量预测标签和真实标签之间的误差。
+在这里，*c* 是一个常数，![](img/196.png) 是第 *i* 个样本的真实标签，*N* 是样本数量，*L* 是损失函数，它用于衡量预测标签和真实标签之间的误差。
 
-在每次迭代中，*m*，算法将决策树拟合到损失函数关于预测值的负梯度值，即![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><msub><mi>r</mi><mi>m</mi></msub><mo>=</mo><mo>−</mo><mo>∇</mo><mi>L</mi><mo>(</mo><mi>y</mi><mo>,</mo><mi>F</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/236.png)。决策树预测负梯度值，然后使用以下方程更新模型的预测：
+在每次迭代中，*m*，算法将决策树拟合到损失函数关于预测值的负梯度值，即![](img/236.png)。决策树预测负梯度值，然后使用以下方程更新模型的预测：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>F</mi><mi>m</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><msub><mi>F</mi><mrow><mi>m</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>(</mo><mi>x</mi><mo>)</mo><mo>+</mo><mi>η</mi><mi mathvariant="normal">*</mi><msub><mi>h</mi><mi>m</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/237.png)
+![](img/237.png)
 
-在这里，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><msub><mi>F</mi><mrow><mi>m</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/238.png) 是模型在前一次迭代的预测，*η* 是学习率，而![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:mo>(</mml:mo><mml:mi>x</mml:mi><mml:mo>)</mml:mo></mml:math>](img/239.png) 是当前迭代中决策树的预测。
+在这里，![](img/238.png) 是模型在前一次迭代的预测，*η* 是学习率，而![](img/239.png) 是当前迭代中决策树的预测。
 
 模型的最终预测是通过结合所有树的预测得到的：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>F</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mrow><munderover><mo>∑</mo><mrow><mi>m</mi><mo>=</mo><mn>1</mn></mrow><mi>M</mi></munderover><mrow><msub><mi>η</mi><mi>m</mi></msub><mi mathvariant="normal">*</mi><msub><mi>h</mi><mi>m</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></mrow></math>](img/240.png)
+![](img/240.png)
 
-在这里，*M* 是模型中树的总数，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>η</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/241.png) 和 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub><mml:mo>(</mml:mo><mml:mi>x</mml:mi><mml:mo>)</mml:mo></mml:math>](img/242.png) 分别是 *m* 棵树的学习率和预测值。
+在这里，*M* 是模型中树的总数，![](img/241.png) 和 ![](img/242.png) 分别是 *m* 棵树的学习率和预测值。
 
 让我们来看看梯度提升的一些优点：
 
@@ -1096,7 +1096,7 @@ SMOTE 是处理机器学习中不平衡数据集的常用算法。它是一种�
 
 1.  通过在 *x* 和 *x’* 之间插值来生成一个合成样本。为此，选择一个介于 0 和 1 之间的随机数，*r*，然后按照以下方式计算合成样本：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>n</mi><mi>e</mi><mi>w</mi><mi>s</mi><mi>a</mi><mi>m</mi><mi>p</mi><mi>l</mi><mi>e</mi><mo>=</mo><mi>x</mi><mo>+</mo><mi>r</mi><mi mathvariant="normal">*</mi><mfenced open="(" close=")"><mrow><mrow><mi>x</mi><mo>′</mo></mrow><mo>−</mo><mi>x</mi></mrow></mfenced></mrow></mrow></math>](img/243.png)
+![](img/243.png)
 
 这将创建一个新的样本，它在 *x* 和 *x’* 之间，但不是两者中的任何一个。
 
@@ -1124,11 +1124,11 @@ SMOTE 是处理机器学习中不平衡数据集的常用算法。它是一种�
 
 1.  我们通过使用随机数 *r* 在 *x* 和 *x’* 之间进行插值来生成一个合成样本：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>n</mi><mi>e</mi><mi>w</mi><mi>s</mi><mi>a</mi><mi>m</mi><mi>p</mi><mi>l</mi><mi>e</mi><mo>=</mo><mi>x</mi><mo>+</mo><mi>r</mi><mi mathvariant="normal">*</mi><mo>(</mo><mi>x</mi><mo>′</mo><mo>−</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/244.png)
+![](img/244.png)
 
 例如，假设 *x* 是 (*1, 2*)，*x’* 是 (*3, 4*)，而 *r* 是 *0.5*。在这种情况下，新的样本如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>n</mi><mi>e</mi><mi}s</mi><mi>a</mi><mi>m</mi><mi>p</mi><mi>l</mi><mi>e</mi><mo>=</mo><mo>(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>)</mo><mo>+</mo><mn>0.5</mn><mi mathvariant="normal">*</mi><mo>(</mo><mo>(</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo>)</mo><mo>−</mo><mo>(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>)</mo><mo>)</mo><mo>=</mo><mo>(</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>)</mo></mrow></mrow></mrow></math>](img/245.png)
+![](img/245.png)
 
 4. 我们重复 *步骤 1* 到 *3*，直到我们生成了所需的合成样本数量。例如，如果我们想生成 100 个合成样本，我们将对每个 100 个少数类样本重复 *步骤 1* 到 *3*，然后将原始的少数类样本与合成样本结合起来，创建每个类别有 200 个样本的平衡数据集。
 
@@ -1171,11 +1171,11 @@ SMOTE 是处理机器学习中不平衡数据集的常用算法。它是一种�
 
 为了将成本矩阵纳入训练过程，我们可以修改模型在训练期间优化的标准损失函数。一个常见的成本敏感损失函数是加权交叉熵损失，其定义如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>l</mi><mi>o</mi><mi}s</mi><mi}s</mi><mo>=</mo><mo>−</mo><mo>(</mo><msub><mi>w</mi><mrow><mi>p</mi><mi>o</mi><mi>s</mi></mrow></msub><mi mathvariant="normal">*</mi><mi>y</mi><mi mathvariant="normal">*</mi><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mover><mi mathvariant="normal">y</mi><mo stretchy="true">ˆ</mo></mover><mo>)</mo><mo>+</mo><msub><mi>w</mi><mrow><mi>n</mi><mi>e</mi><mi>g</mi></mrow></msub><mi mathvariant="normal">*</mi><mo>(</mo><mn>1</mn><mo>−</mo><mi>y</mi><mo>)</mo><mi mathvariant="normal">*</mi><mi>l</mi><mi>o</mi><mi>g</mi><mo>(</mo><mn>1</mn><mo>−</mo><mover><mi mathvariant="normal">y</mi><mo stretchy="true">ˆ</mo></mover><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/246.png)
+![](img/246.png)
 
-在这里，*y*是真实标签（要么是0要么是1），![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover accent="true"><mml:mrow><mml:mi mathvariant="normal">y</mml:mi></mml:mrow><mml:mo>^</mml:mo></mml:mrow></mml:mover></mml:math>](img/247.png)是预测的正类概率，而![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msub><mi>w</mi><mrow><mi>p</mi><mi>o</mi><mi>s</mi></mrow></msub></mrow></math>](img/248.png)和![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:math>](img/249.png)是分别分配给正类和负类的权重。
+在这里，*y*是真实标签（要么是0要么是1），![](img/247.png)是预测的正类概率，而![](img/248.png)和![](img/249.png)是分别分配给正类和负类的权重。
 
-权重，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msub><mi>w</mi><mrow><mi>p</mi><mi>o</mi><mi>s</mi></mrow></msub></mrow></math>](img/250.png)和![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:math>](img/251.png)，可以通过混淆矩阵中分配的成本来确定。例如，如果我们对假阴性（即错误地将正例分类为负例）分配更高的成本，我们可能会将![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msub><mi>w</mi><mrow><mi>p</mi><mi>o</mi><mi>s</mi></mrow></msub></mrow></math>](img/252.png)的值设置得比![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:math>](img/249.png)高。
+权重，![](img/250.png)和![](img/251.png)，可以通过混淆矩阵中分配的成本来确定。例如，如果我们对假阴性（即错误地将正例分类为负例）分配更高的成本，我们可能会将![](img/252.png)的值设置得比![](img/249.png)高。
 
 成本敏感学习也可以与其他类型的模型一起使用，例如决策树和SVMs。将成本分配给不同类型的错误的概念可以以多种方式应用于不平衡数据集以提高模型性能。然而，根据数据集和解决问题的具体特征，仔细选择合适的成本矩阵和损失函数是非常重要的：
 
@@ -1191,17 +1191,17 @@ SMOTE 是处理机器学习中不平衡数据集的常用算法。它是一种�
 
 数据增强中涉及到的方程相对简单，因为它们是基于对原始示例应用变换函数。例如，为了将图像旋转一定角度，我们可以使用旋转矩阵：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>x</mi><mo>′</mo><mo>=</mo><mi>x</mi><mi>c</mi><mi>o</mi><mi>s</mi><mo>(</mo><mi>θ</mi><mo>)</mo><mo>−</mo><mi>y</mi><mi>s</mi><mi>i</mi><mi>n</mi><mo>(</mo><mi>θ</mi><mo>)</mo></mrow></mrow></mrow></math>](img/254.png)
+![](img/254.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>y</mi><mo>′</mo><mo>=</mo><mi>x</mi><mi>s</mi><mi>i</mi><mi>n</mi><mo>(</mo><mi>θ</mi><mo>)</mo><mo>+</mo><mi>y</mi><mi>c</mi><mi>o</mi><mi>s</mi><mo>(</mo><mi>θ</mi><mo>)</mo></mrow></mrow></mrow></math>](img/255.png)
+![](img/255.png)
 
-在这里，*x* 和 *y* 是图像中像素的原始坐标，*x’* 和 *y’* 是旋转后的新坐标，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>θ</mml:mi></mml:math>](img/256.png) 是旋转角度。
+在这里，*x* 和 *y* 是图像中像素的原始坐标，*x’* 和 *y’* 是旋转后的新坐标，![](img/256.png) 是旋转角度。
 
 同样，为了应用平移，我们可以简单地通过一定数量的像素移动图像：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>x</mi><mo>′</mo><mo>=</mo><mi>x</mi><mo>+</mo><mi>d</mi><mi>x</mi></mrow></mrow></math>](img/257.png)
+![](img/257.png)
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>y</mi><mo>′</mo><mo>=</mo><mi>y</mi><mo>+</mo><mi>d</mi><mi>y</mi></mrow></mrow></math>](img/258.png)
+![](img/258.png)
 
 在这里，*dx* 和 *dy* 分别是水平和垂直位移。
 

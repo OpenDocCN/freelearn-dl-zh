@@ -513,7 +513,7 @@ OpenAI的GPT将被用作提示的下游LLM，这意味着它将获得关于强�
 
 *AutoGen是一个框架，它使开发者能够使用能够相互对话以解决任务的多个代理来开发LLM应用。AutoGen代理是可定制的、可对话的，并允许无缝地参与人类。它们可以在各种模式下运行，这些模式结合了LLM、人类输入和*工具*。
 
-![图9.1 – AutoGen功能](img/B18949_09_1.jpg)
+![](img/B18949_09_1.jpg)
 
 图9.1 – AutoGen功能
 
@@ -615,7 +615,7 @@ This task provided us with the code to create the visual we wanted. Note that we
 
 In the next code cell, we pasted the code that the team created. The code runs well and visualizes the three distributions exactly as we asked the team (see *Figure 9**.2*):
 
-![Figure 9.2 – Visualizing the value that prompt compression provides](img/B18949_09_2.jpg)
+![](img/B18949_09_2.jpg)
 
 Figure 9.2 – Visualizing the value that prompt compression provides
 

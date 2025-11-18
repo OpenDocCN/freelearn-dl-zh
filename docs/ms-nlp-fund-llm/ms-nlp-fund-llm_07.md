@@ -102,13 +102,13 @@ LLMs，例如GPT-3和GPT-4，仅仅是训练在大量文本上并且拥有大量
 
 当LM更大时，这意味着它有更多的参数。这些参数允许模型捕捉和编码数据中的更复杂关系和细微差别。换句话说，更大的模型可以从训练数据中学习并保留更多信息。因此，它在训练后能够更好地处理更广泛的任务和上下文。正是这种增加的复杂性和容量使得更大的LLM在不同任务上具有更强的泛化能力。正如我们在*图7.1*中可以看到的，更大的LLM在不同任务上的表现更好。
 
-![图7.1 – 基于大小和训练的LLM性能](img/B18949_07_1.jpg)
+![](img/B18949_07_1.jpg)
 
 图7.1 – 基于大小和训练的LLM性能
 
 我们还可以在*图7.2*中看到过去三年LLM发展的进展。
 
-![图7.2 – 2019年至2023年间发布的LLM（公开可用的模型已突出显示）](img/B18949_07_2.jpg)
+![](img/B18949_07_2.jpg)
 
 图7.2 – 2019年至2023年间发布的LLM（公开可用的模型已突出显示）
 
@@ -164,7 +164,7 @@ LLMs在生成类似人类的文本方面表现出非凡的能力。它们可以�
 
 由于这些原因，公司正在尝试实施和训练更大的LMs（*图7**.3*）：
 
-![图7.3 – 新的LMs及其大小，以及开发者](img/B18949_07_3.jpg)
+![](img/B18949_07_3.jpg)
 
 图7.3 – 新的LMs及其大小，以及开发者
 
@@ -294,17 +294,17 @@ PPO是一种用于优化代理π策略的强化学习算法。策略定义了代
 
 强化学习的目标可以从以下方面进行数学定义：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>J</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>π</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi>E</mml:mi></mml:mrow><mml:mrow><mml:mi>π</mml:mi></mml:mrow></mml:msub><mml:mfenced separators="|"><mml:mrow><mml:mrow><mml:munder><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:munder><mml:mrow><mml:mi>R</mml:mi><mml:mo>(</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>)</mml:mo></mml:mrow></mml:mrow></mml:mrow></mml:mfenced></mml:math>](img/307.png)
+![](img/307.png)
 
 在这个公式中，*E*π[.]是遵循策略*π*生成的轨迹（状态-动作对的序列）的期望，*s*_t是时间*t*的状态，*a*_t是时间*t*采取的动作，而*R(s*_t*, a*_t*)*是时间*t*收到的奖励。
 
 PPO通过引入一个比率，*r*_t(θ)，来修改这个目标，以鼓励策略空间的探索，同时防止在每次更新时策略发生太大变化。这个比率*r*_t(θ)表示当前策略*π*_θ与旧策略*π_θ_old*的概率比：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><msub><mi>r</mi><mi>t</mi></msub><mo>(</mo><mi>θ</mi><mo>)</mo><mo>=</mo><mfrac><mrow><msub><mi>π</mi><mi>θ</mi></msub><mo>(</mo><msub><mi>a</mi><mi>t</mi></msub><mo>|</mo><msub><mi>s</mi><mi>t</mi></msub><mo>)</mo></mrow><mrow><msub><mi>π</mi><mrow><mi>θ</mi><mi>o</mi><mi>l</mi><mi>d</mi></mrow></msub><mo>(</mo><msub><mi>a</mi><mi>t</mi></msub><mo>|</mo><msub><mi>s</mi><mi>t</mi></msub><mo>)</mo></mrow></mfrac></mrow></mrow></mrow></math>](img/308.png)
+![](img/308.png)
 
 PPO的目标随后定义为以下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msub><mi>J</mi><mrow><mi>P</mi><mi>P</mi><mi>O</mi></mrow></msub><mfenced open="(" close=")"><mi>π</mi></mfenced><mo>=</mo><msub><mi>E</mi><mrow><mi>π</mi><mi>o</mi><mi>l</mi><mi>d</mi></mrow></msub><mfenced open="(" close=")"><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mo>(</mo><msub><mi>r</mi><mi>t</mi></msub><mfenced open="(" close=")"><mi>θ</mi></mfenced><msub><mi>A</mi><mi>t</mi></msub><mo>,</mo><mi>c</mi><mi>l</mi><mi>i</mi><mi>p</mi><mo>(</mo><msub><mi>r</mi><mi>t</mi></msub><mfenced open="(" close=")"><mi>θ</mi></mfenced><mo>,</mo><mn>1</mn><mo>−</mo><mi>ϵ</mi><mo>,</mo><mn>1</mn><mo>+</mo><mi>ϵ</mi><mo>)</mo><msub><mi>A</mi><mi>t</mi></msub></mrow></mfenced></mrow></mrow></math>](img/309.png)
+![](img/309.png)
 
 在这里，*A_t* 是一个优势函数，它衡量采取行动 *a_t* 相比于状态 *s_*t 的平均行动有多好，而 *clip(r_*t*(θ), 1 - ε, 1 + ε)* 是 *r_*t*(θ)* 的裁剪版本，旨在阻止策略更新过大。
 
@@ -354,7 +354,7 @@ RLHF的概念由于其多方面的模型训练过程和不同的部署阶段，�
 
 接下来，一旦LLM就位，就需要生成数据来训练奖励模型。这一步对于将人类偏好整合到系统中至关重要。
 
-![图7.4 – 预训练LM](img/B18949_07_4.jpg)
+![](img/B18949_07_4.jpg)
 
 图7.4 – 预训练LM
 
@@ -380,7 +380,7 @@ Elo评分系统的基本机制保持不变。以下是它如何适应LM中的RLH
 
 成功的RLHF系统使用了不同大小的奖励语言模型相对于文本生成。例如，OpenAI使用了一个175B的语言模型和一个6B的奖励模型，Anthropic使用了从10B到52B的语言模型和奖励模型，而DeepMind为语言模型和奖励模型都使用了70B的Chinchilla模型。这是因为偏好模型必须与模型生成文本所需的容量相匹配。在RLHF的此阶段，我们拥有一个能够进行文本生成的初始语言模型和一个根据人类感知对任何文本进行评分的偏好模型。接下来，我们应用强化学习来优化原始语言模型以适应奖励模型。
 
-![图7.5 – 强化学习的奖励模型](img/B18949_07_5.jpg)
+![](img/B18949_07_5.jpg)
 
 图7.5 – 强化学习的奖励模型
 
@@ -390,19 +390,19 @@ Elo评分系统的基本机制保持不变。以下是它如何适应LM中的RLH
 
 我们可以将这个微调任务表述为一个强化学习问题。最初，策略是一个接受提示并生成一系列文本（或仅仅是文本的概率分布）的LM。这个策略的动作空间是与LM词汇表相匹配的所有标记（通常约为50 K个标记），而观察空间是可能的输入标记序列的分布，鉴于强化学习之前的用途（维度近似于输入标记序列词汇大小的幂(`^`)长度）。奖励函数将偏好模型与策略转移的约束结合起来。
 
-奖励函数是系统将所有讨论过的模型整合到单个强化学习与人类反馈（RLHF）过程中的交汇点。给定数据集中的提示*x*，文本*y*由当前迭代的微调策略创建。这个文本与原始提示一起传递给偏好模型，该模型返回一个表示“偏好度”的标量度量![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><msub><mi>r</mi><mi>θ</mi></msub></mrow></math>](img/310.png)。
+奖励函数是系统将所有讨论过的模型整合到单个强化学习与人类反馈（RLHF）过程中的交汇点。给定数据集中的提示*x*，文本*y*由当前迭代的微调策略创建。这个文本与原始提示一起传递给偏好模型，该模型返回一个表示“偏好度”的标量度量![](img/310.png)。
 
-此外，强化学习策略的每个标记的概率分布与初始模型中的概率分布进行对比，以计算它们差异的惩罚。在OpenAI、Anthropic和DeepMind的几篇论文中，这个惩罚被构建为这些分布序列之间的**Kullback–Leibler**（**KL**）散度的缩放版本![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>r</mml:mi></mml:mrow><mml:mrow><mml:mi>K</mml:mi><mml:mi>L</mml:mi></mml:mrow></mml:msub></mml:math>](img/311.png)。KL散度项惩罚强化学习策略在每次训练批次中显著偏离初始预训练模型，确保生成合理连贯的文本片段。
+此外，强化学习策略的每个标记的概率分布与初始模型中的概率分布进行对比，以计算它们差异的惩罚。在OpenAI、Anthropic和DeepMind的几篇论文中，这个惩罚被构建为这些分布序列之间的**Kullback–Leibler**（**KL**）散度的缩放版本![](img/311.png)。KL散度项惩罚强化学习策略在每次训练批次中显著偏离初始预训练模型，确保生成合理连贯的文本片段。
 
 没有这种惩罚，优化过程可能会开始生成一些胡言乱语，这些胡言乱语可能会以某种方式欺骗奖励模型，使其给予高奖励。在实践中，KL散度通过从两个分布中进行采样来近似。最终传递给强化学习更新规则的奖励如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>r</mi><mo>=</mo><msub><mi>r</mi><mi>θ</mi></msub><mo>−</mo><mi>λ</mi><msub><mi>r</mi><mrow><mi>K</mi><mi>L</mi></mrow></msub></mrow></mrow></math>](img/312.png)
+![](img/312.png)
 
 一些RLHF系统已经将额外的术语纳入奖励函数。例如，OpenAI的InstructGPT成功尝试将额外的预训练梯度（来自人类标注集）融合到PPO的更新规则中。预计随着RLHF的继续研究，这个奖励函数的公式将继续演变。
 
 最后，更新规则是PPO从当前数据批次中优化奖励指标参数的更新（PPO是按策略的，意味着参数只更新当前批次的提示生成对）。PPO是一种信任域优化算法，它通过约束梯度来确保更新步骤不会破坏学习过程。DeepMind为Gopher采用了类似的奖励设置，但使用了同步优势演员。
 
-![图7.6 – 使用强化学习微调模型](img/B18949_07_6.jpg)
+![](img/B18949_07_6.jpg)
 
 图7.6 – 使用强化学习微调模型
 
@@ -460,11 +460,11 @@ PaLM采用传统的Transformer模型架构，在解码器专用设置中，允�
 
     标准结构如下：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>y</mi><mo>=</mo><mi>x</mi><mo>+</mo><mi>M</mi><mi>L</mi><mi>P</mi><mo>(</mo><mi>L</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>N</mi><mi>o</mi><mi>r</mi><mi>m</mi><mo>(</mo><mi>x</mi><mo>+</mo><mi>A</mi><mi>t</mi><mi>t</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>(</mo><mi>L</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>N</mi><mi>o</mi><mi>r</mi><mi>m</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/313.png)
+    ![](img/313.png)
 
     并行结构如下：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>y</mi><mo>=</mo><mi>x</mi><mo>+</mo><mi>M</mi><mi>L</mi><mi>P</mi><mo>(</mo><mi>L</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>N</mi><mi>o</mi><mi>r</mi><mi>m</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo><mo>+</mo><mi>A</mi><mi>t</mi><mi>t</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>(</mo><mi>L</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>N</mi><mi>o</mi><mi>r</mi><mi>m</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mrow></mrow></math>](img/314.png)
+    ![](img/314.png)
 
     由于MLP和注意力输入矩阵乘法的融合，这在大规模上导致大约15%的训练速度提升。
 

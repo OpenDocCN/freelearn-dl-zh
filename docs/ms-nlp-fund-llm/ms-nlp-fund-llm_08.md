@@ -290,7 +290,7 @@ LangChain最显著的优点之一是能够将任意LLM连接到定义好的数�
 
 .
 
-![图8.1 – 典型LangChain管道的范式](img/B18949_08_1.jpg)
+![](img/B18949_08_1.jpg)
 
 图8.1 – 典型LangChain管道的范式
 

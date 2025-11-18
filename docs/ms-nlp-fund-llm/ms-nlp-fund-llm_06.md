@@ -114,7 +114,7 @@
 
 基本神经网络的结构由三种类型的层组成，如图*图6.1*所示：
 
-![图6.1 – 神经网络的基本架构](img/B18949_06_001.jpg)
+![](img/B18949_06_001.jpg)
 
 图6.1 – 神经网络的基本架构
 
@@ -148,7 +148,7 @@
 
 1.  **加权求和**：每个输入（*x*）到神经元的乘以相应的权重（*w*）。这些加权输入然后与偏置项（*b*）相加。偏置项允许激活函数向左或向右移动，有助于神经元模拟更广泛的模式。从数学上讲，这一步可以表示如下：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>z</mi><mo>=</mo><mi>w</mi><mn>1</mn><mi mathvariant="normal">*</mi><mi>x</mi><mn>1</mn><mo>+</mo><mi>w</mi><mn>2</mn><mi mathvariant="normal">*</mi><mi>x</mi><mn>2</mn><mo>+</mo><mo>…</mo><mo>+</mo><mi>w</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">*</mi><mi>x</mi><mi mathvariant="normal">n</mi><mo>+</mo><mi>b</mi></mrow></mrow></math>](img/297.png)
+    ![](img/297.png)
 
 1.  **激活函数**：加权求和的结果随后通过激活函数。激活函数的目的是将非线性引入神经元的输出。这种非线性使得网络能够从错误中学习并做出调整，这对于执行复杂任务（如语言翻译或图像识别）至关重要。常见的激活函数选择包括 sigmoid 函数、双曲正切（**tanh**）和修正线性单元（**ReLU**）等。
 
@@ -168,19 +168,19 @@
 
 +   **Sigmoid 函数**：这里我们基本上是将输入分类为 0 或 1。Sigmoid 函数将实值输入压缩到 0 到 1 之间。它通常用于二元分类网络的输出层：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mfrac><mn>1</mn><mrow><mo>(</mo><mn>1</mn><mo>+</mo><mi>e</mi><mi>x</mi><mi>p</mi><mo>(</mo><mo>−</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mfrac></mrow></mrow></math>](img/298.png)
+    ![](img/298.png)
 
     然而，它有两个主要缺点：**梯度消失问题**（对于大的正或负输入，梯度非常小，这可能会在反向传播期间减慢学习速度）和**输出不是** **零中心**。
 
 +   **双曲正切函数**：tanh函数也接受实数值输入并将其压缩到-1和1之间。与sigmoid函数不同，其输出以零为中心，因为其范围在原点周围是对称的：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mfrac><mrow><mo>(</mo><mi>e</mi><mi>x</mi><mi>p</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>−</mo><mi>e</mi><mi>x</mi><mi>p</mi><mo>(</mo><mo>−</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow><mrow><mo>(</mo><mi>e</mi><mi>x</mi><mi>p</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>+</mo><mi>e</mi><mi>x</mi><mi>p</mi><mo>(</mo><mo>−</mo><mi>x</mi><mo>)</mo><mo>)</mo></mrow></mfrac></mrow></mrow></math>](img/299.png)
+    ![](img/299.png)
 
     它也受到梯度消失问题的影响，与sigmoid函数一样。
 
 +   **ReLU函数**：ReLU函数在近年来变得非常流行。其计算方式如下：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mi>m</mi><mi>a</mi><mi>x</mi><mo>(</mo><mn>0</mn><mo>,</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/300.png)
+    ![](img/300.png)
 
     换句话说，如果输入是正的，激活就是输入本身；否则，它是零。
 
@@ -188,7 +188,7 @@
 
 +   **Leaky ReLU**：Leaky ReLU是ReLU的一种变体，它解决了“dying ReLU”问题。我们不是将函数定义为负*x*的*0*，而是将其定义为*x*的一个小的线性分量：
 
-    ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mi>m</mi><mi>a</mi><mi>x</mi><mo>(</mo><mn>0.01</mn><mi>x</mi><mo>,</mo><mi>x</mi><mo>)</mo></mrow></mrow></mrow></math>](img/301.png)
+    ![](img/301.png)
 
     这允许函数在输入为负时“泄露”一些信息，有助于缓解dying ReLU问题。
 
@@ -202,7 +202,7 @@
 
 +   **Softmax函数**：softmax函数常用于分类器的输出层，其中我们试图将输入分配到几个可能的类别之一。它给出了任何给定输入属于每个可能类别的概率：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>f</mi><mfenced open="(" close=")"><msub><mi>x</mi><mi>i</mi></msub></mfenced><mo>=</mo><mfrac><msup><mi>e</mi><msub><mi>x</mi><mi>i</mi></msub></msup><mrow><msub><mo>∑</mo><mi>j</mi></msub><msup><mi>e</mi><msub><mi>x</mi><mi>j</mi></msub></msup></mrow></mfrac></mrow></mrow></math>](img/302.png)
+![](img/302.png)
 
 分母将概率归一化，因此它们在所有类别中加起来等于1。softmax函数也用于多项式逻辑回归。
 
@@ -266,37 +266,37 @@
 
 +   **前馈神经网络 (FNN)**: 这是最直接的一种神经网络。在这个网络中，信息仅沿一个方向移动，从输入层通过任何隐藏层到输出层。网络中没有循环或环路；它是一条直线，“前馈”路径。
 
-![图6.2 – 前馈神经网络](img/B18949_06_002.jpg)
+![](img/B18949_06_002.jpg)
 
 图6.2 – 前馈神经网络
 
 +   **多层感知器 (MLP)**: MLP是一种前馈网络，除了其输入和输出层外，至少还有一个隐藏层。层之间是完全连接的，这意味着层中的每个神经元都与下一层的每个神经元相连。MLP可以模拟复杂模式，并被广泛用于图像识别、分类、语音识别和其他类型的机器学习任务。MLP是一种前馈网络，具有按顺序排列的神经元层。信息从输入层通过隐藏层流向输出层，方向单一：
 
-![图6.3 – 多层感知器](img/B18949_06_003.jpg)
+![](img/B18949_06_003.jpg)
 
 图6.3 – 多层感知器
 
 +   **CNN**: CNN特别适合涉及空间数据的任务，如图像。其架构包括三种主要类型的层：卷积层、池化层和全连接层。卷积层对输入应用一系列过滤器，这使得网络能够自动和自适应地学习特征的空间层次结构。池化层减少表示的空间大小，从而减少网络中的参数和计算，以控制过拟合并降低后续层的计算成本。全连接层获取池化层的输出，并在输出上进行高级推理。
 
-![图6.4 – 卷积神经网络](img/B18949_06_004.jpg)
+![](img/B18949_06_004.jpg)
 
 图6.4 – 卷积神经网络
 
 +   **循环神经网络 (RNN)**: 与前馈网络不同，RNNs具有形成有向循环的连接。这种架构允许它们使用先前输出的信息作为输入，这使得它们非常适合涉及序列数据的任务，例如时间序列预测或自然语言处理。RNNs的一个重要变体是LSTM网络，它除了标准单元外还使用特殊单元。RNN单元包括一个“记忆细胞”，可以在长时间内保持信息在内存中，这对于需要从数据中的长距离依赖关系学习的任务特别有用，例如手写识别或语音识别。
 
-![图6.5 – 循环神经网络](img/B18949_06_005.jpg)
+![](img/B18949_06_005.jpg)
 
 图6.5 – 循环神经网络
 
 +   **自动编码器 (AE)**: AE 是一种用于学习输入数据有效编码的神经网络。它具有对称架构，并设计用于应用反向传播，将目标值设置为等于输入。自动编码器通常用于特征提取、学习数据的表示和降维。它们还用于生成模型、噪声去除和推荐系统。
 
-![图 6.6 – 自动编码器架构](img/B18949_06_006.jpg)
+![](img/B18949_06_006.jpg)
 
 图 6.6 – 自动编码器架构
 
 +   **生成对抗网络 (GAN)**: GAN 由两部分组成，一个生成器和一个判别器，它们都是神经网络。生成器创建数据实例，旨在与训练数据集的分布相同。判别器的目标是区分来自真实分布的实例和来自生成器的实例。生成器和判别器一起训练，目标是随着训练的进行，生成器产生更好的实例，而判别器则变得更好地区分真实实例和生成实例。
 
-![图 6.7 – 计算机视觉中的生成对抗网络](img/B18949_06_007.jpg)
+![](img/B18949_06_007.jpg)
 
 图 6.7 – 计算机视觉中的生成对抗网络
 
@@ -380,7 +380,7 @@
 
 从数学上讲，多标签学习（MLM）的目标是最大化以下似然函数：
 
-![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>L</mml:mi><mml:mo>=</mml:mo><mml:mrow><mml:munder><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:munder><mml:mrow><mml:mrow><mml:mrow><mml:mi mathvariant="normal">log</mml:mi></mml:mrow><mml:mo>⁡</mml:mo><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>P</mml:mi><mml:mo>(</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>|</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>;</mml:mo><mml:mi>θ</mml:mi><mml:mo>)</mml:mo></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:math>](img/303.png)
+![](img/303.png)
 
 其中 *w*_i 是一个掩码词，*w*_{-i} 是非掩码词，而 *θ* 代表模型参数。
 
@@ -390,9 +390,9 @@
 
 自回归语言模型的目标是最大化
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>L</mi><mo>=</mo><mrow><munder><mo>∑</mo><mi>i</mi></munder><mrow><mi>log</mi><mfenced open="(" close=")"><mrow><mi>P</mi><mo>(</mo><msub><mi>w</mi><mi>i</mi></msub><mo>|</mo><msub><mi>w</mi><mn>1</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>w</mi><mrow><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>;</mo><mi>θ</mi><mo>)</mo></mrow></mfenced></mrow></mrow></mrow></mrow></math>](img/304.png)
+![](img/304.png)
 
-其中 *w_*i 是当前词，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>.</mml:mo><mml:mo>.</mml:mo><mml:mo>.</mml:mo><mml:mo>.</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/305.png) 是前面的词，而 *θ* 代表模型参数。
+其中 *w_*i 是当前词，![](img/305.png) 是前面的词，而 *θ* 代表模型参数。
 
 这些策略使语言模型能够直接从原始文本中获得对语言语法和语义的丰富理解，而无需显式标签。然后，这些模型可以通过各种任务进行微调，例如文本分类、情感分析等，利用从自监督预训练阶段获得的语言理解。
 
@@ -434,7 +434,7 @@ Transformer的关键创新是自注意力机制，它允许模型在生成输出
 
 Transformer由一个编码器和解码器组成，它们都由几个相同的层组成，如图*图6.8*所示。编码器中的每一层包含两个子层：一个自注意力机制和一个位置感知的全连接前馈网络。在每个子层周围都采用了残差连接，然后是层归一化：
 
-![图6.8 – 自注意力机制](img/B18949_06_008.jpg)
+![](img/B18949_06_008.jpg)
 
 图6.8 – 自注意力机制
 
@@ -446,7 +446,7 @@ Transformer由一个编码器和解码器组成，它们都由几个相同的层
 
 每个词的注意力分数计算如下：
 
-![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mrow><mi>A</mi><mi>t</mi><mi>t</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo>)</mo><mo>=</mo><mi>s</mi><mi>o</mi><mi>f</mi><mi>t</mi><mi>m</mi><mi>a</mi><mi>x</mi><mo>(</mo><mi>Q</mi><mi>K</mi><mi mathvariant="normal">﻿</mi><mi mathvariant="normal">T</mi><mo>/</mo><mi>s</mi><mi>q</mi><mi>r</mi><mi>t</mi><mo>(</mo><mi>d</mi><mo>_</mo><mi mathvariant="normal">k</mi><mo>)</mo><mo>)</mo><mi>V</mi></mrow></mrow></mrow></math>](img/306.png)
+![](img/306.png)
 
 其中*d_k*是查询和键的维度，用于缩放点积以防止其变得过大。softmax操作确保注意力分数是归一化的并且总和为1。这些分数代表在产生当前单词的输出时，对每个单词值的赋予的权重。
 
@@ -626,7 +626,7 @@ GPT-3 令人印象深刻的特点之一是其执行少样本学习的能力。�
 
 让我们回顾一下管道的各个部分，如图 *图 6**.9* 所示：
 
-![图 6.9 – 典型探索和模型管道的结构](img/B18949_06_009.jpg)
+![](img/B18949_06_009.jpg)
 
 图 6.9 – 典型探索和模型管道的结构
 

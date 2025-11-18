@@ -150,7 +150,7 @@ TERMINATE
 
 1.  扫描下面的二维码或访问以下链接
 
-![下载此书的免费PDF副本](img/B18949_QR_Free_PDF.jpg)
+![](img/B18949_QR_Free_PDF.jpg)
 
 [https://packt.link/free-ebook/978-1-80461-918-6](https://packt.link/free-ebook/978-1-80461-918-6)
 
