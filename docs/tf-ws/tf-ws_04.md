@@ -566,7 +566,9 @@ eval_metrics = model.evaluate(features, target)
 
     图 4.10：在 TensorBoard 中，模型架构的可视化表示
 
-1.  在 TensorBoard 中可视化模型拟合过程。你应该会得到如下输出：![图 4.11：在 TensorBoard 中，损失随训练和验证拆分的轮次变化的可视化表示    ](img/B16341_04_11.jpg)
+1.  在 TensorBoard 中可视化模型拟合过程。你应该会得到如下输出：
+
+    ![图 4.11：在 TensorBoard 中，损失随训练和验证拆分的轮次变化的可视化表示    ](img/B16341_04_11.jpg)
 
 图 4.11：在 TensorBoard 中，损失随训练和验证拆分的轮次变化的可视化表示
 

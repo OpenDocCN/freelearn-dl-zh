@@ -65,7 +65,7 @@ from tensorflow.keras.regularizers import l1
 l1_reg = l1(l=0.01)
 ```
 
-`l` 参数对应于 ![公式 2](img/B16341_06_04b.png) 超参数。实例化的 L1 正则化可以被添加到 TensorFlow Keras 的任何层中：
+`l` 参数对应于`λ`超参数。实例化的 L1 正则化可以被添加到 TensorFlow Keras 的任何层中：
 
 ```py
 from tensorflow.keras.layers import Dense
