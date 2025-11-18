@@ -50,13 +50,13 @@
 
 向量之间有两种乘法类型：点积 (![](img/9.png)) 和叉积 (![](img/10.png))。点积是我们常在机器学习算法中使用的。
 
-点积是一种可以应用于两个向量（x = [x 1, x 2, … , x n] 和 ![]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/11.png)）的数学运算。它有许多实际应用，其中之一是帮助确定它们的相似性。它被定义为两个向量对应元素的乘积之和。向量 *x* 和 *y* 的点积用符号 *x**![](img/12.png)* *y*（中间有一个点）表示，并定义为以下内容：
+点积是一种可以应用于两个向量（`x = [x 1, x 2, … , x n]`和`y = [y1, y2, ..., yn]`）的数学运算。它有许多实际应用，其中之一是帮助确定它们的相似性。它被定义为两个向量对应元素的乘积之和。向量 *x* 和 *y* 的点积用符号 `x · y`（中间有一个点）表示，并定义为以下内容：
 
 ![](img/13.png)
 
 其中 *n* 代表向量的维度。点积是一个标量量，可以用来测量两个向量之间的角度，以及一个向量在另一个向量上的投影。它还在许多机器学习算法中发挥着至关重要的作用，包括线性回归和神经网络。
 
-点积是交换律的，这意味着向量的顺序不会影响结果。这意味着 *x* *![](img/12.png)* *y = y**![](img/12.png)* *x*. 此外，点积保持了标量乘法的分配律，意味着以下内容：
+点积是交换律的，这意味着向量的顺序会影响结果。这意味着`x · y = y · x`. 此外，点积保持了标量乘法的分配律，意味着以下内容：
 
 ![](img/16.png)
 
@@ -68,25 +68,25 @@
 
 ![](img/18.png)
 
-其中 ![](img/19.png) 是原始向量，而 ![](img/20.png) 表示其范数。需要注意的是，归一化向量会保留其方向，同时将其长度设置为1，从而允许在不同空间中比较向量。
+其中`x`是原始向量，而`||x||` 表示其范数。需要注意的是，归一化向量会保留其方向，同时将其长度设置为1，从而允许在不同空间中比较向量。
 
-两个向量 ![]"><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mspace width="0.25em" /><mo>…</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub><mspace width="0.25em" /></mrow></mfenced></mrow></mrow></math>](img/21.png) 和 ![]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi> </mml:mi><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mi> </mml:mi></mml:mrow></mml:mfenced></mml:math>](img/22.png) 的余弦相似度在数学上表示为归一化到单位长度后两个向量的点积。这可以表示如下：
+两个向量 `y = [y1, y2, ..., yn]` 的余弦相似度在数学上表示为归一化到单位长度后两个向量的点积。这可以表示如下：
 
 ![](img/23.png)
 
-其中 ![](img/24.png) 和 ![](img/25.png) 分别是向量 *x* 和 *y* 的范数。此计算出的 *x* 和 *y* 之间的余弦相似度等同于这两个向量之间角度的余弦值，记为 *θ*。
+其中 `||x||`和 `||y||`分别是向量 *x* 和 *y* 的范数。此计算出的 *x* 和 *y* 之间的余弦相似度等同于这两个向量之间角度的余弦值，记为 *θ*。
 
 点积为 *0* 的向量被认为是正交的，这意味着在存在非 *0* 向量的情况下，它们之间的角度是 90 度。我们可以得出结论，*0* 向量与任何向量都是正交的。如果一组向量中的每一对都是正交的，并且每个向量的范数为 *1*，则该组向量被认为是正交的。这种正交归一集在许多数学情境中非常有价值。例如，当在不同正交坐标系之间转换时，这种方法就会发挥作用，此时新坐标点的计算是基于修改后的方向集。这种方法被称为解析几何中的坐标变换，在线性代数领域得到了广泛的应用。
 
 ## 矩阵和向量的基本运算
 
-**矩阵转置**是指获取矩阵的转置，这个过程涉及到交换其行和列。这意味着矩阵中原本位于 *(i, j)* 位置的元素现在占据了其转置矩阵中 *(j, i)* 位置。因此，原本大小为 *n × m* 的矩阵在转置后变成了 *m × n* 的矩阵。表示矩阵 *X* 转置的符号是 ![](img/26.png)。以下是一个矩阵转置操作的示例：
+**矩阵转置**是指获取矩阵的转置，这个过程涉及到交换其行和列。这意味着矩阵中原本位于 *(i, j)* 位置的元素现在占据了其转置矩阵中 *(j, i)* 位置。因此，原本大小为 *n × m* 的矩阵在转置后变成了 *m × n* 的矩阵。表示矩阵 *X* 转置的符号是`Xᵀ`。以下是一个矩阵转置操作的示例：
 
-![]" separators="|"><mml:mrow><mml:mtable><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1,1</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1,2</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2,1</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2,2</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>3,1</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>3,2</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr></mml:mtable></mml:mrow></mml:mfenced></mml:math>](img/27.png)
+![](img/27.png)
 
-![]" separators="|"><mml:mrow><mml:mtable><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1,1</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2,1</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>3,1</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1,2</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>2,2</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>3,2</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr></mml:mtable></mml:mrow></mml:mfenced></mml:math>](img/28.png)
+![](img/28.png)
 
-关键的是，矩阵 ![](img/29.png) 的转置 ![](img/26.png) 恢复到原始矩阵 *X*。此外，很明显，行向量可以转置为列向量，反之亦然。此外，以下对于矩阵和向量都成立：
+关键的是，矩阵`X`的转置`Xᵀ` 恢复到原始矩阵 *X*。此外，很明显，行向量可以转置为列向量，反之亦然。此外，以下对于矩阵和向量都成立：
 
 ![](img/31.png)
 
@@ -100,9 +100,9 @@
 
 在本节中，我们将介绍不同类型的矩阵定义：
 
-+   **对称矩阵**：对称矩阵是一种方阵，其转置矩阵等于原矩阵。用数学术语来说，如果一个矩阵 *X* 是对称的，那么 ![](img/34.png)。例如，
++   **对称矩阵**：对称矩阵是一种方阵，其转置矩阵等于原矩阵。用数学术语来说，如果一个矩阵 *X* 是对称的，那么`X = Xᵀ`。例如，
 
-    ![]" separators="|"><mml:mrow><mml:mtable><mml:mtr><mml:mtd><mml:mn>1</mml:mn></mml:mtd><mml:mtd><mml:mn>2</mml:mn></mml:mtd><mml:mtd><mml:mn>3</mml:mn></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mn>2</mml:mn></mml:mtd><mml:mtd><mml:mn>4</mml:mn></mml:mtd><mml:mtd><mml:mn>5</mml:mn></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mn>3</mml:mn></mml:mtd><mml:mtd><mml:mn>5</mml:mn></mml:mtd><mml:mtd><mml:mn>7</mml:mn></mml:mtd></mml:mtr></mml:mtable></mml:mrow></mml:mfenced></mml:math>](img/35.png)
+    ![](img/35.png)
 
     是对称的。
 
@@ -136,11 +136,11 @@
 
     对于一个 *2 × 2* 矩阵
 
-    ![]" separators="|"><mml:mrow><mml:mtable><mml:mtr><mml:mtd><mml:mi>a</mml:mi></mml:mtd><mml:mtd><mml:mi>b</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mi>c</mml:mi></mml:mtd><mml:mtd><mml:mi>d</mml:mi></mml:mtd></mml:mtr></mml:mtable></mml:mrow></mml:mfenced></mml:math>](img/38.png)
+    ![](img/38.png)
 
     其行列式可以计算为 *ad - bc*。如果我们考虑一个 *3 ×* *3* 矩阵，
 
-    ![]" separators="|"><mml:mrow><mml:mtable><mml:mtr><mml:mtd><mml:mi>a</mml:mi></mml:mtd><mml:mtd><mml:mi>b</mml:mi></mml:mtd><mml:mtd><mml:mi>c</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mi>d</mml:mi></mml:mtd><mml:mtd><mml:mi>e</mml:mi></mml:mtd><mml:mi>f</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mi>g</mml:mi></mml:mtd><mml:mtd><mml:mi>h</mml:mi></mml:mtd><mml:mi>i</mml:mi></mml:mtd></mml:mtr></mml:mtable></mml:mrow></mml:mfenced></mml:math>](img/39.png)
+    ![](img/39.png)
 
     矩阵的行列式计算如下：
 
@@ -160,7 +160,7 @@
 
 *V*的列包含*d*个特征向量，而*Δ*的对角元素包含相应的特征值。线性变换*A*x*可以通过一系列三个操作来直观理解。最初，*x*乘以![](img/44.png)计算*x*在*V*列关联的非正交基中的坐标。随后，![](img/45.png) x乘以*Δ*使用*Δ*中的因子缩放这些坐标，与特征向量的方向一致。最后，与*V*相乘将坐标恢复到原始基，从而在*d*个特征向量方向上实现各向异性缩放。
 
-对角化矩阵表示涉及沿*d*个线性无关方向的各向异性缩放的变换。当*V*的列是正交归一向量时，![](img/46.png)等于其转置，![](img/47.png)，表示沿相互正交的方向进行缩放。在这种情况下，矩阵*A*总是对角化的，并且当*V*的列是正交归一向量时，表现出对称性，如以下关系所证实。
+对角化矩阵表示涉及沿*d*个线性无关方向的各向异性缩放的变换。当*V*的列是正交归一向量时，`V - 1`等于其转置，`Vᵀ`，表示沿相互正交的方向进行缩放。在这种情况下，矩阵*A*总是对角化的，并且当*V*的列是正交归一向量时，表现出对称性，如以下关系所证实。
 
 ![](img/48.png)
 
@@ -208,9 +208,9 @@
 
 *U* 矩阵的列被称为左奇异向量，而 *V* 矩阵转置 ![](img/47.png) 的行是右奇异向量。具有奇异值的 *S* 矩阵是一个与 *A* 相同大小的对角矩阵。奇异值分解将原始数据分解到一个定义向量是正交归一（既是正交又是单位）的坐标系中。奇异值分解的计算涉及识别矩阵 ![](img/62.png) 和 ![](img/63.png) 的特征值和特征向量。矩阵 *V* 的列由 ![](img/64.png) 的特征向量组成，而矩阵 *U* 的列由 ![](img/65.png) 的特征向量组成。*S* 矩阵中的奇异值是从 ![](img/66.png) 或 ![](img/67.png) 的特征值的平方根得到的，并按降序排列。这些奇异值是实数。如果 *A* 是实矩阵，*U* 和 *V* 也将是实数。
 
-为了说明奇异值分解（SVD）的计算，提供了一个示例。考虑一个 *4 × 2* 矩阵。可以通过计算 ![](img/68.png) 和 ![](img/69.png) 来找到矩阵的特征值，然后确定这些矩阵的特征向量。*U* 的列由 ![](img/68.png) 的特征向量组成，而 *V* 的列由 ![](img/71.png) 的特征向量组成。*S* 矩阵由 ![](img/68.png) 或 ![](img/73.png) 的特征值的平方根组成。在给定的示例中，通过求解特征方程 ![](img/74.png) 来找到特征值，其中 *W* 是矩阵，*I* 是单位矩阵，而 *λ* 是特征值。然后通过求解从特征值方程导出的方程组来找到特征向量。最终通过结合特征向量和奇异值得到最终的矩阵 *U*、*S* 和 ![](img/57.png)。
+为了说明奇异值分解（SVD）的计算，提供了一个示例。考虑一个 *4 × 2* 矩阵。可以通过计算`AAᵀ`和`AᵀA`来找到矩阵的特征值，然后确定这些矩阵的特征向量。*U* 的列由 `AAᵀ`的特征向量组成，而 *V* 的列由`AᵀA`的特征向量组成。*S* 矩阵由 `AAᵀ`或`AᵀA` 的特征值的平方根组成。在给定的示例中，通过求解特征方程`|w - λI| = 0`来找到特征值，其中 *W* 是矩阵，*I* 是单位矩阵，而 *λ* 是特征值。然后通过求解从特征值方程导出的方程组来找到特征向量。最终通过结合特征向量和奇异值得到最终的矩阵 *U*、*S* 和 `Vᵀ`。
 
-应该注意的是，单个值是按降序排列的，其中 ![](img/76.png)
+应该注意的是，单个值是按降序排列的，其中`λ1 > λ2 > ...`
 
 让我们继续讨论机器学习的基本概率。
 
@@ -232,7 +232,7 @@
 
 ![](img/77.png)
 
-其中 ![](img/78.png) 表示 *A* 中的结果。假设实验的所有结果都有相同的机会，并且选择一个结果不会影响后续轮次中选择其他结果（这意味着它们在统计上是独立的），那么
+其中`E1, ..., En`表示 *A* 中的结果。假设实验的所有结果都有相同的机会，并且选择一个结果不会影响后续轮次中选择其他结果（这意味着它们在统计上是独立的），那么
 
 ![](img/79.png)
 
