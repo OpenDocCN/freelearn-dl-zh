@@ -126,7 +126,9 @@ import matplotlib.pyplot as plt
 
     图 0.3：Anaconda 主页
 
-1.  安装程序应立即开始下载。网站会默认根据您的系统配置选择合适的安装程序。如果您更喜欢为其他操作系统（Windows、macOS 或 Linux）以及系统配置（32 位或 64 位）下载 Anaconda，可以点击框底部的`获取附加安装程序`链接（参考*图 0.3*）。页面应该会滚动到一个部分（参考*图 0.4*），允许您根据所需的操作系统和配置选择不同的选项。本书建议您使用最新版本的 Python（3.8 或更高版本）。![图 0.4: 根据操作系统下载 Anaconda    ](img/B16341_0_04.jpg)
+1.  安装程序应立即开始下载。网站会默认根据您的系统配置选择合适的安装程序。如果您更喜欢为其他操作系统（Windows、macOS 或 Linux）以及系统配置（32 位或 64 位）下载 Anaconda，可以点击框底部的`获取附加安装程序`链接（参考*图 0.3*）。页面应该会滚动到一个部分（参考*图 0.4*），允许您根据所需的操作系统和配置选择不同的选项。本书建议您使用最新版本的 Python（3.8 或更高版本）。
+
+    ![图 0.4: 根据操作系统下载 Anaconda    ](img/B16341_0_04.jpg)
 
     图 0.4: 根据操作系统下载 Anaconda
 
@@ -136,13 +138,17 @@ import matplotlib.pyplot as plt
 
     图 0.5: Anaconda 设置
 
-1.  在 Windows 系统中，如果您之前从未在系统中安装过 Python，可以勾选提示将 Anaconda 添加到您的`PATH`的复选框。这样，您就可以在默认命令提示符中运行 Anaconda 特有的命令（如`conda`）。如果您已经安装了 Python，或者之前安装过 Anaconda 的旧版本，建议您不要勾选此选项（您可以通过 Anaconda Prompt 应用来运行 Anaconda 命令）。根据您的系统配置，安装可能需要一些时间。![图 0.6: Anaconda 安装步骤    ](img/B16341_0_06.jpg)
+1.  在 Windows 系统中，如果您之前从未在系统中安装过 Python，可以勾选提示将 Anaconda 添加到您的`PATH`的复选框。这样，您就可以在默认命令提示符中运行 Anaconda 特有的命令（如`conda`）。如果您已经安装了 Python，或者之前安装过 Anaconda 的旧版本，建议您不要勾选此选项（您可以通过 Anaconda Prompt 应用来运行 Anaconda 命令）。根据您的系统配置，安装可能需要一些时间。
+
+    ![图 0.6: Anaconda 安装步骤    ](img/B16341_0_06.jpg)
 
     图 0.6: Anaconda 安装步骤
 
     若要获取更详细的安装说明，您可以点击以下链接查阅官方文档：Linux 版请点击此链接（[`docs.anaconda.com/anaconda/install/linux/`](https://docs.anaconda.com/anaconda/install/linux/)）；macOS 版请点击此链接（[`docs.anaconda.com/anaconda/install/mac-os/`](https://docs.anaconda.com/anaconda/install/mac-os/)）；Windows 版请点击此链接（[`docs.anaconda.com/anaconda/install/windows/`](https://docs.anaconda.com/anaconda/install/windows/)）。
 
-1.  要检查 Anaconda Navigator 是否正确安装，请在您的应用程序中查找`Anaconda Navigator`。查找一个具有以下图标的应用程序。根据您的操作系统，图标的外观可能会有所不同。![图 0.7: Anaconda Navigator 图标    ](img/B16341_0_07.jpg)
+1.  要检查 Anaconda Navigator 是否正确安装，请在您的应用程序中查找`Anaconda Navigator`。查找一个具有以下图标的应用程序。根据您的操作系统，图标的外观可能会有所不同。
+
+    ![图 0.7: Anaconda Navigator 图标    ](img/B16341_0_07.jpg)
 
     图 0.7: Anaconda Navigator 图标
 
@@ -154,7 +160,9 @@ import matplotlib.pyplot as plt
 
     有关如何验证是否已安装 Anaconda Navigator 的详细步骤，请参考以下链接：[`docs.anaconda.com/anaconda/install/verify-install/`](https://docs.anaconda.com/anaconda/install/verify-install/)。
 
-1.  点击图标打开 Anaconda Navigator。首次加载可能需要一些时间，但安装成功后，你应该看到类似的界面：![图 0.9：Anaconda Navigator 界面    ](img/B16341_0_09.jpg)
+1.  点击图标打开 Anaconda Navigator。首次加载可能需要一些时间，但安装成功后，你应该看到类似的界面：
+
+    ![图 0.9：Anaconda Navigator 界面    ](img/B16341_0_09.jpg)
 
 图 0.9：Anaconda Navigator 界面
 
@@ -220,7 +228,9 @@ import matplotlib.pyplot as plt
 
 要设置环境，请按照以下步骤操作：
 
-1.  在 macOS 上，从 Launchpad 打开终端（你可以在此处找到关于终端的更多信息：[`support.apple.com/en-in/guide/terminal/apd5265185d-f365-44cb-8b09-71a064a42125/mac`](https://support.apple.com/en-in/guide/terminal/apd5265185d-f365-44cb-8b09-71a064a42125/mac)）。在 Linux 上，打开你所在发行版的终端应用程序。在 Windows 上，你可以直接搜索应用程序并打开 Anaconda Prompt。你可以通过打开`开始`菜单并搜索`Anaconda Prompt`来做到这一点。![图 0.15：在 Windows 上搜索 Anaconda Prompt    ](img/B16341_0_15.jpg)
+1.  在 macOS 上，从 Launchpad 打开终端（你可以在此处找到关于终端的更多信息：[`support.apple.com/en-in/guide/terminal/apd5265185d-f365-44cb-8b09-71a064a42125/mac`](https://support.apple.com/en-in/guide/terminal/apd5265185d-f365-44cb-8b09-71a064a42125/mac)）。在 Linux 上，打开你所在发行版的终端应用程序。在 Windows 上，你可以直接搜索应用程序并打开 Anaconda Prompt。你可以通过打开`开始`菜单并搜索`Anaconda Prompt`来做到这一点。
+
+    ![图 0.15：在 Windows 上搜索 Anaconda Prompt    ](img/B16341_0_15.jpg)
 
     图 0.15：在 Windows 中搜索 Anaconda Prompt
 
@@ -294,7 +304,9 @@ import matplotlib.pyplot as plt
     conda install pywin32
     ```
 
-1.  启动 Jupyter 笔记本时，选择创建的`tensorflow`内核。![图 0.19：选择 tensorflow 内核](img/B16341_0_19.jpg)
+1.  启动 Jupyter 笔记本时，选择创建的`tensorflow`内核。
+
+    ![图 0.19：选择 tensorflow 内核](img/B16341_0_19.jpg)
 
     ](img/B16341_0_19.jpg)
 

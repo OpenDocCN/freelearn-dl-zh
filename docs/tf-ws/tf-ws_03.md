@@ -24,21 +24,29 @@ Google Colab 解决了设置开发环境的问题，可以创建可以与他人�
 
 TensorBoard 是一个用于辅助机器学习实验的可视化工具包。该平台具有仪表板功能，可以可视化数据科学或机器学习实践者可能需要的多种常见数据类型，例如标量值、图像批次和音频文件。虽然这些可视化可以通过其他绘图库创建，例如 `matplotlib` 或 `ggplot`，但 TensorBoard 将多种可视化集成在一个易于使用的环境中。此外，创建这些可视化所需的唯一操作是在构建、拟合和评估步骤中记录跟踪信息。TensorBoard 有助于以下任务：
 
-+   可视化模型图以查看和理解模型的架构：![图 3.1：TensorBoard 中模型图和函数的可视化表示    ](img/B16341_03_01.jpg)
++   可视化模型图以查看和理解模型的架构：
+
+    ![图 3.1：TensorBoard 中模型图和函数的可视化表示    ](img/B16341_03_01.jpg)
 
 图 3.1：TensorBoard 中模型图和函数的可视化表示
 
 +   查看变量的直方图和分布，并跟踪它们随时间的变化。
 
-+   显示图像、文本和音频数据。例如，以下图显示了来自 Fashion MNIST 数据集的图像（[`www.tensorflow.org/datasets/catalog/fashion_mnist`](https://www.tensorflow.org/datasets/catalog/fashion_mnist)）：![图 3.2：在 TensorBoard 中查看图像    ](img/B16341_03_02.jpg)
++   显示图像、文本和音频数据。例如，以下图显示了来自 Fashion MNIST 数据集的图像（[`www.tensorflow.org/datasets/catalog/fashion_mnist`](https://www.tensorflow.org/datasets/catalog/fashion_mnist)）：
+
+    ![图 3.2：在 TensorBoard 中查看图像    ](img/B16341_03_02.jpg)
 
 图 3.2：在 TensorBoard 中查看图像
 
-+   在模型训练过程中绘制模型评估指标随 epoch 变化的图：![图 3.3：在 TensorBoard 中绘制模型评估指标    ](img/B16341_03_03.jpg)
++   在模型训练过程中绘制模型评估指标随 epoch 变化的图：
+
+    ![图 3.3：在 TensorBoard 中绘制模型评估指标    ](img/B16341_03_03.jpg)
 
 图 3.3：在 TensorBoard 中绘制模型评估指标
 
-+   用于可视化嵌入向量的降维：![图 3.4：在 TensorBoard 中可视化嵌入向量    ](img/B16341_03_04.jpg)
++   用于可视化嵌入向量的降维：
+
+    ![图 3.4：在 TensorBoard 中可视化嵌入向量    ](img/B16341_03_04.jpg)
 
 图 3.4：在 TensorBoard 中可视化嵌入向量
 
@@ -175,7 +183,9 @@ tensorboard --logdir=./logs
 
 1.  将函数应用于这两个张量，并将追踪记录导出到日志目录。
 
-1.  在命令行中启动 TensorBoard，并在网页浏览器中查看图形：![图 3.6：TensorBoard 中张量转换的可视化表示    ](img/B16341_03_06.jpg)
+1.  在命令行中启动 TensorBoard，并在网页浏览器中查看图形：
+
+    ![图 3.6：TensorBoard 中张量转换的可视化表示    ](img/B16341_03_06.jpg)
 
 图 3.6：TensorBoard 中张量转换的可视化表示
 
