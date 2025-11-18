@@ -1153,7 +1153,9 @@ model.add(layers.Activation("relu"))
 
 1.  导入你需要的额外库，包括 NumPy、Matplotlib、Input、Conv2D、Dense、Flatten、Dropout、GlobalMaxPooling2D、Activation、Model、confusion_matrix 和 itertools。
 
-1.  直接从 `tensorflow_datasets` 加载 `CIFAR-100` 数据集，并查看其元数据中的属性，构建训练和测试数据管道：![图 7.37：CIFAR-100 数据集的属性    ](img/B16341_07_37.jpg)
+1.  直接从 `tensorflow_datasets` 加载 `CIFAR-100` 数据集，并查看其元数据中的属性，构建训练和测试数据管道：
+
+    ![图 7.37：CIFAR-100 数据集的属性    ](img/B16341_07_37.jpg)
 
     图 7.37：CIFAR-100 数据集的属性
 
@@ -1161,21 +1163,29 @@ model.add(layers.Activation("relu"))
 
 1.  使用功能性 API 构建模型，使用 `Conv2D` 和 `Flatten` 等层。
 
-1.  使用`model.compile`和`model.fit`编译并训练模型：![图 7.38：模型拟合    ](img/B16341_07_38.jpg)
+1.  使用`model.compile`和`model.fit`编译并训练模型：
+
+    ![图 7.38：模型拟合    ](img/B16341_07_38.jpg)
 
     图 7.38：模型拟合
 
-1.  使用`plt.plot`绘制损失图。记得使用在 `model.fit()` 过程中收集的历史数据：![图 7.39：损失与迭代次数    ](img/B16341_07_39.jpg)
+1.  使用`plt.plot`绘制损失图。记得使用在 `model.fit()` 过程中收集的历史数据：
+
+    ![图 7.39：损失与迭代次数    ](img/B16341_07_39.jpg)
 
     图 7.39：损失与迭代次数
 
-1.  使用`plt.plot`绘制准确率：![图 7.40：准确率与迭代次数    ](img/B16341_07_40.jpg)
+1.  使用`plt.plot`绘制准确率：
+
+    ![图 7.40：准确率与迭代次数    ](img/B16341_07_40.jpg)
 
     图 7.40：准确率与迭代次数
 
 1.  为数据集中的不同类别指定标签。
 
-1.  使用`plt.imshow`显示一个误分类的示例：![图 7.41：错误分类示例    ](img/B16341_07_41.jpg)
+1.  使用`plt.imshow`显示一个误分类的示例：
+
+    ![图 7.41：错误分类示例    ](img/B16341_07_41.jpg)
 
 图 7.41：错误分类示例
 
