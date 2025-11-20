@@ -136,7 +136,9 @@ from langchain.text_splitter import (
 
 1.  扫描二维码或访问以下链接
 
-![下载本书的免费 PDF 副本![img/B21443_QR_Free_PDF.jpg](img/B21443_QR_Free_PDF.jpg)
+![下载本书的免费 PDF 副本
+
+![img/B21443_QR_Free_PDF.jpg](img/B21443_QR_Free_PDF.jpg)
 
 [`packt.link/free-ebook/978-1-83508-478-6`](https://packt.link/free-ebook/978-1-83508-478-6)
 
