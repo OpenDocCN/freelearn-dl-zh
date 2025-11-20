@@ -58,17 +58,17 @@ Transformers模型分析序列。它们起初用于自然语言处理，但已�
 
 我们可以将这种沟通链表示为：
 
-*minI(input) ![](img/B17948_16_22.png) maxR(output)*
+`minI(input) -> maxR(output)`
 
 我们将用“提示”取代“输入”，以便转换器表明我们的输入会影响模型的反应。输出是“响应”。与转换器的对话，*d(T)*，可以表示为：
 
-*d(T)=minI(prompt)* *![](img/B17948_16_22.png) maxR(response)*
+`d(T)=minI(prompt) -> maxR(response)`
 
-当*minI(prompt)![](img/B17948_16_22.png)*`1`时，*maxR*(response)的概率也*![](img/B17948_16_22.png)*`1`。
+当`minI(prompt) -> 1`时，`maxR(response)`的概率也`-> 1`。
 
-当*minI(prompt)* *![](img/B17948_16_22.png)*`0`时，*maxR*(response)的概率也*![](img/B17948_16_22.png)*`0`。
+当`minI(prompt) -> 0`时，`maxR(response)`的概率也`-> 0`。
 
-*d(T)*的质量取决于我们能够定义*minI(prompt)*的程度。
+`d(T)`的质量取决于我们能够定义`minI(prompt)`的程度。
 
 如果你的提示倾向于达到`1`，那么它将产生倾向于`1`的概率。
 
@@ -118,7 +118,7 @@ Transformers模型分析序列。它们起初用于自然语言处理，但已�
 
 图 16.3：当提示混淆时 GPT-3 的错误响应
 
-因此我们证实了当*minI(prompt)**![](img/B17948_16_22.png)*`0`时，*maxR(response)![](img/B17948_16_22.png)*`0`的概率。
+因此我们证实了当`minI(prompt) -> 0`时，`maxR(response) -> 0`的概率。
 
 如果我们加入省略号，人类的对话会变得更加难以分析。
 
@@ -158,7 +158,7 @@ OpenAI GPT-3 检测到了`drinking`这个词，并成功地将这个动词与问
 
 提示太模糊了，导致了一条不足的回答，我们可以总结为：
 
-*d(T)![](img/B17948_16_22.png)0，因为当* *minI(prompt)![](img/B17948_16_22.png)*`0`时，*maxR(response)![](img/B17948_16_22.png)*`0`的概率
+`d(T) -> 0`，因为当`*minI(prompt) ->  0`时，`maxR(response) -> 0`的概率
 
 当人类进行交流时，他们会将文化、过去的关系、视觉情境和其他*不可见因素带入对话*。对于第三方来说，这些不可见因素可能包括：
 
@@ -226,11 +226,11 @@ GPT-3 自然地理解了汤姆所说的“喝”与这种程度的英语和良�
 
 请记住，与转换器的 *对话 d(T)* 和响应 *maxR(response)*，取决于您的输入的质量 *minI(prompt)*，如本节开始时所定义的：
 
-*d(T)=minI(prompt) ![](img/B17948_16_22.png) maxR(response)*
+`d(T)=minI(prompt) -> maxR(response)`
 
-当 *minI(prompt)![](img/B17948_16_22.png)*`1` 时，*maxR(response)![](img/B17948_16_22.png)*`1` 的概率。
+当`minI(prompt)-> 1` 时，`maxR(response) -> 1` 的概率。
 
-当 *minI(prompt)![](img/B17948_16_22.png)*`0` 时，*maxR(response)![](img/B17948_16_22.png)*`0` 的概率。
+当`minI(prompt) -> 0` 时，`maxR(response) -> 0` 的概率。
 
 练习提示工程，并以时间来衡量您的进步。提示工程是一项将您带入下一个 AI 水平的新技能。
 

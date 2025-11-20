@@ -503,17 +503,17 @@ candidate_softmax=[0.7, 0.1, 0.1,0.1]
 candidate_one_hot=[1,0,0,0] 
 ```
 
-这将是一个残酷的方法。 标签平滑可以通过引入 epsilon = ![](img/B17948_06_001.png) 使系统更开放。
+这将是一个残酷的方法。 标签平滑可以通过引入`epsilon`使系统更开放。
 
 `candidate_softmax`的元素数量为*k=4*。
 
-对于标签平滑，我们可以将 ![](img/B17948_06_001.png) 设置为 `0.25`，例如。
+对于标签平滑，我们可以将`epsilon` 设置为 `0.25`，例如。
 
 标签平滑的几种方法之一可以是一个直观的函数。
 
-首先，将 `candidate_one_hot` 的值减小 ![](img/B17948_06_003.png)。
+首先，将 `candidate_one_hot` 的值减小`1 - epsilon`。
 
-通过 `0` 值增加 ![](img/B17948_06_004.png)。
+通过 `0` 值增加`0 + epsilon / (k - 1)`。
 
 如果我们应用这种方法，我们将得到以下结果：
 
@@ -525,7 +525,7 @@ BLEU 的一个变体是 chencherry 平滑。
 
 ### Chencherry 平滑
 
-*Chen* 和 *Cherry*（2014）介绍了一种通过将 ![](img/B17948_06_001.png) 添加到否则为 `0` 的值来平滑候选评估的有趣方法。有几种 chencherry（Boxing Chen + Colin Cherry）方法：[`www.nltk.org/api/nltk.translate.html`](https://www.nltk.org/api/nltk.translate.html)。
+*Chen* 和 *Cherry*（2014）介绍了一种通过将`epsilon` 添加到否则为 `0` 的值来平滑候选评估的有趣方法。有几种 chencherry（Boxing Chen + Colin Cherry）方法：[`www.nltk.org/api/nltk.translate.html`](https://www.nltk.org/api/nltk.translate.html)。
 
 让我们首先评估一个带有平滑的法语 - 英语示例：
 
