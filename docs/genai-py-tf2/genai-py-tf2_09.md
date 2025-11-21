@@ -186,7 +186,7 @@ skip-gram 模型的逐步工作可以解释如下：
 
 在 skip-gram 的情况下，对于任何给定的中心词，我们有多个输入-输出训练对。该模型将所有上下文术语都视为同等重要，无论它们与上下文窗口中的中心词之间的距离如何。这使我们能够使用交叉熵作为成本函数，并假设具有强条件独立性。
 
-为了改善结果并加快训练过程，作者们引入了一些简单但有效的技巧。*负采样、噪声对比估计`$1`分层 softmax*等概念是一些被利用的技术。要详细了解 CBOW 和 skip-gram，请读者阅读 Mikolov 等人引用的文献¹，作者在其中详细解释了每个步骤。
+为了改善结果并加快训练过程，作者们引入了一些简单但有效的技巧。*负采样、噪声对比估计*和*分层 softmax*等概念是一些被利用的技术。要详细了解 CBOW 和 skip-gram，请读者阅读 Mikolov 等人引用的文献¹，作者在其中详细解释了每个步骤。
 
 ```py
 nltk to clean up this dataset and prepare it for the next steps. The text cleanup process is limited to lowercasing, removing special characters, and stop word removal only:

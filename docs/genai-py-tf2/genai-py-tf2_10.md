@@ -393,7 +393,7 @@ GPT-3 比以往任何语言模型都要庞大（大约 10 倍），并且将 tra
 
 # 摘要
 
-在本章中，我们介绍了近期 NLP 模型中一些主要的概念，如*attention*机制、*contextual embeddings`$1`self-attention*。然后我们使用这个基础来学习*transformer*架构及其内部组件。我们简要地讨论了 BERT 及其系列架构。
+在本章中，我们介绍了近期 NLP 模型中一些主要的概念，如*attention*机制、*contextual embeddings*和*self-attention*。然后我们使用这个基础来学习*transformer*架构及其内部组件。我们简要地讨论了 BERT 及其系列架构。
 
 在本章的下一节中，我们对 OpenAI 的基于 transformer 的语言模型进行了讨论。我们讨论了 GPT 和 GPT-2 的架构和数据集相关的选择。我们还使用了 Hugging Face 的`transformer`包来开发我们自己的基于 GPT-2 的文本生成流水线。最后，我们对最新、最尖端的语言模型 GPT-3 进行了简要讨论。我们讨论了开发这样一个巨大模型的各种动机以及它超越传统测试基准列表的功能清单。
 
