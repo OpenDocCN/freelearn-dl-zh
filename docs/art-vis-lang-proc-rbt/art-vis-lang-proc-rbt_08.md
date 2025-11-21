@@ -222,7 +222,9 @@
 
 1.  现在让我们尝试使用前面提到的步骤做一些其他的示例。你可以在`Dataset/obj-det/`文件夹中找到图像，输出结果将如图 8.3 所示：
 
-![](img/Image52926.jpg)![图 8.3：YOLO 检测示例](img/Image52947.jpg)
+![](img/Image52926.jpg)
+
+![图 8.3：YOLO 检测示例](img/Image52947.jpg)
 
 ###### 图 8.3：YOLO 检测示例
 

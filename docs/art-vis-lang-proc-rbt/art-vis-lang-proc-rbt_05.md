@@ -176,7 +176,9 @@ model.add(Dropout(0.2))
 
     每次使用新合作者时，将驱动器挂载到目标文件夹。
 
-1.  一旦你首次挂载了你的驱动器，你将需要输入 Google 给出的授权代码，点击给出的 URL 并按下键盘上的**Enter**键：![图 5.8：在 Google Collab 上挂载](img/C13550_05_08.jpg)
+1.  一旦你首次挂载了你的驱动器，你将需要输入 Google 给出的授权代码，点击给出的 URL 并按下键盘上的**Enter**键：
+
+    ![图 5.8：在 Google Collab 上挂载](img/C13550_05_08.jpg)
 
     ###### 图 5.8：在 Google Collab 上挂载
 
@@ -827,7 +829,7 @@ model.fit_generator(datagen.flow(x_train, y_train,
 
     您可以使用以下代码来评估任何模型，但首先需要加载模型。如果您要从`.h5`文件加载整个模型，则必须使用以下代码：
 
-    `from keras.models import load_model` `model = load_model('model.h5')`
+    `from keras.models import load_model``model = load_model('model.h5')`
 
 1.  尝试用未见过的数据测试模型。在 `Dataset/testing/` 文件夹中，您将找到五张花卉图像，可以加载它们进行测试。请记住，类别的顺序如下：
 
@@ -1076,7 +1078,9 @@ from keras.applications.resnet50 import preprocess_input
 
     我们将批次大小设置为 4，因为我们只有少量数据，并且不希望将所有样本一次性传递给神经网络，而是分批处理。由于数据不足，并且使用 Adadelta 优化器时学习率较高，所以我们没有使用 EarlyStopping 回调函数，因为损失值会上下波动。
 
-1.  检查结果：![图 5.22：显示期望的输出](img/C13550_05_20.jpg)
+1.  检查结果：
+
+    ![图 5.22：显示期望的输出](img/C13550_05_20.jpg)
 
     ###### 图 5.20：显示期望的输出
 

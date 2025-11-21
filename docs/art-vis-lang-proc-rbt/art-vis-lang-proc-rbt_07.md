@@ -348,7 +348,9 @@ GloVe 结合了前两种方法，以实现快速训练。它能够扩展到庞�
     drive.mount('/content/drive')
     ```
 
-1.  一旦您第一次挂载了您的驱动器，您需要通过点击 Google 提供的 URL 并按下键盘上的**Enter**键来输入授权码：![图 7.9：显示 Google Colab 授权步骤的图片](img/C13550_07_09.jpg)
+1.  一旦您第一次挂载了您的驱动器，您需要通过点击 Google 提供的 URL 并按下键盘上的**Enter**键来输入授权码：
+
+    ![图 7.9：显示 Google Colab 授权步骤的图片](img/C13550_07_09.jpg)
 
     ###### 图 7.9：显示 Google Colab 授权步骤的图片
 
@@ -646,7 +648,9 @@ GloVe 结合了前两种方法，以实现快速训练。它能够扩展到庞�
     drive.mount('/content/drive')
     ```
 
-1.  一旦你首次挂载了驱动，你需要点击 Google 提供的 URL 并按下键盘上的 **Enter** 键以输入授权码：![图 7.23：Google Colab 授权步骤](img/C13550_07_23.jpg)
+1.  一旦你首次挂载了驱动，你需要点击 Google 提供的 URL 并按下键盘上的 **Enter** 键以输入授权码：
+
+    ![图 7.23：Google Colab 授权步骤](img/C13550_07_23.jpg)
 
     ###### 图 7.23：Google Colab 授权步骤
 

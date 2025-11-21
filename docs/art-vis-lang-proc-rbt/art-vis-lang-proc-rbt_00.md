@@ -111,7 +111,9 @@ X = vectorizer.fit_transform(corpus)
 
 1.  将整个 GitHub 上传到你的 Google Drive 账户中，这样你就可以使用存储在仓库中的文件。确保你先使用 Git LFS 加载了所有文件。
 
-1.  前往你想打开新 Google Colab Notebook 的文件夹，点击“新建”>“更多”>“Colaboratory”。现在，你有一个已打开并保存在相应文件夹中的 Google Colab Notebook，你可以开始使用 Python、Keras 或任何已安装的库。![](img/C13550_Preface_01.jpg)
+1.  前往你想打开新 Google Colab Notebook 的文件夹，点击“新建”>“更多”>“Colaboratory”。现在，你有一个已打开并保存在相应文件夹中的 Google Colab Notebook，你可以开始使用 Python、Keras 或任何已安装的库。
+
+    ![](img/C13550_Preface_01.jpg)
 
 1.  如果你想安装特定的库，你可以使用“pip”包安装或其他命令行安装，并在开头加上“！”。例如，“!pip install sklearn”将安装 scikit-learn。
 
@@ -124,7 +126,9 @@ X = vectorizer.fit_transform(corpus)
 
 1.  然后，打开输出中出现的链接，并使用你创建 Google Colab Notebook 时所用的 Google 账户登录。
 
-1.  现在，你可以使用`ls`列出当前目录中的文件，并使用`cd`导航到特定的文件夹，以便找到上传的文件位置。![](img/C13550_Preface_02.jpg)
+1.  现在，你可以使用`ls`列出当前目录中的文件，并使用`cd`导航到特定的文件夹，以便找到上传的文件位置。
+
+    ![](img/C13550_Preface_02.jpg)
 
 1.  现在，Google Colab Notebook 可以像在该文件夹中打开的 Jupyter notebook 一样加载任何文件并执行任何任务。
 
