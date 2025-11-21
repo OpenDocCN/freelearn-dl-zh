@@ -88,7 +88,7 @@
         padding_side="left")
     ```
 
-1.  在这一步，我们初始化一个生成配置。这个生成配置被传递给模型，指导它如何生成文本。我们将**num_beams**参数设置为**4**。随着光束数量的增加，生成的文本将更加连贯和语法正确。然而，光束数量越多，解码（或文本生成）的时间也会更长。我们将**early_stopping**参数设置为**True**，因为一旦光束数量达到**num_beams**参数中指定的值，下一个单词的生成就会结束。**eos_token_id**（例如，GPT模型的**50256**）和**pad_token_id**（例如，GPT模型的**0**）默认使用模型的标记ID。这些标记ID用于指定模型将使用的句子结束和填充标记。**max_new_tokens**参数指定将生成的最大标记数。还有更多参数可以用于生成文本，我们鼓励您尝试调整之前指定的参数值，以及任何其他用于自定义文本生成的附加参数。有关更多信息，请参阅[https://github.com/huggingface/transformers/blob/main/src/transformers/generation/configuration_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/generation/configuration_utils.py)上的转换器文档中的**GenerationConfig**类：
+1.  在这一步，我们初始化一个生成配置。这个生成配置被传递给模型，指导它如何生成文本。我们将**num_beams**参数设置为*`4`*。随着光束数量的增加，生成的文本将更加连贯和语法正确。然而，光束数量越多，解码（或文本生成）的时间也会更长。我们将**early_stopping**参数设置为**True**，因为一旦光束数量达到**num_beams**参数中指定的值，下一个单词的生成就会结束。**eos_token_id**（例如，GPT模型的**50256**）和**pad_token_id**（例如，GPT模型的*`0`*）默认使用模型的标记ID。这些标记ID用于指定模型将使用的句子结束和填充标记。**max_new_tokens**参数指定将生成的最大标记数。还有更多参数可以用于生成文本，我们鼓励您尝试调整之前指定的参数值，以及任何其他用于自定义文本生成的附加参数。有关更多信息，请参阅[https://github.com/huggingface/transformers/blob/main/src/transformers/generation/configuration_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/generation/configuration_utils.py)上的转换器文档中的**GenerationConfig**类：
 
     ```py
     generation_config = GenerationConfig(
@@ -998,7 +998,7 @@ print(hash_object.hexdigest(64))
 
 So far, we have used locally hosted models for generation. Let us see how the ChatGPT model from OpenAI fares in this regard. The ChatGPT model is the most sophisticated of all models that are being provided as a service.
 
-We only need to change what we do in *steps 3*, *4*, and *5*. The rest of the code generation recipe will work as is without any change. The change for *step 3* is a simple three-step process:
+We only need to change what we do in *steps 3*, `4`, and `5`. The rest of the code generation recipe will work as is without any change. The change for *step 3* is a simple three-step process:
 
 1.  Add the necessary import statement to your list of imports:
 
@@ -1358,7 +1358,7 @@ The steps for the recipe are as follows:
 
     ```py
 
-2.  In this step, we read the API keys for OpenAI and SerpApi. We initialize the LLM using the OpenAI constructor call. We pass in the API key along with the temperature value of **0**. Setting the temperature value to **0** ensures a more deterministic output. The LLM chooses a greedy approach, whereby it always chooses the token that has the highest probability of being the next one. We did not specify a model explicitly as part of this call. We recommend referring to the models listed at [https://platform.openai.com/docs/api-reference/models](https://platform.openai.com/docs/api-reference/models) and choosing one. The default model is set to **gpt-3.5-turbo-instruct** if a model is not specified explicitly:
+2.  In this step, we read the API keys for OpenAI and SerpApi. We initialize the LLM using the OpenAI constructor call. We pass in the API key along with the temperature value of *`0`*. Setting the temperature value to *`0`* ensures a more deterministic output. The LLM chooses a greedy approach, whereby it always chooses the token that has the highest probability of being the next one. We did not specify a model explicitly as part of this call. We recommend referring to the models listed at [https://platform.openai.com/docs/api-reference/models](https://platform.openai.com/docs/api-reference/models) and choosing one. The default model is set to **gpt-3.5-turbo-instruct** if a model is not specified explicitly:
 
     ```
 

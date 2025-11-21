@@ -371,7 +371,7 @@ x_test = np.expand_dims(x_test, axis=3)
 ```py
 # building the generator convolutional network
 inpt_noise = Input(shape=(ltnt_dim,))
-gl1 = Dense(7*7*256, activation='relu')(inpt_noise)
+gl1 = Dense(7`7`256, activation='relu')(inpt_noise)
 gl2 = BatchNormalization()(gl1)
 gl3 = Reshape((7, 7, 256))(gl2)
 gl4 = Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', 

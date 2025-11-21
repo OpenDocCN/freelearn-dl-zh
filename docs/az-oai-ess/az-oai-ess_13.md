@@ -616,7 +616,7 @@ ToT 框架的好处包括以下几点：
 
 1.  应用程序调用调度器（例如，Semantic Kernel、Azure Machine Learning prompt flow 或 LangChain），该调度器向 Azure AI Search 发出搜索查询。
 
-1.  调度器检索前*N*个结果，并将其与原始查询一起集成到提示中。
+1.  调度器检索前`N`个结果，并将其与原始查询一起集成到提示中。
 
 1.  提示被发送到语言模型，响应随后返回给应用程序，供用户阅读。
 

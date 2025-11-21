@@ -181,15 +181,15 @@ random_actions_game(10)
 
 Q-learning 是一种基于策略的强化学习技术，Q-learning 的目标是学习一种最优策略，帮助智能体在环境的不同状态下决定采取什么行动。
 
-要实现 Q-learning，你需要了解什么是 *Q* 函数。
+要实现 Q-learning，你需要了解什么是 `Q` 函数。
 
-一个 *Q* 函数接受一个状态和相应的动作作为输入，并返回总期望奖励。它可以表示为 *Q(s, a)*。当处于 *s* 状态时，最优的 *Q* 函数会告诉智能体选择某个动作 *a* 的优劣。
+一个 `Q` 函数接受一个状态和相应的动作作为输入，并返回总期望奖励。它可以表示为 *Q(s, a)*。当处于 `s` 状态时，最优的 `Q` 函数会告诉智能体选择某个动作 `a` 的优劣。
 
-对于单一状态 *s* 和动作 *a*，*Q(s, a)* 可以通过以下公式表示为下一个状态 *s'* 的 *Q* 值：
+对于单一状态 `s` 和动作 `a`，*Q(s, a)* 可以通过以下公式表示为下一个状态 *s'* 的 `Q` 值：
 
 ![](img/f8058bff-e7d2-4eb6-b543-551e2a944f5d.png)
 
-这就是著名的贝尔曼方程。它告诉我们，最大奖励是智能体进入当前状态 *s* 所得到的奖励和下一个状态 *s'* 的折扣后最大未来奖励之和。
+这就是著名的贝尔曼方程。它告诉我们，最大奖励是智能体进入当前状态 `s` 所得到的奖励和下一个状态 *s'* 的折扣后最大未来奖励之和。
 
 以下是《强化学习：导论》一书中 Q-learning 算法的伪代码，作者是 Richard S. Sutton 和 Andrew G. Barto：
 
@@ -370,7 +370,7 @@ def performance_plot(scores, target_score):
 
 # 定义 replay
 
-以下`replay`函数会在游戏结束时，在`train`函数（在下一节定义）内部被调用，用于训练代理。在这个函数中，我们使用*Q*函数贝尔曼方程来定义每个状态的目标：
+以下`replay`函数会在游戏结束时，在`train`函数（在下一节定义）内部被调用，用于训练代理。在这个函数中，我们使用`Q`函数贝尔曼方程来定义每个状态的目标：
 
 ```py
 def replay(epsilon, gamma, epsilon_min, epsilon_decay, model, training_data, batch_size=64):
@@ -409,7 +409,7 @@ action = 0
 
 对于`state`，我们知道需要采取的`action`以进入`new_state`，以及为此所获得的`reward`。我们还有`done`，它表示进入的`new_state`是否符合游戏规则。
 
-只要进入的新状态，*s'*，符合游戏规则，即`done`为`False`，根据贝尔曼方程，进入新状态*s'*通过采取`action`从状态*s*过渡的总`reward`可以在 Python 中写为如下：
+只要进入的新状态，*s'*，符合游戏规则，即`done`为`False`，根据贝尔曼方程，进入新状态*s'*通过采取`action`从状态`s`过渡的总`reward`可以在 Python 中写为如下：
 
 ```py
 target = reward + gamma * np.amax(model.predict(new_state)[0])
@@ -431,7 +431,7 @@ target = reward + gamma * np.amax(model.predict(new_state)[0])
 
 这个过程将对训练数据批次中的所有数据点重复执行。此外，每次调用回放函数时，epsilon 的值会根据衰减因子减少。
 
-`random.sample` 从一个集合中随机抽取 *n* 个元素。`np.amax` 返回数组中的最大值。
+`random.sample` 从一个集合中随机抽取 `n` 个元素。`np.amax` 返回数组中的最大值。
 
 # 训练循环
 
@@ -699,7 +699,7 @@ SARSA 学习方法和 Q-learning 一样，都是基于策略的强化学习技�
 
 SARSA 和 Q-learning 非常相似，除了 Q-learning 是一个脱离策略的算法，而 SARSA 是一个基于策略的算法。SARSA 学习的 Q 值不是像 Q-learning 那样基于贪心策略，而是基于当前策略下执行的动作。
 
-对于单个状态，*s*，和一个动作，*a*，*Q(s, a)* 可以通过以下公式表示为下一个状态，*s'*，和动作，*a'*，的 Q 值：
+对于单个状态，`s`，和一个动作，`a`，*Q(s, a)* 可以通过以下公式表示为下一个状态，*s'*，和动作，*a'*，的 Q 值：
 
 ![](img/b69b5557-639d-477c-b48a-2bb34d6d41ce.png)
 

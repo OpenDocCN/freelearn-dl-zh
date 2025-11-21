@@ -802,7 +802,7 @@ while (true) {
 
 ## 还有更多...
 
-`CompiledSpellChecker` 允许输出 *n*-best 结果；这允许对文本进行多种可能的解析。在像研究搜索引擎这样的高覆盖率/召回率情况下，可能需要允许应用多种分词。此外，可以通过直接扩展 `WeightedEditDistance` 类来调整编辑成本。
+`CompiledSpellChecker` 允许输出 `n`-best 结果；这允许对文本进行多种可能的解析。在像研究搜索引擎这样的高覆盖率/召回率情况下，可能需要允许应用多种分词。此外，可以通过直接扩展 `WeightedEditDistance` 类来调整编辑成本。
 
 ## 参见
 

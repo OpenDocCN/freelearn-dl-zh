@@ -345,7 +345,7 @@ TensorFlow 是如何工作的，其潜在范式是什么？
 
 +   图节点是具有任意数量输入和输出的操作。
 
-+   我们节点之间的图边将是在这些操作之间流动的张量，关于张量的最佳思考方式实际上是作为*n*维数组。
++   我们节点之间的图边将是在这些操作之间流动的张量，关于张量的最佳思考方式实际上是作为`n`维数组。
 
 使用这样的流图作为深度学习框架的主干的优势在于，它允许您以小而简单的操作构建复杂的模型。此外，当我们在后面讨论梯度计算时，这将使得梯度计算变得非常简单：
 
@@ -361,23 +361,23 @@ TensorFlow 是如何工作的，其潜在范式是什么？
 
 ![](img/e7423ec6-bcff-4926-aa39-1dfaeef0ea5f.png)
 
-因此，我们有一些隐藏层，我们试图计算，如某个参数矩阵*W*时间一些输入*x*加上偏差项*b*的 ReLU 激活。ReLU 函数取输出的最大值和零之间的较大者。
+因此，我们有一些隐藏层，我们试图计算，如某个参数矩阵`W`时间一些输入`x`加上偏差项`b`的 ReLU 激活。ReLU 函数取输出的最大值和零之间的较大者。
 
 下图显示了 TensorFlow 中图形的可能样子：
 
 ![](img/efac83f1-6997-4383-a90b-64d40eb1aabf.png)
 
-在这个图中，我们为 *b* 和 *W* 定义了变量，并且我们为 *x* 定义了一个占位符；我们还为图中的每个操作定义了节点。接下来，我们将详细了解这些节点类型。
+在这个图中，我们为 `b` 和 `W` 定义了变量，并且我们为 `x` 定义了一个占位符；我们还为图中的每个操作定义了节点。接下来，我们将详细了解这些节点类型。
 
 # 变量
 
-变量将是有状态的节点，它们输出当前的值。在这个例子中，就是 *b* 和 *W*。我们所说的变量是有状态的意思是，它们在多次执行过程中保持其当前值，而且很容易将保存的值恢复到变量中：
+变量将是有状态的节点，它们输出当前的值。在这个例子中，就是 `b` 和 `W`。我们所说的变量是有状态的意思是，它们在多次执行过程中保持其当前值，而且很容易将保存的值恢复到变量中：
 
 ![](img/40b4497a-5fd5-48c1-8603-d839b777bdfb.png)
 
 此外，变量还有其他有用的功能；例如，它们可以在训练过程中及训练后保存到磁盘，这使得我们之前提到的功能得以实现，即来自不同公司和团队的人们可以保存、存储并将他们的模型参数传输给其他人。而且，变量是你希望调整以最小化损失的东西，我们很快就会看到如何做到这一点。
 
-重要的是要知道，图中的变量，如 *b* 和 *W*，仍然是操作，因为根据定义，图中的所有节点都是操作。因此，当你在运行时评估这些持有 *b* 和 *W* 值的操作时，你将获得这些变量的值。
+重要的是要知道，图中的变量，如 `b` 和 `W`，仍然是操作，因为根据定义，图中的所有节点都是操作。因此，当你在运行时评估这些持有 `b` 和 `W` 值的操作时，你将获得这些变量的值。
 
 我们可以使用 TensorFlow 的 `Variable()` 函数来定义一个变量并给它一个初始值：
 
@@ -415,9 +415,9 @@ result = tf.matmul(ph_var1,ph_var2)
 
 我们执行以下步骤来生成上面的图：
 
-1.  创建权重 *W* 和 *b*，包括初始化。我们可以通过从均匀分布中采样来初始化权重矩阵 *W*，即 *W ~ Uniform(-1,1)*，并将 *b* 初始化为 0。
+1.  创建权重 `W` 和 `b`，包括初始化。我们可以通过从均匀分布中采样来初始化权重矩阵 `W`，即 *W ~ Uniform(-1,1)*，并将 `b` 初始化为 0。
 
-1.  创建输入占位符 *x*，它将具有 *m * 784* 的输入矩阵形状。
+1.  创建输入占位符 `x`，它将具有 *m * 784* 的输入矩阵形状。
 
 1.  构建流图。
 
@@ -439,7 +439,7 @@ x = tf.placeholder(tf.float32, (100, 784))
 # express h as Tensorflow ReLU of the TensorFlow matrix
 #Multiplication of x and W and we add b
 h = tf.nn.relu(tf.matmul(x,W) + b )
-h and see its value until we run this graph. So, this code snippet is just for building a backbone for our model. If you try to print the value of *W* or *b* in the preceding code, you should get the following output in Python:
+h and see its value until we run this graph. So, this code snippet is just for building a backbone for our model. If you try to print the value of `W` or `b` in the preceding code, you should get the following output in Python:
 ```
 
 ![](img/1a80ee6c-f094-4944-b153-0d6cdcb98b7d.png)
@@ -487,7 +487,7 @@ sess.run(h, {x: np.random.random((100,784))})
 ![](img/7faee772-f55c-41db-b38f-9768eb147d71.png)
 
 ```py
-lazy evaluation. It means that the evaluation of your graph only ever happens at runtime, and runtime in TensorFlow means the session. So, calling this function, global_variables_initializer(), will actually initialize anything called variable in your graph, such as *W* and *b* in our case.
+lazy evaluation. It means that the evaluation of your graph only ever happens at runtime, and runtime in TensorFlow means the session. So, calling this function, global_variables_initializer(), will actually initialize anything called variable in your graph, such as `W` and `b` in our case.
 ```
 
 我们还可以在一个 with 块中使用会话变量，以确保在执行图后会话会被关闭：

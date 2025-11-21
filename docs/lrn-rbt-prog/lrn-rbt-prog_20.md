@@ -50,7 +50,7 @@ Mycroft完全依赖于能够访问互联网。对于机器人和控制器来说�
 
 # 菜单模式 - 选择你的机器人行为
 
-我们的书介绍了一系列机器人行为，并邀请你创建更多。我们讨论了SSH启动机器人程序可能会很繁琐——甚至只是记住你有的选项或按下*Ctrl* + *C*组合来停止都可能会让人沮丧。
+我们的书介绍了一系列机器人行为，并邀请你创建更多。我们讨论了SSH启动机器人程序可能会很繁琐——甚至只是记住你有的选项或按下*Ctrl* + `C`组合来停止都可能会让人沮丧。
 
 在本节中，我们将创建一个菜单系统来选择它们。一种方便且适合手机的方式是将它提供给手机的浏览器，因此我们采用了这种方法来处理我们的机器人。我们还将使用桌面浏览器来测试此代码。
 
@@ -292,7 +292,7 @@ pi@myrobot:~ $ python3 control_server.py
 
 图 17.3 – 浏览器中的我的机器人菜单
 
-*图 17.3* 现在显示了渲染的列表。我们现在看到所有菜单项而不是模板占位符。您应该能够点击一个模式并看到机器人启动该行为。点击 `robot_modes.py` 代码将发送相当于 *Ctrl* + *C* 动作到运行的行为脚本，使其停止。
+*图 17.3* 现在显示了渲染的列表。我们现在看到所有菜单项而不是模板占位符。您应该能够点击一个模式并看到机器人启动该行为。点击 `robot_modes.py` 代码将发送相当于 *Ctrl* + `C` 动作到运行的行为脚本，使其停止。
 
 当您点击一个行为或停止时，它会在消息区域显示输出，如图下所示截图：
 
@@ -318,7 +318,7 @@ KeyboardInterrupt
 192.168.1.149 - - [17/Oct/2020 22:43:41] "POST /stop HTTP/1.1" 200 -
 ```
 
-您需要在 Pi 上按下 *Ctrl* + *C* 来退出此菜单服务器应用。
+您需要在 Pi 上按下 *Ctrl* + `C` 来退出此菜单服务器应用。
 
 重要提示
 
@@ -592,7 +592,7 @@ KeyboardInterrupt
 1.  我们现在从第一个滑块开始构建主体；我们使用`svg`标签来定义它，我们将用它来制作滑块轨迹，如下面的代码片段所示：
 
     ```py
-    slider_track class lets us style both tracks—we use HTML classes to identify multiple objects. The left_slider ID will help us position and add touch events to it. IDs in HTML are usually used to reference one object uniquely.The `viewBox` attribute defines the dimensions of the drawing internal to `svg` as lower *x*, lower *y*, width, and height. View box coordinates make sense even if we scale the `svg` element for a different device. The height range is -100/100, equivalent to the motor speeds, and the width range is -10 to +10.
+    slider_track class lets us style both tracks—we use HTML classes to identify multiple objects. The left_slider ID will help us position and add touch events to it. IDs in HTML are usually used to reference one object uniquely.The `viewBox` attribute defines the dimensions of the drawing internal to `svg` as lower `x`, lower `y`, width, and height. View box coordinates make sense even if we scale the `svg` element for a different device. The height range is -100/100, equivalent to the motor speeds, and the width range is -10 to +10.
     ```
 
 1.  在容器内部，我们将画一个圆。这个圆需要一个半径`r`，我们可以用视图框单位给出。中心在两个方向上都是0。这个代码如下所示：
@@ -1295,7 +1295,7 @@ Flask 使用子进程来管理其调试模式，这干扰了我们对它们的�
     $ journalctl -u menu_server -f
     ```
 
-    我们将能够看到服务器在运行时的状态——这可能不是调试中最方便的，但对于启动服务来说很方便。使用 *Ctrl* + *C* 来停止查看日志。
+    我们将能够看到服务器在运行时的状态——这可能不是调试中最方便的，但对于启动服务来说很方便。使用 *Ctrl* + `C` 来停止查看日志。
 
 你现在可以重新启动机器人，等待绿灯亮起，然后开始驾驶它。绿灯也会意味着你的 Mycroft 语音助手可以向机器人发送请求。
 

@@ -328,7 +328,7 @@ EQS 是一个在 Unreal 4.7 中引入的功能，在 4.9 中得到了很大的�
 
 +   **投影数据**：这与 Trace Data 类似，但通过从上方投影点进行“垂直”追踪。其余部分，概念与*Trace Data*完全相同。选项是***无***，***导航***，和***几何形状***，它们在*Trace Data*中的含义相同。“Navigation Over Ledges”不存在，因为它没有意义。
 
-通过使用前一个屏幕截图中显示的相同设置（我在使用*Trace Data*与*Navigation*，并且在级别中有*NavMesh*），这就是它的样子（我使用*P*键激活了 NavMesh，所以你也能看到它）：
+通过使用前一个屏幕截图中显示的相同设置（我在使用*Trace Data*与*Navigation*，并且在级别中有*NavMesh*），这就是它的样子（我使用`P`键激活了 NavMesh，所以你也能看到它）：
 
 ![](img/fe7378b5-f5e7-4d35-a7fa-4436dcbb8882.png)
 

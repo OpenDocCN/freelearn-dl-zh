@@ -409,7 +409,7 @@ CelebFaces 属性（**CelebA**，[`mmlab.ie.cuhk.edu.hk/projects/CelebA.html`](h
 DATA_PATH = '/media/john/FastData/CelebA'    # Load data from SSD
 ```
 
-如果你不确定在 Ubuntu 文件管理器中当前的绝对路径，可以按 *Ctrl* + *L*，此时完整路径会显示出来。
+如果你不确定在 Ubuntu 文件管理器中当前的绝对路径，可以按 *Ctrl* + `L`，此时完整路径会显示出来。
 
 1.  更改图像通道数：
 

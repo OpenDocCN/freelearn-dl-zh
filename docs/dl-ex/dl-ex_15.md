@@ -188,7 +188,7 @@ def generator(z_latent_space, output_channel_dim, is_train=True):
         #leaky relu parameter
         leaky_param_alpha = 0.2
 
-        fully_connected_layer = tf.layers.dense(z_latent_space, 2*2*512)
+        fully_connected_layer = tf.layers.dense(z_latent_space, 2`2`512)
 
         #reshaping the output back to 4D tensor to match the accepted format for convolution layer
         reshaped_output = tf.reshape(fully_connected_layer, (-1, 2, 2, 512))

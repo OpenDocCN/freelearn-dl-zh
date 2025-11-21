@@ -56,7 +56,7 @@ OHLC 定价模型展示了某一时间段的开盘价、最高价、最低价和
 
 +   将数据拆分为某一大小的时间序列（其中大小是一个可以调整的参数）。
 
-+   将时间序列数据聚类为*K*个集群，其中*K*是唯一需要调节的参数。假设某些具有自然趋势的集群会出现（如价格的急剧下跌/上涨等）。
++   将时间序列数据聚类为`K`个集群，其中`K`是唯一需要调节的参数。假设某些具有自然趋势的集群会出现（如价格的急剧下跌/上涨等）。
 
 +   对每个集群，训练回归/分类器，分别预测价格和价格变化。
 
@@ -828,7 +828,7 @@ private static void predictAllCategories (MultiLayerNetwork net, List<Pair<INDAr
 
 +   调用函数`net.rnnTimeStep()`，参数为第 i 行的键，并将结果附加到`predicts`列表中
 
-+   实际值来自测试数据行*i*^(th)的值
++   实际值来自测试数据行`i`^(th)的值
 
 +   打印预测值和实际值
 
@@ -838,7 +838,7 @@ private static void predictAllCategories (MultiLayerNetwork net, List<Pair<INDAr
 
 +   遍历`predicts`和`actuals`数组，获取每个列表中每个元素的双精度值。
 
-+   每个*n*的值有四个从 0 到 4 的值。将变量`name`设置为*Y*列的边缘。
++   每个`n`的值有四个从 0 到 4 的值。将变量`name`设置为`Y`列的边缘。
 
 +   调用`PlotUtil`函数来绘制*XY*折线图。
 

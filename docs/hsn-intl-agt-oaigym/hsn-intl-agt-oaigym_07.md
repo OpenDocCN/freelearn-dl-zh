@@ -136,7 +136,7 @@ export CARLA_SERVER=~/software/CARLA_VER_NUM/CarlaUE4.sh
 
 ![](img/00150.jpeg)
 
-一旦车辆初始化完成，你应该能够使用键盘上的*w*、*a*、*s*、*d*键来控制车辆。*w*键将使汽车向前行驶，*a*键将使汽车向左转，其他操作你大概能猜出来！
+一旦车辆初始化完成，你应该能够使用键盘上的`w`、`a`、`s`、`d`键来控制车辆。`w`键将使汽车向前行驶，`a`键将使汽车向左转，其他操作你大概能猜出来！
 
 现在让我们继续，并开始实现我们的 Gym 兼容 CARLA 环境的配置和初始化。
 
@@ -409,7 +409,7 @@ rgb_image = sensor_data['CameraRGB'].data
 
 `rgb_image`是一个 NumPy n 维数组，您可以像通常访问和操作 NumPy n 维数组一样访问和操作它。
 
-例如，要访问 RGB 摄像头图像在(*x*, *y*)图像平面坐标处的像素值，可以使用以下代码行：
+例如，要访问 RGB 摄像头图像在(`x`, `y`)图像平面坐标处的像素值，可以使用以下代码行：
 
 ```py
 pixel_value_at_x_y = rgb_image[X, Y]

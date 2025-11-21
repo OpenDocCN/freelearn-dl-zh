@@ -180,7 +180,7 @@ private bool SetNextTarget()
 }
 ```
 
-`Steer`方法使用给定的目标点进行一些计算，以获得新的方向和旋转。通过从当前位置（*a*）减去目标点（*b*），我们得到从*a*到*b*的方向向量。我们对该向量进行归一化，然后应用当前速度来确定这一帧在新`targetDirection`上的移动距离。最后，我们使用质量来平滑`targetDirection`和当前方向之间的加速度，并将该值作为`acceleration`返回：
+`Steer`方法使用给定的目标点进行一些计算，以获得新的方向和旋转。通过从当前位置（`a`）减去目标点（`b`），我们得到从`a`到`b`的方向向量。我们对该向量进行归一化，然后应用当前速度来确定这一帧在新`targetDirection`上的移动距离。最后，我们使用质量来平滑`targetDirection`和当前方向之间的加速度，并将该值作为`acceleration`返回：
 
 ```py
 public Vector3 Steer(Vector3 target)

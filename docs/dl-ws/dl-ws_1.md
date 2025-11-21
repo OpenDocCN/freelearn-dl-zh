@@ -478,7 +478,7 @@ C = tf.Variable([[1,2,3],[4,5,6],[7,8,9]])
 
 ```py
 def myfunc(x,y,c):
-    Z=x*x*y+y+c
+    Z=x`x`y+y+c
     return Z
 ```
 
@@ -528,7 +528,7 @@ Y=4
 
     ```py
     def myfunc(x,y,c):
-        Z=x*x*y+y+c
+        Z=x`x`y+y+c
         return Z
     ```
 

@@ -30,11 +30,11 @@ GAN 的工作流程将在接下来的章节中解释。
 
 为了理解 GAN，我们必须知道判别算法和生成算法是如何工作的。判别算法试图预测一个标签并对输入数据进行分类，或者将它们归类到数据所属的类别中。另一方面，生成算法则尝试预测特征，以给出某个特定标签。
 
-例如，一个判别算法可以预测一封邮件是否是垃圾邮件。这里，垃圾邮件是标签之一，邮件中提取的文本被认为是输入数据。如果将标签看作*y*，将输入看作*x*，我们可以将其表示如下：
+例如，一个判别算法可以预测一封邮件是否是垃圾邮件。这里，垃圾邮件是标签之一，邮件中提取的文本被认为是输入数据。如果将标签看作`y`，将输入看作`x`，我们可以将其表示如下：
 
 ![](img/c4a4b7b1-c903-4e1a-b3ef-9845baa9935e.png)
 
-另一方面，生成算法则尝试预测这些输入特征（在前面的公式中是*x*）的可能性。生成模型关注的是如何获得*x*，而判别模型关注的是*x*与*y*之间的关系。
+另一方面，生成算法则尝试预测这些输入特征（在前面的公式中是`x`）的可能性。生成模型关注的是如何获得`x`，而判别模型关注的是`x`与`y`之间的关系。
 
 以 MNIST 数据库为例，生成器将生成图像并传递给判别器。如果图像确实来自 MNIST 数据集，判别器将验证该图像。生成器生成图像的目的是希望它能够通过判别器的验证，即使它是假的（如上图所示）。
 
@@ -148,7 +148,7 @@ loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels-labels, lo
 train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss) 
 ```
 
-`GradientDescentOptimizer`方法会通过调整输出中的*w*和*b*（权重和偏置参数）的值，经过多步迭代，直到我们减小损失并更接近准确的预测，具体如下：
+`GradientDescentOptimizer`方法会通过调整输出中的`w`和`b`（权重和偏置参数）的值，经过多步迭代，直到我们减小损失并更接近准确的预测，具体如下：
 
 ```py
 # Accuracy calculation 
@@ -317,7 +317,7 @@ public void init(DisplayMetrics metrics, ImageClassifier classifier, BarChart ba
 
 我们将使用以下库中的图表：[`github.com/PhilJay/MPAndroidChart`](https://github.com/PhilJay/MPAndroidChart)。
 
-我们将初始化 `BarChart` 视图，*x* 轴包含从零到九的数字，*y* 轴包含从 0 到 1.0 的概率值：
+我们将初始化 `BarChart` 视图，`x` 轴包含从零到九的数字，`y` 轴包含从 0 到 1.0 的概率值：
 
 ```py
 BarChart barChart = (BarChart) findViewByld(R.id.barChart); 
@@ -424,7 +424,7 @@ IAxisValueFormatter formatter = new IAxisValueFormatter() {
 
 FreeHandView 看起来像这样，并附有一个空的柱状图：
 
-![通过这个，我们将添加一个模块来识别手写数字并进行分类。# 数字分类器现在，让我们编写分类器。1.  首先，我们将加载模型文件。这个方法从 assets 文件夹读取模型并将其加载到内存中：```py/** Memory-map the model file in Assets. */ private MappedByteBuffer loadModelFile(Activity activity) throws I0Exception {     AssetFileDescriptor fileDescriptor = activity.getAssets().openFd(getModelPath());     FilelnputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());     FileChannel fileChannel = inputStream.getChannel();     long startOffset = fileDescriptor.getStartOffset();     long declaredLength = fileDescriptor.getDeclaredLength();         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength); }```1.  现在，让我们逐步编写 TensorFlow Lite 分类器。这是我们从数字分类器获得结果的地方。一旦我们接收到保存的文件图像作为用户输入，位图将被转换为字节缓冲区，以便在模型上运行推理。一旦接收到输出，所花费的时间将通过 `SystemClock` 时间来记录：```py/** Classifies a frame from the preview stream. */ public float classifyFrame(Bitmap bitmap) {     if (tflite == null){     Log.e(TAG, "classifier has not been initialized; Skipped.");     return 0.5f;     } convertBitmapToByteBuffer(bitmap); // Here's where the classification happens!!! long startTime = SystemClock.uptimeMillis(); runlnference(); long endTime = SystemClock.uptimeMillis(); Log.d(TAG, "Timecost to run model inference: " + Long.toString(endTime - startTime)); return getProbability(0); }```1.  `runlnference()` 方法调用了`tflite`中的 `run` 方法，如下所示：```py@Override protected void runlnference() {     tflite.run(imgData, labelProbArray); }```1.  接下来，让我们从 `MainActivity` 启动应用程序，在此处初始化 `barChart` 视图。初始化 `barChart` 视图时需要设置 *x* 和 *y* 轴，并使用以下值：```pyBARENTRY = new ArrayList<>(); initializeBARENTRY();Bardataset = new BarDataSet(BARENTRY, "project"); BARDATA = new BarData(Bardataset); barChart.setData(BARDATA); ```1.  在 `MainActivity` 的 `OnCreate()` 方法中初始化 FreeHandView 以开始分类：```pypaintView.init(metrics, classifier, barChart);```1.  当你达到 1.00 的概率值时，算法能够以 100% 的准确度识别该数字。以下是一个示例：![](img/21170abb-5da1-4041-ad38-d5ea86814376.png)
+![通过这个，我们将添加一个模块来识别手写数字并进行分类。# 数字分类器现在，让我们编写分类器。1.  首先，我们将加载模型文件。这个方法从 assets 文件夹读取模型并将其加载到内存中：```py/** Memory-map the model file in Assets. */ private MappedByteBuffer loadModelFile(Activity activity) throws I0Exception {     AssetFileDescriptor fileDescriptor = activity.getAssets().openFd(getModelPath());     FilelnputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());     FileChannel fileChannel = inputStream.getChannel();     long startOffset = fileDescriptor.getStartOffset();     long declaredLength = fileDescriptor.getDeclaredLength();         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength); }```1.  现在，让我们逐步编写 TensorFlow Lite 分类器。这是我们从数字分类器获得结果的地方。一旦我们接收到保存的文件图像作为用户输入，位图将被转换为字节缓冲区，以便在模型上运行推理。一旦接收到输出，所花费的时间将通过 `SystemClock` 时间来记录：```py/** Classifies a frame from the preview stream. */ public float classifyFrame(Bitmap bitmap) {     if (tflite == null){     Log.e(TAG, "classifier has not been initialized; Skipped.");     return 0.5f;     } convertBitmapToByteBuffer(bitmap); // Here's where the classification happens!!! long startTime = SystemClock.uptimeMillis(); runlnference(); long endTime = SystemClock.uptimeMillis(); Log.d(TAG, "Timecost to run model inference: " + Long.toString(endTime - startTime)); return getProbability(0); }```1.  `runlnference()` 方法调用了`tflite`中的 `run` 方法，如下所示：```py@Override protected void runlnference() {     tflite.run(imgData, labelProbArray); }```1.  接下来，让我们从 `MainActivity` 启动应用程序，在此处初始化 `barChart` 视图。初始化 `barChart` 视图时需要设置 `x` 和 `y` 轴，并使用以下值：```pyBARENTRY = new ArrayList<>(); initializeBARENTRY();Bardataset = new BarDataSet(BARENTRY, "project"); BARDATA = new BarData(Bardataset); barChart.setData(BARDATA); ```1.  在 `MainActivity` 的 `OnCreate()` 方法中初始化 FreeHandView 以开始分类：```pypaintView.init(metrics, classifier, barChart);```1.  当你达到 1.00 的概率值时，算法能够以 100% 的准确度识别该数字。以下是一个示例：![](img/21170abb-5da1-4041-ad38-d5ea86814376.png)
 
 1.  在某些情况下，分类会因为部分匹配而降低概率，以下截图展示了这种情况：
 

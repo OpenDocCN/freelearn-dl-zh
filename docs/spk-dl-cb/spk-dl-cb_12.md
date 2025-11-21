@@ -470,7 +470,7 @@ ytest_OHE = u.to_categorical(ytest_array)
 
 ![](img/b24c2d12-6e5e-48a8-8908-9bde8ebf6140.png)
 
-1.  数据被传入 Keras 深度学习模型，使用矩阵而非数据框。因此，我们的训练和测试数据框被转换为 numpy 数组，并被拆分为 *x* 和 *y*。`xtrain_array` 和 `xtest_array` 选取的特征为 userid、movieid 和 genreCount。这些是我们用来预测用户可能评分的唯一特征。我们会丢弃 `imdbid` 和 `tmdbid`，因为它们直接与 `movieid` 相关，因此不会提供额外的价值。`timestamp` 会被移除，以过滤与投票频率相关的偏差。最后，`ytest_array` 和 `ytrain_array` 将包含评分的标签值。所有四个数组的 `shape` 如下图所示：
+1.  数据被传入 Keras 深度学习模型，使用矩阵而非数据框。因此，我们的训练和测试数据框被转换为 numpy 数组，并被拆分为 `x` 和 `y`。`xtrain_array` 和 `xtest_array` 选取的特征为 userid、movieid 和 genreCount。这些是我们用来预测用户可能评分的唯一特征。我们会丢弃 `imdbid` 和 `tmdbid`，因为它们直接与 `movieid` 相关，因此不会提供额外的价值。`timestamp` 会被移除，以过滤与投票频率相关的偏差。最后，`ytest_array` 和 `ytrain_array` 将包含评分的标签值。所有四个数组的 `shape` 如下图所示：
 
 ![](img/9de44283-57bc-48f3-9746-89d0c2f7e6b6.png)
 

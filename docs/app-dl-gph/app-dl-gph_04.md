@@ -185,7 +185,7 @@ class GCN(torch.nn.Module):
         return F.log_softmax(x, dim=1)
 ```
 
-接下来，我们定义 GCN 模型。该模型由两层 GCN（**GCNConv**）组成，中间有一个隐藏层。**__init__**方法使用指定的输入、隐藏和输出维度来初始化层。**forward**方法定义了模型的前向传播过程，其中**x**和**edge_index**会传递到 GCN 层。ReLU 激活函数和 dropout 会在第一层之后应用，**log-softmax**则应用于第二层的输出：
+接下来，我们定义 GCN 模型。该模型由两层 GCN（**GCNConv**）组成，中间有一个隐藏层。**__init__**方法使用指定的输入、隐藏和输出维度来初始化层。**forward**方法定义了模型的前向传播过程，其中*`x`*和**edge_index**会传递到 GCN 层。ReLU 激活函数和 dropout 会在第一层之后应用，**log-softmax**则应用于第二层的输出：
 
 ```py
 # Set the model parameters

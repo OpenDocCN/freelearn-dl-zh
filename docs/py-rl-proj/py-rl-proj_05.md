@@ -811,7 +811,7 @@ Gym Minecraft 环境提供了超过 10 个任务。要尝试其他任务，只�
 tmux attach -t a3c
 ```
 
-在控制台窗口之间切换，按*Ctrl* + *b*，然后按*0* - *9*。窗口 0 是参数服务器。窗口 1-8 显示 8 个代理的训练统计数据（如果启动了 8 个代理）。最后一个窗口运行 htop。要分离 TMUX，按*Ctrl*，然后按*b*。
+在控制台窗口之间切换，按*Ctrl* + `b`，然后按`0` - `9`。窗口 0 是参数服务器。窗口 1-8 显示 8 个代理的训练统计数据（如果启动了 8 个代理）。最后一个窗口运行 htop。要分离 TMUX，按*Ctrl*，然后按`b`。
 
 `tensorboard`日志保存在`save/<environment_name>/train/log_<agent_index>`文件夹中。要使用 TensorBoard 可视化训练过程，请在该文件夹下运行以下命令：
 

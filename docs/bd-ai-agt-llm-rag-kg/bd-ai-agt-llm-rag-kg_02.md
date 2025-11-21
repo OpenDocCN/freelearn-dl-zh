@@ -54,11 +54,11 @@ RNN 及其衍生模型存在一些问题：
 
 理念是，我们不是传递 RNN 的隐藏状态，而是传递只关注序列重要部分的上下文信息。在解码（翻译）每个标记时，我们希望检索另一种语言中对应和具体的信息。注意力机制确定在那一刻输入中哪些标记是重要的。
 
-第一步是编码器（*h*）的隐藏状态和前一个解码器输出（*s*）之间的对齐。得分函数可以不同：点积或余弦相似度是最常用的，但也可以是更复杂的函数，例如前馈神经网络层。这一步使我们能够理解在那一刻隐藏状态编码器与翻译的相关性。这一步会对所有编码器步骤进行。
+第一步是编码器（`h`）的隐藏状态和前一个解码器输出（`s`）之间的对齐。得分函数可以不同：点积或余弦相似度是最常用的，但也可以是更复杂的函数，例如前馈神经网络层。这一步使我们能够理解在那一刻隐藏状态编码器与翻译的相关性。这一步会对所有编码器步骤进行。
 
 <mrow><mrow><mrow><mfenced close=")" open="("><mn>1</mn></mfenced><msub><mi>e</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><mo>=</mo><mi>s</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mo>(</mo><msub><mi>s</mi><mrow><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><msub><mi>h</mi><mi>j</mi></msub><mo>)</mo></mrow></mrow></mrow>
 
-目前，我们有一个表示两个向量（*h* 和 *s*）之间相似度的标量。所有这些分数都传递到 softmax 函数中，该函数将所有值压缩到 0 和 1 之间。这一步也用于为每个隐藏状态分配相对重要性。
+目前，我们有一个表示两个向量（`h` 和 `s`）之间相似度的标量。所有这些分数都传递到 softmax 函数中，该函数将所有值压缩到 0 和 1 之间。这一步也用于为每个隐藏状态分配相对重要性。
 
 <mrow><mrow><mfenced close=")" open="("><mn>2</mn></mfenced><msub><mi>a</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><mo>=</mo><mi>s</mi><mi>o</mi><mi>f</mi><mi>t</mi><mi>m</mi><mi>a</mi><mi>x</mi><mfenced close=")" open="("><msub><mi>e</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub></mfenced><mo>=</mo><mfrac><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">x</mi><mi mathvariant="normal">p</mi><mo>(</mo><msub><mi>e</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><mo>)</mo></mrow><mrow><msubsup><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">x</mi><mi mathvariant="normal">p</mi><mo>(</mo><msub><mi>e</mi><mrow><mi>i</mi><mo>,</mo><mi>k</mi></mrow></msub><mo>)</mo></mrow></mrow></mfrac></mrow></mrow>
 
@@ -94,7 +94,7 @@ RNN 及其衍生模型存在一些问题：
 
 <mrow><mrow><mi>A</mi><mi>t</mi><mi>t</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mfenced close=")" open="("><mrow><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi></mrow></mfenced><mo>=</mo><mi>s</mi><mi>o</mi><mi>f</mi><mi>t</mi><mi>m</mi><mi>a</mi><mi>x</mi><mfenced close=")" open="("><mfrac><mrow><mi>Q</mi><mo>∙</mo><msup><mi>k</mi><mi>T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac></mfenced><mo>∙</mo><mi>V</mi></mrow></mrow>
 
-你可以立即看出，它是从原始注意力公式派生出来的。我们使用点积来进行比较，然后利用`softmax`函数来计算相对重要性和将值归一化到 0 和 1 之间。*D*是序列的大小；换句话说，自注意力也是作为我们序列长度的函数进行归一化的。
+你可以立即看出，它是从原始注意力公式派生出来的。我们使用点积来进行比较，然后利用`softmax`函数来计算相对重要性和将值归一化到 0 和 1 之间。`D`是序列的大小；换句话说，自注意力也是作为我们序列长度的函数进行归一化的。
 
 下一步是使用`softmax`。这里是对该函数（如何计算以及如何在 Python 中更高效地实现）的一个小复习：
 
@@ -102,9 +102,9 @@ RNN 及其衍生模型存在一些问题：
 
 <mrow><mrow><mi>p</mi><mi>y</mi><mi>t</mi><mi>h</mi><mi>o</mi><mi>n</mi><mo>:</mo><mi>y</mi><mo>=</mo><mfenced close="]" open="["><mtable columnalign="center" columnwidth="auto" rowalign="baseline baseline baseline" rowspacing="1.0000ex 1.0000ex"><mtr><mtd><msub><mi>y</mi><mn>1</mn></msub></mtd></mtr><mtr><mtd><msub><mi>y</mi><mn>2</mn></msub></mtd></mtr><mtr><mtd><msub><mi>y</mi><mn>3</mn></msub></mtd></mtr></mtable></mfenced><mo>=</mo><mi>s</mi><mi>o</mi><mi>f</mi><mi>t</mi><mi>m</mi><mi>a</mi><mi>x</mi><mfenced close=")" open="("><mi>x</mi></mfenced><mo>=</mo><mi>f</mi><mfenced close=")" open="("><mfenced close="]" open="["><mtable columnalign="center" columnwidth="auto" rowalign="baseline baseline baseline" rowspacing="1.0000ex 1.0000ex"><mtr><mtd><msub><mi>x</mi><mn>1</mn></msub></mtd></mtr><mtr><mtd><msub><mi>x</mi><mn>2</mn></msub></mtd></mtr><mtr><mtd><msub><mi>x</mi><mn>3</mn></msub></mtd></mtr></mtable></mfenced></mfenced><mo>=</mo><mfrac><mfenced close="]" open=""><mtable columnalign="center center center" columnspacing="0.8000em 0.8000em" columnwidth="auto auto auto" rowalign="baseline"><mtr><mtd><msub><mi>x</mi><mn>1</mn></msub></mtd><mtd><msub><mi>x</mi><mn>2</mn></msub></mtd><mtd><msub><mi>x</mi><mn>3</mn></msub></mtd></mtr></mtable></mfenced><mrow><msup><mi>e</mi><msub><mi>x</mi><mn>1</mn></msub></msup><mo>+</mo><msup><mi>e</mi><msub><mi>x</mi><mn>2</mn></msub></msup><mo>+</mo><msup><mi>e</mi><msub><mi>x</mi><mn>3</mn></msub></msup></mrow></mfrac><mo>=</mo><mfrac><msup><mi>e</mi><mi>x</mi></msup><mrow><mi>s</mi><mi>u</mi><mi>m</mi><mo>(</mo><msup><mi>e</mi><mi>x</mi></msup><mo>)</mo></mrow></mfrac></mrow></mrow>
 
-正如我们在上一章中看到的，随着向量长度的增加，点积可以变得相当宽。这可能导致`softmax`函数中的输入太大（这会将`softmax`中的概率质量转移到几个元素上，从而导致梯度很小）。在原始文章中，他们通过将*D*的平方根进行归一化来解决此问题。
+正如我们在上一章中看到的，随着向量长度的增加，点积可以变得相当宽。这可能导致`softmax`函数中的输入太大（这会将`softmax`中的概率质量转移到几个元素上，从而导致梯度很小）。在原始文章中，他们通过将`D`的平方根进行归一化来解决此问题。
 
-![图 2.5 – 展开的自我注意力图 2.5 – 展开的自我注意力真正的区别在于我们使用三个初始随机初始化的权重矩阵：**查询**（**Q**）、**键**（**K**）和**值**（**V**）。*Q*是当前注意力的焦点，*K*向模型提供关于先前输入的信息，而*V*用于提取最终输入信息。因此，第一步是将这三个矩阵与我们的输入*X*（一个向量数组，其中每个向量代表一个标记）相乘。`<mrow><mrow><mi mathvariant="bold-italic">Q</mi><mo>=</mo><mi mathvariant="bold-italic">X</mi><mo>∙</mo><msup><mi mathvariant="bold-italic">W</mi><mi>Q</mi></msup><mo>,</mo><mi mathvariant="bold-italic">K</mi><mo>=</mo><mi mathvariant="bold-italic">X</mi><mo>∙</mo><msup><mi mathvariant="bold-italic">W</mi><mi>V</mi></msup><mo>,</mo><mi mathvariant="bold-italic">V</mi><mo>=</mo><mi mathvariant="bold-italic">X</mi><mo>∙</mo><msup><mi mathvariant="bold-italic">W</mi><mi>V</mi></msup></mrow></mrow>这个系统的美妙之处在于我们可以用它从相同的输入中提取多个表示（毕竟，教科书里可以有多个问题）。因此，由于操作可以并行化，我们可以有多头注意力。**多头自注意力**使得模型能够同时捕捉输入序列中多种类型的关系。这一点至关重要，因为句子中的一个词在上下文中可能与几个其他词相关。在训练过程中，每个头中的*K*和*Q*矩阵专门用于建模不同类型的关系。每个注意力头根据其特定的视角产生输出，从而为*n*个头生成*n*个输出。然后，这些输出被连接起来，并通过最终的线性投影层恢复到原始输入的大小。![图 2.6 – 多头自注意力](img/B21257_02_06.jpg)
+![图 2.5 – 展开的自我注意力图 2.5 – 展开的自我注意力真正的区别在于我们使用三个初始随机初始化的权重矩阵：**查询**（*`Q`*）、**键**（*`K`*）和**值**（*`V`*）。`Q`是当前注意力的焦点，`K`向模型提供关于先前输入的信息，而`V`用于提取最终输入信息。因此，第一步是将这三个矩阵与我们的输入`X`（一个向量数组，其中每个向量代表一个标记）相乘。`<mrow><mrow><mi mathvariant="bold-italic">Q</mi><mo>=</mo><mi mathvariant="bold-italic">X</mi><mo>∙</mo><msup><mi mathvariant="bold-italic">W</mi><mi>Q</mi></msup><mo>,</mo><mi mathvariant="bold-italic">K</mi><mo>=</mo><mi mathvariant="bold-italic">X</mi><mo>∙</mo><msup><mi mathvariant="bold-italic">W</mi><mi>V</mi></msup><mo>,</mo><mi mathvariant="bold-italic">V</mi><mo>=</mo><mi mathvariant="bold-italic">X</mi><mo>∙</mo><msup><mi mathvariant="bold-italic">W</mi><mi>V</mi></msup></mrow></mrow>这个系统的美妙之处在于我们可以用它从相同的输入中提取多个表示（毕竟，教科书里可以有多个问题）。因此，由于操作可以并行化，我们可以有多头注意力。**多头自注意力**使得模型能够同时捕捉输入序列中多种类型的关系。这一点至关重要，因为句子中的一个词在上下文中可能与几个其他词相关。在训练过程中，每个头中的`K`和`Q`矩阵专门用于建模不同类型的关系。每个注意力头根据其特定的视角产生输出，从而为`n`个头生成`n`个输出。然后，这些输出被连接起来，并通过最终的线性投影层恢复到原始输入的大小。![图 2.6 – 多头自注意力](img/B21257_02_06.jpg)
 
 图 2.6 – 多头自注意力
 
@@ -118,9 +118,9 @@ RNN 及其衍生模型存在一些问题：
 
 +   我们不必等待不同时间步来看到远距离词对之间的关系（如在 RNN 中）。
 
-+   然而，它在函数上具有与标记数*N*的二次成本，并且没有固有的顺序概念。
++   然而，它在函数上具有与标记数`N`的二次成本，并且没有固有的顺序概念。
 
-自注意力在计算上很昂贵。可以证明，考虑到序列*T*和序列长度*d*，计算成本和空间是二次的：
+自注意力在计算上很昂贵。可以证明，考虑到序列`T`和序列长度`d`，计算成本和空间是二次的：
 
 `<mrow><mrow><mrow><mi>t</mi><mi>i</mi><mi>m</mi><mi>e</mi><mo>=</mo><mi mathvariant="script">O</mi><mfenced close=")" open="("><mrow><msup><mi>T</mi><mn>2</mn></msup><mo>+</mo><mi>d</mi></mrow></mfenced><mi>s</mi><mi>p</mi><mi>a</mi><mi>c</mi><mi>e</mi><mo>=</mo><mi mathvariant="script">O</mi><mo>(</mo><msup><mi>T</mi><mn>2</mn></msup><mo>+</mo><mi>T</mi><mi>d</mi><mo>)</mo></mrow></mrow></mrow>
 
@@ -194,7 +194,7 @@ RNN 及其衍生模型存在一些问题：
 
 训练过程中有很多可变性，这可能会损害训练学习。为了减少无信息可变性，我们添加了这个归一化步骤，从而也归一化了梯度。
 
-在这一点上，我们可以将所有内容组装成一个单独的块。考虑在嵌入之后，我们输入 *X* 是一个维度为 *n x d* 的矩阵（其中 *n* 是标记的数量，*d* 是嵌入的维度）。这个输入 *X* 进入转换器块，并以相同的维度输出。这个过程会重复应用于所有转换器块：
+在这一点上，我们可以将所有内容组装成一个单独的块。考虑在嵌入之后，我们输入 `X` 是一个维度为 *n x d* 的矩阵（其中 `n` 是标记的数量，`d` 是嵌入的维度）。这个输入 `X` 进入转换器块，并以相同的维度输出。这个过程会重复应用于所有转换器块：
 
 <mml:math display="block"><mml:mi mathvariant="bold-italic">H</mml:mi><mml:mo>=</mml:mo><mml:mi>L</mml:mi><mml:mi>a</mml:mi><mml:mi>y</mml:mi><mml:mi>e</mml:mi><mml:mi>r</mml:mi><mml:mi>N</mml:mi><mml:mi>o</mml:mi><mml:mi>r</mml:mi><mml:mi>m</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi mathvariant="bold-italic">X</mml:mi><mml:mo>+</mml:mo><mml:mi>M</mml:mi><mml:mi>u</mml:mi><mml:mi>l</mml:mi><mml:mi>i</mml:mi><mml:mi>H</mml:mi><mml:mi>e</mml:mi><mml:mi>a</mml:mi><mml:mi>d</mml:mi><mml:mi>S</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi><mml:mi>f</mml:mi><mml:mi>A</mml:mi><mml:mi>t</mml:mi><mml:mi>t</mml:mi><mml:mi>e</mml:mi><mml:mi>n</mml:mi><mml:mi>i</mml:mi><mml:mi>n</mml:mi><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi mathvariant="bold-italic">X</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>
 
@@ -212,7 +212,7 @@ RNN 及其衍生模型存在一些问题：
 
 一旦我们有了“积木”，我们就可以将它们组装成一个功能结构。在原始描述中，该模型是为机器翻译而设计的，由两部分组成：一个编码器（它接受要翻译的文本）和一个解码器（它将生成翻译）。
 
-原始的转换器由编码器和解码器中的不同转换器块和结构组成，如图 *2**.10* 所示。
+原始的转换器由编码器和解码器中的不同转换器块和结构组成，如图 `2`*.10* 所示。
 
 ![图 2.10 – 编码器-解码器结构](img/B21257_02_10.jpg)
 
@@ -224,7 +224,7 @@ RNN 及其衍生模型存在一些问题：
 
 图 2.11 – 交叉注意力
 
-输入*N*来自编码器，而输入*M*来自解码器。在图中，交叉注意力正在混合编码器和解码器中的信息，使解码器能够从编码器中学习。
+输入`N`来自编码器，而输入`M`来自解码器。在图中，交叉注意力正在混合编码器和解码器中的信息，使解码器能够从编码器中学习。
 
 关于结构的另一个注意事项：在解码器中，第一个自注意力机制有一个额外的遮蔽层，以防止模型看到未来的信息。
 
@@ -240,11 +240,11 @@ RNN 及其衍生模型存在一些问题：
 
 你如何训练这样一个复杂的模型？这个问题的答案比你想象的要简单。模型可以通过多头自注意力学习复杂且多样化的关系，这使得模型能够灵活地学习复杂的模式。构建示例（或找到它们）来教模型这些复杂关系会非常昂贵。因此，我们希望有一个系统，允许模型自己学习这些关系。优势在于，如果我们有大量的文本可用，模型可以在我们不需要精心挑选训练语料库的情况下进行学习。多亏了互联网的出现，我们有了大量语料库，允许模型看到不同主题、语言、风格等的文本示例。
 
-尽管原始模型是一个`seq2seq`模型，但后来的转换器（如 LLMs）被训练成语言模型，尤其是在**自监督方式**下。在语言建模中，我们考虑一个单词序列 *s*，序列中下一个单词 *x* 的概率是 <mml:math><mml:mi>P</mml:mi><mml:mo>(</mml:mo><mml:mi>w</mml:mi><mml:mo>|</mml:mo><mml:mi>h</mml:mi><mml:mo>)</mml:mo></mml:math>。这个概率取决于该点之前的所有单词。通过概率的链式法则，我们可以分解这个概率：
+尽管原始模型是一个`seq2seq`模型，但后来的转换器（如 LLMs）被训练成语言模型，尤其是在**自监督方式**下。在语言建模中，我们考虑一个单词序列 `s`，序列中下一个单词 `x` 的概率是 <mml:math><mml:mi>P</mml:mi><mml:mo>(</mml:mo><mml:mi>w</mml:mi><mml:mo>|</mml:mo><mml:mi>h</mml:mi><mml:mo>)</mml:mo></mml:math>。这个概率取决于该点之前的所有单词。通过概率的链式法则，我们可以分解这个概率：
 
 <mml:math display="block"><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>P</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn><mml:mo>:</mml:mo><mml:mi>n</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo stretchy="false">∏</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn><mml:mo>:</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:math>
 
-这使我们能够计算从一系列先前单词中一个单词的条件概率。其理念是，当我们拥有足够的文本时，我们可以将诸如**“to be or not to”**这样的序列作为输入，并让模型估计下一个单词为**“be”**的概率，即 `<mrow><mrow><mrow><mi>P</mi><mo>(</mo><mi>b</mi><mi>e</mi><mo>|</mo><mi>t</mi><mi>o</mi><mi>b</mi><mi>e</mi><mi>o</mi><mi>r</mi><mi>n</mi><mi>o</mi><mi>t</mi><mi>t</mi><mi>o</mi><mo>)</mo></mrow></mrow></mrow>`. 然后，在 transformer 块序列之后，我们有一个执行线性投影的层和一个生成输出的**softmax 层**。之前的序列被称为上下文；第一个 transformer 的上下文长度为 512 个标记。模型生成一个输出，这是一个维度为*V*（模型词汇表）的概率向量，也称为**logit 向量**。投影层被称为**unembedder**（它执行反向映射），因为我们必须从*N*标记 x *D*嵌入维度映射到 1 x *V*。由于每个 transformer 块的输入和输出相同，理论上我们可以消除块，并将 unembedder 和 softmax 附加到任何中间块上。这使我们能够更好地解释每个块的功能及其内部表示。
+这使我们能够计算从一系列先前单词中一个单词的条件概率。其理念是，当我们拥有足够的文本时，我们可以将诸如**“to be or not to”**这样的序列作为输入，并让模型估计下一个单词为**“be”**的概率，即 `<mrow><mrow><mrow><mi>P</mi><mo>(</mo><mi>b</mi><mi>e</mi><mo>|</mo><mi>t</mi><mi>o</mi><mi>b</mi><mi>e</mi><mi>o</mi><mi>r</mi><mi>n</mi><mi>o</mi><mi>t</mi><mi>t</mi><mi>o</mi><mo>)</mo></mrow></mrow></mrow>`. 然后，在 transformer 块序列之后，我们有一个执行线性投影的层和一个生成输出的**softmax 层**。之前的序列被称为上下文；第一个 transformer 的上下文长度为 512 个标记。模型生成一个输出，这是一个维度为`V`（模型词汇表）的概率向量，也称为**logit 向量**。投影层被称为**unembedder**（它执行反向映射），因为我们必须从`N`标记 x `D`嵌入维度映射到 1 x `V`。由于每个 transformer 块的输入和输出相同，理论上我们可以消除块，并将 unembedder 和 softmax 附加到任何中间块上。这使我们能够更好地解释每个块的功能及其内部表示。
 
 一旦我们有了这个概率向量，我们就可以使用自监督进行训练。我们取一个文本语料库（未标注）并训练模型以最小化序列中真实单词的概率与预测概率之间的差异。为此，我们使用**交叉熵损失**（预测概率分布与真实概率分布之间的差异）。预测概率分布是 logit 向量，而真实的一个是 one-hot 编码向量，其中序列中的下一个单词为 1，其他地方为 0。
 
@@ -268,15 +268,15 @@ RNN 及其衍生模型存在一些问题：
 
 +   **随机采样**：模型随机选择下一个标记。句子看起来很奇怪，因为模型选择了罕见或独特的单词。
 
-+   **Top-k 采样**：在每一步，我们对概率进行排序，并选择概率最高的*k*个单词。我们重新归一化概率并随机选择一个。
++   **Top-k 采样**：在每一步，我们对概率进行排序，并选择概率最高的`k`个单词。我们重新归一化概率并随机选择一个。
 
 +   **Top-p 采样**：这是一种替代方案，我们只保留最可能单词的一定百分比。
 
-+   `softmax`，我们将除以一个温度参数（介于 0 和 1 之间）。当*t*越接近 0 时，最可能单词的概率就越接近 1（接近贪婪采样）。在某些情况下，当我们想要一个不那么贪婪的方法时，*t*也可以大于 1。
++   `softmax`，我们将除以一个温度参数（介于 0 和 1 之间）。当`t`越接近 0 时，最可能单词的概率就越接近 1（接近贪婪采样）。在某些情况下，当我们想要一个不那么贪婪的方法时，`t`也可以大于 1。
 
 到目前为止，我们考虑了固定词汇，并假设每个标记都是一个单词。一般来说，一旦模型训练完成，可能会有一些模型不知道的单词，这些单词被分配了一个特殊的标记`<UNK>`。在之后的 transformers 和 LLMs 中，寻求了一种解决未知词问题的方法。例如，在训练集中，我们可能有诸如*big*、*bigger*和*small*这样的单词，但没有*smaller*。模型不会知道*smaller*，会导致`<UNK>`。根据训练集，模型可能有不完整或过时的知识。在英语和其他语言中，都有确切的词素和语法规则，我们希望分词器能够意识到这一点。为了避免出现太多的`<UNK>`，一种解决方案是从子词（标记）的角度思考。
 
-最常用的方法是**字节对编码**（**BPE**）。这个过程从一组单个字符开始。算法随后扫描整个语料库，并开始合并最频繁一起出现的符号。例如，我们有**E**和**R**，在第一次扫描后，我们向词汇表中添加一个新的**ER**符号。这个过程会迭代地进行，合并并创建新的符号（越来越长的字符字符串）。通常，算法会在创建了*N*个标记（*N*是开始时预定的一个数字）后停止。此外，还有一个特殊的单词结束符号，用于区分标记是在单词内部还是单词的末尾。一旦算法到达创建词汇表，我们就可以使用分词器对语料库进行分词，并为每个子词分配一个与词汇表中索引相对应的索引。
+最常用的方法是**字节对编码**（**BPE**）。这个过程从一组单个字符开始。算法随后扫描整个语料库，并开始合并最频繁一起出现的符号。例如，我们有*`E`*和*`R`*，在第一次扫描后，我们向词汇表中添加一个新的**ER**符号。这个过程会迭代地进行，合并并创建新的符号（越来越长的字符字符串）。通常，算法会在创建了`N`个标记（`N`是开始时预定的一个数字）后停止。此外，还有一个特殊的单词结束符号，用于区分标记是在单词内部还是单词的末尾。一旦算法到达创建词汇表，我们就可以使用分词器对语料库进行分词，并为每个子词分配一个与词汇表中索引相对应的索引。
 
 ![图 2.14 – 分词结果的示例](img/B21257_02_14.jpg)
 

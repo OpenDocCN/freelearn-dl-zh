@@ -116,7 +116,7 @@ wget https://dl.fbaipublicfiles.com/synsin/checkpoints/realestate/synsin.pth
 bash ./download_models.sh
 ```
 
-**粗体**: 表示新术语、重要词汇或屏幕上显示的词语。例如：“细化模块（**g**）从神经点云渲染器获取输入，然后输出最终重建的图像。”
+**粗体**: 表示新术语、重要词汇或屏幕上显示的词语。例如：“细化模块（*`g`*）从神经点云渲染器获取输入，然后输出最终重建的图像。”
 
 提示或重要说明
 

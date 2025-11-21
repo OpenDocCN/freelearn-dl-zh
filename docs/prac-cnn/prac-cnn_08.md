@@ -42,7 +42,7 @@ CycleGAN 也是一种图像到图像翻译器，但没有输入/输出对。例�
 
 在以下示例中，我们使用 MNIST 数据集并利用 TensorFlow 构建和训练一个 GAN 模型。这里，我们将使用一种特殊版本的 ReLU 激活函数，称为**Leaky ReLU**。输出是一个新的手写数字类型：
 
-Leaky ReLU 是 ReLU 激活函数的一种变体，其公式为*f(x) = max(α∗x, x**)*。因此，*x*为负值时，输出为*alpha * x*，而*x*为正值时，输出为*x*。
+Leaky ReLU 是 ReLU 激活函数的一种变体，其公式为*f(x) = max(α∗x, x**)*。因此，`x`为负值时，输出为*alpha * x*，而`x`为正值时，输出为`x`。
 
 ```py
 #import all necessary libraries and load data set

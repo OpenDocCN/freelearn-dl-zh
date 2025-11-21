@@ -294,7 +294,7 @@
 
 图 2.21：重新缩放的 `Present_Tmax` 列的直方图
 
-结果的直方图显示温度值范围从 `0` 到 `1`，这一点从直方图的 *x* 轴范围可以看出。通过使用 `MinMaxScaler`，这些值将始终保持最小值为 `0`，最大值为 `1`。
+结果的直方图显示温度值范围从 `0` 到 `1`，这一点从直方图的 `x` 轴范围可以看出。通过使用 `MinMaxScaler`，这些值将始终保持最小值为 `0`，最大值为 `1`。
 
 在本次活动中，您进一步对数值字段进行了预处理。在这里，您对数值字段进行了缩放，使其最小值为 `0`，最大值为 `1`。如果数值字段不是正态分布的，这比标准缩放器更有用。它还确保结果字段限制在最小值和最大值之间。
 
@@ -3084,7 +3084,7 @@
     ```py
     def create_dc_generator(seed_size, channels):
         model = Sequential()
-        model.add(Dense(4*4*256,activation="relu",input_dim=seed_size))
+        model.add(Dense(4`4`256,activation="relu",input_dim=seed_size))
         model.add(Reshape((4,4,256)))
         model.add(UpSampling2D())
         model.add(Conv2D(256,kernel_size=3,padding="same"))

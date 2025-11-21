@@ -157,7 +157,7 @@ pool.close()
 
 图 15.3 – Textract 输出
 
-现在，我们已经提取了文本和相关标签，例如*0*代表银行对账单，*1*代表工资单。接下来，让我们进入 Comprehend 训练的下一部分。
+现在，我们已经提取了文本和相关标签，例如`0`代表银行对账单，`1`代表工资单。接下来，让我们进入 Comprehend 训练的下一部分。
 
 ## 创建 Amazon Comprehend 分类训练任务
 
@@ -263,7 +263,7 @@ pool.close()
 
 1.  访问此链接，https://console.aws.amazon.com/comprehend/v2/home?region=us-east-1#endpoints，并点击 **创建端点**。
 
-1.  输入 `classify-doc` 作为端点名称，设置我们在上一步中训练的 `doc-classifier`，并将**推理单元**设置为 **1**。
+1.  输入 `classify-doc` 作为端点名称，设置我们在上一步中训练的 `doc-classifier`，并将**推理单元**设置为 *`1`*。
 
     ![图 15.7 – Amazon Comprehend 创建实时端点 UI    ](img/B17528_15_07.jpg)
 

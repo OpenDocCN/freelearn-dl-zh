@@ -120,7 +120,7 @@ Figure 4.2 – Character creation
 
 1.  在 **Character Movement (Rotation Settings)** 类别中，找到 **Max Walk Speed** 属性并将其值设置为 **500.0 cm/s** 。
 
-1.  在 **Character Movement (Rotation Settings)** 类别中，找到 **Rotation Rate** 属性并将 **Z** 值设置为 **640.0°** 。
+1.  在 **Character Movement (Rotation Settings)** 类别中，找到 **Rotation Rate** 属性并将 *`Z`* 值设置为 **640.0°** 。
 
 1.  在同一类别中，勾选 **Orient Rotation to** **Movement** 复选框。
 
@@ -192,7 +192,7 @@ Figure 4.2 – Character creation
 
 1.  将体积的**位置**设置为**(0, 0, 0)**和**缩放**设置为**(20, 20, 1)**。
 
-1.  在级别内点击并按下键盘上的*P*键以显示生成的导航网格，如图*图 4* *.6* 所示：
+1.  在级别内点击并按下键盘上的`P`键以显示生成的导航网格，如图*图 4* *.6* 所示：
 
 ![图 4.6 – 导航网格](img/B31016_04_6.jpg)
 
@@ -388,7 +388,7 @@ Figure 4.2 – Character creation
 
 注意
 
-根据你创建桥梁的方式，你可能会有比我更不规则的修饰区域；此外，导航网格可能生成得不够完全可通行。为了解决这些问题，你需要稍微调整模型面板的**Z**值和修饰区域的大小。
+根据你创建桥梁的方式，你可能会有比我更不规则的修饰区域；此外，导航网格可能生成得不够完全可通行。为了解决这些问题，你需要稍微调整模型面板的*`Z`*值和修饰区域的大小。
 
 我们最终准备好测试这个关卡。
 

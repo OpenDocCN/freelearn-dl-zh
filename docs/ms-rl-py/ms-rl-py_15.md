@@ -234,7 +234,7 @@ class PendulumMassEnv(PendulumEnv, gym.utils.EzPickle, MetaEnv):
         return self.m
 ```
 
-在训练 MAML 时，RLlib 会通过 `episode_reward_mean` 测量智能体在任何适应之前的环境表现。经过 *N* 次梯度适应步骤后的表现会显示在 `episode_reward_mean_adapt_N` 中。这些内部适应步骤的次数是智能体的一个配置项，可以修改：
+在训练 MAML 时，RLlib 会通过 `episode_reward_mean` 测量智能体在任何适应之前的环境表现。经过 `N` 次梯度适应步骤后的表现会显示在 `episode_reward_mean_adapt_N` 中。这些内部适应步骤的次数是智能体的一个配置项，可以修改：
 
 ```py
 "inner_adaptation_steps": 1

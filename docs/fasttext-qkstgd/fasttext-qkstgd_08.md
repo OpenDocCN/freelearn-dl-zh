@@ -749,7 +749,7 @@ transmat.train(word_pair)
 print ("the shape of translation matrix is: ", transmat.translation_matrix.shape)
 ```
 
-在预测时，对于任何给定的新单词，我们可以通过计算 *z* = *Wx* 将其映射到另一个语言空间，然后我们找到在目标语言空间中与 *z* 向量表示最接近的单词。考虑的距离度量是余弦相似度。这与此处所示的代码类似：
+在预测时，对于任何给定的新单词，我们可以通过计算 `z` = *Wx* 将其映射到另一个语言空间，然后我们找到在目标语言空间中与 `z` 向量表示最接近的单词。考虑的距离度量是余弦相似度。这与此处所示的代码类似：
 
 ```py
 # The pair is in the form of (English, Italian), we can see whether the translated word is correct

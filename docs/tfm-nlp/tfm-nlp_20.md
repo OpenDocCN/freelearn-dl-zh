@@ -174,7 +174,7 @@ os.chdir("/content/gpt-2/src/")
 
 您可以通过双击单元格的运行按钮来停止训练。训练将结束，并且训练参数将被保存。
 
-您也可以在 1,000 步后停止训练模型，方法是使用*Ctrl* + *M*。程序将停止并保存训练参数。它会将代码转换为文本（您需要将其复制回代码单元格）并显示以下消息：
+您也可以在 1,000 步后停止训练模型，方法是使用*Ctrl* + `M`。程序将停止并保存训练参数。它会将代码转换为文本（您需要将其复制回代码单元格）并显示以下消息：
 
 ![](img/B17948_Appendix_IV_01.png)
 
@@ -260,7 +260,7 @@ os.chdir("/content/gpt-2/src")
 
 由于这是一个无条件的样本生成器，你不需要输入上下文句子。
 
-要停止该单元格，双击单元格的运行按钮，或按*Ctrl* + *M*。
+要停止该单元格，双击单元格的运行按钮，或按*Ctrl* + `M`。
 
 结果是随机的，但从语法的角度来看是合理的。从语义的角度来看，结果并不那么有趣，因为我们没有提供上下文。但仍然，这个过程是了不起的。它创造了帖子，写了一个标题，日期，想象了组织和地址，提出了一个主题，甚至想象了网页链接！
 
@@ -323,7 +323,7 @@ faculty of the mind.
 The reason is the thing which apprehends, and seeks to understand, the objects of its minds, which apprehend and apprehend the things of itself. No one can speak of this reason without the understanding and the understanding of the human reason. But that knowledge and understanding which is the most natural of all the faculties, which, because it is understood by the human reason, is the most natural of all the faculties, is not without reason, but only without understanding. The human reason, who sees and knows the things which the natural sense, which, though in the natural sense, does not understand, is the source of every other knowledge which we understand. The reason is the thing which does not understand, but understands the things which we comprehend, and therefore, is not to be understood. I mean that the reason is the thing which does not understand, but knows only the things which we do understand…." 
 ```
 
-要停止单元格，双击单元格的运行按钮，或输入*Ctrl* + *M*。
+要停止单元格，双击单元格的运行按钮，或输入*Ctrl* + `M`。
 
 哇！我怀疑有谁能看出我们训练过的 GPT-2 模型产生的文本补全与人类之间的区别。它也可能在每次运行时生成不同的输出。这可能是输出的样子，例如：
 

@@ -354,7 +354,7 @@ AI/ML 产品依赖于数据运行。数据存储的位置和方式是一个重�
 
 +   *产品驱动增长，* *韦斯·布什*
 
-+   *关注差距 - 只有在生产环境中才算是 AI/ML：数据战略系列第* *4* *部分*： [`www.credera.com/insights/mind-gap-not-ai-ml-unless-production-data-strategy-series-part-4`](https://www.credera.com/insights/mind-gap-not-ai-ml-unless-production-data-strategy-series-part-4)
++   *关注差距 - 只有在生产环境中才算是 AI/ML：数据战略系列第* `4` *部分*： [`www.credera.com/insights/mind-gap-not-ai-ml-unless-production-data-strategy-series-part-4`](https://www.credera.com/insights/mind-gap-not-ai-ml-unless-production-data-strategy-series-part-4)
 
 )
 

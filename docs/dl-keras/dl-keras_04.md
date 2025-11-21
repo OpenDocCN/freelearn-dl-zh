@@ -12,7 +12,7 @@
 
 # 什么是 GAN？
 
-GAN 的关键直觉可以很容易地类比为*艺术伪造*，即创造那些被错误归功于其他、更著名艺术家的艺术作品的过程 ([`en.wikipedia.org/wiki/Art`](https://en.wikipedia.org/wiki/Art))。GAN 同时训练两个神经网络，如下图所示。生成器*G(Z)*进行伪造，而判别器*D(Y)*则根据对真实艺术品和复制品的观察判断复制品的真实性。*D(Y)*接受一个输入，*Y*，（例如一张图片），并做出判断，判定输入的真实性——一般来说，接近零的值表示*真实*，接近一的值表示*伪造*。*G(Z)*从随机噪声*Z*中接收输入，并通过训练让自己欺骗*D*，让*D*误认为*G(Z)*生成的内容是真的。因此，训练判别器*D(Y)*的目标是最大化每个真实数据分布中的图像的*D(Y)*，并最小化每个不属于真实数据分布的图像的*D(Y)*。因此，*G*和*D*进行的是一场对立的博弈；这就是所谓的*对抗训练*。请注意，我们以交替的方式训练*G*和*D*，每个目标都作为损失函数通过梯度下降优化。生成模型学习如何更成功地伪造，而判别模型学习如何更成功地识别伪造。判别器网络（通常是标准的卷积神经网络）试图对输入图像进行分类，判断它是现实的还是生成的。这个新颖的核心思想是通过生成器和判别器进行反向传播，以调整生成器的参数，让生成器学会如何在更多的情境下欺骗判别器。最终，生成器将学会如何生成与真实图像无法区分的伪造图像。
+GAN 的关键直觉可以很容易地类比为*艺术伪造*，即创造那些被错误归功于其他、更著名艺术家的艺术作品的过程 ([`en.wikipedia.org/wiki/Art`](https://en.wikipedia.org/wiki/Art))。GAN 同时训练两个神经网络，如下图所示。生成器*G(Z)*进行伪造，而判别器*D(Y)*则根据对真实艺术品和复制品的观察判断复制品的真实性。*D(Y)*接受一个输入，`Y`，（例如一张图片），并做出判断，判定输入的真实性——一般来说，接近零的值表示*真实*，接近一的值表示*伪造*。*G(Z)*从随机噪声`Z`中接收输入，并通过训练让自己欺骗`D`，让`D`误认为*G(Z)*生成的内容是真的。因此，训练判别器*D(Y)*的目标是最大化每个真实数据分布中的图像的*D(Y)*，并最小化每个不属于真实数据分布的图像的*D(Y)*。因此，`G`和`D`进行的是一场对立的博弈；这就是所谓的*对抗训练*。请注意，我们以交替的方式训练`G`和`D`，每个目标都作为损失函数通过梯度下降优化。生成模型学习如何更成功地伪造，而判别模型学习如何更成功地识别伪造。判别器网络（通常是标准的卷积神经网络）试图对输入图像进行分类，判断它是现实的还是生成的。这个新颖的核心思想是通过生成器和判别器进行反向传播，以调整生成器的参数，让生成器学会如何在更多的情境下欺骗判别器。最终，生成器将学会如何生成与真实图像无法区分的伪造图像。
 
 ![](img/B06258_04a_01.png)
 
@@ -42,7 +42,7 @@ GAN 的关键直觉可以很容易地类比为*艺术伪造*，即创造那些�
 
 ![](img/B06258_04a_006.png)
 
-GAN 最酷的用途之一就是对生成器的向量*Z*中的人脸进行算术操作。换句话说，如果我们停留在合成伪造图像的空间中，就能看到像这样的效果：
+GAN 最酷的用途之一就是对生成器的向量`Z`中的人脸进行算术操作。换句话说，如果我们停留在合成伪造图像的空间中，就能看到像这样的效果：
 
 *[微笑的女人] - [中立的女人] + [中立的男人] = [微笑的男人]*
 
@@ -56,7 +56,7 @@ GAN 最酷的用途之一就是对生成器的向量*Z*中的人脸进行算术�
 
 # 深度卷积生成对抗网络
 
-**深度卷积生成对抗网络**（**DCGAN**）在论文中介绍：*《使用深度卷积生成对抗网络进行无监督表示学习》*，作者 A. Radford, L. Metz 和 S. Chintala，arXiv: 1511.06434, 2015。生成器使用一个 100 维的均匀分布空间*Z*，然后通过一系列卷积操作将其投影到一个更小的空间中。下图展示了一个示例：
+**深度卷积生成对抗网络**（**DCGAN**）在论文中介绍：*《使用深度卷积生成对抗网络进行无监督表示学习》*，作者 A. Radford, L. Metz 和 S. Chintala，arXiv: 1511.06434, 2015。生成器使用一个 100 维的均匀分布空间`Z`，然后通过一系列卷积操作将其投影到一个更小的空间中。下图展示了一个示例：
 
 ![](img/B06258_04a_008.png)
 
@@ -67,10 +67,10 @@ def generator_model():
     model = Sequential()
     model.add(Dense(input_dim=100, output_dim=1024))
     model.add(Activation('tanh'))
-    model.add(Dense(128*7*7))
+    model.add(Dense(128`7`7))
     model.add(BatchNormalization())
     model.add(Activation('tanh'))
-    model.add(Reshape((128, 7, 7), input_shape=(128*7*7,)))
+    model.add(Reshape((128, 7, 7), input_shape=(128`7`7,)))
     model.add(UpSampling2D(size=(2, 2)))
     model.add(Convolution2D(64, 5, 5, border_mode='same'))
     model.add(Activation('tanh'))
@@ -128,7 +128,7 @@ python setup.py install
 
 请注意，Keras 2.0 的兼容性已在此问题中跟踪：[`github.com/bstriner/keras-adversarial/issues/11`](https://github.com/bstriner/keras-adversarial/issues/11)。
 
-如果生成器*G*和判别器*D*基于相同的模型，*M*，那么它们可以合并为一个对抗模型；它使用相同的输入，*M*，但为*G*和*D*分开目标和度量。该库有以下 API 调用：
+如果生成器`G`和判别器`D`基于相同的模型，`M`，那么它们可以合并为一个对抗模型；它使用相同的输入，`M`，但为`G`和`D`分开目标和度量。该库有以下 API 调用：
 
 ```py
 adversarial_model = AdversarialModel(base_model=M,
@@ -137,7 +137,7 @@ adversarial_model = AdversarialModel(base_model=M,
 
 ```
 
-如果生成器*G*和判别器*D*基于两个不同的模型，则可以使用此 API 调用：
+如果生成器`G`和判别器`D`基于两个不同的模型，则可以使用此 API 调用：
 
 ```py
 adversarial_model = AdversarialModel(player_models=[gan_g, gan_d],
@@ -185,7 +185,7 @@ from image_utils import dim_ordering_fix, dim_ordering_input,
 
 ```
 
-对抗性模型用于多玩家游戏。给定一个包含*n*个目标和*k*个玩家的基础模型，创建一个包含*n*k*个目标的模型，其中每个玩家在该玩家的目标上优化损失。此外，`simple_gan`生成一个具有给定`gan_targets`的 GAN。注意，在库中，生成器和判别器的标签是相反的；直观地说，这对 GAN 来说是一种标准做法：
+对抗性模型用于多玩家游戏。给定一个包含`n`个目标和`k`个玩家的基础模型，创建一个包含`n`k*个目标的模型，其中每个玩家在该玩家的目标上优化损失。此外，`simple_gan`生成一个具有给定`gan_targets`的 GAN。注意，在库中，生成器和判别器的标签是相反的；直观地说，这对 GAN 来说是一种标准做法：
 
 ```py
 def gan_targets(n):
@@ -645,7 +645,7 @@ WaveNet 是一种深度生成模型，用于生成原始音频波形。这项突
 
 +   **参数化语音合成（Parametric TTS）**：这是创建模型来存储待合成音频的所有特征的过程。在 WaveNet 之前，使用参数化语音合成生成的音频比连续语音合成的音频自然度低。WaveNet 通过直接建模音频声音的生成改进了技术水平，而不是使用过去使用的中间信号处理算法。
 
-原则上，WaveNet 可以看作是一堆 1 维卷积层（我们已经在第三章，*深度学习与 ConvNets*中看到了 2 维卷积用于图像），具有恒定的步幅为 1 且没有池化层。注意，输入和输出在构造上具有相同的维度，因此 ConvNet 非常适合模拟音频等序列数据。然而，已经表明，为了达到输出神经元的大接受域大小（记住神经元层的接收域是前一层提供输入的横截面），需要使用大量大滤波器或者昂贵地增加网络的深度。因此，纯粹的 ConvNets 在学习如何合成音频方面并不那么有效。WaveNet 背后的关键直觉是扩张因果卷积（更多信息请参考文章：*Multi-Scale Context Aggregation by Dilated Convolutions*，作者 Fisher Yu, Vladlen Koltun, 2016，可在[`www.semanticscholar.org/paper/Multi-Scale-Context-Aggregation-by-Dilated-Yu-Koltun/420c46d7cafcb841309f02ad04cf51cb1f190a48`](https://www.semanticscholar.org/paper/Multi-Scale-Context-Aggregation-by-Dilated-Yu-Koltun/420c46d7cafcb841309f02ad04cf51cb1f190a48)获取）或者有时称为空洞卷积（*atrous*是法语表达*à trous*的词语，意思是*带孔的*，因此空洞卷积是一种在应用卷积层的滤波器时跳过某些输入值的方式）。例如，在一维情况下，大小为 3 的滤波器*w*，带有膨胀率*1*将计算以下和：
+原则上，WaveNet 可以看作是一堆 1 维卷积层（我们已经在第三章，*深度学习与 ConvNets*中看到了 2 维卷积用于图像），具有恒定的步幅为 1 且没有池化层。注意，输入和输出在构造上具有相同的维度，因此 ConvNet 非常适合模拟音频等序列数据。然而，已经表明，为了达到输出神经元的大接受域大小（记住神经元层的接收域是前一层提供输入的横截面），需要使用大量大滤波器或者昂贵地增加网络的深度。因此，纯粹的 ConvNets 在学习如何合成音频方面并不那么有效。WaveNet 背后的关键直觉是扩张因果卷积（更多信息请参考文章：*Multi-Scale Context Aggregation by Dilated Convolutions*，作者 Fisher Yu, Vladlen Koltun, 2016，可在[`www.semanticscholar.org/paper/Multi-Scale-Context-Aggregation-by-Dilated-Yu-Koltun/420c46d7cafcb841309f02ad04cf51cb1f190a48`](https://www.semanticscholar.org/paper/Multi-Scale-Context-Aggregation-by-Dilated-Yu-Koltun/420c46d7cafcb841309f02ad04cf51cb1f190a48)获取）或者有时称为空洞卷积（*atrous*是法语表达*à trous*的词语，意思是*带孔的*，因此空洞卷积是一种在应用卷积层的滤波器时跳过某些输入值的方式）。例如，在一维情况下，大小为 3 的滤波器`w`，带有膨胀率`1`将计算以下和：
 
 ![](img/B06258_04a_015.png)
 

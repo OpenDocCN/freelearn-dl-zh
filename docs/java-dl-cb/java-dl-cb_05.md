@@ -235,7 +235,7 @@ model.fit();
 
 以下是 DL4J Word2Vec 中可用的其他词法分析器工厂实现，用于为给定输入生成词法分析器：
 
-+   `NGramTokenizerFactory`：这是一个基于*n*-gram 模型创建词法分析器的工厂。*N*-grams 是由文本语料库中的连续单词或字母组成，长度为*n*。
++   `NGramTokenizerFactory`：这是一个基于`n`-gram 模型创建词法分析器的工厂。`N`-grams 是由文本语料库中的连续单词或字母组成，长度为`n`。
 
 +   `PosUimaTokenizerFactory`：这是一个创建词法分析器的工厂，能够过滤部分词性标注。
 
@@ -243,7 +243,7 @@ model.fit();
 
 以下是 DL4J 中内置的词元预处理器（不包括`CommonPreprocessor`）：
 
-+   `EndingPreProcessor`：这是一个去除文本语料库中词尾的预处理器——例如，它去除词尾的*s*、*ed*、*.*、*ly*和*ing*。
++   `EndingPreProcessor`：这是一个去除文本语料库中词尾的预处理器——例如，它去除词尾的`s`、*ed*、*.*、*ly*和*ing*。
 
 +   `LowCasePreProcessor`：这是一个将文本转换为小写格式的预处理器。
 
@@ -267,7 +267,7 @@ model.fit();
 Collection<String> words = model.wordsNearest("season",10); 
 ```
 
-您将看到类似以下的*n*输出：
+您将看到类似以下的`n`输出：
 
 ```py
 week
@@ -299,7 +299,7 @@ System.out.println(cosSimilarity);
 
 # 它是如何工作的...
 
-在第一步中，我们通过调用`wordsNearest()`，提供输入和数量`n`，找到了与给定词语上下文最相似的前*n*个词。`n`的数量是我们希望列出的词数。
+在第一步中，我们通过调用`wordsNearest()`，提供输入和数量`n`，找到了与给定词语上下文最相似的前`n`个词。`n`的数量是我们希望列出的词数。
 
 在第二步中，我们尝试找出两个给定词语的相似度。为此，我们实际上计算了这两个给定词语之间的**余弦相似度**。余弦相似度是我们用来衡量词语/文档相似度的有用度量之一。我们使用训练好的模型将输入词语转化为向量。
 

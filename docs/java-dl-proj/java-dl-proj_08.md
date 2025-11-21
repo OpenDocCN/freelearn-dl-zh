@@ -96,7 +96,7 @@ ParallelWrapper wrapper = new ParallelWrapper.Builder(net)
 
 `ParallelWrapper` 将现有模型作为主要参数，并通过将工作者数量保持为等于或大于机器上 GPU 数量的方式进行并行训练。
 
-在 `ParallelWrapper` 内，初始模型将被复制，每个工作者将训练自己的模型。在 `averagingFrequency(X)` 中的每 *N* 次迭代后，所有模型将被平均，并继续训练。现在，要使用此功能，请在 `pom.xml` 文件中使用以下依赖：
+在 `ParallelWrapper` 内，初始模型将被复制，每个工作者将训练自己的模型。在 `averagingFrequency(X)` 中的每 `N` 次迭代后，所有模型将被平均，并继续训练。现在，要使用此功能，请在 `pom.xml` 文件中使用以下依赖：
 
 ```py
 <dependency>
@@ -518,7 +518,7 @@ private static int *nTrainEpochs* = 100;
                         .stride(2, 2)
                         .activation(Activation.RELU)
                         .weightInit(WeightInit.RELU)
-                        .build()) //Output: (15-3+0)/2+1 = 7 -> 7*7*10 = 490
+                        .build()) //Output: (15-3+0)/2+1 = 7 -> 7`7`10 = 490
                 .layer(3, new DenseLayer.Builder()
                         .activation(Activation.RELU)
                         .nIn(2340) // 13 * 18 * 10 = 2340, see CNN layer width x height
@@ -847,7 +847,7 @@ private static void networkTrainer(UCF101Reader reader, DataSetIterator trainDat
                         .stride(2, 2)
                         .activation(Activation.RELU)
                         .weightInit(WeightInit.RELU)
-                        .build())   //Output: (15-3+0)/2+1 = 7 -> 7*7*10 = 490
+                        .build())   //Output: (15-3+0)/2+1 = 7 -> 7`7`10 = 490
                 .layer(3, new DenseLayer.Builder()
                         .activation(Activation.RELU)
                         .nIn(2340) // 13 * 18 * 10 = 2340, see CNN layer width x height

@@ -86,9 +86,9 @@ def security(user_message):
 
 ![](img/3-PPMUMLAP0325.png)**快速提示**：使用**AI 代码解释器**和**快速复制**功能增强您的编码体验。在下一代 Packt Reader 中打开此书。点击**复制**按钮
 
-（**1**）快速将代码复制到您的编码环境，或点击**解释**按钮
+（*`1`*）快速将代码复制到您的编码环境，或点击**解释**按钮
 
-（**2**）让 AI 助手为您解释代码块。
+（*`2`*）让 AI 助手为您解释代码块。
 
 ![白色背景，黑色文字  AI 生成的内容可能不正确。](img/image_%282%29.png)
 
@@ -631,7 +631,7 @@ OpenWeather 的调用非常简单。它只需要您的 API 密钥和城市名称
 url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&units=metric&appid={api_key}" 
 ```
 
-注意，`metric`是 OpenWeatherMap API 定义的特定关键字，表示摄氏度**C**，同时也提供风速为**米/秒**（**m/s**）。如果您想使用美国习惯单位，将`metric`改为`imperial`，`&units=imperial`，您将获得华氏度**F**和风速为**英里/小时**（**mph**）。
+注意，`metric`是 OpenWeatherMap API 定义的特定关键字，表示摄氏度*`C`*，同时也提供风速为**米/秒**（**m/s**）。如果您想使用美国习惯单位，将`metric`改为`imperial`，`&units=imperial`，您将获得华氏度*`F`*和风速为**英里/小时**（**mph**）。
 
 我们现在只需发出请求并检索响应：
 

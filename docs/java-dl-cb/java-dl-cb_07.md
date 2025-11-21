@@ -243,7 +243,7 @@ trainIterator.setPreProcessor(normalization);
 
 # 如何工作...
 
-在第 1 步中，我们使用`NormalizerStandardize`来归一化数据集。`NormalizerStandardize`会对数据（特征）进行归一化，使其具有*0*的均值和*1*的标准差。换句话说，数据集中的所有值都将归一化到*(0, 1)*的范围内：
+在第 1 步中，我们使用`NormalizerStandardize`来归一化数据集。`NormalizerStandardize`会对数据（特征）进行归一化，使其具有`0`的均值和`1`的标准差。换句话说，数据集中的所有值都将归一化到*(0, 1)*的范围内：
 
 ```py
 DataNormalization normalization = new NormalizerStandardize();

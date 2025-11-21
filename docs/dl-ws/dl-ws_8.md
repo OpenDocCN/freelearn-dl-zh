@@ -1410,7 +1410,7 @@
         Genmodel.add(Activation('relu'))
         Genmodel.add(BatchNormalization())
         # second layer of FC => RElu => BN layers
-        Genmodel.add(Dense(7*7*64))
+        Genmodel.add(Dense(7`7`64))
         Genmodel.add(Activation('relu'))
         Genmodel.add(BatchNormalization())
     The complete code for this step can be found at https://packt.live/3fpobDm

@@ -34,7 +34,7 @@ scikit-learn 管道的主要目的是将 ML 步骤组合在一起。可以通过
 
 管道按顺序应用一系列变换，然后是最终的估算器。在管道中，`fit` 和 `transform` 方法在中间步骤中实现。`fit` 方法仅在管道操作的最后由最终估算器实现。为了缓存管道中的变换器，使用了 `memory` 参数。
 
-用于分类的估算器是一个 Python 对象，它实现了方法的 fit (*x*, *y*) 和 predict (*T*) 值。例如，`class sklearn.svm.SVC` 实现了 SVC。模型的参数作为估算器构造函数的参数传递。scikit-learn 中的 `memory` 类具有 `class sklearn.utils.Memory(*args, **kwargs)` 签名。它有缓存、清除、减少、评估和格式化内存对象的方法。`cache` 方法用于计算函数的返回值。返回的对象是一个 `MemorizedFunc` 对象，它的行为类似于一个函数，并提供额外的方法用于缓存查找和管理。`cache` 方法接受诸如 `func=None, ignore=None, verbose=None, mmap_mode=False` 等参数。
+用于分类的估算器是一个 Python 对象，它实现了方法的 fit (`x`, `y`) 和 predict (`T`) 值。例如，`class sklearn.svm.SVC` 实现了 SVC。模型的参数作为估算器构造函数的参数传递。scikit-learn 中的 `memory` 类具有 `class sklearn.utils.Memory(*args, **kwargs)` 签名。它有缓存、清除、减少、评估和格式化内存对象的方法。`cache` 方法用于计算函数的返回值。返回的对象是一个 `MemorizedFunc` 对象，它的行为类似于一个函数，并提供额外的方法用于缓存查找和管理。`cache` 方法接受诸如 `func=None, ignore=None, verbose=None, mmap_mode=False` 等参数。
 
 `class signature` 管道如下：
 

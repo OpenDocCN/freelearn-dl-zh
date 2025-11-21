@@ -301,7 +301,7 @@ utterance =  x(i)
 label = y(i)
 ```
 
-用于系统特征的输入是功率归一化后的音频剪辑的谱图，网络的输出是每种语言的字形。为了增加非线性，使用了**修正线性单元**（**ReLU**）函数，*σ(x) = min{max{x, 0}, 20}*。在双向循环层之后，放置一个或多个全连接层，输出层*L*是 softmax 层，计算字符的概率分布。
+用于系统特征的输入是功率归一化后的音频剪辑的谱图，网络的输出是每种语言的字形。为了增加非线性，使用了**修正线性单元**（**ReLU**）函数，*σ(x) = min{max{x, 0}, 20}*。在双向循环层之后，放置一个或多个全连接层，输出层`L`是 softmax 层，计算字符的概率分布。
 
 现在让我们深入了解 DS2 架构的实现。你可以在这里找到完整代码：[`github.com/PacktPublishing/Python-Deep-Learning-Projects/tree/master/Chapter07`](https://github.com/PacktPublishing/Python-Deep-Learning-Projects/tree/master/Chapter07)。
 

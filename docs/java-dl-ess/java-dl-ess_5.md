@@ -58,7 +58,7 @@
 
 当你阅读到这里时，你会发现 DL4J 的最大特点是它是以与 Hadoop 集成为前提设计的。这表明，DL4J 非常适合处理大规模数据，且比其他库更具可扩展性。此外，DL4J 支持 GPU 计算，因此能够更快速地处理数据。
 
-此外，DL4J 内部使用一个名为**Java 的 N 维数组**（**ND4J**）的库。该项目页面为[`nd4j.org/`](http://nd4j.org/)。与 DL4J 相同，这个库也作为开源项目发布在 GitHub 上：[`github.com/deeplearning4j/nd4j`](https://github.com/deeplearning4j/nd4j)。该库的开发者与 DL4J 相同，都是 Skymind。正如库名所示，这是一个科学计算库，使我们能够处理多功能的*n*维数组对象。如果你是 Python 开发者，可以通过类比 NumPy 来更容易理解它，因为 ND4J 是一个受 NumPy 启发的库。ND4J 还支持 GPU 计算，DL4J 能够进行 GPU 集成的原因就是它在内部使用了 ND4J。
+此外，DL4J 内部使用一个名为**Java 的 N 维数组**（**ND4J**）的库。该项目页面为[`nd4j.org/`](http://nd4j.org/)。与 DL4J 相同，这个库也作为开源项目发布在 GitHub 上：[`github.com/deeplearning4j/nd4j`](https://github.com/deeplearning4j/nd4j)。该库的开发者与 DL4J 相同，都是 Skymind。正如库名所示，这是一个科学计算库，使我们能够处理多功能的`n`维数组对象。如果你是 Python 开发者，可以通过类比 NumPy 来更容易理解它，因为 ND4J 是一个受 NumPy 启发的库。ND4J 还支持 GPU 计算，DL4J 能够进行 GPU 集成的原因就是它在内部使用了 ND4J。
 
 在 GPU 上与它们一起工作能带来什么好处？让我们简要看一下这一点。CPU 和 GPU 之间最大的区别在于核心数量的差异。GPU，顾名思义，是一个图形处理单元，最初是一个用于图像处理的集成电路。这也是 GPU 能够优化同时处理相同命令的原因。并行处理是它的强项。另一方面，CPU 需要处理各种命令，这些任务通常是按顺序处理的。与 CPU 相比，GPU 擅长处理大量简单的任务，因此像深度学习训练迭代这样的计算是它的专长。
 

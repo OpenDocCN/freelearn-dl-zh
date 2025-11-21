@@ -169,7 +169,7 @@ val simD = glove.similarity("old", "new")
  println("old/new similarity: " + simD)
 ```
 
-或者，找到与给定词语最相似的 *n* 个词：
+或者，找到与给定词语最相似的 `n` 个词：
 
 ```py
 val words: util.Collection[String] = glove.wordsNearest("time", 10)

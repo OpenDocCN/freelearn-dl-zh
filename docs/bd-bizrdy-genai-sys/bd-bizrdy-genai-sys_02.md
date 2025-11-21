@@ -903,15 +903,15 @@ AI 控制器的核心是在接收到输入（系统或人类用户）时决定�
 ```py
 scenarios = [
     {
-**"scenario_number"****:** **1****,**
+**"scenario_number"****:** *`1`***,**
         "description": "Market Semantic analysis.You will be provided with a market survey on a give range of products.The term market must be in the user or system input. Your task is provide an analysis."
     },
     {
-**"scenario_number"****:** **2****,**
+**"scenario_number"****:** *`2`***,**
         "description": " Sentiment analysis  Read the content and classify the content as an opinion  If it is not opinion, stop there  If it is an opinion then your task is to perform a sentiment analysis on these statements and provide a score with the label: Analysis score: followed by a numerical value between 0 and 1  with no + or - sign.Add an explanation."
     },
     {
-**"scenario_number"****:** **3****,**
+**"scenario_number"****:** *`3`***,**
         "description": "Semantic analysis.This is not an analysis but a semantic search. Provide more information on the topic."
     }
 ] 

@@ -104,7 +104,7 @@
 
 # 另请参阅
 
-其他浏览器也有类似的插件和扩展。如果你使用的是 Google Chrome，可以从以下网站下载名为*D*ownload'em All 的类似插件：
+其他浏览器也有类似的插件和扩展。如果你使用的是 Google Chrome，可以从以下网站下载名为`D`ownload'em All 的类似插件：
 
 [`chrome.google.com/webstore/detail/downloadem-all/ccdfjnniglfbpaplecpifdiglfmcebce?hl=en-US`](https://chrome.google.com/webstore/detail/downloadem-all/ccdfjnniglfbpaplecpifdiglfmcebce?hl=en-US)
 

@@ -362,7 +362,7 @@ model <- mx.mlp(data.matrix(train), train_target, hidden_node=10, out_node=2, ou
 preds = predict(model, data.matrix(test))
 ```
 
-1.  然后，我们可以使用混淆矩阵来评估性能，将调整后的目标类别放在*y*-轴上，预测结果放在*x*-轴上，如下所示：
+1.  然后，我们可以使用混淆矩阵来评估性能，将调整后的目标类别放在`y`-轴上，预测结果放在`x`-轴上，如下所示：
 
 ```py
 pred.label = max.col(t(preds))-1

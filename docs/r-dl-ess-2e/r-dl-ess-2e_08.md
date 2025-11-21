@@ -180,7 +180,7 @@ b'Hello world from TensorFlow'
 
 在这个第一个 TensorFlow 示例中，我们将探讨回归问题。此部分的代码位于`Chapter8/regression_tf.R`文件夹中：
 
-1.  首先，我们为输入值*x*和输出值*y*创建一些虚拟数据。我们将*y*设为大约等于`0.8 + x * 1.3`。我们希望应用程序发现`beta0`和`beta1`的值，分别为`0.8`和`1.3`：
+1.  首先，我们为输入值`x`和输出值`y`创建一些虚拟数据。我们将`y`设为大约等于`0.8 + x * 1.3`。我们希望应用程序发现`beta0`和`beta1`的值，分别为`0.8`和`1.3`：
 
 ```py
 library(tensorflow)
@@ -237,7 +237,7 @@ for (step in 0:80) {
 
 在本节中，我们将基于 MNIST 数据集构建一个 TensorFlow 模型。该代码具有与第五章《使用卷积神经网络进行图像分类》中的 Lenet 模型相似的层和参数。然而，在 TensorFlow 中构建模型的代码比在 Keras 或 MXNet 中构建模型的代码要复杂。原因之一是，程序员需要确保各层的尺寸正确对齐。在 Keras/MXNet 模型中，我们只需更改某一层的节点数即可。在 TensorFlow 中，如果我们更改一层的节点数，必须确保同时更改下一层的输入。
 
-在某些方面，在 TensorFlow 中编程更接近我们在第三章《深度学习基础》中手写的神经网络代码。与 Keras/MXNet 在训练循环中的另一个区别是，我们需要管理批次，而不仅仅是调用要求遍历所有数据 *x* 次（其中 *x* 是一个时期）。此示例的代码位于`Chapter8/mnist_tf.R`文件夹中。首先，我们加载 Keras 包以获取 MNIST 数据，但我们使用 TensorFlow 训练模型。以下是代码的第一部分：
+在某些方面，在 TensorFlow 中编程更接近我们在第三章《深度学习基础》中手写的神经网络代码。与 Keras/MXNet 在训练循环中的另一个区别是，我们需要管理批次，而不仅仅是调用要求遍历所有数据 `x` 次（其中 `x` 是一个时期）。此示例的代码位于`Chapter8/mnist_tf.R`文件夹中。首先，我们加载 Keras 包以获取 MNIST 数据，但我们使用 TensorFlow 训练模型。以下是代码的第一部分：
 
 ```py
 library(RSNNS) # for decodeClassLabels

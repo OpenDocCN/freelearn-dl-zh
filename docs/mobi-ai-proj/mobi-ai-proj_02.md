@@ -699,7 +699,7 @@ Android Studio 是用于 Android 应用开发的开发环境和沙盒。所有�
 
 +   ROOMS：每个住宅的平均房间数
 
-+   **A****GE**：1940 年之前建成的业主自住单元的比例
++   *`A`***GE**：1940 年之前建成的业主自住单元的比例
 
 +   **HIGHWAYS**：通往辐射状高速公路的可达性指数
 
@@ -765,7 +765,7 @@ public JSONObject makeJSON() {
          System.*out*.println("Error:" + e);
      }
 
-     Log.*i*("", jObj.toString());
+     Log.`i`("", jObj.toString());
 
      return jObj;
  }
@@ -804,7 +804,7 @@ InputStream ByPostMethod(String ServerURL) {
          }
 
      } catch (Exception e) {
-         Log.*e*("ERROR CAUGHT", "Error in GetData", e);
+         Log.`e`("ERROR CAUGHT", "Error in GetData", e);
      }
      return DataInputStream;
 
@@ -828,19 +828,19 @@ String ConvertStreamToString(InputStream stream) {
          }
 
      } catch (IOException e) {
-         Log.*e*("ERROR CAUGHT", "Error in ConvertStreamToString", e);
+         Log.`e`("ERROR CAUGHT", "Error in ConvertStreamToString", e);
      } catch (Exception e) {
-         Log.*e*("ERROR CAUGHT", "Error in ConvertStreamToString", e);
+         Log.`e`("ERROR CAUGHT", "Error in ConvertStreamToString", e);
      } finally {
 
          try {
              stream.close();
 
          } catch (IOException e) {
-             Log.*e*("ERROR CAUGHT", "Error in ConvertStreamToString", e);
+             Log.`e`("ERROR CAUGHT", "Error in ConvertStreamToString", e);
 
          } catch (Exception e) {
-             Log.*e*("ERROR CAUGHT", "Error in ConvertStreamToString", e);
+             Log.`e`("ERROR CAUGHT", "Error in ConvertStreamToString", e);
          }
      }
      return response.toString();
@@ -873,7 +873,7 @@ private class MakeNetworkCall extends AsyncTask<String, Void, String> {
 
          InputStream is = null;
          String URL = "http://10.0.2.2:5000/predict";
-         Log.*d*("ERROR CAUGHT", "URL: " + URL);
+         Log.`d`("ERROR CAUGHT", "URL: " + URL);
          String res = "";
 
          is = ByPostMethod(URL);
@@ -890,7 +890,7 @@ private class MakeNetworkCall extends AsyncTask<String, Void, String> {
          super.onPostExecute(result);
 
          DisplayMessage(result);
-         Log.*d*("COMPLETED", "Result: " + result);
+         Log.`d`("COMPLETED", "Result: " + result);
      }
  }
 ```
@@ -903,7 +903,7 @@ private class MakeNetworkCall extends AsyncTask<String, Void, String> {
 estimate.setOnClickListener(new View.OnClickListener() {
      @Override
      public void onClick(View v) {
-         Log.*i*("CHECK", "CLICKED");
+         Log.`i`("CHECK", "CLICKED");
 
          new MakeNetworkCall().execute("http://10.0.2.2:5000/predict", "Post");
      }

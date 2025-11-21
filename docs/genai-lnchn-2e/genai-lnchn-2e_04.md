@@ -678,7 +678,7 @@ template = ChatPromptTemplate.from_messages([
 ```py
 generations = []
 for _ in range(20):
- generations.append(final_chain.invoke({"question": "Solve equation 2*x**2-96*x+1152"}, temperature=2.0).strip())
+ generations.append(final_chain.invoke({"question": "Solve equation 2`x`*2-96*x+1152"}, temperature=2.0).strip())
 from collections import Counter
 print(Counter(generations).most_common(1)[0][0])
 >> x = 24

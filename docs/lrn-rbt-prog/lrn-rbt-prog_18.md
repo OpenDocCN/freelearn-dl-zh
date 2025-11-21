@@ -176,7 +176,7 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
 当您登录时，Mycroft 将显示安装指南。这将向您列出的问题进行提问：
 
-1.  当询问是否要进行引导设置时，按 *Y* 表示是。Mycroft 安装将下载大量更新。留出 30 分钟到 1 小时的时间来完成。
+1.  当询问是否要进行引导设置时，按 `Y` 表示是。Mycroft 安装将下载大量更新。留出 30 分钟到 1 小时的时间来完成。
 
 1.  Mycroft 现在将询问您的音频输出设备：
 
@@ -184,11 +184,11 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
     3, to select USB speakers, which sets some basic defaults.
     ```
 
-1.  按 *Ctrl* + *C* 退出引导设置并返回到 `$` 提示符。
+1.  按 *Ctrl* + `C` 退出引导设置并返回到 `$` 提示符。
 
 1.  为了使安装生效，我们需要更新 SD 卡上的软件。在提示符下，输入 `sudo apt update -y && sudo apt upgrade -y`。更新可能需要一些时间。
 
-1.  使用 `sudo reboot` 重启 Pi 以使更新生效。重启 Pi 后，使用 `ssh` 登录。您将再次处于引导设置中。再次按 *Ctrl* + *C*。
+1.  使用 `sudo reboot` 重启 Pi 以使更新生效。重启 Pi 后，使用 `ssh` 登录。您将再次处于引导设置中。再次按 *Ctrl* + `C`。
 
 1.  使用以下命令安装 ReSpeaker 2-Mics Pi HAT 的音频驱动程序：
 
@@ -200,7 +200,7 @@ Mycroft 为此准备了 Raspbian 发行版。让我们将其放入 SD 卡中：
 
     Git 克隆可能需要一分钟左右。该板使用 WM8960 音频芯片。安装脚本将花费 20-30 分钟完成。
 
-1.  再次重启。在退出引导模式后按 *Ctrl* + *C*。
+1.  再次重启。在退出引导模式后按 *Ctrl* + `C`。
 
     在我们继续之前，测试我们是否真的得到了音频是一个好主意。
 
@@ -263,15 +263,15 @@ card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm
        "play_mp3_cmdline": "mpg123 -a playback %1",
     ```
 
-1.  按*Ctrl* + *X*来保存并退出。当被询问是否保存文件时，输入*Y*表示是。
+1.  按*Ctrl* + `X`来保存并退出。当被询问是否保存文件时，输入`Y`表示是。
 
 1.  再次重启；当你回来时，不要退出指导模式。
 
-1.  Mycroft会要求测试设备。按*T*来测试扬声器。可能需要几秒钟，但你将听到Mycroft对你说话。如果声音有点小，尝试输入数字`9`，然后再次测试。这是一个激动人心的时刻！按*D*表示你已经完成了测试。
+1.  Mycroft会要求测试设备。按`T`来测试扬声器。可能需要几秒钟，但你将听到Mycroft对你说话。如果声音有点小，尝试输入数字`9`，然后再次测试。这是一个激动人心的时刻！按`D`表示你已经完成了测试。
 
-1.  指导安装程序接下来会询问麦克风。选择**4**代表**其他USB麦克风**并尝试声音测试。安装程序会要求你对着麦克风说话，并且应该会回放你的声音。如果听起来不错，请按*1*。
+1.  指导安装程序接下来会询问麦克风。选择*`4`*代表**其他USB麦克风**并尝试声音测试。安装程序会要求你对着麦克风说话，并且应该会回放你的声音。如果听起来不错，请按`1`。
 
-1.  指导安装程序会询问你是否使用推荐设置；选择*1*以确认你想要使用它。将有一系列关于密码设置的问题。我建议不要添加sudo密码，而是将Pi的默认密码改为一个独特的密码。
+1.  指导安装程序会询问你是否使用推荐设置；选择`1`以确认你想要使用它。将有一系列关于密码设置的问题。我建议不要添加sudo密码，而是将Pi的默认密码改为一个独特的密码。
 
 1.  Mycroft将以大量紫色安装文本启动。
 
@@ -309,7 +309,7 @@ card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm
 
 1.  首先，为了引起它的注意，你必须使用唤醒词*Hey Mycroft*。如果它准备好了（并且没有还在忙碌），它将发出一个扬声器音调来显示*Mycroft*正在倾听。你需要站在大约一米的Raspberry Pi麦克风附近。它可能会回应说*请稍等，我正在完成启动*。给它一分钟，然后再次尝试。
 
-1.  如果你听到声音，你现在可以要求它做某事。一个好的起点是告诉它：*说你好*。大约10秒后，Mycroft 应该会通过扬声器回应*你好*。你需要尽可能清晰地说话。我发现它需要你逐个发音；那些*t*和*n*的音是必不可少的。
+1.  如果你听到声音，你现在可以要求它做某事。一个好的起点是告诉它：*说你好*。大约10秒后，Mycroft 应该会通过扬声器回应*你好*。你需要尽可能清晰地说话。我发现它需要你逐个发音；那些`t`和`n`的音是必不可少的。
 
 现在既然它已经工作，你可以用它来玩一些有趣的事情！你可以将*嘿 Mycroft*缩短为*Mycroft*。你还可以说的其他事情包括以下内容：
 
@@ -435,7 +435,7 @@ card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm
     self.mode_config to map mode_name to a script name. We then use subprocess to start this script with Python. Popen creates a process, and the code stores a handle for it in self.current_process. This method returns True if we started it, and False if one was already running.
     ```
 
-1.  该类需要一种方法来请求它停止一个进程。请注意，当进程未运行时，它不会尝试停止进程。当我们停止脚本时，我们可以使用 Unix 信号，这允许我们以允许它们运行 `atexit` 代码的方式请求它们停止。它发送 `SIGINT` 信号，这是 *Ctrl* + *C* 键盘组合的等效信号：
+1.  该类需要一种方法来请求它停止一个进程。请注意，当进程未运行时，它不会尝试停止进程。当我们停止脚本时，我们可以使用 Unix 信号，这允许我们以允许它们运行 `atexit` 代码的方式请求它们停止。它发送 `SIGINT` 信号，这是 *Ctrl* + `C` 键盘组合的等效信号：
 
     ```py
         def stop(self):
@@ -510,7 +510,7 @@ card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm
      * Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
     ```
 
-1.  现在创建另一个 `ssh` 窗口进入 Mycroft Raspberry Pi – 我们可以测试它是否与另一个窗口通信。在 `pi@picroft.local` 中按一次 *Ctrl* + *C* 以进入 Linux 命令行（`$` 提示符）。
+1.  现在创建另一个 `ssh` 窗口进入 Mycroft Raspberry Pi – 我们可以测试它是否与另一个窗口通信。在 `pi@picroft.local` 中按一次 *Ctrl* + `C` 以进入 Linux 命令行（`$` 提示符）。
 
 1.  `curl` 命令在像 Raspberry Pi 这样的 Linux 系统上经常被用来测试此类服务器。它向网络服务器发送请求，发送/接收数据，并显示结果。它非常适合测试此类 HTTP 控制API。
 
@@ -526,7 +526,7 @@ card 1: wm8960soundcard [wm8960-soundcard], device 0: bcm2835-i2s-wm8960-hifi wm
 
     注意这两个URL都是以`http://myrobot.local:5000/`开头的。这个地址可能因你的主机名而异。这是这个控制服务器的基准URL。
 
-1.  你可以按*Ctrl* + *C*来停止它。
+1.  你可以按*Ctrl* + `C`来停止它。
 
 我们可以用这个来构建我们的 Mycroft 行为，但在继续之前，让我们检查一下是否有任何问题。
 
@@ -735,9 +735,9 @@ requests
 
 1.  如果你需要更新代码，再次上传文件到这个位置将导致 Mycroft 重新加载它。
 
-    加载或使用技能时遇到的问题将在 Mycroft 输出中显示。你还可以在 `/var/log/mycroft/skills.log` 中找到结果——`less` Linux 工具对于查看此类日志输出很有用，使用 *Shift* + *G* 跳到文件末尾或输入 `/myrobot` 跳到其输出。
+    加载或使用技能时遇到的问题将在 Mycroft 输出中显示。你还可以在 `/var/log/mycroft/skills.log` 中找到结果——`less` Linux 工具对于查看此类日志输出很有用，使用 *Shift* + `G` 跳到文件末尾或输入 `/myrobot` 跳到其输出。
 
-    你也可以使用 `tail -f /var/log/mycroft/skills.log` 来查看问题发生时的状态。使用 *Ctrl* + *C* 来停止。
+    你也可以使用 `tail -f /var/log/mycroft/skills.log` 来查看问题发生时的状态。使用 *Ctrl* + `C` 来停止。
 
 1.  现在，打开机器人的电源，使用 `ssh` 登录，并使用 `python3 control_server.py` 启动控制服务器。
 

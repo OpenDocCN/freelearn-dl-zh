@@ -372,7 +372,7 @@ GitHub Copilot 是一个强大的 AI 编程助手，能够显著提升你在与 
 
 图 8.8：带有 GitHub Copilot 状态图标的 VS Code
 
-GitHub Copilot 状态图标不仅仅是一个符号，它是 VS Code 界面中的一个互动网关。当 GitHub Copilot 处于活动状态时，图标会亮起，表明 AI 驱动的代码建议正在运行。用户可以与该图标互动，深入了解与 GitHub Copilot 相关的更多选项，例如调整设置或发现当前版本。此图标在用户体验中起着至关重要的作用，提供了一种无缝的方式，让用户可以直接从 VS Code 界面中导航和与 GitHub Copilot 互动。在新版中，你可以使用 *Ctrl* + *I* 来请求 GitHub Copilot Chat 执行某项任务，或者点击右下角的图标来打开 Copilot Chat。
+GitHub Copilot 状态图标不仅仅是一个符号，它是 VS Code 界面中的一个互动网关。当 GitHub Copilot 处于活动状态时，图标会亮起，表明 AI 驱动的代码建议正在运行。用户可以与该图标互动，深入了解与 GitHub Copilot 相关的更多选项，例如调整设置或发现当前版本。此图标在用户体验中起着至关重要的作用，提供了一种无缝的方式，让用户可以直接从 VS Code 界面中导航和与 GitHub Copilot 互动。在新版中，你可以使用 *Ctrl* + `I` 来请求 GitHub Copilot Chat 执行某项任务，或者点击右下角的图标来打开 Copilot Chat。
 
 在探索了 GitHub Copilot 状态图标的互动功能及其在提升编码效率中的作用之后，我们现在准备深入探讨其更多的能力。以此为基础，让我们一起探索如何进一步利用 GitHub Copilot Chat 在 VS Code 中提升我们的编码工作流。
 
@@ -418,7 +418,7 @@ GitHub Copilot Chat 是一款突破性的工具，作为 AI 编程助手，帮�
 
 1.  **启动 Copilot Chat**：有两种方式可以启动 Copilot Chat：
 
-    +   按下键盘上的 *Ctrl* + *I*。
+    +   按下键盘上的 *Ctrl* + `I`。
 
     +   点击屏幕右下角状态栏中的 GitHub Copilot 图标。
 

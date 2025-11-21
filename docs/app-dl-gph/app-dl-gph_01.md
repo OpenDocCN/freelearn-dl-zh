@@ -89,7 +89,7 @@ connections(
 
 图 1.3 – 在图上运行 BFS
 
-使用这个算法，如果玛丽的节点被标记为已访问，并且跳数为*2*，那么我们可以放心地说，约翰和玛丽有二度连接。
+使用这个算法，如果玛丽的节点被标记为已访问，并且跳数为`2`，那么我们可以放心地说，约翰和玛丽有二度连接。
 
 BFS 的时间复杂度是多少？如前所述，用户的数量假定为 ![<mml:math  ><mml:mi>V</mml:mi></mml:math>](img/1.png) ，一度连接的数量为 ![<mml:math  ><mml:mi>E</mml:mi></mml:math>](img/2.png) 。实际上，BFS 至多访问图中的所有顶点和边一次，所以时间复杂度就是简单的 ![<mml:math  ><mml:mi>O</mml:mi><mml:mo>(</mml:mo><mml:mi>V</mml:mi><mml:mo>+</mml:mo><mml:mi>E</mml:mi><mml:mo>)</mml:mo></mml:math>](img/10.png) 。在实际场景中，连接数远远超过平台上的用户数，因此时间复杂度可以近似为 ![<mml:math  ><mml:mi>O</mml:mi><mml:mo>(</mml:mo><mml:mi>E</mml:mi><mml:mo>)</mml:mo></mml:math>](img/11.png) 。
 

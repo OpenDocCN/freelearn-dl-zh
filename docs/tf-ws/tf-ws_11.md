@@ -914,9 +914,9 @@ def create_generator(seed_size, channels):
 
 现在，您将创建由*输入种子*生成的图像；不同的种子编号将生成不同的图像，而您的种子大小将决定生成多少不同的图像。
 
-接下来，添加一个密集层，输出空间的维度为`4*4*256`，并使用 ReLU 激活函数。`input_dim`是输入形状，您将其设置为`seed_size`。
+接下来，添加一个密集层，输出空间的维度为`4`4`256`，并使用 ReLU 激活函数。`input_dim`是输入形状，您将其设置为`seed_size`。
 
-使用以下代码添加一个层，将您的输入重塑为匹配`4*4*256`的输出空间：
+使用以下代码添加一个层，将您的输入重塑为匹配`4`4`256`的输出空间：
 
 ```py
 model.add(Reshape((4,4,256)))
@@ -952,7 +952,7 @@ model.add(Activation("tanh"))
 ```py
 def create_generator(seed_size, channels):
     model = Sequential()
-    model.add(Dense(4*4*256,activation="relu", \
+    model.add(Dense(4`4`256,activation="relu", \
                     input_dim=seed_size))
     model.add(Reshape((4,4,256)))
     model.add(UpSampling2D())
@@ -1269,7 +1269,7 @@ def train(dataset, epochs):
     ```py
     def create_generator(seed_size, channels):
         model = Sequential()
-        model.add(Dense(4*4*256,activation="relu", \
+        model.add(Dense(4`4`256,activation="relu", \
                         input_dim=seed_size))
         model.add(Reshape((4,4,256)))
         model.add(UpSampling2D())

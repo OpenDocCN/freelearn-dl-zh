@@ -268,10 +268,10 @@ spark.stop()
 | `flatMap(func)` | 这个转换类似于 `map`：不同之处在于，每个输入项可以映射到零个或多个输出项（应用的 `func` 函数应该返回一个 `Seq`）。 |
 | `union(otherRdd)` | 返回一个新的 RDD，包含源 RDD 和 `otherRdd` 参数中元素的并集。 |
 | `distinct([numPartitions])` | 返回一个新的 RDD，仅包含源 RDD 中的唯一元素。 |
-| `groupByKey([numPartitions])` | 当对一个包含 (*K*, *V*) 对的 RDD 调用时，它返回一个 (*K*, *Iterable<V>*) 对的 RDD。默认情况下，输出 RDD 的并行度取决于源 RDD 的分区数。你可以传递一个可选的 `numPartitions` 参数来设置不同的分区数。 |
-| `reduceByKey(func, [numPartitions])` | 当对一个包含 (*K*, *V*) 对的 RDD 调用时，它返回一个 (*K*, *V*) 对的 RDD，其中每个键的值通过给定的 `func` 函数进行聚合，该函数的类型必须为 *(V*, *V) => V*。与 `groupByKey` 转换相同，reduce 操作的分区数可以通过可选的 `numPartitions` 第二个参数进行配置。 |
-| `sortByKey([ascending], [numPartitions])` | 当对一个包含 (*K*, *V*) 对的 RDD 调用时，它返回一个按键排序的 (*K*, *V*) 对的 RDD，排序顺序根据布尔值 `ascending` 参数来指定（升序或降序）。输出 RDD 的分区数量可以通过可选的 `numPartitions` 第二个参数进行配置。 |
-| `join(otherRdd, [numPartitions])` | 当应用于类型为 (*K*, *V*) 和 (*K*, *W*) 的 RDD 时，它返回一个 (*K*, (*V*, *W*)) 对的 RDD，为每个键提供所有元素对。它支持左外连接、右外连接和全外连接。输出 RDD 的分区数量可以通过可选的 `numPartitions` 参数进行配置。 |
+| `groupByKey([numPartitions])` | 当对一个包含 (`K`, `V`) 对的 RDD 调用时，它返回一个 (`K`, *Iterable<V>*) 对的 RDD。默认情况下，输出 RDD 的并行度取决于源 RDD 的分区数。你可以传递一个可选的 `numPartitions` 参数来设置不同的分区数。 |
+| `reduceByKey(func, [numPartitions])` | 当对一个包含 (`K`, `V`) 对的 RDD 调用时，它返回一个 (`K`, `V`) 对的 RDD，其中每个键的值通过给定的 `func` 函数进行聚合，该函数的类型必须为 *(V*, *V) => V*。与 `groupByKey` 转换相同，reduce 操作的分区数可以通过可选的 `numPartitions` 第二个参数进行配置。 |
+| `sortByKey([ascending], [numPartitions])` | 当对一个包含 (`K`, `V`) 对的 RDD 调用时，它返回一个按键排序的 (`K`, `V`) 对的 RDD，排序顺序根据布尔值 `ascending` 参数来指定（升序或降序）。输出 RDD 的分区数量可以通过可选的 `numPartitions` 第二个参数进行配置。 |
+| `join(otherRdd, [numPartitions])` | 当应用于类型为 (`K`, `V`) 和 (`K`, `W`) 的 RDD 时，它返回一个 (`K`, (`V`, `W`)) 对的 RDD，为每个键提供所有元素对。它支持左外连接、右外连接和全外连接。输出 RDD 的分区数量可以通过可选的 `numPartitions` 参数进行配置。 |
 
 以下表格列出了 Spark 支持的一些常见操作：
 
@@ -281,12 +281,12 @@ spark.stop()
 | `collect()` | 返回 RDD 中所有元素作为一个数组传递给驱动程序。 |
 | `count()` | 返回 RDD 中元素的总数。 |
 | `first()` | 返回 RDD 中的第一个元素。 |
-| `take(n)` | 返回一个包含 RDD 中前 *n* 个元素的数组。 |
+| `take(n)` | 返回一个包含 RDD 中前 `n` 个元素的数组。 |
 | `foreach(func)` | 对 RDD 中的每个元素执行 `func` 函数。 |
 | `saveAsTextFile(path)` | 将 RDD 的元素以文本文件的形式写入指定目录（通过 `path` 参数指定绝对路径），支持本地文件系统、HDFS 或其他 Hadoop 支持的文件系统。此功能仅适用于 Scala 和 Java。 |
-| `countByKey()` | 这个操作仅适用于类型为 (*K*, *V*) 的 RDD——它返回一个 (*K*, *Int*) 对的哈希映射，其中 *K* 是源 RDD 的键，值是该键 *K* 的计数。 |
+| `countByKey()` | 这个操作仅适用于类型为 (`K`, `V`) 的 RDD——它返回一个 (`K`, *Int*) 对的哈希映射，其中 `K` 是源 RDD 的键，值是该键 `K` 的计数。 |
 
-现在，让我们通过一个示例理解转换和操作的概念，该示例可以在 Scala shell 中执行——它找到输入文本文件中最常用的 *N* 个单词。以下图示展示了这一问题的潜在实现：
+现在，让我们通过一个示例理解转换和操作的概念，该示例可以在 Scala shell 中执行——它找到输入文本文件中最常用的 `N` 个单词。以下图示展示了这一问题的潜在实现：
 
 ![](img/d5572d5c-5e5e-42db-8f01-0c624d1dc699.png)
 
@@ -369,7 +369,7 @@ Spark 可以在执行操作时将 RDD（以及数据集）持久化到内存中�
 
 然而，在 Spark 中有两种有限类型的共享变量可供使用，适用于两种常见的使用模式——广播变量和累加器。
 
-Spark 编程中最常见的操作之一是对 RDD 执行连接操作，根据给定的键整合数据。在这些情况下，可能会有大量的数据集被发送到执行分区的从属节点进行连接。可以很容易地理解，这种情况会导致巨大的性能瓶颈，因为网络 I/O 的速度比内存访问慢 100 倍。为了解决这个问题，Spark 提供了广播变量，可以将其广播到从属节点。节点上的 RDD 操作可以快速访问广播变量的值。Spark 还尝试使用高效的广播算法来分发广播变量，以减少通信开销。广播变量是通过调用`SparkContext.broadcast(v)`方法从变量*v*创建的。广播变量是*v*的一个封装，其值可以通过调用`value`方法获取。以下是一个可以通过 Spark shell 运行的 Scala 示例：
+Spark 编程中最常见的操作之一是对 RDD 执行连接操作，根据给定的键整合数据。在这些情况下，可能会有大量的数据集被发送到执行分区的从属节点进行连接。可以很容易地理解，这种情况会导致巨大的性能瓶颈，因为网络 I/O 的速度比内存访问慢 100 倍。为了解决这个问题，Spark 提供了广播变量，可以将其广播到从属节点。节点上的 RDD 操作可以快速访问广播变量的值。Spark 还尝试使用高效的广播算法来分发广播变量，以减少通信开销。广播变量是通过调用`SparkContext.broadcast(v)`方法从变量`v`创建的。广播变量是`v`的一个封装，其值可以通过调用`value`方法获取。以下是一个可以通过 Spark shell 运行的 Scala 示例：
 
 ```py
 scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
@@ -379,7 +379,7 @@ scala> broadcastVar.value
 res0: Array[Int] = Array(1, 2, 3)
 ```
 
-在创建后，广播变量`broadcastVar`可以在集群中执行的任何函数中使用，但初始值*v*除外，因为这可以防止*v*被多次发送到所有节点。为了确保所有节点都能获得相同的广播变量值，*v*在`broadcastVar`广播后不能被修改。
+在创建后，广播变量`broadcastVar`可以在集群中执行的任何函数中使用，但初始值`v`除外，因为这可以防止`v`被多次发送到所有节点。为了确保所有节点都能获得相同的广播变量值，`v`在`broadcastVar`广播后不能被修改。
 
 下面是相同示例的 Python 代码：
 
@@ -672,7 +672,7 @@ val words = lines.flatMap(_.split(" "))
 wordCounts.print()
 ```
 
-`words` DStream 被映射（一个一对一的转换）为一个(*word*, *1*)对的 DStream，随后通过减少操作得到每批数据中单词的频率。最后的命令会每秒打印生成的计数。DStream 中的每个 RDD 包含来自某个时间间隔的数据——对 DStream 应用的任何操作都转换为对底层 RDD 的操作：
+`words` DStream 被映射（一个一对一的转换）为一个(*word*, `1`)对的 DStream，随后通过减少操作得到每批数据中单词的频率。最后的命令会每秒打印生成的计数。DStream 中的每个 RDD 包含来自某个时间间隔的数据——对 DStream 应用的任何操作都转换为对底层 RDD 的操作：
 
 ![](img/284d70b8-6143-4b6d-bce0-41c7bea81814.png)
 
@@ -766,10 +766,10 @@ DStreams 支持 RDD 大部分可用的转换功能。这意味着输入 DStream 
 | `union(otherStream)` | 返回一个新的 DStream。它包含源 DStream 和输入的 `otherDStream` DStream 中元素的并集。 |
 | `count()` | 返回一个新的 DStream。它包含通过计算每个 RDD 中元素的数量而得到的单一元素 RDD。 |
 | `reduce(func)` | 返回一个新的 DStream。它包含通过应用 `func` 函数（该函数应该是结合性和交换性的，以便支持正确的并行计算）在源中每个 RDD 上聚合得到的单一元素 RDD。 |
-| `countByValue()` | 返回一个新的 DStream，包含 (*K*, *Long*) 对，其中 *K* 是源元素的类型。每个键的值表示其在源中每个 RDD 中的频率。 |
-| `reduceByKey(func, [numTasks])` | 返回一个新的 DStream，包含 (*K*, *V*) 对（对于源 DStream 中的 (*K*, *V*) 对）。每个键的值通过应用 `func` 函数来进行聚合。为了进行分组，此转换使用 Spark 默认的并行任务数（在本地模式下是 2，而在集群模式下由 `config` 属性 `spark.default.parallelism` 确定），但可以通过传递可选的 `numTasks` 参数来更改此数值。 |
-| `join(otherStream, [numTasks])` | 返回一个新的 DStream，包含 (*K*, (*V*, *W*)) 对，当它分别应用于两个 DStream，其中一个包含 (*K*, *V*) 对，另一个包含 (*K*, *W*) 对时。 |
-| `cogroup(otherStream, [numTasks])` | 返回一个新的 DStream，包含 (*K*, *Seq[V]*, *Seq[W]*) 元组，当它分别应用于两个 DStream，其中一个包含 (*K*, *V*) 对，另一个包含 (*K*, *W*) 对时。 |
+| `countByValue()` | 返回一个新的 DStream，包含 (`K`, *Long*) 对，其中 `K` 是源元素的类型。每个键的值表示其在源中每个 RDD 中的频率。 |
+| `reduceByKey(func, [numTasks])` | 返回一个新的 DStream，包含 (`K`, `V`) 对（对于源 DStream 中的 (`K`, `V`) 对）。每个键的值通过应用 `func` 函数来进行聚合。为了进行分组，此转换使用 Spark 默认的并行任务数（在本地模式下是 2，而在集群模式下由 `config` 属性 `spark.default.parallelism` 确定），但可以通过传递可选的 `numTasks` 参数来更改此数值。 |
+| `join(otherStream, [numTasks])` | 返回一个新的 DStream，包含 (`K`, (`V`, `W`)) 对，当它分别应用于两个 DStream，其中一个包含 (`K`, `V`) 对，另一个包含 (`K`, `W`) 对时。 |
+| `cogroup(otherStream, [numTasks])` | 返回一个新的 DStream，包含 (`K`, *Seq[V]*, *Seq[W]*) 元组，当它分别应用于两个 DStream，其中一个包含 (`K`, `V`) 对，另一个包含 (`K`, `W`) 对时。 |
 | `transform(func)` | 返回一个新的 DStream。它将 RDD 到 RDD 的 `func` 函数应用于源中的每个 RDD。 |
 | `updateStateByKey(func)` | 返回一个新的状态 DStream。新 DStream 中每个键的状态通过将输入函数 `func` 应用于先前的状态和该键的新值来更新。 |
 
@@ -787,7 +787,7 @@ DStreams 支持 RDD 大部分可用的转换功能。这意味着输入 DStream 
 
 这两个参数必须是源 DStream 批次间隔的倍数。
 
-让我们看看这个方法如何应用于本节开始时介绍的应用场景。假设你想要每隔 10 秒钟生成一次过去 60 秒数据的字数统计。需要在过去 60 秒的 DStream 中对（*word*, *1*）对应用 `reduceByKey` 操作。这可以通过 `reduceByKeyAndWindow` 操作来实现。转换为 Scala 代码如下：
+让我们看看这个方法如何应用于本节开始时介绍的应用场景。假设你想要每隔 10 秒钟生成一次过去 60 秒数据的字数统计。需要在过去 60 秒的 DStream 中对（*word*, `1`）对应用 `reduceByKey` 操作。这可以通过 `reduceByKeyAndWindow` 操作来实现。转换为 Scala 代码如下：
 
 ```py
 val windowedWordCounts = pairs.reduceByKeyAndWindow((a:Int,b:Int) => (a + b), Seconds(60), Seconds(10))
@@ -806,9 +806,9 @@ windowedWordCounts = pairs.reduceByKeyAndWindow(lambda x, y: x + y, lambda x, y:
 | `window(windowLength, slideInterval)` | 返回一个新的 DStream。它基于源数据的窗口化批次。 |
 | `countByWindow(windowLength, slideInterval)` | 返回源 DStream 中元素的滑动窗口计数（基于 `windowLength` 和 `slideInterval` 参数）。 |
 | `reduceByWindow(func, windowLength, slideInterval)` | 返回一个新的单元素 DStream。它是通过在滑动时间间隔内聚合源 DStream 中的元素，并应用 `func` 减少函数来创建的（为了支持正确的并行计算，`func` 必须是结合性和交换性的）。 |
-| `reduceByKeyAndWindow(func, windowLength, slideInterval, [numTasks])` | 返回一个新的由（*K*, *V*）对组成的 DStream（与源 DStream 相同的 *K* 和 *V*）。每个键的值通过在滑动窗口中对批次（由 `windowLength` 和 `slideInterval` 参数定义）应用 `func` 输入函数来聚合。并行任务的数量在本地模式下为 2（默认），而在集群模式下由 Spark 配置属性 `spark.default.parallelism.numTask` 给出，这是一个可选参数，用于指定自定义任务数量。 |
+| `reduceByKeyAndWindow(func, windowLength, slideInterval, [numTasks])` | 返回一个新的由（`K`, `V`）对组成的 DStream（与源 DStream 相同的 `K` 和 `V`）。每个键的值通过在滑动窗口中对批次（由 `windowLength` 和 `slideInterval` 参数定义）应用 `func` 输入函数来聚合。并行任务的数量在本地模式下为 2（默认），而在集群模式下由 Spark 配置属性 `spark.default.parallelism.numTask` 给出，这是一个可选参数，用于指定自定义任务数量。 |
 | `reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])` | 这是 `reduceByKeyAndWindow` 转换的一个更高效版本。这次，当前窗口的减少值是通过使用前一个窗口的减少值逐步计算出来的。通过减少进入窗口的新数据，同时对离开窗口的旧数据进行逆减少，来实现这一点。请注意，这种机制只有在 `func` 函数有相应的逆减少函数 `invFunc` 时才能工作。 |
-| `countByValueAndWindow(windowLength, slideInterval, [numTasks])` | 返回一个由（*K*, *Long*）对组成的 DStream（与源 DStream 组成的（*K*, *V*）对相同）。返回的 DStream 中每个键的值是其在给定滑动窗口内的频率（由 `windowLength` 和 `slideInterval` 参数定义）。`numTask` 是一个可选参数，用于指定自定义任务数量。 |
+| `countByValueAndWindow(windowLength, slideInterval, [numTasks])` | 返回一个由（`K`, *Long*）对组成的 DStream（与源 DStream 组成的（`K`, `V`）对相同）。返回的 DStream 中每个键的值是其在给定滑动窗口内的频率（由 `windowLength` 和 `slideInterval` 参数定义）。`numTask` 是一个可选参数，用于指定自定义任务数量。 |
 
 # 使用不同管理器的集群模式
 

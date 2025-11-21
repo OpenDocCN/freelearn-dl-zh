@@ -38,7 +38,7 @@
 
 ![](img/6296918a-8ac6-4574-b1ff-2368e6946b4c.png)
 
-使用随机输入来生成数据样本。例如，生成器 *G(z)* 使用先验分布 *p(z)* 来生成输入 *z*，然后使用 *z* 生成一些数据。这个输出作为输入被传递到判别器神经网络 *D(x)*。它从 ![](img/1ff29fae-3f62-4e27-8ebe-6c1a91597318.png) 中获取输入 *x*，其中 ![](img/49289ba1-2cdd-4375-9077-36f8649f8e3a.png) 是我们的真实数据分布。然后，*D(x)* 使用 `sigmoid` 函数解决一个二分类问题，输出结果在 0 到 1 之间。
+使用随机输入来生成数据样本。例如，生成器 *G(z)* 使用先验分布 *p(z)* 来生成输入 `z`，然后使用 `z` 生成一些数据。这个输出作为输入被传递到判别器神经网络 *D(x)*。它从 ![](img/1ff29fae-3f62-4e27-8ebe-6c1a91597318.png) 中获取输入 `x`，其中 ![](img/49289ba1-2cdd-4375-9077-36f8649f8e3a.png) 是我们的真实数据分布。然后，*D(x)* 使用 `sigmoid` 函数解决一个二分类问题，输出结果在 0 到 1 之间。
 
 GANs 的训练是生成器和判别器之间的竞争过程。目标函数可以通过以下数学形式表示：
 
@@ -52,9 +52,9 @@ GANs 的训练是生成器和判别器之间的竞争过程。目标函数可以
 
 +   ![](img/173c7e8d-6049-4dcb-8467-b7fa266f45ff.png) 表示训练数据的基础分布
 
-+   ![](img/dc44753e-ecd8-423b-9633-8be92c39bbb5.png) 表示判别器对输入图像 *x* 的操作
++   ![](img/dc44753e-ecd8-423b-9633-8be92c39bbb5.png) 表示判别器对输入图像 `x` 的操作
 
-+   ![](img/22d6d1fc-22dd-4ca2-9fcb-b1683de79bbc.png) 表示生成器在潜在样本 *z* 上的操作
++   ![](img/22d6d1fc-22dd-4ca2-9fcb-b1683de79bbc.png) 表示生成器在潜在样本 `z` 上的操作
 
 +   ![](img/7fdda8a8-8bdf-4bf7-9683-c546acea033a.png) 表示生成的假数据的判别器输出 ![](img/0b5145dd-c1da-404d-9ca8-c20abecc4498.png)
 
@@ -62,11 +62,11 @@ GANs 的训练是生成器和判别器之间的竞争过程。目标函数可以
 
 为了训练 GAN，使用基于梯度的优化算法，例如随机梯度下降。算法流程如下：
 
-1.  首先，采样 *m* 个噪声样本和 *m* 个真实数据样本。
+1.  首先，采样 `m` 个噪声样本和 `m` 个真实数据样本。
 
 1.  冻结生成器，即将训练设置为 false，以便生成器网络仅进行前向传播而不进行反向传播。然后对这些数据训练判别器。
 
-1.  对不同的 *m* 噪声样本进行采样。
+1.  对不同的 `m` 噪声样本进行采样。
 
 1.  冻结判别器，并在这些数据上训练生成器。
 
@@ -74,7 +74,7 @@ GANs 的训练是生成器和判别器之间的竞争过程。目标函数可以
 
 正式来说，伪代码如下所示。
 
-在这个示例中，我们正在对生成对抗网络进行小批量随机梯度下降训练。应用于判别器的步数 *k* 是一个超参数。我们在实验中使用了 *k=1*，这是最不昂贵的选项：
+在这个示例中，我们正在对生成对抗网络进行小批量随机梯度下降训练。应用于判别器的步数 `k` 是一个超参数。我们在实验中使用了 *k=1*，这是最不昂贵的选项：
 
 ![](img/193ed986-2232-4d70-8c9b-0849d7207c54.png)
 
@@ -114,7 +114,7 @@ GANs 的一些应用包括将单色或黑白图像转换为彩色图像、在图
 
 如前所述，普通的 GAN 包含生成器和判别器。我们来尝试理解 DiscoGAN 的构建块，然后再继续理解如何将它们结合起来，从而学习跨领域关系。具体包括以下内容：
 
-+   **生成器：** 在原始 GAN 中，生成器会从一个输入向量*z*（例如，随机从高斯分布中采样）生成伪造的图像。然而，在这种情况下，由于我们希望将图像从一个领域转移到另一个领域，我们将输入向量*z*替换为一张图片。以下是生成器函数的参数：
++   **生成器：** 在原始 GAN 中，生成器会从一个输入向量`z`（例如，随机从高斯分布中采样）生成伪造的图像。然而，在这种情况下，由于我们希望将图像从一个领域转移到另一个领域，我们将输入向量`z`替换为一张图片。以下是生成器函数的参数：
 
 | **参数** | **值** |
 | --- | --- |
@@ -165,7 +165,7 @@ GANs 的一些应用包括将单色或黑白图像转换为彩色图像、在图
 
 # DiscoGAN 建模
 
-对于每个映射，也就是**手袋**（用**b**表示）到**鞋子**（用**s**表示），或者反过来，我们加入两个生成器。假设，对于映射**b**到**s**，第一个生成器将输入图像从**b**领域映射到**s**领域，而第二个生成器将图像从**s**领域重建到**b**领域。直观上，我们需要第二个生成器来实现我们在前面章节中提到的一一映射目标。数学上，可以表示如下：
+对于每个映射，也就是**手袋**（用*`b`*表示）到**鞋子**（用*`s`*表示），或者反过来，我们加入两个生成器。假设，对于映射*`b`*到*`s`*，第一个生成器将输入图像从*`b`*领域映射到*`s`*领域，而第二个生成器将图像从*`s`*领域重建到*`b`*领域。直观上，我们需要第二个生成器来实现我们在前面章节中提到的一一映射目标。数学上，可以表示如下：
 
 ![](img/55e10729-cbc7-4f69-b8b5-b1ef79cef683.png)
 
@@ -235,7 +235,7 @@ def generator(x, initializer, s*cope_name* = 'generator',*reuse*=*False*):
    *with* tf.variable_scope(*scope_name*) *as* scope:
        *if* *reuse*:
            scope.reuse_variables()
-       conv1 = tf.contrib.layers.conv2d(inputs=*x*, num_outputs=32, kernel_size=4, stride=2, padding="SAME",reuse=*reuse*, activation_fn=tf.nn.leaky_relu, weights_initializer=*initializer*,
+       conv1 = tf.contrib.layers.conv2d(inputs=`x`, num_outputs=32, kernel_size=4, stride=2, padding="SAME",reuse=*reuse*, activation_fn=tf.nn.leaky_relu, weights_initializer=*initializer*,
                                         scope="disc_conv1")  # 32 x 32 x 32
        conv2 = tf.contrib.layers.conv2d(inputs=conv1, num_outputs=64, kernel_size=4, stride=2, padding="SAME",
                                         reuse=*reuse*, activation_fn=tf.nn.leaky_relu, normalizer_fn=tf.contrib.layers.batch_norm,
@@ -250,22 +250,22 @@ def generator(x, initializer, s*cope_name* = 'generator',*reuse*=*False*):
        deconv1 = tf.contrib.layers.conv2d(conv4, num_outputs=4 * 128, kernel_size=4, stride=1, padding="SAME",
                                               activation_fn=tf.nn.relu, normalizer_fn=tf.contrib.layers.batch_norm,
                                               weights_initializer=*initializer*, scope="gen_conv1")
-       deconv1 = tf.reshape(deconv1, shape=[tf.shape(*x*)[0], 8, 8, 128])
+       deconv1 = tf.reshape(deconv1, shape=[tf.shape(`x`)[0], 8, 8, 128])
 
        deconv2 = tf.contrib.layers.conv2d(deconv1, num_outputs=4 * 64, kernel_size=4, stride=1, padding="SAME",
                                               activation_fn=tf.nn.relu, normalizer_fn=tf.contrib.layers.batch_norm,
                                               weights_initializer=*initializer*, scope="gen_conv2")
-       deconv2 = tf.reshape(deconv2, shape=[tf.shape(*x*)[0], 16, 16, 64])
+       deconv2 = tf.reshape(deconv2, shape=[tf.shape(`x`)[0], 16, 16, 64])
 
        deconv3 = tf.contrib.layers.conv2d(deconv2, num_outputs=4 * 32, kernel_size=4, stride=1, padding="SAME",
                                               activation_fn=tf.nn.relu, normalizer_fn=tf.contrib.layers.batch_norm,
                                               weights_initializer=*initializer*, scope="gen_conv3")
-       deconv3 = tf.reshape(deconv3, shape=[tf.shape(*x*)[0], 32, 32, 32])
+       deconv3 = tf.reshape(deconv3, shape=[tf.shape(`x`)[0], 32, 32, 32])
 
        deconv4 = tf.contrib.layers.conv2d(deconv3, num_outputs=4 * 16, kernel_size=4, stride=1, padding="SAME",
                                               activation_fn=tf.nn.relu, normalizer_fn=tf.contrib.layers.batch_norm,
                                               weights_initializer=*initializer*, scope="gen_conv4")
-       deconv4 = tf.reshape(deconv4, shape=[tf.shape(*x*)[0], 64, 64, 16])
+       deconv4 = tf.reshape(deconv4, shape=[tf.shape(`x`)[0], 64, 64, 16])
 
        recon = tf.contrib.layers.conv2d(deconv4, num_outputs=3, kernel_size=4, stride=1, padding="SAME", \
                                             activation_fn=tf.nn.relu, scope="gen_conv5")
@@ -277,11 +277,11 @@ def generator(x, initializer, s*cope_name* = 'generator',*reuse*=*False*):
 1.  使用我们在*DiscoGAN 的基本单元*部分之前提到的参数定义判别器：
 
 ```py
-def discriminator(*x*,*initializer*, *scope_name* ='discriminator',  *reuse*=*False*):
+def discriminator(`x`,*initializer*, *scope_name* ='discriminator',  *reuse*=*False*):
    *with* tf.variable_scope(*scope_name*) *as* scope:
        *if* *reuse*:
            scope.reuse_variables()
-       conv1 = tf.contrib.layers.conv2d(inputs=*x*, num_outputs=32, kernel_size=4, stride=2, padding="SAME",
+       conv1 = tf.contrib.layers.conv2d(inputs=`x`, num_outputs=32, kernel_size=4, stride=2, padding="SAME",
                                         reuse=*reuse*, activation_fn=tf.nn.leaky_relu, weights_initializer=*initializer*,
                                         scope="disc_conv1")  # 32 x 32 x 32
        conv2 = tf.contrib.layers.conv2d(inputs=conv1, num_outputs=64, kernel_size=4, stride=2, padding="SAME",
@@ -296,7 +296,7 @@ def discriminator(*x*,*initializer*, *scope_name* ='discriminator',  *reuse*=*Fa
        conv5 = tf.contrib.layers.conv2d(inputs=conv4, num_outputs=512, kernel_size=4, stride=2, padding="SAME",
                                         reuse=*reuse*, activation_fn=tf.nn.leaky_relu, normalizer_fn=tf.contrib.layers.batch_norm,
                                         weights_initializer=*initializer*, scope="disc_conv5")  # 2 x 2 x 512
-       fc1 = tf.reshape(conv5, shape=[tf.shape(*x*)[0], 2 * 2 * 512])
+       fc1 = tf.reshape(conv5, shape=[tf.shape(`x`)[0], 2 * 2 * 512])
        fc1 = tf.contrib.layers.fully_connected(inputs=fc1, num_outputs=512, reuse=*reuse*, activation_fn=tf.nn.leaky_relu,
                                                normalizer_fn=tf.contrib.layers.batch_norm,
                                                weights_initializer=*initializer*, scope="disc_fc1")

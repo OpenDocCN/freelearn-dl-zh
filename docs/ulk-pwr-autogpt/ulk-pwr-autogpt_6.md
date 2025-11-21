@@ -282,13 +282,13 @@ Auto-GPT 持续模式最引人注目的应用之一是研究与分析领域。�
 
 例如，当你在日志中看到 Auto-GPT 因重复做同样几项任务而陷入循环时，你可能会想停止它，以防止使用 API 的高额费用。
 
-像 *Ctrl* + *C* 这样的快捷键会立即发送取消请求。
+像 *Ctrl* + `C` 这样的快捷键会立即发送取消请求。
 
 确保 Auto-GPT 正在运行的终端处于活动状态，如果不确定，请点击它。
 
 如果这个方法不起作用，例如当 Auto-GPT 正在 *思考* 或插件正在执行某些操作并忽略键盘中断时，你可以随时使用进程管理工具，如 **Windows 任务管理器**、**Mac OS 活动监视器** 或 Linux 上的 **htop/top**，找到 Auto-GPT 的 Python 进程并手动终止它。
 
-当你的 Auto-GPT 实例在 Docker 上运行且启用了持续模式时，始终确保至少打开 Docker Desktop 应用程序，这样如果你看到它执行了意外的操作且没有响应 *Ctrl* + *C*，你可以关闭 Auto-GPT 的 Docker 容器。
+当你的 Auto-GPT 实例在 Docker 上运行且启用了持续模式时，始终确保至少打开 Docker Desktop 应用程序，这样如果你看到它执行了意外的操作且没有响应 *Ctrl* + `C`，你可以关闭 Auto-GPT 的 Docker 容器。
 
 如果你不在电脑旁，仅通过 Telegram 或 Discord 与 Auto-GPT 进行通信，请确保有一个始终有效的保障措施，以防止 Auto-GPT 变得具有破坏性。
 

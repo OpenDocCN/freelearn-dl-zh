@@ -121,7 +121,7 @@ $> pip install Pillow tqdm
             return self.feature_extractor.predict(image)[0]
     ```
 
-1.  为了清理标题，我们必须去除所有标点符号和单个字母的单词（如*a*）。`_clean_captions()`方法执行了这个任务，并且还添加了特殊标记，也就是`self.start_token`和`self.end_token`：
+1.  为了清理标题，我们必须去除所有标点符号和单个字母的单词（如`a`）。`_clean_captions()`方法执行了这个任务，并且还添加了特殊标记，也就是`self.start_token`和`self.end_token`：
 
     ```py
         def _clean_captions(self, captions):

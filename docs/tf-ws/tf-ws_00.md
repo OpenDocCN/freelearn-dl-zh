@@ -120,7 +120,7 @@ import matplotlib.pyplot as plt
 
 本书中所有练习和活动的代码都可以通过 Jupyter Notebook 执行。您需要先安装 Anaconda Navigator，它是一个可以访问 Jupyter 笔记本的界面。Anaconda Navigator 会作为 Anaconda Individual Edition 的一部分安装，Anaconda 是一个适用于 Windows、macOS 和 Linux 的开源 Python 分发平台。安装 Anaconda 时也会安装 Python。请前往 [`www.anaconda.com/distribution/`](https://www.anaconda.com/distribution/)：
 
-1.  在打开的页面中，点击 `Download` 按钮（由 *1* 标注）。确保下载的是 `Individual Edition`。
+1.  在打开的页面中，点击 `Download` 按钮（由 `1` 标注）。确保下载的是 `Individual Edition`。
 
     ![图 0.3：Anaconda 主页    ](img/B16341_0_03.jpg)
 
@@ -152,7 +152,7 @@ import matplotlib.pyplot as plt
 
     图 0.7: Anaconda Navigator 图标
 
-    您还可以使用操作系统的搜索功能来搜索该应用程序。例如，在 Windows 10 上，您可以使用*Windows 键* + *S*组合键，然后输入*Anaconda Navigator*。在 macOS 上，您可以使用 Spotlight 搜索。在 Linux 上，您可以打开终端，输入`anaconda-navigator`命令并按*Return*键。
+    您还可以使用操作系统的搜索功能来搜索该应用程序。例如，在 Windows 10 上，您可以使用*Windows 键* + `S`组合键，然后输入*Anaconda Navigator*。在 macOS 上，您可以使用 Spotlight 搜索。在 Linux 上，您可以打开终端，输入`anaconda-navigator`命令并按*Return*键。
 
     ![图 0.8: 在 Windows 10 上搜索 Anaconda Navigator    ](img/B16341_0_08.jpg)
 
@@ -198,7 +198,7 @@ import matplotlib.pyplot as plt
 
     图 0.13：Jupyter Notebook 导航菜单选项介绍
 
-    如果你通过操作系统的文件资源管理器更改了目录，但在 Jupyter Notebook 导航器中没有显示更改后的文件，可以点击`刷新笔记本列表`按钮（标注为*1*）。要退出，点击`退出按钮`（标注为*2*）。要创建一个新文件（一个新的 Jupyter 笔记本），你可以点击`新建`按钮（标注为*3*）。
+    如果你通过操作系统的文件资源管理器更改了目录，但在 Jupyter Notebook 导航器中没有显示更改后的文件，可以点击`刷新笔记本列表`按钮（标注为`1`）。要退出，点击`退出按钮`（标注为`2`）。要创建一个新文件（一个新的 Jupyter 笔记本），你可以点击`新建`按钮（标注为`3`）。
 
 1.  点击`New`
 

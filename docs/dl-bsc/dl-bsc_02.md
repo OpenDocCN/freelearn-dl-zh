@@ -259,7 +259,7 @@ Hello cat!
 
 使用`+`来连接字符串。
 
-要关闭 Python 解释器，对于 Linux 和 macOS X，输入*Ctrl*+*D*（按住*Ctrl*键的同时按下*D*键）。对于 Windows，输入*Ctrl*+*Z*并按*Enter*键。
+要关闭 Python 解释器，对于 Linux 和 macOS X，输入*Ctrl*+`D`（按住*Ctrl*键的同时按下`D`键）。对于 Windows，输入*Ctrl*+`Z`并按*Enter*键。
 
 ## Python 脚本文件
 

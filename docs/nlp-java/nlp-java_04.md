@@ -250,7 +250,7 @@ LingPipe 分类器存在于一个基于它们提供的估算类型的层级结�
 
 +   `BaseClassifier<E>`：这只是一个基本的对象分类器，类型为`E`。它有一个`classify()`方法，该方法返回一个分类结果，而分类结果又有一个`bestCategory()`方法和一个具有一定信息用途的`toString()`方法。
 
-+   `RankedClassifier<E> extends BaseClassifier<E>`：`classify()`方法返回`RankedClassification`，它扩展了`Classification`并添加了`category(int rank)`方法，说明第 1 至*n*个分类是什么。还有一个`size()`方法，表示分类的数量。
++   `RankedClassifier<E> extends BaseClassifier<E>`：`classify()`方法返回`RankedClassification`，它扩展了`Classification`并添加了`category(int rank)`方法，说明第 1 至`n`个分类是什么。还有一个`size()`方法，表示分类的数量。
 
 +   `ScoredClassifier<E> extends RankedClassifier<E>`：返回的`ScoredClassification`添加了一个`score(int rank)`方法。
 
@@ -333,7 +333,7 @@ JointClassifier<String> classifier = (JointClassifier<String>) AbstractExternali
 
 +   `ConditionalClassification`通过将其设为基于输入的类别概率来进一步细化分数。所有类别的概率将加起来为 1。这个列被标记为`P(Category|Input)`，这是传统的写法，表示*给定输入的类别概率*。
 
-+   `JointClassification`增加了输入和类别的 log2（以 2 为底的对数）概率——这是联合概率。所有类别和输入的概率将加起来为 1，这实际上是一个非常大的空间，任何类别和字符串对的概率都非常低。这就是为什么使用 log2 值来防止数值下溢的原因。这一列被标记为`log 2 P(Category, Input)`，它被翻译为*类别和输入的 log**2* *概率*。
++   `JointClassification`增加了输入和类别的 log2（以 2 为底的对数）概率——这是联合概率。所有类别和输入的概率将加起来为 1，这实际上是一个非常大的空间，任何类别和字符串对的概率都非常低。这就是为什么使用 log2 值来防止数值下溢的原因。这一列被标记为`log 2 P(Category, Input)`，它被翻译为*类别和输入的 log*`2` *概率*。
 
 查看`com.aliasi.classify`包的 Javadoc，了解实现这些度量和分类器的更多信息。
 
@@ -587,7 +587,7 @@ public static List<String[]> readCsvRemoveHeader(File file) throws IOException {
 
 你可能已经注意到 CSV 写入器输出中的表头和那个标记为`TRUTH`的列。现在，我们可以开始使用它了。加载我们之前提供的推文，或者将你的数据转换为我们`.csv`格式使用的格式。获取新数据的简单方法是通过 Twitter 运行一个多语言友好的查询，例如`Disney`，这是我们默认提供的数据。
 
-打开 CSV 文件，并为至少 10 个示例标注你认为推文所用的语言，*e*代表英语，*n*代表非英语。如果你不想手动标注数据，分发包中有一个`data/disney_e_n.csv`文件，你可以使用这个文件。如果你对某条推文不确定，可以忽略它。未标注的数据会被忽略。请看下面的截图：
+打开 CSV 文件，并为至少 10 个示例标注你认为推文所用的语言，`e`代表英语，`n`代表非英语。如果你不想手动标注数据，分发包中有一个`data/disney_e_n.csv`文件，你可以使用这个文件。如果你对某条推文不确定，可以忽略它。未标注的数据会被忽略。请看下面的截图：
 
 ![准备工作](img/4672OS_01_01.jpg)
 
@@ -683,7 +683,7 @@ for (String[] row : rows) {
 }
 ```
 
-第四行将使用真值注释中的值创建一个分类对象—在这种情况下是*e*或*n*。这与`BaseClassifier<E>`为`bestCategory()`方法返回的类型相同。真值注释没有特殊类型。下一行添加了分类所应用的文本，我们得到了一个`Classified<CharSequence>`对象。
+第四行将使用真值注释中的值创建一个分类对象—在这种情况下是`e`或`n`。这与`BaseClassifier<E>`为`bestCategory()`方法返回的类型相同。真值注释没有特殊类型。下一行添加了分类所应用的文本，我们得到了一个`Classified<CharSequence>`对象。
 
 循环的最后一行将对创建的分类对象应用`handle`方法。评估器假设其`handle`方法所提供的数据是一个真值注释，该数据通过提取待分类数据、应用分类器进行分类、获得结果中的`firstBest()`分类，然后标记分类是否与刚刚构造的真值匹配。对于`.csv`文件中的每一行都会发生这种情况。
 
@@ -819,15 +819,15 @@ LingPipe 分类器的 Javadoc 在其底层数学方面非常详细，解释了�
 
 之前的食谱展示了如何使用真实数据评估分类器，以及如何使用真实数据训练分类器，但如果要同时进行这两者呢？这个好主意叫做交叉验证，其工作原理如下：
 
-1.  将数据分为*n*个不同的集合或折叠——标准的*n*是 10。
+1.  将数据分为`n`个不同的集合或折叠——标准的`n`是 10。
 
-1.  对于*i*从 1 到*n*：
+1.  对于`i`从 1 到`n`：
 
-    +   在通过排除第*i*折叠定义的*n - 1*折叠上进行训练
+    +   在通过排除第`i`折叠定义的*n - 1*折叠上进行训练
 
-    +   在第*i*折上进行评估
+    +   在第`i`折上进行评估
 
-1.  报告所有折叠*i*的评估结果。
+1.  报告所有折叠`i`的评估结果。
 
 这就是大多数机器学习系统调优性能的方式。工作流程如下：
 
@@ -1400,7 +1400,7 @@ return filteredTexts;
 
 问题：所需的分类不是互斥的。例如，一条推文可以同时表达正面和负面内容，如“喜欢米奇，讨厌普鲁托”。我们的分类器假设各个类别是互斥的。
 
-解决方案：我们经常使用多个二分类器来代替一个*n*分类器或多项分类器。分类器将被训练为正面/非正面和负面/非负面。然后，可以将推文标注为`n`和`p`。
+解决方案：我们经常使用多个二分类器来代替一个`n`分类器或多项分类器。分类器将被训练为正面/非正面和负面/非负面。然后，可以将推文标注为`n`和`p`。
 
 #### 人物/公司/地点检测
 

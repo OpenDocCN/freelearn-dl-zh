@@ -146,11 +146,11 @@
 
 Figure 3.3 – ANN cheat sheet (source: Billion-scale Approximate Nearest Neighbor Search, Yusuke Matsui)
 
-上面的图示说明了*如何根据您的搜索系统选择 ANN 库*。在图示中，*N*表示您*StorageIndexer* 中文档的数量。不同的 N 数量可以通过不同的 ANN 搜索库进行优化，例如 `FAISS` ([`github.com/facebookresearch/faiss`](https://github.com/facebookresearch/faiss)) 或 `NMSLIB` ([`github.com/nmslib/nmslib`](https://github.com/nmslib/nmslib))。与此同时，由于您很可能是 Python 用户，`Annoy` 库 ([`github.com/spotify/annoy`](https://github.com/spotify/annoy)) 提供了一个用户友好的接口，并具有合理的性能，足以应对百万级向量搜索。
+上面的图示说明了*如何根据您的搜索系统选择 ANN 库*。在图示中，`N`表示您*StorageIndexer* 中文档的数量。不同的 N 数量可以通过不同的 ANN 搜索库进行优化，例如 `FAISS` ([`github.com/facebookresearch/faiss`](https://github.com/facebookresearch/faiss)) 或 `NMSLIB` ([`github.com/nmslib/nmslib`](https://github.com/nmslib/nmslib))。与此同时，由于您很可能是 Python 用户，`Annoy` 库 ([`github.com/spotify/annoy`](https://github.com/spotify/annoy)) 提供了一个用户友好的接口，并具有合理的性能，足以应对百万级向量搜索。
 
 上述库是基于不同算法实现的，其中最流行的包括 **KD-Tree**、**局部敏感哈希** (**LSH**) 和 **产品量化** (**PQ**)。
 
-KD-Tree 遵循一个迭代过程来构建树。为了简化可视化，我们假设数据只包含两个特征，*f1*（*x* 轴）和 *f2*（*y* 轴），其形态如下：
+KD-Tree 遵循一个迭代过程来构建树。为了简化可视化，我们假设数据只包含两个特征，*f1*（`x` 轴）和 *f2*（`y` 轴），其形态如下：
 
 ![图 3.4 – KD-Tree，样本数据集以进行索引](img/Figure_3.4_B17488.jpg)
 
@@ -299,7 +299,7 @@ if __name__ == '__main__':
 
 PQ 的基本思想是将高维向量分割成子向量，如下所示的步骤所示：
 
-1.  我们将每个向量分割成 *m* 个子向量。
+1.  我们将每个向量分割成 `m` 个子向量。
 
 1.  对于每个子向量，我们应用量化。为此，我们为每个子向量分配一个唯一的聚类 ID（该子向量与其中心点的最近聚类）。
 
@@ -400,7 +400,7 @@ mAP 是在给定有序排名列表的情况下，最重要的搜索系统评估�
 
 nDCG 可以对每个文档进行多个等级的评分，例如*不相关*、*相关*或*高度相关*。在这种情况下，mAP 不再适用。
 
-例如，给定三种相关性程度（不相关、相关和高度相关），这些相关性差异可以表示为用户通过获取每个文档所能获得的信息增益。对于高度相关的文档，可以赋予增益值*3*，相关的文档可以赋予增益值*1*，不相关的文档增益值设为*0*。然后，如果一个高度相关的文档排名高于不相关的文档，用户可以获得更多的*增益*，这被称为**累积增益**（**CG**）。下表展示了基于搜索系统返回的前 10 个排名文档，我们得到的信息增益：
+例如，给定三种相关性程度（不相关、相关和高度相关），这些相关性差异可以表示为用户通过获取每个文档所能获得的信息增益。对于高度相关的文档，可以赋予增益值`3`，相关的文档可以赋予增益值`1`，不相关的文档增益值设为`0`。然后，如果一个高度相关的文档排名高于不相关的文档，用户可以获得更多的*增益*，这被称为**累积增益**（**CG**）。下表展示了基于搜索系统返回的前 10 个排名文档，我们得到的信息增益：
 
 | **文档** | **标签** | **增益** |
 | --- | --- | --- |

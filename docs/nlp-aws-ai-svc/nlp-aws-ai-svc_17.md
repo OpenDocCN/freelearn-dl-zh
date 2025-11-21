@@ -270,7 +270,7 @@
     df
     ```
 
-1.  现在，我们已经将 Textract 的结果加载到**p****andas** **DataFrame**中（[`pandas.pydata.org/docs/reference/api/pandas.DataFrame.html`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html)），接下来我们将运行一系列操作，从贷款申请中筛选出我们感兴趣的列。请执行笔记本中*Extract contents for sending to Comprehend CER*部分下的所有单元格。最终，我们应该会看到如下所示的过滤字段列表：
+1.  现在，我们已经将 Textract 的结果加载到*`p`***andas** **DataFrame**中（[`pandas.pydata.org/docs/reference/api/pandas.DataFrame.html`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html)），接下来我们将运行一系列操作，从贷款申请中筛选出我们感兴趣的列。请执行笔记本中*Extract contents for sending to Comprehend CER*部分下的所有单元格。最终，我们应该会看到如下所示的过滤字段列表：
 
 ![图 14.5 – 我们将用于 Comprehend 实体识别的最终字段列表](img/B17528_14_05.jpg)
 

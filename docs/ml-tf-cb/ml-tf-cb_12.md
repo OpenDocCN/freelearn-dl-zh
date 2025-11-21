@@ -856,7 +856,7 @@ TensorFlow 分布式 API 允许我们通过将模型复制到不同节点并在�
     ```py
     num_rows = 4
     num_cols = 3
-    plt.figure(figsize=(2*2*num_cols, 2*num_rows))
+    plt.figure(figsize=(2`2`num_cols, 2*num_rows))
     for row in range(num_rows):
         for col in range(num_cols):
             index = num_cols * row + col
@@ -889,7 +889,7 @@ TensorFlow 分布式 API 允许我们通过将模型复制到不同节点并在�
     ```py
     num_rows = 4
     num_cols = 3
-    plt.figure(figsize=(2*2*num_cols, 2*num_rows))
+    plt.figure(figsize=(2`2`num_cols, 2*num_rows))
     for row in range(num_rows):
         for col in range(num_cols):
             index = num_cols * row + col

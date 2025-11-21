@@ -255,7 +255,7 @@ python -m deeppavlov install kbqa_cq_en
 
     +   **"Retriever": {"top_k": 10}**: The **top_k** keyword argument specifies that the top-k (in this case, **10**) results from the retriever are used by the reader to search for the exact answer
 
-    +   **"Reader": {"top_k": 5}**: The **top_k** keyword argument specifies that the top-k (in this case, **5**) results from the reader are presented as the output of the method:
+    +   **"Reader": {"top_k": 5}**: The **top_k** keyword argument specifies that the top-k (in this case, *`5`*) results from the reader are presented as the output of the method:
 
         ```py
         pipe = ExtractiveQAPipeline(reader, retriever)
@@ -803,7 +803,7 @@ python3 -m spacy download en_core_web_sm
 
     在这一步，我们为解释器实例调用`explain_instance`方法。我们传递给它输入句子、`predict_prob`方法和一个`threshold`参数。解释器实例使用`predict_prob`方法来调用分类器，对输入句子的不同变体进行解释，以确定哪些单词对贡献最大。它还识别当输入句子中的某些单词被`UNK`标记替换时发出的类标签。`threshold`参数定义了给定类别的最小概率，低于此概率的所有生成的样本都将被忽略。这意味着解释器生成的所有句子对于给定类别都将具有大于阈值的概率.exp = explainer.explain_instance(text, predict_prob, threshold=0.95)
 
-1.  我们打印出在这种情况下对**积极**标签贡献最大的**锚点**单词。我们还打印出解释器测量的精度。我们观察到它将单词**good**、**a**和**is**识别为对**积极**分类贡献最大：
+1.  我们打印出在这种情况下对**积极**标签贡献最大的**锚点**单词。我们还打印出解释器测量的精度。我们观察到它将单词**good**、*`a`*和**is**识别为对**积极**分类贡献最大：
 
     ```py
     print('Anchor: %s' % (' AND '.join(exp.names())))

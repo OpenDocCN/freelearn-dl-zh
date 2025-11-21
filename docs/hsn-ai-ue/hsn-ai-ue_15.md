@@ -188,7 +188,7 @@
 
 ![截图](img/76c1f3d4-9dae-4798-9bfa-753a2926f473.png)
 
-现在我们需要一个 AI 控制器；为了简单起见，我们可以在蓝图创建它，并将其命名为**B***P_EQSTestingAIController**。重写**On Possess**函数，并运行**行为树**：
+现在我们需要一个 AI 控制器；为了简单起见，我们可以在蓝图创建它，并将其命名为*`B`**P_EQSTestingAIController**。重写**On Possess**函数，并运行**行为树**：
 
 ![截图](img/dd15afe8-1463-42ef-baa0-9748355642d7.png)
 

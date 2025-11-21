@@ -840,7 +840,7 @@ history_resnet50 = model_resnet50.fit(X_train/np.max(X_train), y_train, batch_si
 
 # 准备就绪
 
-对于关键点检测任务，我们将使用一个数据集，在该数据集上我们标注了要检测的点。对于这个练习，输入将是我们要检测关键点的图像，输出将是关键点的 *x* 和 *y* 坐标。数据集可以从这里下载：[`github.com/udacity/P1_Facial_Keypoints`](https://github.com/udacity/P1_Facial_Keypoints)。
+对于关键点检测任务，我们将使用一个数据集，在该数据集上我们标注了要检测的点。对于这个练习，输入将是我们要检测关键点的图像，输出将是关键点的 `x` 和 `y` 坐标。数据集可以从这里下载：[`github.com/udacity/P1_Facial_Keypoints`](https://github.com/udacity/P1_Facial_Keypoints)。
 
 我们将遵循以下步骤：
 
@@ -870,7 +870,7 @@ $ git clone https://github.com/udacity/P1_Facial_Keypoints.git import pandas as 
 
 ![](img/fa5e1b6c-254b-4440-88d1-6829589e3257.png)
 
-总共有 137 列，其中第一列是图像的名称，剩余的 136 列代表对应图像中 68 个面部关键点的 *x* 和 *y* 坐标值。
+总共有 137 列，其中第一列是图像的名称，剩余的 136 列代表对应图像中 68 个面部关键点的 `x` 和 `y` 坐标值。
 
 1.  预处理数据集，提取图像、调整大小后的图像、VGG16 特征以及修改后的关键点位置作为输出：
 

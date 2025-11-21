@@ -64,7 +64,7 @@
 
 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:mrow></mml:mrow><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mi>b</mml:mi></mml:math>](img/289.png)
 
-这里，*row* 和 *col* 表示输入层的位置，在此处应用滤波器（*row=1* 和 *col=1* 在前述图中）； ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/290.png) 和 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/291.png) 是滤波器大小（3×3）的高度和宽度； *i* 和 *j* 是每个滤波器权重的索引，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml><mml:mi>j</mml></mml:mrow></mml:msub></mml:math>](img/292.png)； *b* 是偏置权重。参与输入的单元组，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/293.png)，参与输入的单元组称为**感受野**。
+这里，*row* 和 *col* 表示输入层的位置，在此处应用滤波器（*row=1* 和 *col=1* 在前述图中）； ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/290.png) 和 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/291.png) 是滤波器大小（3×3）的高度和宽度； `i` 和 `j` 是每个滤波器权重的索引，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml><mml:mi>j</mml></mml:mrow></mml:msub></mml:math>](img/292.png)； `b` 是偏置权重。参与输入的单元组，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/293.png)，参与输入的单元组称为**感受野**。
 
 我们可以看到，在卷积层中，单元的激活值与我们在*第二章*中定义的单元激活值的计算方式相同——即输入的加权和。但在这里，单元的输入仅来自其周围有限数量的输入单元（感受野）。这与全连接（FC）层不同，在全连接层中，输入来自所有输入单元。这个区别很重要，因为滤波器的目的是突出输入中的某个特定特征，比如图像中的边缘或线条。在神经网络的上下文中，滤波器的输出代表下一层单元的激活值。如果该特征在此空间位置存在，单元将处于激活状态。在层次结构的数据中，如图像，邻近像素会形成有意义的形状和物体，如边缘或线条。然而，图像一端的像素与另一端的像素不太可能存在关系。因此，使用全连接层将所有输入像素与每个输出单元连接，就像让网络在大海捞针。它无法知道某个输入像素是否与输出单元相关（是否位于周围区域），还是与图像另一端的像素无关。因此，卷积层有限的感受野更适合突出输入数据中的有意义特征。
 
@@ -191,7 +191,7 @@
 
 +   CNN 卷积可以拥有多个滤波器，突出显示不同的特征，从而产生多个输出特征图（每个滤波器一个），这些特征图被合并成一个**输出体积**。
 
-假设我们有![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/294.png)输入（大写的*C*）和![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/295.png)输出切片。根据输入和输出切片的关系，我们可以得到跨通道卷积和深度卷积，如下图所示：
+假设我们有![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/294.png)输入（大写的`C`）和![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/295.png)输出切片。根据输入和输出切片的关系，我们可以得到跨通道卷积和深度卷积，如下图所示：
 
 ![图 4.6 – 跨通道卷积（左）；深度卷积（右）](img/B19627_04_06.jpg)
 
@@ -199,23 +199,23 @@
 
 让我们讨论它们的性质：
 
-+   **跨通道卷积**：一个输出切片接收所有输入切片的输入 (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:mi>t</mml:mi><mml:mi>o</mml:mi><mml:mo>-</mml:mo><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>e</mml:mi></mml:math>](img/296.png) 关系)。有了多个输出切片，关系变为 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:mi>t</mml:mi><mml:mi>o</mml:mi><mml:mo>-</mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/297.png)。换句话说，每个输入切片都为每个输出切片的输出做出贡献。每一对输入/输出切片使用一个独立的过滤器切片，这个过滤器切片对该对切片是独有的。我们用 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/298.png)（小写 *c*）表示输入切片的索引；用 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/299.png) 表示输出切片的索引；用 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/300.png) 和 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/301.png) 表示过滤器的维度。然后，单个输出切片中一个输出单元的跨通道二维卷积定义为以下加权和：
++   **跨通道卷积**：一个输出切片接收所有输入切片的输入 (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:mi>t</mml:mi><mml:mi>o</mml:mi><mml:mo>-</mml:mo><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>e</mml:mi></mml:math>](img/296.png) 关系)。有了多个输出切片，关系变为 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:mi>t</mml:mi><mml:mi>o</mml:mi><mml:mo>-</mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/297.png)。换句话说，每个输入切片都为每个输出切片的输出做出贡献。每一对输入/输出切片使用一个独立的过滤器切片，这个过滤器切片对该对切片是独有的。我们用 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/298.png)（小写 `c`）表示输入切片的索引；用 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/299.png) 表示输出切片的索引；用 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/300.png) 和 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/301.png) 表示过滤器的维度。然后，单个输出切片中一个输出单元的跨通道二维卷积定义为以下加权和：
 
 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:math>](img/302.png)
 
 请注意，我们有一个独特的偏置，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub><mml:mo>,</mml:mo></mml:math>](img/303.png) 每个输出切片都有一个。
 
-我们还可以通过以下公式计算交叉通道 2D 卷积中的权重总数 *W*：
+我们还可以通过以下公式计算交叉通道 2D 卷积中的权重总数 `W`：
 
 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>W</mml:mi><mml:mo>=</mml:mo><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/304.png)
 
 这里，*+1* 表示每个滤波器的偏置权重。假设我们有三个输入切片，并且想要应用四个 5×5 的滤波器。如果这样做，卷积滤波器将有总共 (3 * 5 * 5 + 1) * 4 = 304 个权重，四个输出切片（深度为 4 的输出体积），每个切片有一个偏置。每个输出切片的滤波器将有三个 5×5 的滤波器块，分别对应三个输入切片，并且有一个偏置，总共有 3 * 5 * 5 + 1 = 76 个权重。
 
-+   **深度卷积**：一个输出切片仅接收来自单个输入切片的信息。这是对前述情况的某种反转。在最简单的形式下，我们对单个输入切片应用滤波器，生成一个输出切片。在这种情况下，输入和输出的体积具有相同的深度——即 *C*。我们还可以指定一个通道倍增器（一个整数 *M*），即对单个输出切片应用 *M* 个滤波器，生成每个输入切片的 *M* 个输出切片。在这种情况下，输出切片的总数为 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:mi>M</mml:mi></mml:math>](img/305.png)。深度卷积 2D 被定义为以下加权和：
++   **深度卷积**：一个输出切片仅接收来自单个输入切片的信息。这是对前述情况的某种反转。在最简单的形式下，我们对单个输入切片应用滤波器，生成一个输出切片。在这种情况下，输入和输出的体积具有相同的深度——即 `C`。我们还可以指定一个通道倍增器（一个整数 `M`），即对单个输出切片应用 `M` 个滤波器，生成每个输入切片的 `M` 个输出切片。在这种情况下，输出切片的总数为 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:mi>M</mml:mi></mml:math>](img/305.png)。深度卷积 2D 被定义为以下加权和：
 
 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>m</mml:mi><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>m</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>m</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/306.png)
 
-我们可以通过以下公式计算二维深度卷积中的权重*W*：
+我们可以通过以下公式计算二维深度卷积中的权重`W`：
 
 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" display="block"><mml:mi>W</mml:mi><mml:mo>=</mml:mo><mml:mi>C</mml:mi><mml:mo>×</mml:mo><mml:mfenced separators="|"><mml:mrow><mml:mi>M</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mi>M</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/307.png)
 
@@ -313,13 +313,13 @@ width_o = 1 + (width_i – filter_w) / stride
 
 PyTorch、Keras 和 **TensorFlow**（**TF**）支持 1D、2D 和 3D 卷积。卷积操作的输入和输出是张量。一个具有多个输入/输出切片的 1D 卷积将有 3D 的输入和输出张量。它们的轴可以是 *SCW* 或 *SWC* 顺序，我们有如下定义：
 
-+   *S*：小批量中的样本索引
++   `S`：小批量中的样本索引
 
-+   *C*：深度切片在体积中的索引
++   `C`：深度切片在体积中的索引
 
-+   *W*：切片的内容
++   `W`：切片的内容
 
-同样，一个 2D 卷积将由 *SCHW* 或 *SHWC* 顺序的张量表示，其中 *H* 和 *W* 分别是切片的高度和宽度。一个 3D 卷积将有 *SCDHW* 或 *SDHWC* 顺序，其中 *D* 代表切片的深度。
+同样，一个 2D 卷积将由 *SCHW* 或 *SHWC* 顺序的张量表示，其中 `H` 和 `W` 分别是切片的高度和宽度。一个 3D 卷积将有 *SCDHW* 或 *SDHWC* 顺序，其中 `D` 代表切片的深度。
 
 ## 数据增强
 
@@ -569,7 +569,7 @@ PyTorch、Keras 和 **TensorFlow**（**TF**）支持 1D、2D 和 3D 卷积。卷
 
 图 4.12 – 1D 卷积（左）；3D 卷积（右）
 
-相同虚线的权重共享相同的值。1D 卷积的输出也是 1D。如果输入是 3D，例如 3D MRI，我们可以使用 3D 卷积，它也会产生 3D 输出。这样，我们可以保持输入数据的空间排列。在上面的图示中，我们可以看到右侧的 3D 卷积示例。输入的维度是 H/W/L，滤波器在所有维度上有一个单一的大小，*F*。输出也是 3D。
+相同虚线的权重共享相同的值。1D 卷积的输出也是 1D。如果输入是 3D，例如 3D MRI，我们可以使用 3D 卷积，它也会产生 3D 输出。这样，我们可以保持输入数据的空间排列。在上面的图示中，我们可以看到右侧的 3D 卷积示例。输入的维度是 H/W/L，滤波器在所有维度上有一个单一的大小，`F`。输出也是 3D。
 
 ## 1×1 卷积
 
@@ -597,13 +597,13 @@ PyTorch、Keras 和 **TensorFlow**（**TF**）支持 1D、2D 和 3D 卷积。卷
 
 ## 膨胀卷积
 
-常规卷积在 *n×n* 感受野上应用 *n×n* 滤波器。而膨胀卷积则稀疏地在大小为 *(n * l - 1) × (n * l - 1)* 的感受野上应用相同的滤波器，其中 *l* 是 **膨胀因子**。我们仍然将每个滤波器的权重与一个输入切片单元相乘，但这些单元之间的距离为 *l*。常规卷积是膨胀卷积的特例，*l = 1*。以下图示最好说明这一点：
+常规卷积在 *n×n* 感受野上应用 *n×n* 滤波器。而膨胀卷积则稀疏地在大小为 *(n * l - 1) × (n * l - 1)* 的感受野上应用相同的滤波器，其中 `l` 是 **膨胀因子**。我们仍然将每个滤波器的权重与一个输入切片单元相乘，但这些单元之间的距离为 `l`。常规卷积是膨胀卷积的特例，*l = 1*。以下图示最好说明这一点：
 
 ![图 4.14 – 一种膨胀卷积，膨胀因子为 l=2。这里展示了操作的前两步。底层是输入，顶层是输出。来源：[`github.com/vdumoulin/conv_arithmetic`](https://github.com/vdumoulin/conv_arithmetic)](img/B19627_04_14.jpg)
 
 图 4.14 – 一种膨胀卷积，膨胀因子为 l=2。这里展示了操作的前两步。底层是输入，顶层是输出。来源：[`github.com/vdumoulin/conv_arithmetic`](https://github.com/vdumoulin/conv_arithmetic)
 
-膨胀卷积可以在不丧失分辨率或覆盖范围的情况下指数级地增大感受野的大小。我们也可以通过步幅卷积或池化来增大感受野，但会以分辨率和/或覆盖范围的损失为代价。为了理解这一点，我们假设有一个步幅大于 1 的步幅卷积*s > 1*。在这种情况下，输出切片的大小是输入的*s*倍（分辨率损失）。如果我们进一步增大*s > F*（*F*是池化或卷积核的大小），我们会失去覆盖范围，因为输入切片的某些区域根本不参与输出。此外，膨胀卷积不会增加计算和内存成本，因为滤波器使用的权重数量与常规卷积相同。
+膨胀卷积可以在不丧失分辨率或覆盖范围的情况下指数级地增大感受野的大小。我们也可以通过步幅卷积或池化来增大感受野，但会以分辨率和/或覆盖范围的损失为代价。为了理解这一点，我们假设有一个步幅大于 1 的步幅卷积*s > 1*。在这种情况下，输出切片的大小是输入的`s`倍（分辨率损失）。如果我们进一步增大*s > F*（`F`是池化或卷积核的大小），我们会失去覆盖范围，因为输入切片的某些区域根本不参与输出。此外，膨胀卷积不会增加计算和内存成本，因为滤波器使用的权重数量与常规卷积相同。
 
 ## 转置卷积
 
@@ -629,7 +629,7 @@ PyTorch、Keras 和 **TensorFlow**（**TF**）支持 1D、2D 和 3D 卷积。卷
 
 让我们详细讨论一下：
 
-+   在第一种情况下，我们有一个常规的卷积，步幅为*stride = 2*，滤波器表示为转置的行矩阵（相当于列矩阵），大小为 4：![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mfenced open="[" close="]" separators="|"><mml:mrow><mml:mn>1,2</mml:mn><mml:mo>,</mml:mo><mml:mn>3,4</mml:mn></mml:mrow></mml:mfenced></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup></mml:math>](img/314.png)（如前图所示，左边）。请注意，步幅应用于输出层，而不是常规卷积中的输入层。在设置步幅大于 1 时，相比于输入，我们可以增加输出的大小。在这里，输入切片的大小是*I*，滤波器的大小是*F*，步幅是*S*，输入填充是*P*。因此，转置卷积的输出切片大小*O*由以下公式给出：![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>O</mml:mi><mml:mo>=</mml:mo><mml:mi>S</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>I</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced><mml:mo>+</mml:mo><mml:mi>F</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn><mml:mi>P</mml:mi></mml:math>](img/315.png)。在这种情况下，大小为 4 的输入会产生大小为 2 * (4 - 1) + 4 - 2 * 2 = 6 的输出。我们还会裁剪输出向量开始和结束时的两个单元格，因为它们只收集来自单个输入单元格的输入。
++   在第一种情况下，我们有一个常规的卷积，步幅为*stride = 2*，滤波器表示为转置的行矩阵（相当于列矩阵），大小为 4：![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mfenced open="[" close="]" separators="|"><mml:mrow><mml:mn>1,2</mml:mn><mml:mo>,</mml:mo><mml:mn>3,4</mml:mn></mml:mrow></mml:mfenced></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup></mml:math>](img/314.png)（如前图所示，左边）。请注意，步幅应用于输出层，而不是常规卷积中的输入层。在设置步幅大于 1 时，相比于输入，我们可以增加输出的大小。在这里，输入切片的大小是`I`，滤波器的大小是`F`，步幅是`S`，输入填充是`P`。因此，转置卷积的输出切片大小`O`由以下公式给出：![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>O</mml:mi><mml:mo>=</mml:mo><mml:mi>S</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mi>I</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced><mml:mo>+</mml:mo><mml:mi>F</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn><mml:mi>P</mml:mi></mml:math>](img/315.png)。在这种情况下，大小为 4 的输入会产生大小为 2 * (4 - 1) + 4 - 2 * 2 = 6 的输出。我们还会裁剪输出向量开始和结束时的两个单元格，因为它们只收集来自单个输入单元格的输入。
 
 +   在第二种情况下，输入填充了存在像素之间的虚拟 0 值子像素（如前面的图所示，右侧）。这就是子像素卷积名称的由来。可以将其视为在图像内部进行的填充，而不仅仅是在边界上进行填充。一旦输入以这种方式变换，就会应用常规卷积。
 
@@ -703,7 +703,7 @@ PyTorch、Keras 和 **TensorFlow**（**TF**）支持 1D、2D 和 3D 卷积。卷
 
 +   它们以一个 7×7 卷积层开始，*stride = 2*，接着是 3×3 最大池化。这个阶段作为一个下采样步骤，使得网络的其余部分可以在一个更小的 56×56 的切片上工作，相比于输入的 224×224。
 
-+   网络其余部分的下采样是通过一个修改过的残差块实现的，*stride =* *2*。
++   网络其余部分的下采样是通过一个修改过的残差块实现的，*stride =* `2`。
 
 +   GAP 在所有残差块之后、1,000 单元全连接 softmax 层之前进行下采样。
 
@@ -769,7 +769,7 @@ Inception v2 和 v3 是一起发布的，并提出了比原始 v1（*Rethinking 
 
 最后一层堆叠单元的感受野等同于一个大卷积滤波器的单层感受野。与使用单层大滤波器相比，堆叠的层能够以更少的参数实现相同的感受野大小。例如，我们可以将一个单独的 5×5 层替换为两个堆叠的 3×3 层。为了简便起见，我们假设有单一的输入和输出切片。5×5 层的总权重（不包括偏差）是 5 * 5 = 25。
 
-另一方面，单个 3×3 层的总权重是 3 * 3 = 9，两个层的权重则是 2 * (3 * 3) = 18，这使得这种安排比单层的 5×5 层更高效 28%（18/25 = 0.72）。即便在输入和输出切片为多个的情况下，这种效率提升也得以保持。接下来的改进是将一个 *n×n* 卷积因式分解为两个堆叠的不对称 1×*n* 和 *n*×1 卷积。例如，我们可以将一个单一的 3×3 卷积分解为两个 1×3 和 3×1 卷积，其中 3×1 卷积应用于 1×3 卷积的输出。在第一个情况下，滤波器大小是 3 * 3 = 9，而在第二种情况下，组合后的大小是 (3 * 1) + (1 * 3) = 3 + 3 = 6，达到了 33% 的效率提升，如下图所示：
+另一方面，单个 3×3 层的总权重是 3 * 3 = 9，两个层的权重则是 2 * (3 * 3) = 18，这使得这种安排比单层的 5×5 层更高效 28%（18/25 = 0.72）。即便在输入和输出切片为多个的情况下，这种效率提升也得以保持。接下来的改进是将一个 *n×n* 卷积因式分解为两个堆叠的不对称 1×`n` 和 `n`×1 卷积。例如，我们可以将一个单一的 3×3 卷积分解为两个 1×3 和 3×1 卷积，其中 3×1 卷积应用于 1×3 卷积的输出。在第一个情况下，滤波器大小是 3 * 3 = 9，而在第二种情况下，组合后的大小是 (3 * 1) + (1 * 3) = 3 + 3 = 6，达到了 33% 的效率提升，如下图所示：
 
 ![图 4.23 – 3×3 卷积的因式分解为 1×3 和 3×1 卷积；灵感来自于 https://arxiv.org/abs/1512.00567](img/B19627_04_23.jpg)
 
@@ -891,7 +891,7 @@ MobileNet 的目标是面向内存和计算能力有限的设备，例如手机�
 
 +   **线性瓶颈**：我们假设输入是一个 RGB 图像。当图像通过神经网络（NN）传播时，每一层都会生成一个带有多个通道的激活张量。一直以来，人们认为这些张量中编码的信息可以在所谓的“感兴趣流形”中压缩，这个流形的张量比原始张量要小。强迫神经网络寻找这种流形的一种方法是使用 1×1 瓶颈卷积。然而，论文的作者认为，如果该卷积后接非线性激活函数，如 ReLU，这可能会导致由于 ReLU 消失问题而丧失流形信息。为了解决这个问题，MobileNet 使用没有非线性激活的 1×1 瓶颈卷积。
 
-+   `input -> 1×1 瓶颈卷积 -> 3×3 卷积 -> 1×1 反采样卷积`。换句话说，它遵循一个`宽 -> 窄 -> 宽`的数据表示。另一方面，反向残差块遵循`窄 -> 宽 -> 窄`的表示方式。在这里，瓶颈卷积通过**扩展** **因子** *t* 扩展其输入。
++   `input -> 1×1 瓶颈卷积 -> 3×3 卷积 -> 1×1 反采样卷积`。换句话说，它遵循一个`宽 -> 窄 -> 宽`的数据表示。另一方面，反向残差块遵循`窄 -> 宽 -> 窄`的表示方式。在这里，瓶颈卷积通过**扩展** **因子** `t` 扩展其输入。
 
     作者认为瓶颈包含了所有必要的信息，而扩展层仅作为一个实现细节，伴随着张量的非线性变换。因此，他们提出在瓶颈连接之间使用快捷连接。
 
@@ -899,7 +899,7 @@ MobileNet 的目标是面向内存和计算能力有限的设备，例如手机�
 
 +   **SE 模块**：我们已经熟悉这个模块。这里的区别是**硬 Sigmoid**激活函数，它近似 Sigmoid 函数，但在计算上更高效。该模块位于扩展深度卷积后，因此可以将注意力应用于最大的表示。SE 模块是 V3 的新增加项，在 V2 中并不存在。
 
-+   **步幅** *s*：该模块使用步幅卷积实现下采样。当*s*=1 时，才存在捷径连接。
++   **步幅** `s`：该模块使用步幅卷积实现下采样。当`s`=1 时，才存在捷径连接。
 
 MobileNetV3 引入了网络的大小变体，具有以下特点：
 
@@ -921,7 +921,7 @@ MobileNetV3 引入了网络的大小变体，具有以下特点：
 
 图 4.31 – 融合 MBConv 模块
 
-新的 3×3 卷积同时处理扩展（通过因子*t*）和步幅（1 或 2）。
+新的 3×3 卷积同时处理扩展（通过因子`t`）和步幅（1 或 2）。
 
 EfficientNetV2 的作者观察到，使用融合 MBConv 和 MBConv 模块组合的 CNN，比仅使用 MBConv 模块的 CNN 训练速度更快。然而， 
 

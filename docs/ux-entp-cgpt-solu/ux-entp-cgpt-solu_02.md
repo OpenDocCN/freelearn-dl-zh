@@ -186,7 +186,7 @@ ChatGPT无疑是一场火热的浪潮。独特、有趣、快速、智能？然�
 
 Hick-Hyman 法则
 
-这个法则于1952年发表在《实验心理学季刊》上。它是一个方程式，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>R</mi><mi>T</mi><mo>=</mo><mi>a</mi><mo>+</mo><mi>b</mi><msub><mrow><mi>l</mi><mi>o</mi><mi>g</mi></mrow><mn>2</mn></msub><mo>(</mo><mi>n</mi><mo>)</mo></mrow></mrow></mrow></math>](img/1.png)，其中反应时间（*RT*）是决策中不包括的时间（*a*）加上一个常数（大约0.155秒）乘以可供选择的选项数量（*n*）的对数函数。
+这个法则于1952年发表在《实验心理学季刊》上。它是一个方程式，![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>R</mi><mi>T</mi><mo>=</mo><mi>a</mi><mo>+</mo><mi>b</mi><msub><mrow><mi>l</mi><mi>o</mi><mi>g</mi></mrow><mn>2</mn></msub><mo>(</mo><mi>n</mi><mo>)</mo></mrow></mrow></mrow></math>](img/1.png)，其中反应时间（*RT*）是决策中不包括的时间（`a`）加上一个常数（大约0.155秒）乘以可供选择的选项数量（`n`）的对数函数。
 
 文章：[维基百科对 Hick-Hyman 法则的解释](https://en.wikipedia.org/wiki/Hick%27s_law) ([https://en.wikipedia.org/wiki/Hick%27s_law](https://en.wikipedia.org/wiki/Hick%27s_law))
 

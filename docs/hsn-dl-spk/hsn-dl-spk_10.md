@@ -240,7 +240,7 @@ $SPARK_HOME/bin/spark-submit --class <package>.<class_name> --master <spark_mast
 
 图 10.3：参数平均化
 
-在此图中，**W**表示网络中的参数（权重和偏置）。在 DL4J 中，这一实现使用了 Spark 的 TreeAggregate（[`umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html`](https://umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html)）。
+在此图中，*`W`*表示网络中的参数（权重和偏置）。在 DL4J 中，这一实现使用了 Spark 的 TreeAggregate（[`umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html`](https://umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html)）。
 
 参数平均化是一种简单的方法，但它带来了一些挑战。最直观的平均化方法是每次迭代后直接对参数进行平均。虽然这种方法是可行的，但增加的开销可能非常高，网络通信和同步成本可能会抵消通过增加额外节点来扩展集群的任何好处。因此，参数平均化通常会在平均周期（每个工作节点的最小批次数量）大于一时实现。如果平均周期过于稀疏，每个工作节点的局部参数可能会显著偏离，导致模型效果不佳。合适的平均周期通常是每个工作节点每 10 到 20 次最小批次中进行一次。另一个挑战与优化方法（DL4J 的更新方法）相关。已有研究表明，这些方法（[`ruder.io/optimizing-gradient-descent/`](http://ruder.io/optimizing-gradient-descent/)）能够改善神经网络训练过程中的收敛性。但它们有一个内部状态，也可能需要进行平均化。这将导致每个工作节点的收敛速度更快，但代价是网络传输的大小翻倍。
 
@@ -264,7 +264,7 @@ $SPARK_HOME/bin/spark-submit --class <package>.<class_name> --master <spark_mast
 
 ![](img/7ed522f5-d93c-42d3-997c-26e0fea27211.png)
 
-在这里，*s* 是参数服务器等待收集的更新数量，![](img/7fbd793e-4160-4bee-bba8-18fec6a7f311.png) 是与陈旧程度相关的标量缩放因子。
+在这里，`s` 是参数服务器等待收集的更新数量，![](img/7fbd793e-4160-4bee-bba8-18fec6a7f311.png) 是与陈旧程度相关的标量缩放因子。
 
 在 DL4J 中，尽管参数平均实现一直是容错的，但从 1.0.0-beta3 版本开始，梯度共享实现已完全具备容错能力。
 
@@ -451,7 +451,7 @@ BigDL ([`bigdl-project.github.io/0.6.0/`](https://bigdl-project.github.io/0.6.0/
 
 # DeepLearning.scala
 
-DeepLearning.scala ([`deeplearning.thoughtworks.school/`](https://deeplearning.thoughtworks.school/)) 是来自 ThoughtWorks ([`www.thoughtworks.com/`](https://www.thoughtworks.com/)) 的深度学习框架。该框架用 Scala 实现，自开始以来，其目标就是最大化地利用函数式编程和面向对象编程范式。它支持 GPU 加速的 *N* 维数组。该框架中的神经网络可以通过数学公式构建，因此可以计算公式中权重的导数。
+DeepLearning.scala ([`deeplearning.thoughtworks.school/`](https://deeplearning.thoughtworks.school/)) 是来自 ThoughtWorks ([`www.thoughtworks.com/`](https://www.thoughtworks.com/)) 的深度学习框架。该框架用 Scala 实现，自开始以来，其目标就是最大化地利用函数式编程和面向对象编程范式。它支持 GPU 加速的 `N` 维数组。该框架中的神经网络可以通过数学公式构建，因此可以计算公式中权重的导数。
 
 这个框架支持插件，因此可以通过编写自定义插件来扩展它，这些插件可以与开箱即用的插件集共存（目前在模型、算法、超参数、计算功能等方面有一套相当丰富的插件）。
 

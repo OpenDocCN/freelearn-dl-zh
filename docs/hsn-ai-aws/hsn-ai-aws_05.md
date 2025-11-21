@@ -206,7 +206,7 @@ AWS CLI 是一个便捷的工具，用于检查 AWS 服务的输出格式：
 
 +   这些坐标和测量值都以图像的比例表示。例如，如果图像的尺寸是 700 x 200 像素，并且服务返回了 left == 0.5 和 top == 0.25，那么矩形的左上角坐标为像素（350，50）；700 x 0.5 = 350，200 x 0.25 = 50。
 
-+   `Polygon`描述了`BoundingBox`内的一组点，形成一个精细的多边形，围绕检测到的文本。每个点的*x*和 y 坐标也使用与`BoundingBox`坐标相同的比例系统。
++   `Polygon`描述了`BoundingBox`内的一组点，形成一个精细的多边形，围绕检测到的文本。每个点的`x`和 y 坐标也使用与`BoundingBox`坐标相同的比例系统。
 
 `Geometry`中提供的信息对于执行如在图像中突出显示文本或在图像上叠加其他信息等任务非常有用。
 
@@ -315,7 +315,7 @@ class TranslationService:
 
 +   `translate_text()`方法调用`boto3`翻译客户端的`translate_text()`函数，并传入文本、源语言和目标语言。此方法的`source_language`和`target_language`参数默认值分别为`auto`和`en`。
 
-+   `translate_text()`函数随后处理来自 AWS SDK 的输出，并将其返回为一个包含`translatedText`、`sourceLanguage`和`targetLanguage`键的 Python 字典。我们再次调整了 AWS SDK 的输入输出格式，以适应我们自己的*X*接口契约。
++   `translate_text()`函数随后处理来自 AWS SDK 的输出，并将其返回为一个包含`translatedText`、`sourceLanguage`和`targetLanguage`键的 Python 字典。我们再次调整了 AWS SDK 的输入输出格式，以适应我们自己的`X`接口契约。
 
 亚马逊翻译服务支持自定义术语的概念。此功能允许开发人员在翻译过程中设置自定义术语。这对于源文本中包含非标准语言的单词和短语的使用场景非常有用，比如公司名称、品牌和产品。例如，“Packt”不会被正确翻译。为纠正翻译，我们可以通过上传一个**逗号分隔值**（**CSV**）文件，在 AWS 账户中创建一个自定义术语映射，将“Packt”映射为在不同语言中的正确翻译，具体如下所示：
 

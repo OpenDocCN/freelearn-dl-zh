@@ -36,7 +36,7 @@
 
 图 2.1 – 我们的坦克实体
 
-`PlayerTankController`类控制玩家的坦克。我们使用*W*、*A*、*S*和*D*键来移动和转向坦克，并使用左鼠标按钮从**Turret**对象瞄准和射击。
+`PlayerTankController`类控制玩家的坦克。我们使用`W`、`A`、`S`和`D`键来移动和转向坦克，并使用左鼠标按钮从**Turret**对象瞄准和射击。
 
 信息
 
@@ -177,7 +177,7 @@ transform.Translate(Vector3.forward * Time.deltaTime *
                     curSpeed);
 ```
 
-上述代码表示经典的 *WASD* 控制方案。坦克通过 *A* 和 *D* 键旋转，通过 *W* 和 *S* 键前进和后退。
+上述代码表示经典的 *WASD* 控制方案。坦克通过 `A` 和 `D` 键旋转，通过 `W` 和 `S` 键前进和后退。
 
 信息
 

@@ -46,7 +46,7 @@
 
 表 1 – BIOS 标签及其描述表
 
-从这个表格可以看出，**B** 表示标记的开始，**I** 表示标记的内部，而 **O** 则表示实体的外部。这就是为什么这种类型的标注被称为 **BIO**。例如，前面显示的句子可以使用 BIO 进行标注：
+从这个表格可以看出，*`B`* 表示标记的开始，*`I`* 表示标记的内部，而 *`O`* 则表示实体的外部。这就是为什么这种类型的标注被称为 **BIO**。例如，前面显示的句子可以使用 BIO 进行标注：
 
 ```py
 [B-PER|George] [I-PER|Washington] [O|is] [O|one] [O|the] [O|presidents] [O|of] [B-LOC|United] [I-LOC|States] [I-LOC|of] [I-LOC|America] [O|.]

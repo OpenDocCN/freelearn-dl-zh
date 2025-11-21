@@ -58,19 +58,19 @@ Word2Vec 建模使用窗口扫描句子，然后根据上下文信息预测窗�
 
 在本节中，我们将深入讨论如何构建一个 Word2Vec 模型。如前所述，我们的最终目标是拥有一个训练好的模型，能够为输入的文本数据生成实值向量表示，这也叫做词嵌入。
 
-在模型训练过程中，我们将使用最大似然法 ([`en.wikipedia.org/wiki/Maximum_likelihood`](https://en.wikipedia.org/wiki/Maximum_likelihood))，这个方法可以用来最大化给定模型已经看到的前一个词的条件下，下一个词 *w[t]* 在输入句子中的概率，我们可以称之为 *h*。
+在模型训练过程中，我们将使用最大似然法 ([`en.wikipedia.org/wiki/Maximum_likelihood`](https://en.wikipedia.org/wiki/Maximum_likelihood))，这个方法可以用来最大化给定模型已经看到的前一个词的条件下，下一个词 *w[t]* 在输入句子中的概率，我们可以称之为 `h`。
 
 这个最大似然法将用软最大函数来表示：
 
 ![](img/8312e4a7-cfe0-47dd-9b24-42670c3aca92.png)
 
-在这里，*score* 函数计算一个值，用来表示目标词 *w[t]* 与上下文 *h* 的兼容性。该模型将在输入序列上进行训练，旨在最大化训练数据的似然性（为简化数学推导，使用对数似然）。
+在这里，*score* 函数计算一个值，用来表示目标词 *w[t]* 与上下文 `h` 的兼容性。该模型将在输入序列上进行训练，旨在最大化训练数据的似然性（为简化数学推导，使用对数似然）。
 
 ![](img/ad309d16-c7ef-4cef-9e0e-f3b791538f1d.png)
 
 因此，*ML* 方法将尝试最大化上述方程，从而得到一个概率语言模型。但由于需要使用评分函数计算所有词的每个概率，这一计算非常耗费计算资源。
 
-词汇表 *V* 中的单词 *w'*，在该模型的当前上下文 *h* 中。这将在每个训练步骤中发生。
+词汇表 `V` 中的单词 *w'*，在该模型的当前上下文 `h` 中。这将在每个训练步骤中发生。
 
 ![](img/202fe239-8362-46dc-ab60-3a54281cf6cd.png)
 
@@ -78,7 +78,7 @@ Word2Vec 建模使用窗口扫描句子，然后根据上下文信息预测窗�
 
 由于构建概率语言模型的计算开销较大，人们倾向于使用一些计算上更为高效的技术，比如 **连续词袋模型** (**CBOW**) 和跳字模型。
 
-这些模型经过训练，用逻辑回归构建一个二元分类模型，以区分真实目标词 *w[t]* 和 *h* 噪声或虚构词 ![](img/91f9ba2d-f6dc-4587-b482-b348d4b4560b.png)**,** 它们处在相同的上下文中。下面的图表简化了这个概念，采用了 CBOW 技术：
+这些模型经过训练，用逻辑回归构建一个二元分类模型，以区分真实目标词 *w[t]* 和 `h` 噪声或虚构词 ![](img/91f9ba2d-f6dc-4587-b482-b348d4b4560b.png)**,** 它们处在相同的上下文中。下面的图表简化了这个概念，采用了 CBOW 技术：
 
 ![](img/4663156d-d15c-4994-8fa0-9942283b6244.png)
 
@@ -96,7 +96,7 @@ Word2Vec 建模使用窗口扫描句子，然后根据上下文信息预测窗�
 
 其中：
 
-+   **![](img/e3e0bbb6-3b7d-4a79-bcfa-1311153492a7.png)** 是基于模型在数据集 *D* 中看到词 *w* 在上下文 *h* 中的二元逻辑回归概率，这个概率是通过 θ 向量计算的。这个向量表示已学习的嵌入。
++   **![](img/e3e0bbb6-3b7d-4a79-bcfa-1311153492a7.png)** 是基于模型在数据集 `D` 中看到词 `w` 在上下文 `h` 中的二元逻辑回归概率，这个概率是通过 θ 向量计算的。这个向量表示已学习的嵌入。
 
 +   ![](img/9653f073-6172-4710-800d-692f0ca28fbf.png) 是我们可以从一个噪声概率分布中生成的虚拟或噪声词汇，例如训练输入样本的 unigram。
 
@@ -104,7 +104,7 @@ Word2Vec 建模使用窗口扫描句子，然后根据上下文信息预测窗�
 
 当模型将高概率分配给真实词汇，低概率分配给噪声词汇时，该目标得到了最大化。
 
-从技术上讲，将高概率分配给真实词汇的过程称为**负采样**（[`papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf`](https://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf)），并且使用这种损失函数有很好的数学依据：它提出的更新近似了软最大（softmax）函数在极限情况下的更新。但从计算角度来看，它尤其具有吸引力，因为现在计算损失函数的复杂度仅与我们选择的噪声词数量（*k*）相关，而与词汇表中的所有词汇（*V*）无关。这使得训练变得更加高效。实际上，我们将使用非常类似的**噪声对比估计**（**NCE**）（[`papers.nips.cc/paper/5165-learning-word-embeddings-efficiently-with-noise-contrastive-estimation.pdf`](https://papers.nips.cc/paper/5165-learning-word-embeddings-efficiently-with-noise-contrastive-estimation.pdf)）损失函数，TensorFlow 提供了一个便捷的辅助函数 `tf.nn.nce_loss()`。
+从技术上讲，将高概率分配给真实词汇的过程称为**负采样**（[`papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf`](https://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf)），并且使用这种损失函数有很好的数学依据：它提出的更新近似了软最大（softmax）函数在极限情况下的更新。但从计算角度来看，它尤其具有吸引力，因为现在计算损失函数的复杂度仅与我们选择的噪声词数量（`k`）相关，而与词汇表中的所有词汇（`V`）无关。这使得训练变得更加高效。实际上，我们将使用非常类似的**噪声对比估计**（**NCE**）（[`papers.nips.cc/paper/5165-learning-word-embeddings-efficiently-with-noise-contrastive-estimation.pdf`](https://papers.nips.cc/paper/5165-learning-word-embeddings-efficiently-with-noise-contrastive-estimation.pdf)）损失函数，TensorFlow 提供了一个便捷的辅助函数 `tf.nn.nce_loss()`。
 
 # skip-gram 架构的一个实际示例
 
@@ -130,7 +130,7 @@ the quick brown fox jumped over the lazy dog
 
 现在，我们有了一组输入和输出的词对。
 
-让我们尝试模仿在特定步骤 *t* 处的训练过程。那么，skip-gram 模型将以第一个训练样本为输入，其中输入词为 `quick`，目标输出词为 `the`。接下来，我们需要构造噪声输入，因此我们将从输入数据的单词集中随机选择。为了简化，噪声向量的大小仅为 1。例如，我们可以选择 `sheep` 作为噪声样本。
+让我们尝试模仿在特定步骤 `t` 处的训练过程。那么，skip-gram 模型将以第一个训练样本为输入，其中输入词为 `quick`，目标输出词为 `the`。接下来，我们需要构造噪声输入，因此我们将从输入数据的单词集中随机选择。为了简化，噪声向量的大小仅为 1。例如，我们可以选择 `sheep` 作为噪声样本。
 
 现在，我们可以继续计算真实对和噪声对之间的损失，公式如下：
 
@@ -348,7 +348,7 @@ integer_words = [vocab_to_integer[word] for word in preprocessed_words]
 
 其中：
 
-+   *t* 是单词丢弃的阈值参数
++   `t` 是单词丢弃的阈值参数
 
 +   *f(w[i])* 是输入数据集中目标单词 *w[i]* 的频率
 
@@ -371,9 +371,9 @@ training_words = [word for word in integer_words if random.random() < (1 - prob_
 
 现在，我们有了一个更精炼、更清晰的输入文本版本。
 
-我们提到过，skip-gram 架构在生成目标单词的实值表示时，会考虑目标单词的上下文，因此它在目标单词周围定义了一个大小为 *C* 的窗口。
+我们提到过，skip-gram 架构在生成目标单词的实值表示时，会考虑目标单词的上下文，因此它在目标单词周围定义了一个大小为 `C` 的窗口。
 
-我们将不再平等地对待所有上下文单词，而是为那些距离目标单词较远的单词分配较小的权重。例如，如果我们选择窗口大小为 *C = 4*，那么我们将从 1 到 *C* 的范围内随机选择一个数字 *L*，然后从当前单词的历史和未来中采样 *L* 个单词。关于这一点的更多细节，请参见 Mikolov 等人的论文：[`arxiv.org/pdf/1301.3781.pdf`](https://arxiv.org/pdf/1301.3781.pdf)。
+我们将不再平等地对待所有上下文单词，而是为那些距离目标单词较远的单词分配较小的权重。例如，如果我们选择窗口大小为 *C = 4*，那么我们将从 1 到 `C` 的范围内随机选择一个数字 `L`，然后从当前单词的历史和未来中采样 `L` 个单词。关于这一点的更多细节，请参见 Mikolov 等人的论文：[`arxiv.org/pdf/1301.3781.pdf`](https://arxiv.org/pdf/1301.3781.pdf)。
 
 所以，让我们继续定义这个函数：
 

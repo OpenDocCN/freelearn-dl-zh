@@ -394,7 +394,7 @@ Benchmark.time("Time to convert and show") {result.select("ner", "ner_converter"
 sparkSession.stop
 ```
 
-现在让我们做一些更复杂的事情。这个第二个示例中的管道使用 n-grams 进行分词（[`en.wikipedia.org/wiki/N-gram`](https://en.wikipedia.org/wiki/N-gram)），它是从给定的文本或语音中提取的*n*个标记（通常是单词）的序列。此示例的依赖项与本节前面展示的示例相同——Spark SQL、Spark MLLib 和`spark-nlp`。
+现在让我们做一些更复杂的事情。这个第二个示例中的管道使用 n-grams 进行分词（[`en.wikipedia.org/wiki/N-gram`](https://en.wikipedia.org/wiki/N-gram)），它是从给定的文本或语音中提取的`n`个标记（通常是单词）的序列。此示例的依赖项与本节前面展示的示例相同——Spark SQL、Spark MLLib 和`spark-nlp`。
 
 创建`SparkSession`并配置一些 Spark 属性，如下所示：
 
@@ -441,7 +441,7 @@ val ngram = new NGram()
    .setOutputCol("3-gram")
 ```
 
-`NGram`是一个特征变换器，它将输入的字符串数组转换为 n-grams 数组。在这个示例中，选择的*n*值是`3`。现在，我们需要一个额外的`DocumentAssembler`阶段来处理 n-gram 的结果，如下所示：
+`NGram`是一个特征变换器，它将输入的字符串数组转换为 n-grams 数组。在这个示例中，选择的`n`值是`3`。现在，我们需要一个额外的`DocumentAssembler`阶段来处理 n-gram 的结果，如下所示：
 
 ```py
 val gramAssembler = new DocumentAssembler()

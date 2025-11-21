@@ -150,13 +150,13 @@ F1 分数使用精确率和召回率的加权值。它是精确率和召回率�
 
 *F1score= 2** (*precision * recall*)/(*precision + recall*)
 
-在这个方程中，真正例（*p*）、假正例（*p*）和假负例（*n*）被放入精确率（*P*）和召回率（*R*）的方程中：
+在这个方程中，真正例（`p`）、假正例（`p`）和假负例（`n`）被放入精确率（`P`）和召回率（`R`）的方程中：
 
 ![](img/B17948_05_09.png)
 
 ![](img/B17948_05_10.png)
 
-因此，F1 分数可以视为精确率（*P*）和召回率（*R*）的调和平均值（算术平均值的倒数）：
+因此，F1 分数可以视为精确率（`P`）和召回率（`R`）的调和平均值（算术平均值的倒数）：
 
 ![](img/B17948_05_003.png)
 
@@ -164,7 +164,7 @@ F1 分数使用精确率和召回率的加权值。它是精确率和召回率�
 
 ### Matthews 相关系数（MCC）
 
-MCC 在 *Fine-Tuning BERT Models* 章节的 *Evaluating using Matthews Correlation Coefficient* 部分进行了描述和实现。MCC 计算出一个值，其中包括真正例（*T*[P]）、真负例（*T*[N]）、假正例（*F*[P]）和假负例（*F*[N]）。
+MCC 在 *Fine-Tuning BERT Models* 章节的 *Evaluating using Matthews Correlation Coefficient* 部分进行了描述和实现。MCC 计算出一个值，其中包括真正例（`T[P]`）、真负例（`T[N]`）、假正例（`F[P]`）和假负例（`F[N]`）。
 
 MCC 可以用以下方程总结：
 
@@ -515,7 +515,7 @@ model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_l
 
 ## 斯坦福情感树库（**SST-2**）
 
-**斯坦福情感树库**（**SST-2**）包含电影评论。在这一部分，我们将描述 SST-2（二元分类）任务。然而，数据集远不止如此，可以将情感分类为 *0*（负面）到 *n*（正面）。
+**斯坦福情感树库**（**SST-2**）包含电影评论。在这一部分，我们将描述 SST-2（二元分类）任务。然而，数据集远不止如此，可以将情感分类为 `0`（负面）到 `n`（正面）。
 
 *Socher*等人(2013)将情感分析发展到了超越二元积极-消极 NLP 分类的程度。我们将在 *第十二章*，*检测客户情绪以做出预测* 中使用 Transformer 模型探索 SST-2 多标签情感分类。
 

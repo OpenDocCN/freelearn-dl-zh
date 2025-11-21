@@ -138,7 +138,7 @@ void Start () {
     }
     ```
 
-1.  `UpdateRandom()`方法通过基于`randomFreq`的间隔在整个游戏过程中更新`randomPush`值。`Random.insideUnitSphere`返回一个具有随机*x*、*y*和*z*值的`Vector3`对象，这些值在以`randomForce`值为半径的球体内。
+1.  `UpdateRandom()`方法通过基于`randomFreq`的间隔在整个游戏过程中更新`randomPush`值。`Random.insideUnitSphere`返回一个具有随机`x`、`y`和`z`值的`Vector3`对象，这些值在以`randomForce`值为半径的球体内。
 
 1.  在恢复`while(true)`之前，我们等待一定随机的时长。
 

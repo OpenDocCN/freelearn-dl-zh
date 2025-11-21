@@ -12,7 +12,7 @@
 
 # 执行文本数据的预处理和情感提取
 
-在本节中，我们将使用简·奥斯汀的畅销小说《傲慢与偏见》（1813 年出版）进行文本数据预处理分析。在 R 中，我们将使用 Hadley Wickham 的`tidytext`包进行分词、去除停用词、使用预定义的情感词典进行情感提取、**词频-逆文档频率**（**tf-idf**）矩阵创建，并理解*n*-grams 之间的配对相关性。
+在本节中，我们将使用简·奥斯汀的畅销小说《傲慢与偏见》（1813 年出版）进行文本数据预处理分析。在 R 中，我们将使用 Hadley Wickham 的`tidytext`包进行分词、去除停用词、使用预定义的情感词典进行情感提取、**词频-逆文档频率**（**tf-idf**）矩阵创建，并理解`n`-grams 之间的配对相关性。
 
 在本节中，我们不将文本存储为字符串、语料库或**文档词频矩阵**（**DTM**），而是将其处理成每行一个标记的表格格式。
 
@@ -38,7 +38,7 @@ Pride_Prejudice <- data.frame("text" = prideprejudice,
 
 ```
 
-1.  现在，执行分词操作，将每行一个字符串的格式重新构建为每行一个标记的格式。这里，标记可以是单个单词、一组字符、共现词（*n*-grams）、句子、段落等。目前，我们将句子分词为单个单词：
+1.  现在，执行分词操作，将每行一个字符串的格式重新构建为每行一个标记的格式。这里，标记可以是单个单词、一组字符、共现词（`n`-grams）、句子、段落等。目前，我们将句子分词为单个单词：
 
 ```py
 Pride_Prejudice <- Pride_Prejudice %>% unnest_tokens(word,text) 
@@ -336,7 +336,7 @@ labels <- as.matrix(data.frame("Positive_flag" = movie_review$sentiment,"negativ
 
 ```
 
-1.  提取所有评论中的独特单词，并获取它们的出现次数（*n*）。同时，给每个单词标记一个唯一整数（`orderNo`）。因此，每个单词都使用唯一整数进行编码，之后将用于 LSTM 网络。
+1.  提取所有评论中的独特单词，并获取它们的出现次数（`n`）。同时，给每个单词标记一个唯一整数（`orderNo`）。因此，每个单词都使用唯一整数进行编码，之后将用于 LSTM 网络。
 
 ```py
 reviews_sortedWords <- reviews %>% unnest_tokens(word,text) %>% dplyr::count(word, sort = TRUE) 
@@ -364,7 +364,7 @@ for(i in 1:length(reviews$text))
 
 ```
 
-1.  为了方便将等长序列输入 LSTM 网络，我们将限制评论长度为 150 个单词。换句话说，超过 150 个单词的评论将被截断为前 150 个单词，而短于 150 个单词的评论将通过在前面添加必要数量的零填充为 150 个单词。因此，我们现在添加一个新的单词**0**。
+1.  为了方便将等长序列输入 LSTM 网络，我们将限制评论长度为 150 个单词。换句话说，超过 150 个单词的评论将被截断为前 150 个单词，而短于 150 个单词的评论将通过在前面添加必要数量的零填充为 150 个单词。因此，我们现在添加一个新的单词*`0`*。
 
 ```py
 reviews_words_sno <- lapply(reviews_words_sno,function(x) 
@@ -565,7 +565,7 @@ logistic_model(Xtrain = vocab_train_prune_dtm,
 
 ```
 
-1.  使用*n*-gram（单词单元和二元词组）生成 DTM，然后使用 Lasso 逻辑回归评估性能：
+1.  使用`n`-gram（单词单元和二元词组）生成 DTM，然后使用 Lasso 逻辑回归评估性能：
 
 ```py
 vocab_train_ngrams <- create_vocabulary(itoken(train_tokens,ids=train$id,progressbar = FALSE), 

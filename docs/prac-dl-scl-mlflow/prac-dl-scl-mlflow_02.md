@@ -104,7 +104,7 @@ datamodule = TextClassificationData.from_csv(
 
 1.  一旦我们有了数据，我们现在可以使用基础模型进行微调。首先，通过调用`TextClassifier`并将骨干网络（backbone）设置为`prajjwal1/bert-tiny`来声明`classifier_model`（`prajjwal1/bert-tiny`是一个更小的类似 BERT 的预训练模型，位于 Hugging Face 模型库中：[`huggingface.co/prajjwal1/bert-tiny`](https://huggingface.co/prajjwal1/bert-tiny)）。这意味着我们的模型将基于`bert-tiny`模型。
 
-1.  下一步是通过定义我们希望运行的轮数（epochs）和希望使用的 GPU 数量来设置训练器。这里，`torch.cuda.device_count()`将返回*0*（没有 GPU）或*1*到*N*，其中*N*是你运行环境中最大可用 GPU 的数量。现在，我们已经准备好调用`trainer.finetune`来训练一个二元情感分类器，使用的是 IMDb 数据集：
+1.  下一步是通过定义我们希望运行的轮数（epochs）和希望使用的 GPU 数量来设置训练器。这里，`torch.cuda.device_count()`将返回`0`（没有 GPU）或`1`到`N`，其中`N`是你运行环境中最大可用 GPU 的数量。现在，我们已经准备好调用`trainer.finetune`来训练一个二元情感分类器，使用的是 IMDb 数据集：
 
     ```py
     classifier_model = TextClassifier(backbone="prajjwal1/bert-tiny", num_classes=datamodule.num_classes)

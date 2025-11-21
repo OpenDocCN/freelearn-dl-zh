@@ -114,7 +114,7 @@
 
 ### 熵
 
-熵是一个广泛使用的术语，应用于多个领域，比如物理学和计算机科学。我们在这里使用的熵**E**可以用以下方程定义，其中 pi 是样本中子类 ![](img/Formula_04_001.png) 的比例：
+熵是一个广泛使用的术语，应用于多个领域，比如物理学和计算机科学。我们在这里使用的熵*`E`*可以用以下方程定义，其中 pi 是样本中子类 ![](img/Formula_04_001.png) 的比例：
 
 ![](img/Formula_04_002.jpg)
 
@@ -196,7 +196,7 @@
 
 图 4.7 – 一个父节点和两个子节点，以及它们各自的基尼杂质
 
-在这种情况下，损失**L**将是如下：
+在这种情况下，损失*`L`*将是如下：
 
 ![](img/Formula_04_021.jpg)
 
@@ -1008,7 +1008,7 @@ R2-score on test set: 0.7941678302821006
         X, y, random_state=0)
     ```
 
-1.  实例化`RandomForestRegressor`模型。这次，我们指定`max_features='log2'`，这样每次拆分时，只会使用所有特征的一个随机子集（大小为`log2(n)`，假设有*n*个特征）：
+1.  实例化`RandomForestRegressor`模型。这次，我们指定`max_features='log2'`，这样每次拆分时，只会使用所有特征的一个随机子集（大小为`log2(n)`，假设有`n`个特征）：
 
     ```py
     rf = RandomForestRegressor(max_features='log2', random_state=0)

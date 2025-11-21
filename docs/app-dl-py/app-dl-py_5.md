@@ -131,7 +131,7 @@ DRL 网络的关键思想是它们本质上是无监督的，并且通过试错�
 
 这里，![](img/9d1a43fa-2b2e-4f4c-8b23-362390dae545.png) 是 ![](img/ad642e62-6059-4768-b872-19f70caa4a88.png) 的观测值，![](img/77b76bcb-3fbd-43e7-8c5d-ed149d7e7afb.png) 是该序列的第一个观测值。
 
-正如 Siraj Raval 在他的视频《如何轻松预测股票价格 深度学习入门》第 *7* 集中所建议的，视频可在 YouTube 上观看：[`www.youtube.com/watch?v=ftMq5ps503w`](https://www.youtube.com/watch?v=ftMq5ps503w)。
+正如 Siraj Raval 在他的视频《如何轻松预测股票价格 深度学习入门》第 `7` 集中所建议的，视频可在 YouTube 上观看：[`www.youtube.com/watch?v=ftMq5ps503w`](https://www.youtube.com/watch?v=ftMq5ps503w)。
 
 # 最大值和最小值归一化
 
@@ -141,7 +141,7 @@ DRL 网络的关键思想是它们本质上是无监督的，并且通过试错�
 
 ![](img/553451e1-0d79-4ddb-a484-4501ea4298dd.png)
 
-这里，![](img/0d60a1c3-779b-4517-a09f-5fc81d3f41d0.png) 是 ![](img/4c8b2958-c7c3-4b0e-a6e9-88d3aeee18ca.png) 的观测值，*O* 代表包含所有 O 值的向量，min (O) 和 max (O) 函数分别表示该序列的最小值和最大值。
+这里，![](img/0d60a1c3-779b-4517-a09f-5fc81d3f41d0.png) 是 ![](img/4c8b2958-c7c3-4b0e-a6e9-88d3aeee18ca.png) 的观测值，`O` 代表包含所有 O 值的向量，min (O) 和 max (O) 函数分别表示该序列的最小值和最大值。
 
 在下一个活动中，我们将探索比特币数据集并为模型准备数据。我们将准备可用的比特币数据以供 LSTM 模型使用。这包括选择感兴趣的变量，选择相关的时间段，并应用前述的点相对归一化技术。
 

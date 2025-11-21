@@ -139,7 +139,7 @@ transformer 模型的基础在于注意力子层。而注意力子层的关键�
 
 如果要解释“它”的意思，只有在回到句子开头的“房子”一词时才能理解。这对于机器来说是一段相当长的路径！
 
-定义最大路径长度的函数顺序如 Big *O* 表 7.2 中所示：
+定义最大路径长度的函数顺序如 Big `O` 表 7.2 中所示：
 
 | **层类型** | **最大路径长度** | **上下文大小** |
 | --- | --- | --- |
@@ -176,15 +176,15 @@ OpenAI 选择了在“叠加解码层”部分描述的只解码转换器。结�
 
 第一个版本的 GPT 转换器模型的有希望的结果很快就促使*Radford*等人(2019 年)提出了零-shot 转移模型。他们的核心哲学是继续训练 GPT 模型从原始文本中学习。然后，他们进一步深入研究，聚焦于通过无监督分布的语言建模示例：
 
-示例=(*x*[1], *x*[2], *x*[3], ,*x*[n])
+示例=(`x[1]`, `x[2]`, `x[3]`, ,`x[n]`)
 
 示例由符号序列组成：
 
-序列=(*s*[1], *s*[2], *s*[3], ,*s*[n])
+序列=(`s[1]`, `s[2]`, `s[3]`, ,`s[n]`)
 
 这导致了一个可以表示为任何类型输入的概率分布的元模型：
 
-*p* (*输出*/*输入*)
+`p` (*输出*/*输入*)
 
 目标是一旦训练的 GPT 模型通过深入训练理解了语言，就将这个概念推广到任何类型的下游任务。
 
@@ -192,7 +192,7 @@ GPT 模型从 117M 参数迅速发展到 345M 参数，然后到其他大小，�
 
 这鼓励 OpenAI 更进一步，更远。*Brown*等人(2020 年)假设有条件概率转换器模型可以进行深度训练，并且能够在几乎不进行进一步微调的情况下产生出色的结果：
 
-*p* (*输出*/*多任务*)
+`p` (*输出*/*多任务*)
 
 OpenAI 正在实现其目标，即训练模型，然后直接运行下游任务，而无需进一步微调。这一巨大的进步可以分为四个阶段：
 
@@ -236,7 +236,7 @@ OpenAI 团队通过模型定制和调整了解码模型。*Radford* 等人（201
 
 GPT-3 175B 模型已经达到了很少团队可以访问的独特规模，需要大量的计算资源：
 
-*n*[参数] = 175.0B，*n*[层数] = 96，*d*[模型] = 12288，*n*[头] = 96
+`n`[参数] = 175.0B，`n`[层数] = 96，`d`[模型] = 12288，`$1$2` = 96
 
 让我们看看越来越多的 GPT-3 引擎。
 
@@ -326,7 +326,7 @@ The solution of scholastic perplexities, whether moral or religious, is not only
 
 要停止单元格，请双击单元格的运行按钮。
 
-你还可以按下 *Ctrl* + *M* 停止生成文本，但这可能会将代码转换为文本，你将不得不将其复制回程序单元格。
+你还可以按下 *Ctrl* + `M` 停止生成文本，但这可能会将代码转换为文本，你将不得不将其复制回程序单元格。
 
 输出丰富。我们可以观察到几个事实：
 
@@ -391,7 +391,7 @@ faculty of the mind.
 The reason is the thing which apprehends, and seeks to understand, the objects of its minds, which apprehend and apprehend the things of itself. No one can speak of this reason without the understanding and the understanding of the human reason. But that knowledge and understanding which is the most natural of all the faculties, which, because it is understood by the human reason, is the most natural of all the faculties, is not without reason, but only without understanding. The human reason, who sees and knows the things which the natural sense, which, though in the natural sense, does not understand, is the source of every other knowledge which we understand. The reason is the thing which does not understand, but understands the things which we comprehend, and therefore, is not to be understood. I mean that the reason is the thing which does not understand, but knows only the things which we do understand…." 
 ```
 
-要停止运行单元格，请双击单元格的运行按钮或按下*Ctrl* + *M*。
+要停止运行单元格，请双击单元格的运行按钮或按下*Ctrl* + `M`。
 
 哇！我怀疑有人能看出我们训练过的 GPT-2 模型生成的文本补全和人类的区别。它也可能在每次运行时生成不同的输出。
 
@@ -431,15 +431,15 @@ The reason is the thing which apprehends, and seeks to understand, the objects o
 
 让我们定义一种提示和回应的标准结构，如下:
 
-+   *N* = NLP 任务的名称（输入）。
++   `N` = NLP 任务的名称（输入）。
 
-+   *E* = GPT-3 引擎的解释。*E* 在 *T* 之前（输入）。
++   `E` = GPT-3 引擎的解释。`E` 在 `T` 之前（输入）。
 
-+   *T* = 我们希望 GPT-3 查看的文本或内容（输入）。
++   `T` = 我们希望 GPT-3 查看的文本或内容（输入）。
 
-+   *S* = 显示给 GPT-3 期望的内容。*S* 在必要时跟随 *T* 并添加（输入）。
++   `S` = 显示给 GPT-3 期望的内容。`S` 在必要时跟随 `T` 并添加（输入）。
 
-+   *R* = GPT-3 的回应（输出）。
++   `R` = GPT-3 的回应（输出）。
 
 上述提示的结构是一个指南。然而，GPT-3 非常灵活，有许多变体可行。
 
@@ -447,13 +447,13 @@ The reason is the thing which apprehends, and seeks to understand, the objects o
 
 +   现有知识的问题与答案（**Q&A**）：
 
-    *E* = `Q`
+    `E` = `Q`
 
-    *T* = `1965 年美国总统是谁？`
+    `T` = `1965 年美国总统是谁？`
 
-    *S* = 无
+    `S` = 无
 
-    *R* = `A`
+    `R` = `A`
 
     提示和回答：
 
@@ -467,13 +467,13 @@ The reason is the thing which apprehends, and seeks to understand, the objects o
 
 +   **电影到表情符号**：
 
-    *E* = 一些电影标题的示例
+    `E` = 一些电影标题的示例
 
-    *T* = 无
+    `T` = 无
 
-    *S* = 通过例子隐含
+    `S` = 通过例子隐含
 
-    *R* = 一些表情符号的示例
+    `R` = 一些表情符号的示例
 
     提示和回答：
 
@@ -485,13 +485,13 @@ The reason is the thing which apprehends, and seeks to understand, the objects o
 
 +   给二年级学生总结（**给二年级学生总结**）：
 
-    *E* = `我的二年级孩子问我这段话是什么意思：`
+    `E` = `我的二年级孩子问我这段话是什么意思：`
 
-    *T* = `"""初始结论……。"""`
+    `T` = `"""初始结论……。"""`
 
-    *S* = `我用通俗易懂的语言给他解释了一下："""`
+    `S` = `我用通俗易懂的语言给他解释了一下："""`
 
-    *R* = 摘要
+    `R` = 摘要
 
     提示和回答：
 

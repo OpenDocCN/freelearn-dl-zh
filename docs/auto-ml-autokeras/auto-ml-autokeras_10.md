@@ -56,7 +56,7 @@ $ apt-get install python3-pip jupyter-notebook
 
 路透新闻线是一个包含 11,228 条来自路透社的新闻数据集，按 46 个主题进行标注。
 
-每篇新闻的文本被编码为一个单词索引列表。这些是按数据集中的频率索引的整数。因此，在这里，整数 *1* 编码数据中最常见的第一个单词，*2* 编码第二常见的单词，依此类推。
+每篇新闻的文本被编码为一个单词索引列表。这些是按数据集中的频率索引的整数。因此，在这里，整数 `1` 编码数据中最常见的第一个单词，`2` 编码第二常见的单词，依此类推。
 
 包含完整源代码的笔记本可以在 [`github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras/blob/main/Chapter08/Chapter8_Reuters.ipynb`](https://github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras/blob/main/Chapter08/Chapter8_Reuters.ipynb) 找到。
 

@@ -196,13 +196,13 @@ BertViz 支持三种视图：**头视图**、**模型视图**和**神经元视�
     head_view(attention, tokens)
     ```
 
-    从前面的代码中，`sentence_a` 和 `sentence_b` 意味着 *The cat is sad* 和 *Because it ate too much food as usual*，当悬停在 **o**（**它**）上时，**它** 关注 **Kedi**（**猫**），如下所示：
+    从前面的代码中，`sentence_a` 和 `sentence_b` 意味着 *The cat is sad* 和 *Because it ate too much food as usual*，当悬停在 *`o`*（**它**）上时，**它** 关注 **Kedi**（**猫**），如下所示：
 
     ![图 11.10 – 土耳其语言模型中的指代模式](img/B17123_11_010.jpg)
 
     图 11.10 – 土耳其语言模型中的指代模式
 
-    除了 **o** 之外的所有其他标记大多数关注到了 SEP 分隔符标记，这是 BERT 架构中所有头部中的一种主导行为模式。
+    除了 *`o`* 之外的所有其他标记大多数关注到了 SEP 分隔符标记，这是 BERT 架构中所有头部中的一种主导行为模式。
 
 1.  作为头视图的最后一个示例，我们将解释另一个语言模型，并继续查看模型视图特性。这次，我们选择`bert-base-german-cased`德语语言模型并将其可视化为输入——即，我们用于土耳其语的同一个句对的德语等价句对。
 
@@ -503,7 +503,7 @@ W&B 提供了有用的功能—例如，它自动化了超参数优化和搜索�
 
 +   *Biewald, L.*, *权重与偏差的实验追踪*, *2020*。软件可在 `wandb.com` 获得，*2(5)*。
 
-+   *Rogers, A.*, *Kovaleva, O.* 和 *Rumshisky, A.*, *2020*. *BERT 学习入门：我们对 BERT 如何工作的了解*. *计算语言学协会交易*, *8*, *pp.842-866*。
++   *Rogers, A.*, *Kovaleva, O.* 和 *Rumshisky, A.*, *2020*. *BERT 学习入门：我们对 BERT 如何工作的了解*. *计算语言学协会交易*, `8`, *pp.842-866*。
 
 +   *W&B*：[`wandb.ai`](https://wandb.ai)
 

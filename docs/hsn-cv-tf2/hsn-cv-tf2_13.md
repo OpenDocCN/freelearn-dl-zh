@@ -344,7 +344,7 @@ with tf1.Session() as sess:
 
 +   Bai, M., Urtasun, R., 2016\. *用于实例分割的深度分水岭变换。arXiv:1611.08303 [cs]*。
 
-+   Beyer, L., 2019\. *Python 包装器用于 Philipp Krähenbühl 的稠密（全连接）条件随机场，带有高斯边缘潜力：lucasb-eyer/pydensecr**f*。
++   Beyer, L., 2019\. *Python 包装器用于 Philipp Krähenbühl 的稠密（全连接）条件随机场，带有高斯边缘潜力：lucasb-eyer/pydensecr*`f`。
 
 +   *在 Keras 中构建自编码器 [WWW Document]*, n.d. URL: [`blog.keras.io/building-autoencoders-in-keras.html`](https://blog.keras.io/building-autoencoders-in-keras.html) (accessed January 18, 2019).
 

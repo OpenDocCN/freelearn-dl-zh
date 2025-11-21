@@ -747,20 +747,20 @@ MaxUpBound = 0
 for (i in 1:NumArms){
 ```
 
-记住，为了在每一轮进行上置信区间（UCB）计算，需要计算两个变量：杠杆*i*在*n*次操作后获得的奖励总和，以及策略在前*n*次操作中使用杠杆*i*的次数。我们按如下方式计算杠杆*i*在*n*次操作后获得的平均奖励：
+记住，为了在每一轮进行上置信区间（UCB）计算，需要计算两个变量：杠杆`i`在`n`次操作后获得的奖励总和，以及策略在前`n`次操作中使用杠杆`i`的次数。我们按如下方式计算杠杆`i`在`n`次操作后获得的平均奖励：
 
 ```py
 if(NumSelections[i]> 0 ){
       AverageReward = RewSum[i]/NumSelections[i]
 ```
 
-我们使用以下命令计算在*n*次操作后获得的置信区间：
+我们使用以下命令计算在`n`次操作后获得的置信区间：
 
 ```py
 DeltaI  = sqrt(3/2 * log(n)/NumSelections[i])
 ```
 
-然后，我们选择返回最大 UCB 的杠杆*i*，如下所示：
+然后，我们选择返回最大 UCB 的杠杆`i`，如下所示：
 
 ```py
 UpBound = AverageReward + DeltaI

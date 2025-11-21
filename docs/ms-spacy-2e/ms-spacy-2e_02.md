@@ -747,7 +747,7 @@ Cat123 Xxxddd
 . .
 ```
 
-特征 `is_stop` 经常被机器学习算法使用。通常，我们会过滤掉那些意义不大的词，例如 *the*、*a*、*an*、*and*、*just*、*with* 等等。这样的词被称为停用词。每种语言都有自己的停用词列表，你可以在 [`github.com/explosion/spaCy/blob/master/spacy/lang/en/stop_words.py`](https://github.com/explosion/spaCy/blob/master/spacy/lang/en/stop_words.py) 查找英语停用词：
+特征 `is_stop` 经常被机器学习算法使用。通常，我们会过滤掉那些意义不大的词，例如 *the*、`a`、*an*、*and*、*just*、*with* 等等。这样的词被称为停用词。每种语言都有自己的停用词列表，你可以在 [`github.com/explosion/spaCy/blob/master/spacy/lang/en/stop_words.py`](https://github.com/explosion/spaCy/blob/master/spacy/lang/en/stop_words.py) 查找英语停用词：
 
 ```py
 doc = nlp("One step forward, and you're no longer in the same place.")

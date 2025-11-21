@@ -542,7 +542,7 @@ HopSkipJump 算法结合了局部和全局搜索策略，以高效地探索对�
     all_adversarial_hsj_predicted_class.append(adversarial_hsj_predicted_class)
     ```
 
-1.  现在，让我们比较模型在原始图像和我们之前在*s**tep 7*中使用的对抗图像工作流程上的准确性表现。我们将使用 Hugging Face `evaluate` 库的准确性评估方法：
+1.  现在，让我们比较模型在原始图像和我们之前在`s`*tep 7*中使用的对抗图像工作流程上的准确性表现。我们将使用 Hugging Face `evaluate` 库的准确性评估方法：
 
     ```py
     accuracy_metric = evaluate.load("accuracy")

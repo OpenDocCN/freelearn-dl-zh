@@ -586,7 +586,7 @@ function runDemo() {
 
 上传几个 JPEG 图像文件并刷新页面几次，看看对象检测演示如何运行；每次运行时，演示将选择存储在 S3 桶中的不同图像。`ObjectDetector` 应用程序虽然不如 Amazon Rekognition 演示那样花哨，但为自己创造了一个架构良好的 AI 应用程序而自豪吧！
 
-本地 HTTP 服务器将持续运行，除非你明确停止它。要停止本地 HTTP 服务器，请进入正在运行 `chalice local` 的终端窗口，并按下 *Ctrl* + *C*。
+本地 HTTP 服务器将持续运行，除非你明确停止它。要停止本地 HTTP 服务器，请进入正在运行 `chalice local` 的终端窗口，并按下 *Ctrl* + `C`。
 
 `ObjectDetector` 应用程序的最终项目结构应如下所示：
 

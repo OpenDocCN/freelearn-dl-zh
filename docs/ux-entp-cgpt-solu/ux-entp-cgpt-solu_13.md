@@ -230,7 +230,7 @@ open 7 days a week from 11 am to 9 pm.
 
 文档：[DeepEval 指标](https://docs.confident-ai.com/docs/metrics-introduction) ([https://docs.confident-ai.com/docs/metrics-introduction](https://docs.confident-ai.com/docs/metrics-introduction))
 
-这个指标与答案的正确性不同。它不考虑事实，而是考虑更多完整性的需要或包含冗余细节的需求。LLM 对答案进行多次（*N*）提问。然后，计算每个问题与原始问题相比的余弦相似度分数集合的平均值。一个优秀的答案使得原始答案可以重建的可能性增加：
+这个指标与答案的正确性不同。它不考虑事实，而是考虑更多完整性的需要或包含冗余细节的需求。LLM 对答案进行多次（`N`）提问。然后，计算每个问题与原始问题相比的余弦相似度分数集合的平均值。一个优秀的答案使得原始答案可以重建的可能性增加：
 
 ```py
 Question: Where is England, and where is its capital?
@@ -268,7 +268,7 @@ How can I improve answer relevance in my LLM using RAGAs
 
 ![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>si</mi><mi>o</mi><mi>n</mi><mo>@</mo><mi>k</mi><mo>=</mo><mfrac><mrow><mi>t</mi><mi>r</mi><mi>u</mi><mi>e</mi><mi>p</mi><mi>o</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>@</mo><mi>k</mi></mrow><mrow><mo>(</mo><mi>t</mi><mi>r</mi><mi>u</mi><mi>e</mi><mi>p</mi><mi>o</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>@</mo><mi>k</mi><mo>+</mo><mi>f</mi><mi>a</mi><mi>l</mi><mi>s</mi><mi>e</mi><mi>p</mi><mi>o</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>e</mi><mi>s</mi><mo>@</mo><mi>k</mi><mo>)</mo></mrow></mfrac></mrow></mrow></math>](img/13.png)
 
-在这里，*K* 是上下文中片段的总数，并且 ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>v</mi><mi>k</mi></msub><mo>∈</mo><mfenced open="{" close="}"><mn>0,1</mn></mfenced></mrow></mrow></math>](img/14.png) 是排名 *k* 的相关性指标。回想一下前面“英国”示例中的两个相关片段。
+在这里，`K` 是上下文中片段的总数，并且 ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><msub><mi>v</mi><mi>k</mi></msub><mo>∈</mo><mfenced open="{" close="}"><mn>0,1</mn></mfenced></mrow></mrow></math>](img/14.png) 是排名 `k` 的相关性指标。回想一下前面“英国”示例中的两个相关片段。
 
 在上下文中，所有的真实项都被排序得高吗？越相关，其排名就越高。如果片段包含支持真实项的相关细节，则将每个片段的精确度相加，以得到上下文的精确度。使用前一个示例中的两个英国示例片段，计算每个片段的精确度，这有助于回答我们关于英国首都及其位置的问题。上下文中没有错误信息，例如告诉我英国在法国，所以它只是基于第二个片段中伦敦是首都的真实正例，但它需要提供关于英国位置的具体细节：
 

@@ -228,7 +228,7 @@ def residual_block(l, transition=False, first=False, filters=16):
 一个宽版（Wide-ResNet）残差块是通过增加每个残差块的输出数量来构建的，当它们到达末端时，这个增加是通过一个倍数来实现的：
 
 ```py
-n_filters = {0:num_filters, 1:num_filters*width, 2:num_filters*2*width, 3:num_filters*4*width}
+n_filters = {0:num_filters, 1:num_filters*width, 2:num_filters`2`width, 3:num_filters`4`width}
 ```
 
 一个瓶颈版本通过减少每层的参数数量来创建一个瓶颈，它具有降维效果，实施赫布理论 *共同发放的神经元会相互连接*，并帮助残差块捕获信号中的特定模式：

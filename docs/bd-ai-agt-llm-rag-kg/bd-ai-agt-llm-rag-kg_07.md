@@ -82,7 +82,7 @@
 
 图 7.3 – 知识库和知识图谱的示例 ([`arxiv.org/pdf/2002.00388`](https://arxiv.org/pdf/2002.00388))
 
-知识图谱定义为由一组实体*E*、关系*R*和事实*F*组成的图，其中每个事实*f*是一个三元组：
+知识图谱定义为由一组实体`E`、关系`R`和事实`F`组成的图，其中每个事实`f`是一个三元组：
 
 <mrow><mrow><mrow><mi mathvariant="script">G</mi><mo>=</mo><mfenced close="}" open="{"><mrow><mi mathvariant="script">E</mi><mo>,</mo><mi mathvariant="script">R</mi><mo>,</mo><mi mathvariant="script">F</mi></mrow></mfenced><mo>;</mo><mi>f</mi><mo>=</mo><mo>(</mo><mi>h</mi><mo>,</mo><mi>r</mi><mo>,</mo><mi>t</mi><mo>)</mo></mrow></mrow></mrow>
 
@@ -312,7 +312,7 @@ print(results["result"])
 
 +   一些可能是语义的，可能更难识别
 
-+   知识来源的错误也可能导致知识错误（症状 *x* 不是疾病 *y* 的症状，人 *x* 不是公司 *y* 的首席执行官等等）
++   知识来源的错误也可能导致知识错误（症状 `x` 不是疾病 `y` 的症状，人 `x` 不是公司 `y` 的首席执行官等等）
 
 有几种方法可以检测这些错误。最简单的方法是统计方法，通过利用概率和统计建模来识别 KG 中的异常值。也有更复杂的变化，利用简单的机器学习模型。这些模型并不特别准确。由于我们可以使用逻辑推理和本体与 KG，因此有基于知识的推理方法来识别异常值（例如，一个人的实例不能也是地点的实例，因此通过利用类似的规则，我们可以识别异常值）。最后，有基于 AI 的方法，也可以使用一个 LLM 来检查错误。LLM 拥有知识和推理技能，因此可以用来验证事实是否正确。例如，如果我们对于某个错误，我们有三元组 `(Vienna, CapitalOf, Hungary)`，LLM 可以识别这个错误）。然后，还有类似的 KG 修正方法。然而，已经建立了几个框架来进行检测和修正。
 
@@ -426,7 +426,7 @@ KG 的存储有不同选择：
 
 就像为向量 RAG 所做的那样，我们可以添加额外的组件来进行增强。例如，在前一章中，我们看到我们可以重写查询或分解过于复杂的查询。查询修改有助于更好地捕捉查询的含义（因为有时查询没有捕捉到用户意图的隐含含义）。检索也可以是一个灵活的过程。在前一章中，我们看到在简单的 RAG 中，检索只进行了一次，但在高级和模块化 RAG 中建立了检索可以多阶段或迭代的变体。更复杂的变体使过程根据查询自适应，因此对于简单的查询，只进行一次检索，而对于更复杂的查询，可能需要进行多次迭代。同样，检索后获得的结果也可以进行修改。例如，即使在使用 GraphRAG 的情况下，我们也可以对检索到的知识进行压缩。实际上，如果我们进行多个检索阶段，我们可能也会发现冗余信息，因此方便过滤掉不相关信息。
 
-今天，使用 GraphRAG 也有重新排序检索结果的方法。一个例子是对找到的各种子图进行排序，并可能选择前*k*个子图。
+今天，使用 GraphRAG 也有重新排序检索结果的方法。一个例子是对找到的各种子图进行排序，并可能选择前`k`个子图。
 
 ![图 7.19 – 基于图的检索的一般架构](https://arxiv.org/pdf/2408.08921)](img/B21257_07_19.jpg)
 
@@ -438,7 +438,7 @@ KG 的存储有不同选择：
 
 +   **三元组**: 通过扩展搜索粒度，我们选择检索三元组（因此不仅包括节点，还包括它们的关系）。当我们不仅对实体本身感兴趣，还对它们的关系感兴趣时，这很有用。
 
-+   **路径**: 在这种情况下，我们仍然扩展检索。路径是一系列节点和关系，因此从实体 *X* 到实体 *Y* 的路径是连接它们的实体和关系的所有链。显然，不同实体之间存在多条路径，并且随着图的大小增加，这些路径呈指数增长。因此，我们通常定义规则、使用 GNN 或选择最短路径。
++   **路径**: 在这种情况下，我们仍然扩展检索。路径是一系列节点和关系，因此从实体 `X` 到实体 `Y` 的路径是连接它们的实体和关系的所有链。显然，不同实体之间存在多条路径，并且随着图的大小增加，这些路径呈指数增长。因此，我们通常定义规则、使用 GNN 或选择最短路径。
 
 +   **子图**: 子图可以被定义为 KG 内部节点和关系的子集。提取子图使我们能够回答复杂查询，因为它允许我们分析实体之间的复杂模式和依赖关系。提取子图有几种方法：我们可以使用特定的模式或进行不同路径的合并。
 
@@ -524,7 +524,7 @@ GNN 是一种深度学习模型，它原生地接受一个图，并在其学习�
 
 <mml:math display="block"><mml:msubsup><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>v</mml:mi></mml:mrow><mml:mrow><mml:mo>(</mml:mo><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn><mml:mo>)</mml:mo></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">W</mml:mi></mml:mrow><mml:mrow><mml:mo>(</mml:mo><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn><mml:mo>)</mml:mo></mml:mrow></mml:msup><mml:mo>∙</mml:mo><mml:mrow><mml:munder><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>w</mml:mi><mml:mo>∈</mml:mo><mml:mi mathvariant="script">N</mml:mi><mml:mo>(</mml:mo><mml:mi>v</mml:mi><mml:mo>)</mml:mo><mml:mo>⋃</mml:mo><mml:mo>{</mml:mo><mml:mi>v</mml:mi><mml:mo>}</mml:mo></mml:mrow></mml:munder><mml:mrow><mml:mfrac><mml:mrow><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>v</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac></mml:mrow></mml:mrow><mml:msubsup><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mo>(</mml:mo><mml:mi>l</mml:mi><mml:mo>)</mml:mo></mml:mrow></mml:msubsup></mml:math>
 
-在这里，在第 *l+1* 层，我们基于之前的嵌入学习一个表示，*h*。*W* 是一个特定于层的权重矩阵，*v* 是一个节点，*w* 是邻居集合，*c* 是归一化系数。
+在这里，在第 *l+1* 层，我们基于之前的嵌入学习一个表示，`h`。`W` 是一个特定于层的权重矩阵，`v` 是一个节点，`w` 是邻居集合，`c` 是归一化系数。
 
 ![图 7.27 – GNNs](img/B21257_07_27.jpg)
 

@@ -14,7 +14,7 @@
 
 +   将文档放入词袋中
 
-+   构建一个*N*-gram模型
++   构建一个`N`-gram模型
 
 +   使用TF-IDF表示文本
 
@@ -432,13 +432,13 @@
 
 # 构建N-gram模型
 
-将文档表示为词袋是有用的，但语义不仅仅是关于孤立单词。为了捕捉词组合，使用**n-gram模型**是有用的。其词汇不仅包括单词，还包括单词序列，或*n*-gram。
+将文档表示为词袋是有用的，但语义不仅仅是关于孤立单词。为了捕捉词组合，使用**n-gram模型**是有用的。其词汇不仅包括单词，还包括单词序列，或`n`-gram。
 
 在这个配方中，我们将构建一个**bigram模型**，其中bigram是两个单词的序列。
 
 ## 准备工作
 
-`CountVectorizer`类非常灵活，允许我们构建*n*-gram模型。我们将在此配方中使用它，并用简单的分类器进行测试。
+`CountVectorizer`类非常灵活，允许我们构建`n`-gram模型。我们将在此配方中使用它，并用简单的分类器进行测试。
 
 在这个配方中，我将代码及其结果与*将文档放入词袋*配方中的结果进行比较，因为这两个配方非常相似，但它们有一些不同的特性。
 
@@ -520,11 +520,11 @@
 
 我们可以通过提供相应的元组给 `ngram_range` 参数来在向量器中使用三元组、四元组等。这样做的不利之处是词汇表不断扩展，句子向量也在增长，因为每个句子向量都必须为输入词汇表中的每个单词提供一个条目。
 
-也可以使用 `CountVectorizer` 类来表示字符 *n*-gram。在这种情况下，你会计算字符序列的出现次数而不是单词序列。
+也可以使用 `CountVectorizer` 类来表示字符 `n`-gram。在这种情况下，你会计算字符序列的出现次数而不是单词序列。
 
 # 使用 TF-IDF 表示文本
 
-我们可以更进一步，使用 TF-IDF 算法来计算传入文档中的单词和 *n*-gram。**TF-IDF** 代表 **词频-逆文档频率**，它给独特于文档的单词比在整个文档中频繁重复的单词更多的权重。这允许我们给特定文档的独特特征词更多的权重。
+我们可以更进一步，使用 TF-IDF 算法来计算传入文档中的单词和 `n`-gram。**TF-IDF** 代表 **词频-逆文档频率**，它给独特于文档的单词比在整个文档中频繁重复的单词更多的权重。这允许我们给特定文档的独特特征词更多的权重。
 
 在这个菜谱中，我们将使用一种不同类型的向量器，该向量器可以将 TF-IDF 算法应用于输入文本并构建一个小型分类器。
 
@@ -563,7 +563,7 @@
     print(len(vectorizer.get_feature_names_out()))
     ```
 
-    结果应该是这样的。词汇表长度应该与我们在词袋配方中得到的相同，因为我们没有使用*n*-grams：
+    结果应该是这样的。词汇表长度应该与我们在词袋配方中得到的相同，因为我们没有使用`n`-grams：
 
     ```py
     ['10' '100' '101' ... 'zone' 'ótimo' 'últimos']
@@ -584,7 +584,7 @@
     [[0\. 0\. 0\. ... 0\. 0\. 0.]]
     ```
 
-1.  现在，让我们训练分类器。我们可以看到，分数略高于词袋分类器的分数，无论是单词还是*n*-gram版本：
+1.  现在，让我们训练分类器。我们可以看到，分数略高于词袋分类器的分数，无论是单词还是`n`-gram版本：
 
     ```py
     vectorize = lambda x: vectorizer.transform([x]).toarray()[0]
@@ -619,7 +619,7 @@
 
 ## 还有更多…
 
-我们可以构建 `TfidfVectorizer` 并使用 `[t, h, e, w, o, m, a, n, th, he, wo, om, ma, an, the, wom, oma, man]` 集合。在一些实验设置中，基于字符 *n*-gram 的模型比基于单词的 *n*-gram 模型表现更好。
+我们可以构建 `TfidfVectorizer` 并使用 `[t, h, e, w, o, m, a, n, th, he, wo, om, ma, an, the, wom, oma, man]` 集合。在一些实验设置中，基于字符 `n`-gram 的模型比基于单词的 `n`-gram 模型表现更好。
 
 我们将使用小型的夏洛克·福尔摩斯文本文件，`sherlock_holmes_1.txt`，位于 [https://github.com/PacktPublishing/Python-Natural-Language-Processing-Cookbook-Second-Edition/blob/main/data/sherlock_holmes_1.txt](https://github.com/PacktPublishing/Python-Natural-Language-Processing-Cookbook-Second-Edition/blob/main/data/sherlock_holmes_1.txt)，以及相同的类，`TfidfVectorizer`。由于分析的单位是字符而不是单词，我们不需要标记化函数或停用词列表。创建向量器和分析句子的步骤如下：
 

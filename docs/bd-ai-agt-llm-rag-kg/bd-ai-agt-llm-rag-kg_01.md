@@ -34,7 +34,7 @@
 
 ## 独热编码
 
-在传统的**自然语言处理**（**NLP**）中，文本表示使用离散符号进行。最简单的例子是独热编码。从一个语料库中的文本序列（由*n*个不同的单词组成），我们得到一个*n*维向量。实际上，第一步是计算整个文本语料库中存在的不同单词集合，称为词汇表。对于每个单词，我们得到一个与词汇表大小相同的向量。然后对于每个单词，我们将有一个主要由零和一组成的长向量来表示该单词（独热向量）。这个系统主要用于当我们想要一个特征矩阵并训练一个模型时。这个过程也称为**向量化**；以下是一个稀疏向量的例子：
+在传统的**自然语言处理**（**NLP**）中，文本表示使用离散符号进行。最简单的例子是独热编码。从一个语料库中的文本序列（由`n`个不同的单词组成），我们得到一个`n`维向量。实际上，第一步是计算整个文本语料库中存在的不同单词集合，称为词汇表。对于每个单词，我们得到一个与词汇表大小相同的向量。然后对于每个单词，我们将有一个主要由零和一组成的长向量来表示该单词（独热向量）。这个系统主要用于当我们想要一个特征矩阵并训练一个模型时。这个过程也称为**向量化**；以下是一个稀疏向量的例子：
 
 <mrow><mrow><mi>r</mi><mi>e</mi><mi}s</mi><mi>t</mi><mi>a</mi><mi>u</mi><mi>r</mi><mi>a</mi><mi>n</mi><mi>t</mi><mo>=</mo><mfenced close="]" open="["><mtable columnalign="center center center" columnspacing="0.8000em 0.8000em" columnwidth="auto auto auto" rowalign="baseline"><mtr><mtd><mtable columnalign="center center center" columnspacing="0.8000em 0.8000em" columnwidth="auto auto auto" rowalign="baseline"><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd></mtr></mtable></mtd><mtd><mtable columnalign="center center center" columnspacing="0.8000em 0.8000em" columnwidth="auto auto auto" rowalign="baseline"><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable></mtd><mtd><mtable columnalign="center center center" columnspacing="0.8000em 0.8000em" columnwidth="auto auto auto" rowalign="baseline"><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd></mtr></mtable></mtd></mtr></mtable></mfenced></mrow></mrow>
 
@@ -230,21 +230,21 @@ print("TF-IDF Matrix:\n", tf_idf_matrix)
 
 ## Word2vec
 
-word2vec 背后的直觉很简单：从其上下文中预测一个词 *w*。为此，我们需要一个**神经网络**和大量语料库。革命性的想法是，通过训练这个神经网络来预测哪些词 *c* 需要靠近目标词 *w*，神经网络的权重将是嵌入向量。这个模型是自监督的；在这种情况下，标签是隐含的，我们不提供它们。
+word2vec 背后的直觉很简单：从其上下文中预测一个词 `w`。为此，我们需要一个**神经网络**和大量语料库。革命性的想法是，通过训练这个神经网络来预测哪些词 `c` 需要靠近目标词 `w`，神经网络的权重将是嵌入向量。这个模型是自监督的；在这种情况下，标签是隐含的，我们不提供它们。
 
-Word2vec 通过两种方式简化了这个想法，使其系统在速度和效率上都非常快：通过将任务转化为二元分类（词 *c* 是否在词 *w* 的上下文中需要？是或否？）并使用逻辑回归分类器：
+Word2vec 通过两种方式简化了这个想法，使其系统在速度和效率上都非常快：通过将任务转化为二元分类（词 `c` 是否在词 `w` 的上下文中需要？是或否？）并使用逻辑回归分类器：
 
 ![图 1.4 – 在 word2vec 中，我们滑动一个上下文窗口（这里表示为三个词的上下文窗口），然后我们随机采样一些负向词](img/B21257_01_04.jpg)
 
 图 1.4 – 在 word2vec 中，我们滑动一个上下文窗口（这里表示为三个词的上下文窗口），然后我们随机采样一些负向词
 
-给定一个文本 *t*，我们在窗口 *c*（我们的上下文）中滚动一个以词 *w* 为中心的窗口；它周围的词是正类示例。之后，我们选择其他随机词作为负例。最后，我们训练一个模型来分类正例和负例；模型的权重是我们的嵌入。
+给定一个文本 `t`，我们在窗口 `c`（我们的上下文）中滚动一个以词 `w` 为中心的窗口；它周围的词是正类示例。之后，我们选择其他随机词作为负例。最后，我们训练一个模型来分类正例和负例；模型的权重是我们的嵌入。
 
-给定一个词 *w* 和一个词 *c*，我们希望词 *c* 在 *w* 的上下文中的概率与它的嵌入相似度相似。换句话说，如果代表 *w* 和 *c* 的向量相似，*c* 必须经常出现在 *w* 的上下文中（word2vec 基于上下文相似性的概念）。我们通过两个嵌入向量之间的点积来定义这种嵌入相似度（我们使用 sigmoid 函数将这个点积转换为概率，从而允许比较）。因此，*c* 在 *w* 的上下文中的概率等于它们的嵌入相似的概率：
+给定一个词 `w` 和一个词 `c`，我们希望词 `c` 在 `w` 的上下文中的概率与它的嵌入相似度相似。换句话说，如果代表 `w` 和 `c` 的向量相似，`c` 必须经常出现在 `w` 的上下文中（word2vec 基于上下文相似性的概念）。我们通过两个嵌入向量之间的点积来定义这种嵌入相似度（我们使用 sigmoid 函数将这个点积转换为概率，从而允许比较）。因此，`c` 在 `w` 的上下文中的概率等于它们的嵌入相似的概率：
 
 <mrow><mrow><mi>P</mi><mfenced close=")" open="("><mrow><mo>+</mo><mo>|</mo><mi>w</mi><mo>,</mo><mi>c</mi></mrow></mfenced><mo>=</mo><mi>σ</mi><mfenced close=")" open="("><mrow><mi mathvariant="bold-italic">c</mi><mo>∙</mo><mi mathvariant="bold-italic">w</mi></mrow></mfenced><mo>=</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><mi>e</mi><mi>x</mi><mi>p</mi><mfenced close=")" open="("><mrow><mo>−</mo><mi mathvariant="bold-italic">c</mi><mo>∙</mo><mi mathvariant="bold-italic">w</mi></mrow></mfenced></mrow></mfrac></mrow></mrow>
 
-这是对上下文中的所有单词 *L* 进行的操作。为了简化，我们假设上下文窗口中的所有单词都是独立的，因此我们可以将各种单词 *c* 的概率相乘。同样，我们希望确保不在单词 *w* 的上下文中的单词的点积是最小的。因此，一方面，我们最大化上下文中的单词的概率，另一方面，我们最小化不在上下文中的单词的概率。实际上，不在 *w* 的上下文中的单词在训练过程中是随机提取的，过程是相同的：
+这是对上下文中的所有单词 `L` 进行的操作。为了简化，我们假设上下文窗口中的所有单词都是独立的，因此我们可以将各种单词 `c` 的概率相乘。同样，我们希望确保不在单词 `w` 的上下文中的单词的点积是最小的。因此，一方面，我们最大化上下文中的单词的概率，另一方面，我们最小化不在上下文中的单词的概率。实际上，不在 `w` 的上下文中的单词在训练过程中是随机提取的，过程是相同的：
 
 <mrow><mrow><mi>P</mi><mfenced close=")" open="("><mrow><mo>+</mo><mo>|</mo><mi>w</mi><mo>,</mo><mi>c</mi></mrow></mfenced><mo>=</mo><mrow><munderover><mo>∏</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>L</mi></munderover><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><mi>e</mi><mi>x</mi><mi>p</mi><mfenced close=")" open="("><mrow><mo>−</mo><msub><mi mathvariant="bold-italic">c</mi><mi mathvariant="bold-italic">i</mi></msub><mo>∙</mo><mi mathvariant="bold-italic">w</mi></mrow></mfenced></mrow></mfrac></mrow></mrow></mrow>
 
@@ -256,7 +256,7 @@ Word2vec 通过两种方式简化了这个想法，使其系统在速度和效�
 
 <mrow><mrow><mi>l</mi><mi>o</mi><mi>g</mi><mi>P</mi><mfenced close=")" open="("><mrow><mo>−</mo><mo>|</mo><mi>w</mi><mo>,</mo><mi>c</mi></mrow></mfenced><mo>=</mo><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>L</mi></munderover><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">g</mi><mo>(</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><mi>e</mi><mi>x</mi><mi>p</mi><mfenced close=")" open="("><mrow><msub><mi mathvariant="bold-italic">c</mi><mi mathvariant="bold-italic">i</mi></msub><mo>∙</mo><mi mathvariant="bold-italic">w</mi></mrow></mfenced></mrow></mfrac><mo>)</mo></mrow></mrow></mrow></mrow>
 
-权重矩阵 *w* 是我们的嵌入；这是我们接下来将要使用的。实际上，模型学习两个向量矩阵（一个用于 *w*，一个用于 *c*），但这两个矩阵非常相似，所以我们只取一个。然后我们使用交叉熵来训练模型并学习每个向量的权重：
+权重矩阵 `w` 是我们的嵌入；这是我们接下来将要使用的。实际上，模型学习两个向量矩阵（一个用于 `w`，一个用于 `c`），但这两个矩阵非常相似，所以我们只取一个。然后我们使用交叉熵来训练模型并学习每个向量的权重：
 
 <mml:math display="block"><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>C</mml:mi><mml:mi>E</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mo>-</mml:mo><mml:mi>l</mml:mi><mml:mi>o</mml:mi><mml:mi>g</mml:mi><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mo>+</mml:mo></mml:mrow><mml:mrow><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>p</mml:mi><mml:mi>o</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:mfenced><mml:mo>+</mml:mo><mml:mrow><mml:munderover><mml:mo stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>L</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mi>l</mml:mi><mml:mi>o</mml:mi><mml:mi>g</mml:mi><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mo>-</mml:mo></mml:mrow><mml:mrow><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>n</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:math>
 
@@ -349,7 +349,7 @@ UMAP 之所以出现，是因为它产生的可视化更好地保留了示例之
 
 ## 嵌入的性质
 
-嵌入是一个令人惊讶的灵活方法，并能够编码不同的句法和语义属性，这些属性既可以可视化，也可以用于不同的操作。一旦我们有了相似性的概念，我们就可以搜索与字词 *w* 最相似的词。请注意，相似性定义为出现在相同的上下文窗口中；模型无法区分同义词和反义词。
+嵌入是一个令人惊讶的灵活方法，并能够编码不同的句法和语义属性，这些属性既可以可视化，也可以用于不同的操作。一旦我们有了相似性的概念，我们就可以搜索与字词 `w` 最相似的词。请注意，相似性定义为出现在相同的上下文窗口中；模型无法区分同义词和反义词。
 
 此外，该模型还能够表示诸如最高级或动词形式之类的语法关系。
 
@@ -412,13 +412,13 @@ print("{} is to {} as {} is to: {} ".format(
 
 ## RNNs
 
-经典神经网络的缺点是它们没有记忆功能。这对于时间序列和文本输入尤其成问题。在一个单词序列 *t* 中，时间 *t* 的单词 *w* 依赖于时间 *t-1* 的 *w*。实际上，在一句话中，最后一个单词通常依赖于句子中的几个单词。因此，我们希望有一个 NN 模型能够记住之前的输入。一个**RNN**（循环神经网络）维护一个内部状态来保持这种记忆；也就是说，它存储有关先前输入的信息，并且它产生的输出受先前输入的影响。这些网络对序列的所有元素执行相同的操作（因此是循环的）并保持这种操作的内存：
+经典神经网络的缺点是它们没有记忆功能。这对于时间序列和文本输入尤其成问题。在一个单词序列 `t` 中，时间 `t` 的单词 `w` 依赖于时间 *t-1* 的 `w`。实际上，在一句话中，最后一个单词通常依赖于句子中的几个单词。因此，我们希望有一个 NN 模型能够记住之前的输入。一个**RNN**（循环神经网络）维护一个内部状态来保持这种记忆；也就是说，它存储有关先前输入的信息，并且它产生的输出受先前输入的影响。这些网络对序列的所有元素执行相同的操作（因此是循环的）并保持这种操作的内存：
 
 ![图 1.11 – RNN 的简单示例](https://arxiv.org/pdf/1506.00019)(img/B21257_01_11.jpg)
 
 图 1.11 – RNN 的简单示例([`arxiv.org/pdf/1506.00019`](https://arxiv.org/pdf/1506.00019))
 
-一个经典的神经网络（**前馈神经网络**）认为输入是独立的，神经网络的一层对时间 *t* 的元素表示的向量执行以下操作：
+一个经典的神经网络（**前馈神经网络**）认为输入是独立的，神经网络的一层对时间 `t` 的元素表示的向量执行以下操作：
 
 <mml:math display="block"><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">y</mml:mi></mml:mrow><mml:mrow><mml:mo>(</mml:mo><mml:mi>t</mml:mi><mml:mo>)</mml:mo></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mo>(</mml:mo><mml:mi mathvariant="bold-italic">W</mml:mi><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msup><mml:mo>+</mml:mo><mml:mi mathvariant="bold-italic">b</mml:mi><mml:mo>)</mml:mo></mml:math>
 
@@ -432,7 +432,7 @@ print("{} is to {} as {} is to: {} ".format(
 
 <mml:math display="block"><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">y</mml:mi></mml:mrow><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mo>(</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">o</mml:mi></mml:mrow><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msup><mml:mo>)</mml:mo></mml:math>
 
-这些操作看起来可能很复杂，但实际上，我们只是在维护一个考虑先前迭代的隐藏状态。第一个方程是一个普通的正向传播层，其中我们将先前隐藏状态 *h* 乘以一组权重 *U*。这个矩阵 *U* 允许我们控制神经网络如何使用先前上下文来绑定输入和过去输入（过去如何影响时间 *t* 的输入输出）。在第二个方程中，我们创建一个新的隐藏状态，该状态将被用于后续计算，但也将用于下一个输入。在第三个方程中，我们创建输出；我们使用一个偏置向量和矩阵来计算输出。在最后一个方程中，它简单地作为一个非线性函数传递。
+这些操作看起来可能很复杂，但实际上，我们只是在维护一个考虑先前迭代的隐藏状态。第一个方程是一个普通的正向传播层，其中我们将先前隐藏状态 `h` 乘以一组权重 `U`。这个矩阵 `U` 允许我们控制神经网络如何使用先前上下文来绑定输入和过去输入（过去如何影响时间 `t` 的输入输出）。在第二个方程中，我们创建一个新的隐藏状态，该状态将被用于后续计算，但也将用于下一个输入。在第三个方程中，我们创建输出；我们使用一个偏置向量和矩阵来计算输出。在最后一个方程中，它简单地作为一个非线性函数传递。
 
 这些 RNN 可以被视为随时间展开的实体，其中我们可以表示整个序列中的网络及其计算：
 
@@ -468,7 +468,7 @@ RNN 不是唯一与这个主题相关的深度学习模型形式。
 
 ## LSTM
 
-理论上，RNN 应该能够处理长序列并记住初始输入。然而，在现实中，隐藏状态中的信息是局部的而不是全局的，对于时间 *t*，它只考虑前一个时间步而不是整个序列。这种简单模型的主要问题是隐藏状态必须同时履行两个角色：提供与时间 *t* 的输出相关的信息，并为未来的决策存储记忆。
+理论上，RNN 应该能够处理长序列并记住初始输入。然而，在现实中，隐藏状态中的信息是局部的而不是全局的，对于时间 `t`，它只考虑前一个时间步而不是整个序列。这种简单模型的主要问题是隐藏状态必须同时履行两个角色：提供与时间 `t` 的输出相关的信息，并为未来的决策存储记忆。
 
 **LSTM** 是 RNN 的扩展，其设计理念是模型可以忘记不重要的信息，只保留重要的上下文。
 
@@ -476,15 +476,15 @@ RNN 不是唯一与这个主题相关的深度学习模型形式。
 
 图 1.13 – LSTM 单元的内部结构([`arxiv.org/pdf/2304.11461`](https://arxiv.org/pdf/2304.11461))
 
-LSTM 有内部机制来控制层内的信息（门）；此外，它还有一个专门上下文层。因此，我们有两个隐藏状态，其中第一个 *h* 用于时间 *t* 的信息（短期记忆），另一个 *c* 用于长期信息。门可以是开启的（1）或关闭的（0）；这是通过一个具有 sigmoid 激活的前馈层来实现的，以压缩值在零和一之间。之后，我们使用 **Hadamard 积**（或逐点乘法）作为层的门控机制。这种乘法作为一个二进制门，当值接近 1 时允许信息通过，当值接近 0 时阻止信息通过。这些门允许一个动态系统，在时间步内，我们决定保留多少信息以及忘记多少信息。
+LSTM 有内部机制来控制层内的信息（门）；此外，它还有一个专门上下文层。因此，我们有两个隐藏状态，其中第一个 `h` 用于时间 `t` 的信息（短期记忆），另一个 `c` 用于长期信息。门可以是开启的（1）或关闭的（0）；这是通过一个具有 sigmoid 激活的前馈层来实现的，以压缩值在零和一之间。之后，我们使用 **Hadamard 积**（或逐点乘法）作为层的门控机制。这种乘法作为一个二进制门，当值接近 1 时允许信息通过，当值接近 0 时阻止信息通过。这些门允许一个动态系统，在时间步内，我们决定保留多少信息以及忘记多少信息。
 
-第一个门被称为 **遗忘门**，因为它用于忘记上下文中不再需要的信息，因此在下一次时间步中也不再需要。所以，我们将使用遗忘门的输出去乘以上下文。此时，我们从输入和前一个时间步的隐藏状态中提取信息。每个门都有一组特定于门的 *U* 权重：
+第一个门被称为 **遗忘门**，因为它用于忘记上下文中不再需要的信息，因此在下一次时间步中也不再需要。所以，我们将使用遗忘门的输出去乘以上下文。此时，我们从输入和前一个时间步的隐藏状态中提取信息。每个门都有一组特定于门的 `U` 权重：
 
 <mrow><mrow><mrow><msup><mi mathvariant="bold-italic">f</mi><mfenced close=")" open="("><mi>t</mi></mfenced></msup><mo>=</mo><mi>σ</mi><msub><mrow><mo>(</mo><mi mathvariant="bold-italic">b</mi></mrow><mi mathvariant="bold-italic">f</mi></msub><mo>+</mo><msub><mi mathvariant="bold-italic">U</mi><mi mathvariant="bold-italic">f</mi></msub><msup><mi mathvariant="bold-italic">h</mi><mfenced close=")" open="("><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></mfenced></msup><mo>+</mo><msub><mi mathvariant="bold-italic">W</mi><mi mathvariant="bold-italic">f</mi></msub><msup><mi mathvariant="bold-italic">x</mi><mi>t</mi></msup><mo>)</mo></mrow></mrow></mrow>
 
 <mml:math display="block"><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">k</mml:mi></mml:mrow><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:msup><mml:mrow><mml:mi mathvariant="bold-italic">c</mml:mi></mml:mrow><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced></mml:mrow></mml:msup><mml:mo>⊙</mml:mo><mml:mi mathvariant="bold-italic">f</mml:mi></mml:mrow><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msup></mml:math>
 
-下一步是从输入中提取信息并决定哪些信息将被添加到上下文中。这由一个**输入门** *i* 控制，它决定了将添加多少信息。上下文随后是通过我们添加的和忘记的内容的总和来获得的：
+下一步是从输入中提取信息并决定哪些信息将被添加到上下文中。这由一个**输入门** `i` 控制，它决定了将添加多少信息。上下文随后是通过我们添加的和忘记的内容的总和来获得的：
 
 <mrow><mrow><mrow><msup><mi mathvariant="bold-italic">g</mi><mfenced close=")" open="("><mi>t</mi></mfenced></msup><mo>=</mo><msub><mrow><mi>t</mi><mi>a</mi><mi>n</mi><mi>h</mi><mo>(</mo><mi mathvariant="bold-italic">b</mi></mrow><mi mathvariant="bold-italic">g</mi></msub><mo>+</mo><msub><mi mathvariant="bold-italic">U</mi><mi mathvariant="bold-italic">g</mi></msub><msup><mi mathvariant="bold-italic">h</mi><mfenced close=")" open="("><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></mfenced></msup><mo>+</mo><msub><mi mathvariant="bold-italic">W</mi><mi mathvariant="bold-italic">g</mi></msub><msup><mi mathvariant="bold-italic">x</mi><mi>t</mi></msup><mo>)</mo></mrow></mrow></mrow>
 
@@ -537,7 +537,7 @@ output.shape
 
 在 GRU 中，遗忘门被称为**更新门**，但它的目的相同：在更新过程中保留重要信息（接近 1 的值）并重写不重要信息（接近 0 的值）。在 GRU 中，输入门被称为**重置门**，它不像 LSTM 那样独立，而是与更新门相连。
 
-第一步是更新门*z*，它实际上与 LSTM 中的遗忘门相同。同时，我们计算重置门*r*：
+第一步是更新门`z`，它实际上与 LSTM 中的遗忘门相同。同时，我们计算重置门`r`：
 
 <mrow><mrow><mrow><msup><mi mathvariant="bold-italic">z</mi><mfenced close=")" open="("><mi>t</mi></mfenced></msup><mo>=</mo><mi>σ</mi><msub><mrow><mo>(</mo><mi mathvariant="bold-italic">b</mi></mrow><mi mathvariant="bold-italic">z</mi></msub><mo>+</mo><msub><mi mathvariant="bold-italic">U</mi><mi mathvariant="bold-italic">z</mi></msub><msup><mi mathvariant="bold-italic">h</mi><mfenced close=")" open="("><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></mfenced></msup><mo>+</mo><msub><mi mathvariant="bold-italic">W</mi><mi mathvariant="bold-italic">z</mi></msub><msup><mi mathvariant="bold-italic">x</mi><mi>t</mi></msup><mo>)</mo></mrow></mrow></mrow>
 

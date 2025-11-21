@@ -102,11 +102,11 @@ IOB 标记系统是命名实体识别的一种标准。
 
 **IOB 标记** 系统包含如下格式的标签：
 
-+   `B-{CHUNK_TYPE}`：表示**B**eginning 块中的词
++   `B-{CHUNK_TYPE}`：表示*`B`*eginning 块中的词
 
-+   `I-{CHUNK_TYPE}`: 用于块内部的词**I**nside
++   `I-{CHUNK_TYPE}`: 用于块内部的词*`I`*nside
 
-+   `O`：**O**utside 任何块
++   `O`：*`O`*utside 任何块
 
 +   `B-PERSON` : 人物实体
 
@@ -135,17 +135,17 @@ B-PERSON O    O    O B-GPE     O B-CARDINAL I-CARDINAL O
 
 其中，
 
-+   *t* 是 1..T
++   `t` 是 1..T
 
 +   *x[t]* 是外部信号
 
-+   *W* 是权重
++   `W` 是权重
 
 +   *h[t-1]* 是时间步 *t-1* 的隐藏层权重。
 
-+   *h[t]* 为时间步 *t* 计算的权重
++   *h[t]* 为时间步 `t` 计算的权重
 
-+   *U* 是 tan*h*层，用于为时间步 *t* 创建权重。
++   `U` 是 tan`h`层，用于为时间步 `t` 创建权重。
 
 *σ(·)* 是一种非线性激活函数。在作者使用的实验中，我们使用了**修正线性单元**（**RELU**）。
 

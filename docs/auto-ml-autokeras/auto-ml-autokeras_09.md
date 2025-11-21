@@ -42,7 +42,7 @@ $ apt-get install python3-pip jupyter-notebook
 
 图 7.1 – 在两个样本上使用情感分析的示例
 
-类似于*第四章*中的 Reuters 示例，*使用 AutoKeras 进行图像分类和回归*，每个评论都被编码为一个单词索引列表（整数）。为了方便起见，单词根据其在数据集中的总体频率进行索引。例如，整数 *3* 表示数据中第三频繁出现的单词。
+类似于*第四章*中的 Reuters 示例，*使用 AutoKeras 进行图像分类和回归*，每个评论都被编码为一个单词索引列表（整数）。为了方便起见，单词根据其在数据集中的总体频率进行索引。例如，整数 `3` 表示数据中第三频繁出现的单词。
 
 包含完整源代码的笔记本可以在[`github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras/blob/main/Chapter07/Chapter7_IMDB_sentiment_analysis.ipynb`](https://github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras/blob/main/Chapter07/Chapter7_IMDB_sentiment_analysis.ipynb)找到。
 

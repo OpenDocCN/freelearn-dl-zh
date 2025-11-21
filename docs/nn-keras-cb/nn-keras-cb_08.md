@@ -461,7 +461,7 @@ for i in range(100):
 
 ![](img/5754caec-464d-4b8e-a375-65df6ffdc898.png)
 
-其中，*GM(l)* 是风格图像 *S* 和生成图像 *G* 在层 *l* 处的 gram 矩阵值。
+其中，*GM(l)* 是风格图像 `S` 和生成图像 `G` 在层 `l` 处的 gram 矩阵值。
 
 gram 矩阵是通过将一个矩阵与其自身的转置相乘得到的。
 
@@ -888,10 +888,10 @@ def generator():
     model = Sequential()
     model.add(Dense(input_dim=100, output_dim=1024))
     model.add(Activation('tanh'))
-    model.add(Dense(128*7*7))
+    model.add(Dense(128`7`7))
     model.add(BatchNormalization())
     model.add(Activation('tanh'))
-    model.add(Reshape((7, 7, 128), input_shape=(128*7*7,)))
+    model.add(Reshape((7, 7, 128), input_shape=(128`7`7,)))
     model.add(UpSampling2D(size=(2, 2)))
     model.add(Conv2D(64, (5, 5), padding='same'))
     model.add(Activation('tanh'))
@@ -961,10 +961,10 @@ def generator():
     model = Sequential()
     model.add(Dense(input_dim=100, output_dim=1024))
     model.add(Activation('tanh'))
-    model.add(Dense(128*7*7))
+    model.add(Dense(128`7`7))
     model.add(BatchNormalization())
     model.add(Activation('tanh'))
-    model.add(Reshape((7, 7, 128), input_shape=(128*7*7,)))
+    model.add(Reshape((7, 7, 128), input_shape=(128`7`7,)))
     model.add(UpSampling2D(size=(2, 2)))
     model.add(Conv2D(64, (5, 5), padding='same'))
     model.add(Activation('tanh'))

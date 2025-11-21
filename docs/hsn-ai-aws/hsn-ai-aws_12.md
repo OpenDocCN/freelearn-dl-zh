@@ -36,13 +36,13 @@
 
 +   通过 tf-idf，出现在特定文档中频繁出现但在其他文档中出现较少的词将具有较高的权重。由于文档-词矩阵是稀疏且嘈杂的，必须通过降维来获取文档和词之间通过主题形成的有意义关系。
 
-+   降维可以通过截断**SVD**（**奇异值分解**）完成，其中文档-词矩阵被分解为三个不同的矩阵，即文档主题（*U*）、词-主题（*V*）和奇异值矩阵（*S*），其中奇异值表示主题的强度，如下图所示：
++   降维可以通过截断**SVD**（**奇异值分解**）完成，其中文档-词矩阵被分解为三个不同的矩阵，即文档主题（`U`）、词-主题（`V`）和奇异值矩阵（`S`），其中奇异值表示主题的强度，如下图所示：
 
 ![](img/dfd740bf-c367-4f34-9ef5-59d21c622be1.png)
 
-这种分解是唯一的。为了在低维空间中表示文档和词，只选择*T*个最大的奇异值（如前图所示的矩阵子集），并且只保留*U*和*V*的前*T*列。*T*是一个超参数，可以调整以反映我们想要找到的主题数量。在线性代数中，任何*m x n*矩阵*A*都可以按如下方式分解：
+这种分解是唯一的。为了在低维空间中表示文档和词，只选择`T`个最大的奇异值（如前图所示的矩阵子集），并且只保留`U`和`V`的前`T`列。`T`是一个超参数，可以调整以反映我们想要找到的主题数量。在线性代数中，任何*m x n*矩阵`A`都可以按如下方式分解：
 
-+   ![](img/8c95a260-1eb4-4cbb-9766-b5592440c1fc.png)，其中*U*称为左奇异向量，*V*称为右奇异向量，*S*称为**奇异值矩阵**。
++   ![](img/8c95a260-1eb4-4cbb-9766-b5592440c1fc.png)，其中`U`称为左奇异向量，`V`称为右奇异向量，`S`称为**奇异值矩阵**。
 
 有关如何计算奇异值以及给定矩阵的左奇异向量和右奇异向量的信息，请参考[`machinelearningmastery.com/singular-value-decomposition-for-machine-learning/`](https://machinelearningmastery.com/singular-value-decomposition-for-machine-learning/) [直观解释——从 SVD 重构矩阵](https://machinelearningmastery.com/singular-value-decomposition-for-machine-learning/)。
 
@@ -62,7 +62,7 @@
 
 ![](img/2216cf84-ecdd-418c-9d69-3229a7fe5c1e.png) = ![](img/e76f0379-2351-46f4-83ae-782618ed3405.png)
 
-这里，*D* = 文档，*W* = 单词，*Z* = 主题。
+这里，`D` = 文档，`W` = 单词，`Z` = 主题。
 
 让我们看看 pLSA 是如何工作的，并举例说明它在某些情况下并不充分：
 
@@ -148,7 +148,7 @@ IDF 的计算公式如下：
 dict_IDF = {name: np.log(float(no_emails) / (1+len(bag_of_words[bag_of_words[name] > 0]))) for name in bag_of_words.columns}
 ```
 
-IDF 公式如下所示：![](img/b6ba616f-fdc7-4ae9-b30a-10a0749c6c11.png)，其中 N 是数据集中邮件的数量，![](img/1a526ca1-bdd2-4916-9589-7a96e72a248c.png)是包含单词*i*的文档数量。
+IDF 公式如下所示：![](img/b6ba616f-fdc7-4ae9-b30a-10a0749c6c11.png)，其中 N 是数据集中邮件的数量，![](img/1a526ca1-bdd2-4916-9589-7a96e72a248c.png)是包含单词`i`的文档数量。
 
 在这一步结束时，将创建一个新的 DataFrame，表示透视后的邮件及其 tf-idf 值。
 
@@ -374,7 +374,7 @@ model_dict = mx.ndarray.load('params')
 W = model_dict['arg:projection_weight'] 
 ```
 
-在前面的代码中，我们提取了 NTM 模型`downloaded_model.tar.gz`，加载了学习到的参数`params`。请记住，模型输出层的大小与数据集中单词（词汇）的数量相同。然后，我们创建了一个多维的 mxnet 数组*W*，按主题加载单词权重。W 的形状为 17,524 x 3，其中 17,524 行表示单词，3 列表示主题。
+在前面的代码中，我们提取了 NTM 模型`downloaded_model.tar.gz`，加载了学习到的参数`params`。请记住，模型输出层的大小与数据集中单词（词汇）的数量相同。然后，我们创建了一个多维的 mxnet 数组`W`，按主题加载单词权重。W 的形状为 17,524 x 3，其中 17,524 行表示单词，3 列表示主题。
 
 1.  对每个主题，运行 softmax 函数计算单词权重，如下所示：
 

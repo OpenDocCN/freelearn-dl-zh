@@ -484,19 +484,19 @@ EBTNodeResult::Type UBTTask_TossCoin::ExecuteTask(UBehaviorTreeComponent& OwnerC
 
 Unreal Engine 类名以特定的字母开头；这些前缀用于指示类类型。主要使用的前缀如下：
 
-+   **U**：用于从**UObject**派生的泛型对象，例如组件。一个很好的例子是**UStaticMeshComponent**类。
++   *`U`*：用于从**UObject**派生的泛型对象，例如组件。一个很好的例子是**UStaticMeshComponent**类。
 
-+   **A**：用于从演员（即**AActor**类）派生的对象，并且可以添加到关卡中。
++   *`A`*：用于从演员（即**AActor**类）派生的对象，并且可以添加到关卡中。
 
-+   **F**：用于泛型类和结构，例如**FColor**结构。
++   *`F`*：用于泛型类和结构，例如**FColor**结构。
 
-+   **T**：用于模板，例如**TArray**或**TMap**。
++   *`T`*：用于模板，例如**TArray**或**TMap**。
 
-+   **I**：用于接口，例如**IGameplayTaskOwnerInterface**。
++   *`I`*：用于接口，例如**IGameplayTaskOwnerInterface**。
 
-+   **E**：用于枚举，例如**EActorBeginPlayState**。
++   *`E`*：用于枚举，例如**EActorBeginPlayState**。
 
-注意，这些前缀是强制性的；如果你尝试命名一个从**AActor**派生的类而没有**A**前缀，你将在编译时遇到错误。此规则仅适用于 C++类；Blueprint 可以没有这些前缀命名。一旦你进入编辑器，Unreal Engine 将隐藏 C++前缀。
+注意，这些前缀是强制性的；如果你尝试命名一个从**AActor**派生的类而没有*`A`*前缀，你将在编译时遇到错误。此规则仅适用于 C++类；Blueprint 可以没有这些前缀命名。一旦你进入编辑器，Unreal Engine 将隐藏 C++前缀。
 
 ## 属性
 

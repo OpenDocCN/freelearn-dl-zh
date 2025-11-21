@@ -269,7 +269,7 @@ target_model = DQN(env.observation_space.shape[0], env.action_space.n)
 optimizer = optim.Adam(current_model.parameters())
 ```
 
-1.  如其名称所示，我们现在构建了两个DQN模型：一个用于在线使用，一个作为目标。我们训练`current_model`的值，然后每*x*次迭代后使用以下代码切换回目标模型：
+1.  如其名称所示，我们现在构建了两个DQN模型：一个用于在线使用，一个作为目标。我们训练`current_model`的值，然后每`x`次迭代后使用以下代码切换回目标模型：
 
 ```py
 def update_target(current_model, target_model):
@@ -393,7 +393,7 @@ class DDQN(nn.Module):
   return action
 ```
 
-1.  除了`act`函数外，DDQN类几乎完全是新构建的。在`init`函数中，我们可以看到三个子模型的构建：`self.feature`、`self.value`和`self.advantage`。然后，在`forward`函数中，我们可以看到输入**x**是如何被第一个**feature**子模型转换的，然后输入到优势和价值子模型中。然后，输出`advantage`和`value`被用来计算预测值，如下所示：
+1.  除了`act`函数外，DDQN类几乎完全是新构建的。在`init`函数中，我们可以看到三个子模型的构建：`self.feature`、`self.value`和`self.advantage`。然后，在`forward`函数中，我们可以看到输入*`x`*是如何被第一个**feature**子模型转换的，然后输入到优势和价值子模型中。然后，输出`advantage`和`value`被用来计算预测值，如下所示：
 
 ```py
 return value + advantage - advantage.mean()
