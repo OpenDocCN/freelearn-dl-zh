@@ -354,7 +354,7 @@ CGAN 的工作方式是通过训练生成器模型生成伪造样本，同时考
 
 ![](img/B16176_06_018.png)
 
-*log log D* (`x`|`y`) 是对真实样本 `x` 在条件 `y` 下的鉴别器输出，而 *log log* (1 - `D` (`G`(`z`|`y`))) 则是对伪造样本 `G`(`z`) 在条件 `y` 下的鉴别器输出。请注意，价值函数与普通 GAN 的原始极小极大方程仅略有变化。因此，我们可以利用改进的生成器成本函数以及我们在前几节讨论过的其他增强功能来加强生成器。条件信息 `y`（例如，类标签）作为两个模型的额外输入，GAN 设置本身负责处理其余部分。*图 6.13* 展示了条件 GAN 的架构设定。
+`log log D (x|y)` 是对真实样本 `x` 在条件 `y` 下的鉴别器输出，而 `log log (1 - D (G(z|y)))` 则是对伪造样本 `G(z) `在条件 `y` 下的鉴别器输出。请注意，价值函数与普通 GAN 的原始极小极大方程仅略有变化。因此，我们可以利用改进的生成器成本函数以及我们在前几节讨论过的其他增强功能来加强生成器。条件信息 `y`（例如，类标签）作为两个模型的额外输入，GAN 设置本身负责处理其余部分。*图 6.13* 展示了条件 GAN 的架构设定。
 
 ![](img/B16176_06_13.png)
 
@@ -386,10 +386,10 @@ def build_conditional_generator(z_dim=100, output_shape=(28, 28),
     Returns:
         tensorflow.keras.model object
     """
-    **noise = Input(shape=(z_dim,))**
-    **label = Input(shape=(***`1`***,), dtype=****'int32'****)**
-    **label_embedding = Flatten()(Embedding(num_classes, z_dim)(label))**
-    **model_input = multiply([noise, label_embedding])**
+    noise = Input(shape=(z_dim,))
+    label = Input(shape=(1,), dtype='int32')
+    label_embedding = Flatten()(Embedding(num_classes, z_dim)(label))
+    model_input = multiply([noise, label_embedding])
     mlp = Dense(256, input_dim=z_dim)(model_input)
     mlp = LeakyReLU(alpha=0.2)(mlp)
     mlp = BatchNormalization(momentum=0.8)(mlp)
@@ -400,7 +400,7 @@ def build_conditional_generator(z_dim=100, output_shape=(28, 28),
     mlp = BatchNormalization(momentum=0.8)(mlp)
     mlp = Dense(np.prod(output_shape), activation='tanh')(mlp)
     mlp = Reshape(output_shape)(mlp)
-    **model = Model([noise, label], mlp)**
+    model = Model([noise, label], mlp)
     if verbose:
         model.summary()
     return model 
@@ -409,7 +409,7 @@ def build_conditional_generator(z_dim=100, output_shape=(28, 28),
 
 ```py
 def build_conditional_discriminator(input_shape=(28, 28,),
-                                    **num_classes=****10**, verbose=True):
+                                    num_classes=10, verbose=True):
     """
     Utility method to build a conditional MLP discriminator
     Parameters:
@@ -424,12 +424,12 @@ def build_conditional_discriminator(input_shape=(28, 28,),
     Returns:
         tensorflow.keras.model object
     """
-    **img = Input(shape=input_shape)**
-    **flat_img = Flatten()(img)**
-    **label = Input(shape=(***`1`***,), dtype=****'int32'****)**
-    **label_embedding = Flatten()(Embedding(num_classes,**
-                                      **np.prod(input_shape))(label))**
-    **model_input = multiply([flat_img, label_embedding])**
+    img = Input(shape=input_shape)
+    flat_img = Flatten()(img)
+    label = Input(shape=(1,), dtype='int32')
+    label_embedding = Flatten()(Embedding(num_classes,
+                                      np.prod(input_shape))(label))
+    model_input = multiply([flat_img, label_embedding])
     mlp = Dense(512, input_dim=np.prod(input_shape))(model_input)
     mlp = LeakyReLU(alpha=0.2)(mlp)
     mlp = Dense(512)(mlp)
@@ -439,7 +439,7 @@ def build_conditional_discriminator(input_shape=(28, 28,),
     mlp = LeakyReLU(alpha=0.2)(mlp)
     mlp = Dropout(0.4)(mlp)
     mlp = Dense(1, activation='sigmoid')(mlp)
-    **model = Model([img, label], mlp)**
+    model = Model([img, label], mlp)
     if verbose:
         model.summary()
     return model 
@@ -451,11 +451,11 @@ def train(generator=None,discriminator=None,gan_model=None,
           epochs=1000, batch_size=128, sample_interval=50,
           z_dim=100):
     # Load MNIST train samples
-    **(X_train, y_train), (_, _) = datasets.mnist.load_data()**
+    (X_train, y_train), (_, _) = datasets.mnist.load_data()
     # Rescale -1 to 1
     X_train = X_train / 127.5 - 1
     X_train = np.expand_dims(X_train, axis=3)
-    **y_train = y_train.reshape(****-1****,** *`1`***)**
+    y_train = y_train.reshape(-1,1)
     # Prepare GAN output labels
     real_y = np.ones((batch_size, 1))
     fake_y = np.zeros((batch_size, 1))
@@ -463,16 +463,16 @@ def train(generator=None,discriminator=None,gan_model=None,
         # train disriminator
         # pick random real samples from X_train
         idx = np.random.randint(0, X_train.shape[0], batch_size)
-        **real_imgs, labels = X_train[idx], y_train[idx]**
+        real_imgs, labels = X_train[idx], y_train[idx]
         # pick random noise samples (z) from a normal distribution
         noise = np.random.normal(0, 1, (batch_size, z_dim))
         # use generator model to generate output samples
-        **fake_imgs = generator.predict([noise, labels])**
+        fake_imgs = generator.predict([noise, labels])
         # calculate discriminator loss on real samples
-        **disc_loss_real = discriminator.train_on_batch([real_imgs, labels], real_y)**
+        disc_loss_real = discriminator.train_on_batch([real_imgs, labels], real_y)
 
         # calculate discriminator loss on fake samples
-        **disc_loss_fake = discriminator.train_on_batch([fake_imgs, labels], fake_y)**
+        disc_loss_fake = discriminator.train_on_batch([fake_imgs, labels], fake_y)
 
         # overall discriminator loss
         discriminator_loss = 0.5 * np.add(disc_loss_real, disc_loss_fake)
@@ -482,9 +482,9 @@ def train(generator=None,discriminator=None,gan_model=None,
         noise = np.random.normal(0, 1, (batch_size, z_dim))
 
         # pick random labels for conditioning
-        **sampled_labels = np.random.randint(***`0`***,** **10****, batch_size).reshape(****-1****,** *`1`***)**
+        sampled_labels = np.random.randint(0, 10, batch_size).reshape(-1, 1)
         # use trained discriminator to improve generator
-        **gen_loss = gan_model.train_on_batch([noise, sampled_labels], real_y)**
+        gen_loss = gan_model.train_on_batch([noise, sampled_labels], real_y)
         # training updates
         print ("%d [Discriminator loss: %f, acc.: %.2f%%] [Generator loss: %f]" % (epoch, discriminator_loss[0], 
               100*discriminator_loss[1], gen_loss))
@@ -507,7 +507,7 @@ def train(generator=None,discriminator=None,gan_model=None,
 
 沃瑟斯坦 GAN（或 W-GAN）是 Arjovsky 等人为克服 GAN 设置中的一些问题而提出的尝试。这是一些深度学习论文中深深植根于理论基础以解释其工作影响的论文之一（除了经验证据）。典型 GAN 和 W-GAN 之间的主要区别在于 W-GAN 将判别器视为评论家（来源于强化学习；参见第十一章《用生成模型创作音乐》）。因此，W-GAN 判别器（或评论家）不仅仅将输入图像分类为真实或伪造，还生成一个分数来告诉生成器输入图像的真实性或伪造性。
 
-我们在本章的初始部分讨论的最大似然游戏解释了这样一个任务，我们试图通过 KL 散度来最小化`p[z]`和`p`[data]之间的差异，即`θ = argmin D[KL](p_data(x)||p[g](z))`。除了是非对称的，KL 散度在分布相距太远或完全不相交时也存在问题。为了克服这些问题，W-GAN 使用**地球移动者**（**EM**）距离或 Wasserstein 距离。简单地说，EM 距离是从分布`p`到`q`移动或转运质量的最小成本。对于 GAN 设置，我们可以将其想象为从生成器分布（`p[z]`）移动到实际分布（`p`[data]）的最小成本。在数学上，这可以被陈述为任何传输计划（表示为`W`（*source*，*destination*））的下确界（或最大下界，表示为*inf*）的方式：
+我们在本章的初始部分讨论的最大似然游戏解释了这样一个任务，我们试图通过 KL 散度来最小化`p[z]`和`p[data]`之间的差异，即`θ = argmin D[KL](p_data(x)||p[g](z))`。除了是非对称的，KL 散度在分布相距太远或完全不相交时也存在问题。为了克服这些问题，W-GAN 使用**地球移动者**（**EM**）距离或 Wasserstein 距离。简单地说，EM 距离是从分布`p`到`q`移动或转运质量的最小成本。对于 GAN 设置，我们可以将其想象为从生成器分布（`p[z]`）移动到实际分布（`p[data]`）的最小成本。在数学上，这可以被陈述为任何传输计划（表示为`W`（`source`，`destination`））的下确界（或最大下界，表示为`inf`）的方式：
 
 ![](img/B16176_06_020.png)
 
@@ -709,15 +709,15 @@ GANs 通过对立的目标进行极小极大博弈。难怪这导致生成器和
 
 图 6.23：两个城市温度的双峰分布
 
-现在我们有了我们的数据集，假设我们的任务是训练一个能够模仿这个分布的 GAN。在完美的情况下，我们将有 GAN 生成来自城市*`A`*和城市*`B`*的温度样本，其概率大致相等。然而，一个常见的问题是模式坍塌：生成器最终只生成来自一个模式（比如，只有城市*`B`*）。当：
+现在我们有了我们的数据集，假设我们的任务是训练一个能够模仿这个分布的 GAN。在完美的情况下，我们将有 GAN 生成来自城市`A`和城市`B`的温度样本，其概率大致相等。然而，一个常见的问题是模式坍塌：生成器最终只生成来自一个模式（比如，只有城市`B`）。当：
 
-+   生成器通过仅从城市*`B`*生成看起来逼真的样本来愚弄鉴别器
++   生成器通过仅从城市`B`生成看起来逼真的样本来愚弄鉴别器
 
-+   鉴别器试图通过学习所有城市*`A`*的输出都是真实的，并试图将城市*`B`*的样本分类为真实或伪造来抵消这一点
++   鉴别器试图通过学习所有城市`A`的输出都是真实的，并试图将城市`B`的样本分类为真实或伪造来抵消这一点
 
-+   生成器然后转向城市*`A`*，放弃城市*`B`*的模式
++   生成器然后转向城市`A`，放弃城市`B`的模式
 
-+   现在，鉴别器假定所有城市*`B`*的样本都是真实的，并试图代替城市*`A`*的样本进行分类
++   现在，鉴别器假定所有城市`B`的样本都是真实的，并试图代替城市`A`的样本进行分类
 
 +   这个周期不断重复
 
