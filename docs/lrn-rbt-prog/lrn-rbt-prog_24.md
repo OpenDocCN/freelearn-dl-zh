@@ -2,7 +2,7 @@
 
 如果你喜欢这本书，你可能对 Packt 出版的以下其他书籍感兴趣：
 
-[![](img/9781838551308.png)](https://www.packtpub.com/product/hands-on-ros-for-robotics-programming/9781838551308)
+![](img/9781838551308.png)
 
 **动手实践 ROS 机器人编程**
 
@@ -22,7 +22,7 @@ ISBN: 978-1-83855-130-8
 
 +   实施深度学习以使你的机器人能够识别其周围环境
 
-[![](img/9781838649326.png)](https://www.packtpub.com/product/ros-robotics-projects-second-edition/9781838649326)
+![](img/9781838649326.png)
 
 **ROS 机器人项目 - 第二版**
 
