@@ -26,7 +26,7 @@
 
 如下所示：
 
-*[阿什什]*[PER] *支付了[Uber]*[ORG] *[$80]*[MONEY] *去[Twitter]*[ORG] *位于[旧金山]*[LOC]的办公室。*
+*[阿什什]*[PER] *支付了[Uber]*[ORG] *[$80]*[MONEY] `$1`[ORG] *位于[旧金山]*[LOC]的办公室。*
 
 这是来自 Google Cloud 自然语言 API 的一个示例，包含多个附加类别：
 

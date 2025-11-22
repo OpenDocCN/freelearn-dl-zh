@@ -528,7 +528,7 @@ df = pd.DataFrame(data=boston['data'], columns=boston['feature_names'])
 
 ![](img/c6309711-d7e1-4a6d-ae40-9c909ad8b76d.png)
 
-这里，n 是样本数量，*x[i]* 和 *y[i]* 是被求和的单个样本，![](img/1f9d23ad-d253-4355-9289-7d79761bc52c.png) 和 ![](img/46020eb6-e869-471d-9fa5-2e3b323b128e.png) 是每组的均值。
+这里，n 是样本数量，`x[i]` 和 `y[i]` 是被求和的单个样本，![](img/1f9d23ad-d253-4355-9289-7d79761bc52c.png) 和 ![](img/46020eb6-e869-471d-9fa5-2e3b323b128e.png) 是每组的均值。
 
 与其眼睛费力地看前面的表格，不如用热图将其可视化。这可以通过 Seaborn 轻松完成。
 
