@@ -538,7 +538,7 @@ def get_Discriminator():
       strides=2,
       activation=tf.nn.relu)(net) #4x4x96
 
-  feature_vector = tf.keras.layers.Flatten()(net) # 4`4`96
+  feature_vector = tf.keras.layers.Flatten()(net) # 4 * 4 * 96
 ```
 
 在定义了将图像编码为特征向量的编码子网络后，我们准备创建条件的隐藏表示并将其与特征向量连接起来。这样做后，我们可以创建 Keras 模型并返回它：
