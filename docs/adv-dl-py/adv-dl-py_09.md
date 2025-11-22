@@ -94,11 +94,11 @@
 
 # 神经概率语言模型
 
-可以通过一个前馈全连接网络来学习语言模型，并隐式地学习嵌入函数。给定一个由*n-1*个词语（*w[t-n+1]*, ..., *w[t-1]*）组成的序列，它会尝试输出下一个词语`w[t]`的概率分布（以下图基于[`www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf`](http://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf)）：
+可以通过一个前馈全连接网络来学习语言模型，并隐式地学习嵌入函数。给定一个由*n-1*个词语（*w[t-n+1]*, ..., *w[t-1]*）组成的序列，它会尝试输出下一个词语`wₜ`的概率分布（以下图基于[`www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf`](http://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf)）：
 
 ![](img/4ddf599f-8890-4f57-86bf-872e19c666f9.png)
 
-一个神经网络语言模型，根据给定的词语*w[t-n+1]* ... *w[t-1]*，输出词语`w[t]`的概率分布。`C`是嵌入矩阵。
+一个神经网络语言模型，根据给定的词语*w[t-n+1]* ... *w[t-1]*，输出词语`wₜ`的概率分布。`C`是嵌入矩阵。
 
 网络层扮演着不同的角色，具体如下：
 
@@ -184,7 +184,7 @@ fastText ([`fasttext.cc/`](https://fasttext.cc/)) 是一个由**Facebook AI Rese
 
 注意使用特殊字符*<*和*>*来标示词的开始和结束。这是为了避免来自不同词的`n`-grams 发生错配。例如，词*her*将被表示为*<her>*，它不会与词*there*中的`n`-gram*her*混淆。fastText 的作者建议***3 ≤ n ≤ 6***。
 
-回顾我们在*Skip-gram*部分介绍的 softmax 公式。我们通过用通用评分函数*`s`*替代 word2vec 网络中的向量乘法操作来推广它，其中`w[t]`是输入词，`w[c]`是上下文词：
+回顾我们在*Skip-gram*部分介绍的 softmax 公式。我们通过用通用评分函数*`s`*替代 word2vec 网络中的向量乘法操作来推广它，其中`wₜ`是输入词，`w[c]`是上下文词：
 
 ![](img/5e4e75aa-b63f-41af-bd4c-9fb77323debb.png)
 
