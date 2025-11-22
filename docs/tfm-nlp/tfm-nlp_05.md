@@ -164,7 +164,7 @@ F1 分数使用精确率和召回率的加权值。它是精确率和召回率�
 
 ### Matthews 相关系数（MCC）
 
-MCC 在 *Fine-Tuning BERT Models* 章节的 *Evaluating using Matthews Correlation Coefficient* 部分进行了描述和实现。MCC 计算出一个值，其中包括真正例（`T[P]`）、真负例（`T[N]`）、假正例（`F[P]`）和假负例（`F[N]`）。
+MCC 在 *Fine-Tuning BERT Models* 章节的 *Evaluating using Matthews Correlation Coefficient* 部分进行了描述和实现。MCC 计算出一个值，其中包括真正例（`T[P]`）、真负例（`Tₙ`）、假正例（`F[P]`）和假负例（`Fₙ`）。
 
 MCC 可以用以下方程总结：
 

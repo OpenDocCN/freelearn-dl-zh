@@ -318,7 +318,7 @@ model.fit([train_pairs[:, 0], train_pairs[:, 1]], tr_labels,
 
 +   ![](img/aeebc6f9-55ef-4356-a4c8-aa68957472ca.png)是每个训练轮次中选定的标签子集。
 
-+   `N[S]`是每一轮每个类的支持样本数量。
++   `Nₛ`是每一轮每个类的支持样本数量。
 
 +   `N[Q]`是每一轮查询样本的数量。
 

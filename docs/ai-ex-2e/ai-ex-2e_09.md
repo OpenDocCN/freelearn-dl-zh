@@ -540,9 +540,9 @@ classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [
 
 假设你有以下结构：
 
-+   输入 = {`x₁`, `x₂`, …, `x[n]`}
++   输入 = {`x₁`, `x₂`, …, `xₙ`}
 
-+   权重 = {`w₁`, `w₂`, …, `w[n]`}
++   权重 = {`w₁`, `w₂`, …, `wₙ`}
 
 +   偏置（或有时更多）是 `b`
 
