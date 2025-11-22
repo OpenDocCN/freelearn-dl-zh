@@ -161,11 +161,11 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, rando
 
 +   `x` – 在我们这个例子中是列中的每个值
 
-+   `x`[min] – 列中所有值的最小值
++   `x[min]` – 列中所有值的最小值
 
-+   `x`[max] – 列中所有值的最大值
++   `x[max]` – 列中所有值的最大值
 
-+   `x`[scaled] – 执行缩放后的`x`
++   `x[scaled]` – 执行缩放后的`x`
 
 在进行缩放之后，我们之前的图表现在看起来是这样的：
 
@@ -193,7 +193,7 @@ y_test = yscaler.transform(y_test.reshape(-1,1))   #32
 
 这段代码创建了两个缩放器，一个用来缩放特征，另一个用来缩放目标。将它们分别称为`xscaler`和`yscaler`。`feature_range`参数指定你希望数据缩放到的范围（在你的例子中是从 0 到 1）。
 
-然后你使用`fit_transform`方法，它会对`X_train`和`y_train`进行缩放，并根据这两个数据集调整缩放器（该方法的`fit`部分会设置`x`[min]和`x`[max]）。之后，你使用`transform`方法对`X_test`和`y_test`进行缩放，而不调整`yscaler`和`xscaler`。
+然后你使用`fit_transform`方法，它会对`X_train`和`y_train`进行缩放，并根据这两个数据集调整缩放器（该方法的`fit`部分会设置`x[min]`和`x[max]`）。之后，你使用`transform`方法对`X_test`和`y_test`进行缩放，而不调整`yscaler`和`xscaler`。
 
 在缩放`y`变量时，必须使用`.reshape(-1,1)`将其重塑，以便创建一个假的第二维（这样代码就可以将这个一维数组当作具有一列的二维数组来处理）。我们需要这个假的第二维来避免格式错误。
 

@@ -526,7 +526,7 @@ TensorFlow 中的张量秩表示张量的维度；对于一个二维矩阵，*�
 变量的形状可以作为初始化器的一部分提供，如下所示：
 
 ```py
-`tf.initializers.RandomUniform(minval=-`0.1`, maxval=`0.1`)(shape=[`10`,`5`])` 
+tf.initializers.RandomUniform(minval=-0.1, maxval=0.1)(shape=[10,5]) 
 ```
 
 数据类型在确定变量的大小时起着重要作用。TensorFlow 有许多不同的数据类型，包括常用的 `tf.bool`、`tf.uint8`、`tf.float32` 和 `tf.int32`。每种数据类型都需要一定的位数来表示该类型的单个值。例如，`tf.uint8` 需要 8 位，而 `tf.float32` 需要 32 位。通常建议在计算中使用相同的数据类型，因为使用不同的数据类型可能会导致类型不匹配。因此，如果你有两个不同数据类型的张量需要转换，你必须使用 `tf.cast(...)` 操作显式地将一个张量转换为另一个张量的数据类型。
@@ -538,7 +538,7 @@ TensorFlow 中的张量秩表示张量的维度；对于一个二维矩阵，*�
 请注意，Python 变量 `tf.Variable` 被赋值后，在计算图中是不可见的，且不属于 TensorFlow 变量命名的一部分。考虑以下示例，你指定一个 TensorFlow 变量如下：
 
 ```py
-`a = tf.Variable(tf.zeros([`5`]),name=`'b'`)` 
+a = tf.Variable(tf.zeros([5]),name='b') 
 ```
 
 在这里，TensorFlow 图会通过名称 `b` 来识别此变量，而不是 `a`。
@@ -632,13 +632,13 @@ x_seg_sum = tf.segment_sum(data, segment_ids)
 然而，在最近的 TensorFlow 版本中，你可以通过使用类似于 NumPy 的语法进行数组索引和切片来执行散布操作。让我们看几个例子。假设你有一个 TensorFlow 变量`v`，它是一个[3,2]的矩阵：
 
 ```py
-`v = tf.Variable(tf.constant([[`1`,`9`],[`3`,`10`],[`5`,`11`]],dtype=tf.float32),name=`'ref'`)` 
-```
+v = tf.Variable(tf.constant([[1,9],[3,10],[5,11]],dtype=tf.float32),name='ref') 
+
 
 你可以通过以下方式更改此张量的第 0 行：
 
 ```py
-`v[`0`].assign([-`1`, -`9`])` 
+v[0].assign([-1, -9]) 
 ```
 
 这将导致：
@@ -653,7 +653,7 @@ array([[-1., -9.],
 你可以通过以下方式更改索引[1,1]处的值：
 
 ```py
-`v[`1`,`1`].assign(-`10`)` 
+v[1,1].assign(-10) 
 ```
 
 这将导致：
@@ -668,7 +668,7 @@ array([[  1.,   9.],
 你可以通过以下方式进行行切片：
 
 ```py
-`v[`1`:,`0`].assign([-`3`,-`5`])` 
+v[1:,0].assign([-3,-5]) 
 ```
 
 这将导致：
@@ -687,13 +687,13 @@ array([[ 1.,  9.],
 聚集操作与散布操作非常相似。请记住，散布是将值分配给张量，而聚集则是检索张量的值。让我们通过一个例子来理解这一点。假设你有一个 TensorFlow 张量`t`：
 
 ```py
-`t = tf.constant([[`1`,`9`],[`3`,`10`],[`5`,`11`]],dtype=tf.float32)` 
+t = tf.constant([[1,9],[3,10],[5,11]],dtype=tf.float32) 
 ```
 
 你可以通过以下方式获取`t`的第 0 行：
 
 ```py
-`t[`0`].numpy()` 
+t[0].numpy() 
 ```
 
 这将返回：
@@ -705,7 +705,7 @@ array([[ 1.,  9.],
 你也可以通过以下方式进行行切片：
 
 ```py
-`t[`1`:,`0`].numpy()` 
+t[1:,0].numpy() 
 ```
 
 这将返回：

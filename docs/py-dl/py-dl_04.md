@@ -342,7 +342,7 @@ H2O 目前不支持收缩自编码器；但是，可以在[`0xdata.atlassian.net
 
 +   Boltzmann 机器也被称为随机 Hopfield 网络。在 Hopfield 网络中，节点激活是基于阈值设置的；但在 Boltzmann 机器中，激活是随机的。Boltzmann 机器中的节点值始终设置为 +1 或 -1。节点处于状态 +1 的概率定义如下: ![Boltzmann 机器](img/00170.jpeg)
 
-+   这里，`a`[`i`] 是针对 Hopfield 网络定义的该节点的激活。
++   这里，`a[`i`]` 是针对 Hopfield 网络定义的该节点的激活。
 
 为了学习我们的 Boltzmann 机器或 Hopfield 网络的权重，我们希望最大化给定 W 的数据集的可能性，这简单地是每个数据项的可能性的乘积：
 
