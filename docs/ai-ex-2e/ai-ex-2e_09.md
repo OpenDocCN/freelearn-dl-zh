@@ -510,7 +510,7 @@ classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [
 
 ### 损失函数
 
-损失函数提供了模型的状态 `y[1]`（权重和偏置）与其目标状态 `y` 之间的距离信息。
+损失函数提供了模型的状态 `y₁`（权重和偏置）与其目标状态 `y` 之间的距离信息。
 
 二次损失函数的描述在本章中应用于案例研究模型的二进制交叉熵函数之前。
 
@@ -540,9 +540,9 @@ classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [
 
 假设你有以下结构：
 
-+   输入 = {`x[1]`, `x[2]`, …, `x[n]`}
++   输入 = {`x₁`, `x₂`, …, `x[n]`}
 
-+   权重 = {`w[1]`, `w[2]`, …, `w[n]`}
++   权重 = {`w₁`, `w₂`, …, `w[n]`}
 
 +   偏置（或有时更多）是 `b`
 
@@ -554,7 +554,7 @@ classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [
 
 现在将激活函数应用于 `z`，以获得模型的当前输出。
 
-`y[1]` = *act*(`z`)
+`y₁` = *act*(`z`)
 
 有了这个思路，可以解释交叉熵损失公式：
 
@@ -566,7 +566,7 @@ classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [
 
 +   `y`是输出目标。
 
-+   `y[1]`是之前描述的当前值。
++   `y₁`是之前描述的当前值。
 
 这个损失函数始终为正，值前有负号，且函数以负号开始。输出产生的小数字趋向于零，随着系统的进展而变小。
 
@@ -576,7 +576,7 @@ classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [
 
 在这种情况下，当`M`（类别数量）= 2 时，不需要求和！[](img/B15438_09_005.png)。二元交叉熵损失函数如下所示：
 
-损失 = –`y` log `y[1]` + (1 – `y`) log (1 – `y[1]`)
+损失 = –`y` log `y₁` + (1 – `y`) log (1 – `y₁`)
 
 该损失函数方法的核心概念是让 CNN 网络为优化器提供信息，以便相应地自动调整权重。
 

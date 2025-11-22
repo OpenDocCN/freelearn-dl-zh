@@ -532,7 +532,7 @@ Stable Diffusion XL
     )
     ```
 
-    它接受模型、训练和评估数据集，以及`training_args`实例。`compute_metrics`函数将在每个周期后计算验证准确率。`preprocess_logits_for_metrics`会将经过独热编码的模型输出（`x[0]`）转换为索引标签，以便与`compute_metrics`函数中的真实标签（`x[1]`）格式匹配。
+    它接受模型、训练和评估数据集，以及`training_args`实例。`compute_metrics`函数将在每个周期后计算验证准确率。`preprocess_logits_for_metrics`会将经过独热编码的模型输出（`x₀`）转换为索引标签，以便与`compute_metrics`函数中的真实标签（`x₁`）格式匹配。
 
 1.  最后，我们可以开始训练：
 

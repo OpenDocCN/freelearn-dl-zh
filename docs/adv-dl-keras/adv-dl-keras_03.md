@@ -349,7 +349,7 @@ def plot_results(models,
 
 ![使用 Keras 构建自编码器](img/B08956_03_07.jpg)
 
-图 3.2.5：MNIST 数字分布与潜在编码维度 `z[0]` 和 `z[1]` 的关系。原始彩色照片可在书籍的 GitHub 仓库中找到，https://github.com/PacktPublishing/Advanced-Deep-Learning-with-Keras/blob/master/chapter3-autoencoders/README.md。
+图 3.2.5：MNIST 数字分布与潜在编码维度 `z₀` 和 `z₁` 的关系。原始彩色照片可在书籍的 GitHub 仓库中找到，https://github.com/PacktPublishing/Advanced-Deep-Learning-with-Keras/blob/master/chapter3-autoencoders/README.md。
 
 ![使用 Keras 构建自编码器](img/B08956_03_08.jpg)
 
