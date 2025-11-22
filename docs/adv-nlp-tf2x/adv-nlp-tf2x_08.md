@@ -65,7 +65,7 @@ then sentiment is positive
 
 +   给定标注函数正确分配标签到数据点的概率
 
-通过在所有数据点上应用所有标注函数，我们生成一个*m × n*的矩阵，表示数据点及其标签。由启发式标注函数*LF*[j]对数据点`X[i]`生成的标签可以表示为：
+通过在所有数据点上应用所有标注函数，我们生成一个*m × n*的矩阵，表示数据点及其标签。由启发式标注函数*LF*[j]对数据点`Xᵢ`生成的标签可以表示为：
 
 ![](img/B16252_08_001.png)
 
@@ -85,7 +85,7 @@ then sentiment is positive
 
 ![](img/B16252_08_003.png)
 
-其中，`Y[i]`表示基于标注函数的标签，![](img/B16252_08_004.png)表示生成模型的预测标签。这些预测标签可以被传递给下游的判别模型进行分类。
+其中，`Yᵢ`表示基于标注函数的标签，![](img/B16252_08_004.png)表示生成模型的预测标签。这些预测标签可以被传递给下游的判别模型进行分类。
 
 这些概念在 Snorkel 库中得到了实现。Snorkel 库的作者是引入*数据编程*方法的关键贡献者，该方法在 2016 年神经信息处理系统会议（Neural Information Process Systems conference）上以同名论文形式发表。Snorkel 库在 2019 年由 Ratner 等人在题为*Snorkel: rapid training data creation with weak supervision*的论文中正式介绍。苹果和谷歌分别发布了使用 Snorkel 库的论文，分别是关于*Overton*和*Snorkel Drybell*的论文。这些论文可以提供关于使用弱监督创建训练数据的数学证明的深入讨论。
 

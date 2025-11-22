@@ -316,7 +316,7 @@ class Text8Sentences(object):
 
 ```
 
-然后我们设置调用代码。gensim 的 word2vec 使用 Python 的 logging 来报告进度，所以我们首先启用它。下一行声明了一个`Text8Sentences`类的实例，接下来的一行则用数据集中的句子训练模型。我们选择将嵌入向量的大小设置为`300`，并且只考虑在语料库中至少出现 30 次的单词。默认的窗口大小是`5`，因此我们将把单词 *w[i-5]*、*w[i-4]*、*w[i-3]*、*w[i-2]*、*w[i-1]*、*w[i+1]*、*w[i+2]*、*w[i+3]*、*w[i+4]* 和 *w[i+5]* 作为单词 `w[i]` 的上下文。默认情况下，创建的 word2vec 模型是 CBOW，但你可以通过在参数中设置`sg=1`来更改这一点：
+然后我们设置调用代码。gensim 的 word2vec 使用 Python 的 logging 来报告进度，所以我们首先启用它。下一行声明了一个`Text8Sentences`类的实例，接下来的一行则用数据集中的句子训练模型。我们选择将嵌入向量的大小设置为`300`，并且只考虑在语料库中至少出现 30 次的单词。默认的窗口大小是`5`，因此我们将把单词 *w[i-5]*、*w[i-4]*、*w[i-3]*、*w[i-2]*、*w[i-1]*、*w[i+1]*、*w[i+2]*、*w[i+3]*、*w[i+4]* 和 *w[i+5]* 作为单词 `wᵢ` 的上下文。默认情况下，创建的 word2vec 模型是 CBOW，但你可以通过在参数中设置`sg=1`来更改这一点：
 
 ```py
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)

@@ -350,7 +350,7 @@ integer_words = [vocab_to_integer[word] for word in preprocessed_words]
 
 +   `t` 是单词丢弃的阈值参数
 
-+   *f(w[i])* 是输入数据集中目标单词 `w[i]` 的频率
++   *f(w[i])* 是输入数据集中目标单词 `wᵢ` 的频率
 
 我们将实现一个辅助函数，用于计算数据集中每个单词的丢弃概率：
 

@@ -157,7 +157,7 @@ train_set_y = theano.shared(numpy.asarray(train_set[1], dtype='int32'))
 
 这个输出是无界的。
 
-为了得到一个概率分布，`p[i]`，其总和为 1，线性模型的输出被传入 softmax 函数：
+为了得到一个概率分布，`pᵢ`，其总和为 1，线性模型的输出被传入 softmax 函数：
 
 ![单层线性模型](img/00017.jpeg)
 
