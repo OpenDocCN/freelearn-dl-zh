@@ -171,7 +171,7 @@ ViT 的一个问题是，当使用非常大的数据集进行预训练时，它�
 
 图 9.4 – DetR 变换器的详细结构。灵感来源于 [`arxiv.org/abs/2005.12872`](https://arxiv.org/abs/2005.12872)
 
-编码器将输入序列映射到一系列连续的表示，就像原始编码器一样（*第七章*）。不同之处在于，模型在每个*`Q`*/*`K`*张量的所有注意力层中添加了固定的绝对位置编码，而原始变换器仅在初始输入张量中添加了静态位置编码。
+编码器将输入序列映射到一系列连续的表示，就像原始编码器一样（*第七章*）。不同之处在于，模型在每个`Q`/`K`张量的所有注意力层中添加了固定的绝对位置编码，而原始变换器仅在初始输入张量中添加了静态位置编码。
 
 解码器是更有趣的地方。首先，我们注意到，固定位置编码也参与了解码器的编码器-解码器注意力块。由于它们参与了编码器的所有自注意力块，我们将它们传递到编码器-解码器注意力层，以使得各部分公平竞争。
 
@@ -325,21 +325,21 @@ SD 结合了自编码器（**AE**，*图 9.5 中的像素空间*部分），去�
 
 图 9.6 – 一个 AE
 
-自编码器（AE）是一个前馈神经网络，它试图重建其输入。换句话说，AE 的目标值（标签）*`y`*等于输入数据*`x`*。我们可以正式地说，它试图学习一个恒等函数，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi mathvariant="bold">W</mml:mi><mml:mo>,</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub><mml:mfenced separators="|"><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi mathvariant="bold">x</mml:mi></mml:math>](img/874.png)（一个重复其输入的函数）。在最基本的形式下，自编码器由隐藏层组成。
+自编码器（AE）是一个前馈神经网络，它试图重建其输入。换句话说，AE 的目标值（标签）`y`等于输入数据`x`。我们可以正式地说，它试图学习一个恒等函数，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi mathvariant="bold">W</mml:mi><mml:mo>,</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub><mml:mfenced separators="|"><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi mathvariant="bold">x</mml:mi></mml:math>](img/874.png)（一个重复其输入的函数）。在最基本的形式下，自编码器由隐藏层组成。
 
-（或瓶颈）和输出层（*`W`*和*`W`*’是这些层的权重矩阵）。像 U-Net 一样，我们可以将自编码器看作是两个组件的虚拟组合：
+（或瓶颈）和输出层（`W`和`W`’是这些层的权重矩阵）。像 U-Net 一样，我们可以将自编码器看作是两个组件的虚拟组合：
 
-+   **编码器**：它将输入数据映射到网络的内部潜在表示。为了简化起见，在这个例子中，编码器是一个单一的全连接瓶颈层。内部状态就是其激活张量*`z`*。编码器可以有多个隐藏层，包括卷积层（如 SD 中的情况）。在这种情况下，*`z`*是最后一层的激活。
++   **编码器**：它将输入数据映射到网络的内部潜在表示。为了简化起见，在这个例子中，编码器是一个单一的全连接瓶颈层。内部状态就是其激活张量`z`。编码器可以有多个隐藏层，包括卷积层（如 SD 中的情况）。在这种情况下，`z`是最后一层的激活。
 
-+   **解码器**：它试图从网络的内部状态*`z`*重建输入。解码器也可以具有复杂的结构，通常与编码器相似。虽然 U-Net 试图将输入图像转换为其他领域的目标图像（例如，分割图），但自编码器仅仅试图重建其输入。
++   **解码器**：它试图从网络的内部状态`z`重建输入。解码器也可以具有复杂的结构，通常与编码器相似。虽然 U-Net 试图将输入图像转换为其他领域的目标图像（例如，分割图），但自编码器仅仅试图重建其输入。
 
 我们可以通过最小化一个损失函数来训练自编码器，这个损失函数被称为**重构误差**。它衡量原始输入与其重构之间的距离。
 
-潜在张量*`z`*是整个自编码器的核心。关键在于瓶颈层的单元数少于输入/输出层的单元数。因为模型试图从较小的特征空间重构输入，我们迫使它只学习数据中最重要的特征。可以将这种紧凑的数据表示看作一种压缩形式（但不是无损的）。我们可以仅使用模型的编码器部分来生成下游任务所需的潜在张量。或者，我们可以仅使用解码器从生成的潜在张量合成新的图像。
+潜在张量`z`是整个自编码器的核心。关键在于瓶颈层的单元数少于输入/输出层的单元数。因为模型试图从较小的特征空间重构输入，我们迫使它只学习数据中最重要的特征。可以将这种紧凑的数据表示看作一种压缩形式（但不是无损的）。我们可以仅使用模型的编码器部分来生成下游任务所需的潜在张量。或者，我们可以仅使用解码器从生成的潜在张量合成新的图像。
 
 在训练过程中，编码器将输入样本映射到潜在空间，在这里每个潜在属性都有一个离散的值。一个输入样本只能有一个潜在表示。因此，解码器只能用一种可能的方式来重构输入。换句话说，我们只能生成一个输入样本的单一重构。然而，我们希望生成基于文本提示的新图像，而不是重新创建原始图像。解决此任务的一种可能方法是**变分自编码器**（**VAE**）。VAE 可以用概率术语来描述潜在表示。我们将不再使用离散值，而是为每个潜在属性提供一个概率分布，从而使潜在空间变为连续的。我们可以修改潜在张量以影响生成图像的概率分布（即属性）。在 SD 中，DM 组件与条件文本提示相结合，充当这个修改器。
 
-完成这个简短的绕道后，我们来讨论卷积编码器在 SD 中的作用（*像素空间*部分，见*图 9.5*）。在训练过程中，AE 编码器创建了一个压缩的初始潜在表示张量，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">z</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi><mml:mo>×</mml:mo><mml:mi>w</mml:mi><mml:mo>×</mml:mo><mml:mi>c</mml:mi></mml:mrow></mml:msup></mml:math>](img/875.png)，来自输入图像，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">x</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>H</mml:mi><mml:mo>×</mml:mo><mml:mi>W</mml:mi><mml:mo>×</mml:mo><mml:mn>3</mml:mn></mml:mrow></mml:msup></mml:math>](img/876.png)。更具体地说，编码器将图像按因子进行下采样，*f = H/h = W/w*，其中 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>f</mml:mi><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mn>2</mml:mn></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msup></mml:math>](img/877.png) (`m`是通过经验实验选择的整数)。然后，整个扩散过程（前向和反向）使用压缩后的*`z`*，而不是原始图像*`x`*。只有当反向扩散结束时，AE 解码器才会将新生成的表示*`z`*上采样成最终生成的图像，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover accent="true"><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mo>~</mml:mo></mml:mover></mml:math>](img/878.png)。通过这种方式，更小的*`z`*允许使用更小、更高效的计算 U-Net，这对训练和推理都有好处。论文的作者将这种 AE 与扩散模型的结合称为**潜在扩散模型**。
+完成这个简短的绕道后，我们来讨论卷积编码器在 SD 中的作用（*像素空间*部分，见*图 9.5*）。在训练过程中，AE 编码器创建了一个压缩的初始潜在表示张量，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">z</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi><mml:mo>×</mml:mo><mml:mi>w</mml:mi><mml:mo>×</mml:mo><mml:mi>c</mml:mi></mml:mrow></mml:msup></mml:math>](img/875.png)，来自输入图像，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">x</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>H</mml:mi><mml:mo>×</mml:mo><mml:mi>W</mml:mi><mml:mo>×</mml:mo><mml:mn>3</mml:mn></mml:mrow></mml:msup></mml:math>](img/876.png)。更具体地说，编码器将图像按因子进行下采样，*f = H/h = W/w*，其中 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>f</mml:mi><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mn>2</mml:mn></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msup></mml:math>](img/877.png) (`m`是通过经验实验选择的整数)。然后，整个扩散过程（前向和反向）使用压缩后的`z`，而不是原始图像`x`。只有当反向扩散结束时，AE 解码器才会将新生成的表示`z`上采样成最终生成的图像，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover accent="true"><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mo>~</mml:mo></mml:mover></mml:math>](img/878.png)。通过这种方式，更小的`z`允许使用更小、更高效的计算 U-Net，这对训练和推理都有好处。论文的作者将这种 AE 与扩散模型的结合称为**潜在扩散模型**。
 
 AE 训练与 U-Net 训练是分开的。因此，我们可以先训练 AE，然后用它在不同的 U-Net 配置下进行多个下游任务。
 
@@ -355,7 +355,7 @@ AE 训练与 U-Net 训练是分开的。因此，我们可以先训练 AE，然�
 
 +   `[EOS]` 标记。该标记处的模型输出作为整个序列的嵌入向量。在 SD 的背景下，我们只关注文本编码器，CLIP 系统的所有其他组件仅在其训练时才是必要的。
 
-+   **图像编码器**：这可以是 ViT 或 CNN（最常见的是 ResNet）。它以图像作为输入，输出其嵌入向量，*`i`*。与文本编码器类似，这也是模型最高层的激活值，而不是任务特定的头部。
++   **图像编码器**：这可以是 ViT 或 CNN（最常见的是 ResNet）。它以图像作为输入，输出其嵌入向量，`i`。与文本编码器类似，这也是模型最高层的激活值，而不是任务特定的头部。
 
 为了使 CLIP 起作用，两个编码器的嵌入向量必须具有相同的大小，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:math>](img/870.png)。如果有必要（例如，在 CNN 图像编码器的情况下），编码器的输出张量会被展平为一维向量。如果两个编码器的维度仍然不同，我们可以添加线性投影（FC 层）来使它们相等。
 
@@ -365,15 +365,15 @@ AE 训练与 U-Net 训练是分开的。因此，我们可以先训练 AE，然�
 
 ## 扩散模型
 
-DM 是一种具有正向和反向阶段的生成模型。前向扩散从由 AE 编码器产生的潜在向量*`z`*开始（接受图像*`x`*作为输入）。然后，通过一系列`T`步骤逐渐向*`z`*添加随机高斯噪声，直到最终的（潜在的）表示，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/883.png)。
+DM 是一种具有正向和反向阶段的生成模型。前向扩散从由 AE 编码器产生的潜在向量`z`开始（接受图像`x`作为输入）。然后，通过一系列`T`步骤逐渐向`z`添加随机高斯噪声，直到最终的（潜在的）表示，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/883.png)。
 
 是纯噪声。前向扩散使用加速算法，在一个步骤中生成![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/884.png)，而不是`T`步骤（*第五章*）。
 
-反向扩散与此相反，从纯噪声开始。它逐渐通过在一系列`T`去噪步骤中去除少量噪声来恢复原始的潜在张量*`z`*。实际上，我们更关心反向扩散，它是基于潜在表示生成图像（前向扩散只参与训练）。它通常使用 U-Net 类型的 CNN 来实现（*图 9.5*，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/885.png)）。
+反向扩散与此相反，从纯噪声开始。它逐渐通过在一系列`T`去噪步骤中去除少量噪声来恢复原始的潜在张量`z`。实际上，我们更关心反向扩散，它是基于潜在表示生成图像（前向扩散只参与训练）。它通常使用 U-Net 类型的 CNN 来实现（*图 9.5*，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/885.png)）。
 
-它以噪声张量![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/540.png)作为输入，并输出对添加到原始潜在张量*`z`*中的噪声的近似值（即仅噪声，而不是张量本身）。然后，我们从当前的 U-Net 输入中减去预测的噪声，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/887.png)，并将结果作为新的输入传递给 U-Net，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/888.png)。
+它以噪声张量![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/540.png)作为输入，并输出对添加到原始潜在张量`z`中的噪声的近似值（即仅噪声，而不是张量本身）。然后，我们从当前的 U-Net 输入中减去预测的噪声，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/887.png)，并将结果作为新的输入传递给 U-Net，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/888.png)。
 
-在训练过程中，代价函数衡量预测噪声与实际噪声之间的差异，并在每次去噪步骤后相应地更新 U-Net 的权重。这个过程持续进行，直到（希望）仅剩下原始张量*`z`*。然后，AE 解码器使用它生成最终图像。
+在训练过程中，代价函数衡量预测噪声与实际噪声之间的差异，并在每次去噪步骤后相应地更新 U-Net 的权重。这个过程持续进行，直到（希望）仅剩下原始张量`z`。然后，AE 解码器使用它生成最终图像。
 
 DM 的纯粹形式无法影响生成图像的属性（这被称为条件化），因为我们从随机噪声开始，导致生成的是随机图像。SD 允许我们做到这一点——一种方法可以将 U-Net 条件化，以根据特定的文本提示或其他数据类型生成图像。为了实现这一点，我们需要将条件化变换器的输出嵌入与去噪 U-Net 结合。假设我们有一个文本提示`[EOS]`标记，那么我们通过**交叉注意力**层将其输出映射到 U-Net 的中间层。在这一层中，键和值张量表示条件化变换器的输出，而查询张量表示 U-Net 的中间层（*图 9.5*）：
 
@@ -454,7 +454,7 @@ StableDiffusionPipeline {
 
 Stable Diffusion XL
 
-最近，Stability AI 发布了 Stable Diffusion XL（*SDXL：改进高分辨率图像合成的潜在扩散模型*，[`arxiv.org/abs/2307.01952`](https://arxiv.org/abs/2307.01952)）。SDXL 使用了三倍大的 U-Net。更大的尺寸源于更多的注意力块和更大的注意力上下文（新版本使用了两个不同文本编码器的连接输出）。它还利用了一个可选的**精炼模型**（**refiner**）——第二个 U-Net 与第一个处于相同的潜在空间，专注于高质量、高分辨率的数据。它将第一个 U-Net 的输出潜在表示*`z`*作为输入，并使用相同的条件文本提示。
+最近，Stability AI 发布了 Stable Diffusion XL（*SDXL：改进高分辨率图像合成的潜在扩散模型*，[`arxiv.org/abs/2307.01952`](https://arxiv.org/abs/2307.01952)）。SDXL 使用了三倍大的 U-Net。更大的尺寸源于更多的注意力块和更大的注意力上下文（新版本使用了两个不同文本编码器的连接输出）。它还利用了一个可选的**精炼模型**（**refiner**）——第二个 U-Net 与第一个处于相同的潜在空间，专注于高质量、高分辨率的数据。它将第一个 U-Net 的输出潜在表示`z`作为输入，并使用相同的条件文本提示。
 
 至此，我们已完成对 SD 的介绍，以及计算机视觉中变压器的更大主题。接下来，让我们看看如何微调基于变压器的模型。
 
@@ -556,7 +556,7 @@ LLM 是强大的工具，但它们也有一些局限性。其中之一是上下�
 
 向量数据库
 
-LLM 和其他神经网络的主要输出（在任何任务特定头部之前）是嵌入向量，我们将这些向量用于下游任务，如分类或文本生成。该数据格式的通用性促使了向量特定数据库（或存储）的创建。如其名称所示，这些存储仅与向量一起使用，并支持快速的向量操作，例如对整个数据库执行不同的相似度度量。我们可以查询输入的嵌入向量与数据库中所有其他向量进行比较，找到最相似的向量。这个概念类似于 *`Q`*/*`K`*/*`V`* 注意力机制，但它是一种外部数据库形式，可以处理比内存注意力更多的数据集。
+LLM 和其他神经网络的主要输出（在任何任务特定头部之前）是嵌入向量，我们将这些向量用于下游任务，如分类或文本生成。该数据格式的通用性促使了向量特定数据库（或存储）的创建。如其名称所示，这些存储仅与向量一起使用，并支持快速的向量操作，例如对整个数据库执行不同的相似度度量。我们可以查询输入的嵌入向量与数据库中所有其他向量进行比较，找到最相似的向量。这个概念类似于 `Q`/`K`/`V` 注意力机制，但它是一种外部数据库形式，可以处理比内存注意力更多的数据集。
 
 该检索模块与多个向量数据库集成。这样，我们就可以使用 LLM 生成并存储文档嵌入（文档作为输入序列）。随后，我们可以查询 LLM 为给定查询生成新的嵌入，并将此查询与数据库进行比较，找到最相似的匹配项。在这种情况下，LLM 的作用仅限于生成向量嵌入。
 

@@ -934,7 +934,7 @@ DDPM 遵循与我们已讨论过的生成模型类似的模式：它从一个潜
 
 1.  重复接下来的步骤`T`次（第 2 行）：
 
-    +   从高斯分布中采样随机噪声张量，*`z`*（第 3 行）。我们为所有反向步骤执行此操作，除了最后一步。
+    +   从高斯分布中采样随机噪声张量，`z`（第 3 行）。我们为所有反向步骤执行此操作，除了最后一步。
 
     +   使用训练好的 U-Net 模型预测噪声，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/384.png)，在步骤`t`时。将此噪声从当前样本中减去，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png)，得到新的、较少噪声的，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/395.png)（第 4 行）。调度系数，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/396.png)，
 

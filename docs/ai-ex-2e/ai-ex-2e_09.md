@@ -186,7 +186,7 @@ image=mpimg.imread('img.bmp')[:,:,0]
 shape = image.shape 
 ```
 
-卷积应用前的图像是字母*`A`*（字母识别）：
+卷积应用前的图像是字母`A`（字母识别）：
 
 ![](img/B15438_09_05.png)
 

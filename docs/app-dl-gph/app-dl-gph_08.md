@@ -182,7 +182,7 @@
         scores = nx.pagerank(graph)
     ```
 
-1.  最后，我们根据 **pagerank** 分数对句子进行排序，并返回前 *`n`* 个句子作为摘要：
+1.  最后，我们根据 **pagerank** 分数对句子进行排序，并返回前 `n` 个句子作为摘要：
 
     ```py
         ranked_sentences = sorted(((

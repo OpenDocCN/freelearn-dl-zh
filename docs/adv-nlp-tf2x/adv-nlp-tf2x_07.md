@@ -565,7 +565,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         super(MultiHeadAttention, self).__init__()
         self.num_heads = num_heads
         self.d_model = d_model
-        **assert** **d_model % self.num_heads ==** *`0`*
+        **assert** **d_model % self.num_heads ==** `0`
         self.depth = d_model // self.num_heads
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)

@@ -128,7 +128,7 @@ pip install torch torch_geometric scikit-learn matplotlib networkx
 
     +   **num_classes**是不同兴趣组的数量，它将作为我们进行节点分类的目标。
 
-1.  我们使用**torch.randn()**创建节点特征（*`x`*）：
+1.  我们使用**torch.randn()**创建节点特征（`x`）：
 
     ```py
     x = torch.randn((num_nodes, num_features))
@@ -144,7 +144,7 @@ pip install torch torch_geometric scikit-learn matplotlib networkx
 
     这将在节点之间生成 5,000 个随机边。**edge_index**张量的形状为**(2, 5000)**，其中每一列表示一条边，格式为**[源节点，目标节点]**。
 
-1.  我们使用**torch.randint()**创建节点标签（*`y`*）：
+1.  我们使用**torch.randint()**创建节点标签（`y`）：
 
     ```py
     y = torch.randint(0, num_classes, (num_nodes,))
@@ -152,7 +152,7 @@ pip install torch torch_geometric scikit-learn matplotlib networkx
 
     这将每个节点（学生）随机分配到五个兴趣组中的一个。
 
-1.  我们创建一个 PyG 的**Data**对象，它有效地存储我们的图数据。我们传入节点特征（*`x`*）、边索引（**edge_index**）和节点标签（*`y`*）：
+1.  我们创建一个 PyG 的**Data**对象，它有效地存储我们的图数据。我们传入节点特征（`x`）、边索引（**edge_index**）和节点标签（`y`）：
 
     ```py
     data = Data(x=x, edge_index=edge_index, y=y)

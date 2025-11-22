@@ -581,7 +581,7 @@ for episode 1..M do
              # where  is the lenght of the episode
     *> Actor update step using all the experience in ![](img/c782ce23-3d71-4d58-9cc7-31cb78ce9b55.png)
 *    
-    *> Critic update using all the experience in *`D`**
+    *> Critic update using all the experience in `D`*
 
 ```
 

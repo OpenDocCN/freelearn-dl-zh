@@ -414,7 +414,7 @@ import matplotlib.pyplot as plt
 
 在我们的导入之后，我们建立了几个在代码中使用的变量。 这里有一些 亮点:
 
-+   **GPT-4o-mini**: 我们将使用 GPT-4o-mini，其中最后一个字符， *`o`*，代表 **全功能**，这也可以说是多模态的另一种说法！
++   **GPT-4o-mini**: 我们将使用 GPT-4o-mini，其中最后一个字符， `o`，代表 **全功能**，这也可以说是多模态的另一种说法！
 
     ```py
      llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)

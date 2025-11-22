@@ -8,7 +8,7 @@
 
 任何自然语言处理任务的文本到文本表示都提供了一个独特的框架来分析Transformers的方法和实践。这一思想是，通过文本到文本的方法，在训练和微调阶段，Transformers可以通过迁移学习学习一种语言。
 
-*Raffel*等人（2019）将这种方法命名为*`T`*ext-*`T`*o-*`T`*ext *`T`*ransfer *`T`*ransformer。这 5 个 T 成为了**T5**，一个新模型诞生了。
+*Raffel*等人（2019）将这种方法命名为`T`ext-`T`o-`T`ext `T`ransfer `T`ransformer。这 5 个 T 成为了**T5**，一个新模型诞生了。
 
 我们将从 T5 Transformers模型的概念和架构开始本章。然后我们将运用 T5 来总结使用 Hugging Face 模型的文件。
 
@@ -80,7 +80,7 @@ OpenAI 的第二次革命，通过 GPT-3，着重将 transformer 模型从微调
 
 同时关注序列中所有标记的注意力层的技术革命导致了 T5 概念的革命。
 
-T5 模型可以概括为一个*`T`*ext-*`T`*o-*`T`*ext *`T`*ransfer *`T`*ransformer。因此，每个 NLP 任务都被表达为一个文本到文本的问题来解决。
+T5 模型可以概括为一个`T`ext-`T`o-`T`ext `T`ransfer `T`ransformer。因此，每个 NLP 任务都被表达为一个文本到文本的问题来解决。
 
 ## 一个前缀而不是任务特定格式
 

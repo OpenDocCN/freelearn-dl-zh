@@ -171,13 +171,13 @@ N-gram 频率是指重叠词序列的频率。这里有一句话：
 
 从这个句子你可以得到以下 n-grams。"_"用来表示句子的开始和结束：
 
-+   *`1`*-**grams (单元组)**：Even, now, They, talked, in, Their, tombs（特征数量：7）。
++   `1`-**grams (单元组)**：Even, now, They, talked, in, Their, tombs（特征数量：7）。
 
-+   *`2`*-**grams (双元组)**：(_, Even)，(Even, now)，(now, They)，(They, talked)，(talked, in)，(in, Their)，(Their, tombs)，(tombs, _)（特征数量：8）。
++   `2`-**grams (双元组)**：(_, Even)，(Even, now)，(now, They)，(They, talked)，(talked, in)，(in, Their)，(Their, tombs)，(tombs, _)（特征数量：8）。
 
-+   *`3`*-**grams (三元组)**：(_, _, Even)，(_, Even, now)，(Even, now, They)，(now, They, talked)，(They, talked, in)，(talked, in, Their)，(in, Their, tombs)，(Their, tombs, _)，(tombs, _, _)（特征：9）。
++   `3`-**grams (三元组)**：(_, _, Even)，(_, Even, now)，(Even, now, They)，(now, They, talked)，(They, talked, in)，(talked, in, Their)，(in, Their, tombs)，(Their, tombs, _)，(tombs, _, _)（特征：9）。
 
-+   *`4`*-**grams (三元组)**：(_, _, _, Even)，(_, _, Even, now)，(_, Even, now, They)，(Even, now, They, talked)，(now, They, talked, in)，(They, talked, in, Their)，(talked, in, Their, tombs)，(in, Their, tombs, _)，(Their, tombs, _, _)，(tombs, _, _, _)（特征：10）。
++   `4`-**grams (三元组)**：(_, _, _, Even)，(_, _, Even, now)，(_, Even, now, They)，(Even, now, They, talked)，(now, They, talked, in)，(They, talked, in, Their)，(talked, in, Their, tombs)，(in, Their, tombs, _)，(Their, tombs, _, _)，(tombs, _, _, _)（特征：10）。
 
 依此类推。
 

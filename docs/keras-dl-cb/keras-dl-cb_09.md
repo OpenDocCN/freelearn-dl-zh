@@ -102,11 +102,11 @@ IOB 标记系统是命名实体识别的一种标准。
 
 **IOB 标记** 系统包含如下格式的标签：
 
-+   `B-{CHUNK_TYPE}`：表示*`B`*eginning 块中的词
++   `B-{CHUNK_TYPE}`：表示`B`eginning 块中的词
 
-+   `I-{CHUNK_TYPE}`: 用于块内部的词*`I`*nside
++   `I-{CHUNK_TYPE}`: 用于块内部的词`I`nside
 
-+   `O`：*`O`*utside 任何块
++   `O`：`O`utside 任何块
 
 +   `B-PERSON` : 人物实体
 

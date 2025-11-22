@@ -215,7 +215,7 @@ ONNX 操作符
 
 图 10.2 – MobileNetV3 ONNX 模型文件的 Netron 可视化
 
-在这里，输入形状为 3×224×224，*`W`* 是卷积滤波器的形状，*`B`* 是偏置。我们在 *第四章* 中介绍了其余的卷积属性。
+在这里，输入形状为 3×224×224，`W` 是卷积滤波器的形状，`B` 是偏置。我们在 *第四章* 中介绍了其余的卷积属性。
 
 不幸的是，PyTorch 和 TF 都没有集成加载 ONNX 模型的功能。但是，已经有开源包允许我们实现这一点。其中有两个分别为 PyTorch 提供的 `onnx2torch` ([`github.com/ENOT-AutoDL/onnx2torch`](https://github.com/ENOT-AutoDL/onnx2torch)) 和为 TF 提供的 `onnx2tf` ([`github.com/PINTO0309/onnx2tf`](https://github.com/PINTO0309/onnx2tf))。
 

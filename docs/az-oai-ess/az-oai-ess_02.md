@@ -238,7 +238,7 @@ AOAI 服务中还提供了其他模型，包括以下模型：
 
 1.  选择**部署模型**并继续配置以下字段：
 
-| **Fi****el***`d`* | **描述** |
+| **Fi****el**`d` | **描述** |
 | --- | --- |
 | **选择一个模型** | 从下拉列表中选择一个模型。模型的可用性因地区而异。要查看每个地区可用模型的列表，请参阅[模型总结表格和地区可用性](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#model-summary-table-and-region-availability)。 |
 | **部署名称** | 在选择部署名称时要考虑周到。部署名称至关重要，因为它将用于通过客户端库和 REST API 调用模型。 |

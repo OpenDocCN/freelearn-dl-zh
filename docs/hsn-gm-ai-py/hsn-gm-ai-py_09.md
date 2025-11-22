@@ -393,7 +393,7 @@ class DDQN(nn.Module):
   return action
 ```
 
-1.  除了`act`函数外，DDQN类几乎完全是新构建的。在`init`函数中，我们可以看到三个子模型的构建：`self.feature`、`self.value`和`self.advantage`。然后，在`forward`函数中，我们可以看到输入*`x`*是如何被第一个**feature**子模型转换的，然后输入到优势和价值子模型中。然后，输出`advantage`和`value`被用来计算预测值，如下所示：
+1.  除了`act`函数外，DDQN类几乎完全是新构建的。在`init`函数中，我们可以看到三个子模型的构建：`self.feature`、`self.value`和`self.advantage`。然后，在`forward`函数中，我们可以看到输入`x`是如何被第一个**feature**子模型转换的，然后输入到优势和价值子模型中。然后，输出`advantage`和`value`被用来计算预测值，如下所示：
 
 ```py
 return value + advantage - advantage.mean()

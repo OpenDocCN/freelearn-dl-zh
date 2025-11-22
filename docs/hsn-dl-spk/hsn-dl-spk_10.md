@@ -240,7 +240,7 @@ $SPARK_HOME/bin/spark-submit --class <package>.<class_name> --master <spark_mast
 
 图 10.3：参数平均化
 
-在此图中，*`W`*表示网络中的参数（权重和偏置）。在 DL4J 中，这一实现使用了 Spark 的 TreeAggregate（[`umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html`](https://umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html)）。
+在此图中，`W`表示网络中的参数（权重和偏置）。在 DL4J 中，这一实现使用了 Spark 的 TreeAggregate（[`umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html`](https://umbertogriffo.gitbooks.io/apache-spark-best-practices-and-tuning/content/treereduce_and_treeaggregate_demystified.html)）。
 
 参数平均化是一种简单的方法，但它带来了一些挑战。最直观的平均化方法是每次迭代后直接对参数进行平均。虽然这种方法是可行的，但增加的开销可能非常高，网络通信和同步成本可能会抵消通过增加额外节点来扩展集群的任何好处。因此，参数平均化通常会在平均周期（每个工作节点的最小批次数量）大于一时实现。如果平均周期过于稀疏，每个工作节点的局部参数可能会显著偏离，导致模型效果不佳。合适的平均周期通常是每个工作节点每 10 到 20 次最小批次中进行一次。另一个挑战与优化方法（DL4J 的更新方法）相关。已有研究表明，这些方法（[`ruder.io/optimizing-gradient-descent/`](http://ruder.io/optimizing-gradient-descent/)）能够改善神经网络训练过程中的收敛性。但它们有一个内部状态，也可能需要进行平均化。这将导致每个工作节点的收敛速度更快，但代价是网络传输的大小翻倍。
 

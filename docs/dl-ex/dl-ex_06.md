@@ -293,7 +293,7 @@ softmax_layer = tf.nn.softmax(tf.matmul(input_values,weights) + biases)
 
 ![](img/872f2c41-24e3-4684-a856-8ec72f4f0aa7.png)
 
-将导致一个由训练样本数（*`m`*） × 类别数（*`n`*）的矩阵：
+将导致一个由训练样本数（`m`） × 类别数（`n`）的矩阵：
 
 ![](img/da19af56-1dbd-4cf7-a371-c8af23bc0538.png)
 

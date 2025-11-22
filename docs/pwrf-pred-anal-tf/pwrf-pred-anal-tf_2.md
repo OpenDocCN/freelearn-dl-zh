@@ -721,7 +721,7 @@ def PrepareTarget(data):
 
 ![Logistic Regression for Survival Prediction](img/02_14.jpg)
 
-对于逻辑回归模型，损失函数是逻辑损失。对于二元分类问题，该算法输出一个二元逻辑回归模型，给定一个新的数据点，记为*`x`*，模型通过应用逻辑函数来进行预测：
+对于逻辑回归模型，损失函数是逻辑损失。对于二元分类问题，该算法输出一个二元逻辑回归模型，给定一个新的数据点，记为`x`，模型通过应用逻辑函数来进行预测：
 
 ![Logistic Regression for Survival Prediction](img/02_15.jpg)
 
@@ -976,9 +976,9 @@ model_params = {"learning_rate": LEARNING_RATE}
 
 通常，线性 SVM 使用 L2 正则化进行训练。最终，线性 SVM 算法会输出一个可以用来预测未知数据标签的 SVM 模型。
 
-假设你有一个未知的数据点，*`x`*，SVM 模型根据 ![Linear SVM for Survival Prediction](img/02_23.jpg) 的值进行预测。结果可以是正的或负的。更具体地说，如果 ![Linear SVM for Survival Prediction](img/02_24.jpg)，那么预测值为正；否则，预测值为负。
+假设你有一个未知的数据点，`x`，SVM 模型根据 ![Linear SVM for Survival Prediction](img/02_23.jpg) 的值进行预测。结果可以是正的或负的。更具体地说，如果 ![Linear SVM for Survival Prediction](img/02_24.jpg)，那么预测值为正；否则，预测值为负。
 
-当前版本的 TensorFlow contrib 包仅支持线性 SVM。TensorFlow 使用 SDCAOptimizer 作为底层优化器。现在的问题是，如果你想要构建自己的 SVM 模型，你需要考虑性能和收敛调整的问题。幸运的是，你可以将 `num_loss_partitions` 参数传递给 SDCAOptimizer 函数。但你需要设置 *`X`*，使其在每个工作节点的并发训练操作中收敛。
+当前版本的 TensorFlow contrib 包仅支持线性 SVM。TensorFlow 使用 SDCAOptimizer 作为底层优化器。现在的问题是，如果你想要构建自己的 SVM 模型，你需要考虑性能和收敛调整的问题。幸运的是，你可以将 `num_loss_partitions` 参数传递给 SDCAOptimizer 函数。但你需要设置 `X`，使其在每个工作节点的并发训练操作中收敛。
 
 如果你将 `num_loss_partitions` 设置为大于或等于这个值，收敛是有保证的，但随着 `num_loss_partitions` 增加，整体训练会变得更慢。另一方面，如果你将其值设置得较小，优化器在减少全局损失时会更具攻击性，但收敛性无法保证。
 

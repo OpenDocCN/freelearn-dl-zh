@@ -329,7 +329,7 @@ BBC 新闻数据集可在 Hugging Face 上获得 [https://huggingface.co/dataset
     [1000 rows x 3 columns]
     ```
 
-1.  创建向量器并将其拟合到训练数据文本上。要了解更多关于向量器的信息，请参阅[*第3章*](B18411_03.xhtml#_idTextAnchor067)。在*使用TF-IDF表示文本*的配方中讨论了TF-IDF向量器。我们使用英语停用词，最小文档频率为*`2`*，最大文档频率为95%（要了解更多关于停用词的信息，请参阅[*第1章*](B18411_01.xhtml#_idTextAnchor013)中的*移除停用词*配方）：
+1.  创建向量器并将其拟合到训练数据文本上。要了解更多关于向量器的信息，请参阅[*第3章*](B18411_03.xhtml#_idTextAnchor067)。在*使用TF-IDF表示文本*的配方中讨论了TF-IDF向量器。我们使用英语停用词，最小文档频率为`2`，最大文档频率为95%（要了解更多关于停用词的信息，请参阅[*第1章*](B18411_01.xhtml#_idTextAnchor013)中的*移除停用词*配方）：
 
     ```py
     vectorizer = TfidfVectorizer(stop_words='english', 

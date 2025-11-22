@@ -159,7 +159,7 @@ public:
 #include "BehaviorTree/BlackboardComponent.h"
 ```
 
-如果由于某种原因，这个`BlackboardComponen*`t`*`无效（这可能会发生在你在项目中创建行为树但你没有黑板的情况下；否则这很难做到，因为行为树编辑器会自动选择一个黑板），我们只需`return false`：
+如果由于某种原因，这个`BlackboardComponen`t``无效（这可能会发生在你在项目中创建行为树但你没有黑板的情况下；否则这很难做到，因为行为树编辑器会自动选择一个黑板），我们只需`return false`：
 
 ```py
   //Get BlackboardComponent

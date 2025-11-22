@@ -301,7 +301,7 @@ def handle_submit(sender):
 
 `chat(user_message)` 函数是我们事件驱动 GenAISys 的 *协调器* 组件。它应该保持以人为中心，以便进行关键的人机控制。一旦系统赢得了用户的信任，并在经过仔细考虑后，它可以被系统消息触发的动作中的一些动作可以触发。协调器在处理从 `handle_submit(sender)` 函数接收到的用户消息时包含重要的决策。它封装了几个选择和功能，如 *图 4.2* 所示：决定是否继续对话，将对话历史记录追加或保存到文件中，确定是否调用 AI 对话代理，以及更新 UI 显示。
 
-它首先继承了对话变量（`conversation_active = True`）的全局状态，我们在对话开始时（在 *图 4.2* 中的节点 *`1`*）初始化了它：
+它首先继承了对话变量（`conversation_active = True`）的全局状态，我们在对话开始时（在 *图 4.2* 中的节点 `1`）初始化了它：
 
 ```py
 # Function to handle user input and optional bot response
@@ -309,7 +309,7 @@ def chat(user_message):
     global conversation_active 
 ```
 
-它会继续通过检查用户是否退出或结束对话来确定多轮对话是否结束（见 *图 4.2* 中的 *`6`*）：
+它会继续通过检查用户是否退出或结束对话来确定多轮对话是否结束（见 *图 4.2* 中的 `6`）：
 
 ```py
  if user_message.lower() in ['exit', 'quit']: 
@@ -319,7 +319,7 @@ def chat(user_message):
 
 ## 6. 如果选择“退出”
 
-假设用户输入 `exit` 或 `quit`；那么我们在对话开始时（在 *图 4.2* 中的节点 *`1`*）设置的 `conversation_active` 变量现在将被设置为 `False`。系统现在知道不再需要更新显示。然后它告诉 `clear_output` 函数等待到下一个对话轮次来清除输出，以避免闪烁效果：
+假设用户输入 `exit` 或 `quit`；那么我们在对话开始时（在 *图 4.2* 中的节点 `1`）设置的 `conversation_active` 变量现在将被设置为 `False`。系统现在知道不再需要更新显示。然后它告诉 `clear_output` 函数等待到下一个对话轮次来清除输出，以避免闪烁效果：
 
 ```py
 clear_output(wait=True) 
@@ -331,13 +331,13 @@ clear_output(wait=True)
 display(HTML("<div style='color: red;'>Conversation ended. Saving history...</div>")) 
 ```
 
-通过调用对话的 *save* 函数结束退出过程，该函数将保存所有历史记录到文件中（见 *图 4.2* 的节点 *`7`*）：
+通过调用对话的 *save* 函数结束退出过程，该函数将保存所有历史记录到文件中（见 *图 4.2* 的节点 `7`）：
 
 ```py
 save_conversation_history() 
 ```
 
-因此，对话将在会话结束时保存以供进一步使用（用于新会话或会议摘要），如 *图 4.2* 的节点 *`7`* 所示：
+因此，对话将在会话结束时保存以供进一步使用（用于新会话或会议摘要），如 *图 4.2* 的节点 `7` 所示：
 
 ```py
 # Function to save conversation history to a file
@@ -354,7 +354,7 @@ def save_conversation_history():
 
 如果用户输入不包含 `exit` 或 `quit`，则多轮、多用户对话将继续。然而，我们在这个功能上需要做出一些重大决策。我们是将其附加到每个用户请求上，还是不附加？如果我们将其附加到每个用户请求上，在某个时刻，上下文窗口将完整，但我们通过 API 发送的标记数量将增加处理时间和成本。
 
-第一步是将我们在开始时初始化的对话历史记录（在 *图 4.2* 的节点 *`1`*）附加上：
+第一步是将我们在开始时初始化的对话历史记录（在 *图 4.2* 的节点 `1`）附加上：
 
 ```py
 # Append user message to the active user’s history 
@@ -363,7 +363,7 @@ user_histories[active_user].append(
 ) 
 ```
 
-因此，在这个笔记本的混合场景中，在这个时候，我们将用户历史记录保存在内存中，直到会话结束，因此我们将使用户的输入历史记录增加每个用户的输入，正如在 *图 4.2* 的节点 **11** 所见。如果用户输入不包含 `exit` 或 `quit`，则多轮、多用户对话将继续。它将用户消息附加到用户的历史记录（在 *图 4.2* 的节点 *`8`*）中。
+因此，在这个笔记本的混合场景中，在这个时候，我们将用户历史记录保存在内存中，直到会话结束，因此我们将使用户的输入历史记录增加每个用户的输入，正如在 *图 4.2* 的节点 **11** 所见。如果用户输入不包含 `exit` 或 `quit`，则多轮、多用户对话将继续。它将用户消息附加到用户的历史记录（在 *图 4.2* 的节点 `8`）中。
 
 然而，如果我们不想将用户请求附加到其中，但仍然想保留整个对话的记录以供上下文参考，我们也可以在对话的中点或结束时总结对话。如果在对话中总结，我们可以添加一个函数，每次都将其附加到用户输入中。如果在会话结束后总结，我们可以继续一个新的、全新的会话，并带有前一个会话的历史记录摘要。
 
@@ -373,7 +373,7 @@ user_histories[active_user].append(
 if agent_checkbox.value: 
 ```
 
-这种验证在 *图 4.2* 的节点 *`9`* 中显示。如果复选框被勾选，则我们之前章节中创建的函数将通过调用 `chat_with_gpt` 被激活：
+这种验证在 *图 4.2* 的节点 `9` 中显示。如果复选框被勾选，则我们之前章节中创建的函数将通过调用 `chat_with_gpt` 被激活：
 
 ```py
  response = chat_with_gpt(user_histories[active_user],
@@ -428,7 +428,7 @@ def update_display():
         display(VBox([user_selector, input_box, agent_checkbox]))  # Keep input box, selector, and checkbox visible if active 
 ```
 
-输入框被清除，代理复选框已被用户独立检查，系统已验证其状态。活跃用户将根据用户的独立决定显示。在这种情况下，会话开始时（*`1`*）初始化的活跃用户`active_user`保持不变。如果用户改变了，`on_user_change`下拉事件（**13**）将由`user_selector`小部件的`observe`方法触发：
+输入框被清除，代理复选框已被用户独立检查，系统已验证其状态。活跃用户将根据用户的独立决定显示。在这种情况下，会话开始时（`1`）初始化的活跃用户`active_user`保持不变。如果用户改变了，`on_user_change`下拉事件（**13**）将由`user_selector`小部件的`observe`方法触发：
 
 ```py
 user_selector.observe(on_user_change, names='value') 
@@ -610,7 +610,7 @@ OpenAI API 调用的响应随后返回到`chat_with_gpt`函数（在*图 4.2*的
 
 1.  用户选择 => 输入 => 代理未检查 => 输出
 
-这些基本序列构成了一组序列，*`S`*：
+这些基本序列构成了一组序列，`S`：
 
 ![](img/B32304_Equation.png)
 
