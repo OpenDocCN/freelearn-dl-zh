@@ -48,7 +48,7 @@
 
 你猜对了：下一个数字是 36，接下来是 49，依此类推。这就是监督学习，也叫**通过示例学习**；你并没有被告知这个序列表示的是正整数的平方——你通过提供的五个示例自己猜出了这一点。
 
-类似地，在监督学习中，机器从示例中学习。它提供了一组包含(`X`, `Y`)的训练数据，其中`X`是输入（可以是一个单一数字或具有大量特征的输入值），`Y`是给定输入的预期输出。一旦在示例数据上训练完成，模型就应该能够在面对新数据时得出准确的结论。
+类似地，在监督学习中，机器从示例中学习。它提供了一组包含`(X, Y)`的训练数据，其中`X`是输入（可以是一个单一数字或具有大量特征的输入值），`Y`是给定输入的预期输出。一旦在示例数据上训练完成，模型就应该能够在面对新数据时得出准确的结论。
 
 监督学习用于根据一组输入预测一个实值输出（回归）或一个离散标签（分类）。我们将在接下来的章节中探讨回归和分类算法。
 
@@ -66,19 +66,19 @@
 
 这只是一个例子；线性回归可以用于许多类似的任务。在本节中，我们将学习如何在数据上执行线性回归。
 
-线性回归是一个监督学习任务。它是最基础、最简单且应用广泛的机器学习预测技术之一。回归的目标是为给定的输入输出对(`x`, `y`)找到一个函数`F`(*x, W*)，使得`y` = `F`(*x, W*)。在(`x`, `y`)对中，`x`是自变量，`y`是因变量，且它们都是连续变量。它帮助我们找到因变量`y`和自变量`x`之间的关系。
+线性回归是一个监督学习任务。它是最基础、最简单且应用广泛的机器学习预测技术之一。回归的目标是为给定的输入输出对`(x, y)`找到一个函数`F(x, W)`，使得`y = F(x, W)`。在`(x, y)`对中，`x`是自变量，`y`是因变量，且它们都是连续变量。它帮助我们找到因变量`y`和自变量`x`之间的关系。
 
-输入`x`可以是单一的输入变量，也可以是多个输入变量。当`F`(*x, W*)映射一个单一输入变量`x`时，这叫做**简单线性回归**；当有多个输入变量时，则称为**多元线性回归**。
+输入`x`可以是单一的输入变量，也可以是多个输入变量。当`F(x, W)`映射一个单一输入变量`x`时，这叫做**简单线性回归**；当有多个输入变量时，则称为**多元线性回归**。
 
-函数`F`(*x, W*)可以通过以下表达式来近似：
+函数`F(x, W)`可以通过以下表达式来近似：
 
 ![](img/b866dc12-794c-4ae7-804a-5e1d8ef703e5.png)
 
-在这个表达式中，`d`是`x`的维度（独立变量的数量），`W`是与`x`的每个分量相关的权重。为了找到函数`F`(*x, W*)，我们需要确定权重。自然的选择是找到能够减少平方误差的权重，因此我们的目标函数如下：
+在这个表达式中，`d`是`x`的维度（独立变量的数量），`W`是与`x`的每个分量相关的权重。为了找到函数`F(x, W)`，我们需要确定权重。自然的选择是找到能够减少平方误差的权重，因此我们的目标函数如下：
 
 ![](img/c2da2354-6889-4776-96d6-062c18f9b2cf.png)
 
-在前面的函数中，`N`是所提供的输入输出对的总数。为了找到权重，我们对目标函数关于权重进行求导并使其等于`0`。在矩阵表示法中，我们可以将列向量`W` = (`W[0]`, `W[1]`, `W[2]`, ..., `W[d]`)^T 的解写为如下：
+在前面的函数中，`N`是所提供的输入输出对的总数。为了找到权重，我们对目标函数关于权重进行求导并使其等于`0`。在矩阵表示法中，我们可以将列向量`W = (W[0], W[1], W[2], ..., W[d])ᐪ` 的解写为如下：
 
 ![](img/9d0fdad2-b84a-4896-868c-3718dc47f9af.png)
 
@@ -86,9 +86,9 @@
 
 ![](img/d758faaa-14ab-4347-8655-6c3ed714d269.png)
 
-`X`是大小为[`N`, `d`]的输入向量，`Y`是大小为[`N`, 1]的输出向量。如果(*X^TX*)^(-1)存在，即`X`的所有行和列是线性独立的，那么可以找到权重。为了确保这一点，输入输出样本的数量（`N`）应该远大于输入特征的数量（`d`）。
+`X`是大小为`[N, d]`的输入向量，`Y`是大小为`[N, 1]`的输出向量。如果`(XᐪX)^(-1)`存在，即`X`的所有行和列是线性独立的，那么可以找到权重。为了确保这一点，输入输出样本的数量（`N`）应该远大于输入特征的数量（`d`）。
 
-需要记住的一件重要事情是，`Y`，即因变量，并不是与自变量`X`线性相关的；相反，它是与模型参数`W`，即权重，线性相关的。因此，我们可以通过线性回归建模诸如指数型甚至正弦型的关系（在`Y`和`X`之间）。在这种情况下，我们将问题推广到寻找权重`W`，使得`y` = `F`(`g`(`x`), `W`)，其中`g`(`x`)是`X`的非线性函数。
+需要记住的一件重要事情是，`Y`，即因变量，并不是与自变量`X`线性相关的；相反，它是与模型参数`W`，即权重，线性相关的。因此，我们可以通过线性回归建模诸如指数型甚至正弦型的关系（在`Y`和`X`之间）。在这种情况下，我们将问题推广到寻找权重`W`，使得`y = F(g(x), W)`，其中`g(x)`是`X`的非线性函数。
 
 # 使用回归进行电力输出预测
 
@@ -211,7 +211,7 @@ loss = model.fit(X_train, Y_train, 20000) #Epochs = 20000
 
 +   Sigmoid 函数的值（因此 `Y[pred]`）介于 (`0`, `1`) 之间。
 
-+   当 *W^TX + b = 0.0* 时，sigmoid 的导数最大，且该导数的最大值为 *0.25*（在同一点上，sigmoid 的值为 *0.5*）
++   当 *WᐪX + b = 0.0* 时，sigmoid 的导数最大，且该导数的最大值为 *0.25*（在同一点上，sigmoid 的值为 *0.5*）
 
 +   Sigmoid 函数变化的斜率取决于权重，而我们将得到导数峰值的位置则取决于偏置。
 
@@ -384,7 +384,7 @@ class LogisticRegressor:
 
 *![](img/1cfc0edb-71e9-44d3-9b6d-500bfccdbac2.png)*
 
-设*φ*为变换，那么我们可以用*φ*(`X`)替换`X`，从而将其点积*X^(T )X^((i))*替换为一个函数 K(*X^T*, `X`^((`i`))) = *φ*(`X`)*^T* *φ*(`X`^((`i`)))，这个函数叫做**核**。因此，我们现在只需要通过应用变换*φ*对数据进行预处理，然后在变换后的空间中像之前一样找到一个线性分隔器。
+设*φ*为变换，那么我们可以用*φ*(`X`)替换`X`，从而将其点积*X^(T )X^((i))*替换为一个函数 K(*Xᐪ*, `X`^((`i`))) = *φ*(`X`)*ᐪ* *φ*(`X`^((`i`)))，这个函数叫做**核**。因此，我们现在只需要通过应用变换*φ*对数据进行预处理，然后在变换后的空间中像之前一样找到一个线性分隔器。
 
 最常用的核函数是**高斯核**，也叫**径向基函数**，定义如下：
 
@@ -515,7 +515,7 @@ scikit-learn 的朴素贝叶斯模块支持三种朴素贝叶斯分布。我们�
 
 +   `BernoulliNB`
 
-正如我们已经看到的，葡萄酒数据是一种连续数据类型。因此，如果我们使用高斯分布来表示`p`(`x[i]`|`C[k]`)——也就是`GaussianNB`模块，那么效果会更好，所以我们需要在 Notebook 的导入单元中加入`from sklearn.naive_bayes import GaussianNB`。你可以通过这个 scikit-learn 的链接了解更多关于`GaussianNB`模块的详细信息：[`scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.GaussianNB.html#sklearn.naive_bayes.GaussianNB`](http://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.GaussianNB.html#sklearn.naive_bayes.GaussianNB)。
+正如我们已经看到的，葡萄酒数据是一种连续数据类型。因此，如果我们使用高斯分布来表示`p(x[i]|C[k])`——也就是`GaussianNB`模块，那么效果会更好，所以我们需要在 Notebook 的导入单元中加入`from sklearn.naive_bayes import GaussianNB`。你可以通过这个 scikit-learn 的链接了解更多关于`GaussianNB`模块的详细信息：[`scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.GaussianNB.html#sklearn.naive_bayes.GaussianNB`](http://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.GaussianNB.html#sklearn.naive_bayes.GaussianNB)。
 
 前两步将与 SVM 案例中的相同。但现在，我们不会声明一个`SVM`分类器，而是声明一个`GaussianNB`分类器，并使用它的`fit`方法来学习训练样本。通过`predict`方法可以得到从学习的模型中获得的结果。所以，按照以下步骤操作：
 
@@ -616,7 +616,7 @@ y_pred = classifier.predict(X_test)
 `scikit` 库提供了 `DecisionTreeRegressor` 和 `DecisionTreeClassifier` 来实现回归和分类。两者都可以从 `sklearn.tree` 导入。`DecisionTreeRegressor` 定义如下：
 
 ```py
-`c`lass sklearn.tree.DecisionTreeRegressor (criterion=’mse’, splitter=’best’, max_depth=None, min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.0, max_features=None, random_state=None, max_leaf_nodes=None, min_impurity_decrease=0.0, min_impurity_split=None, presort=False)
+class sklearn.tree.DecisionTreeRegressor (criterion=’mse’, splitter=’best’, max_depth=None, min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.0, max_features=None, random_state=None, max_leaf_nodes=None, min_impurity_decrease=0.0, min_impurity_split=None, presort=False)
 ```
 
 不同的参数如下：

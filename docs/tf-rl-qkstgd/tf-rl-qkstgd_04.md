@@ -247,7 +247,7 @@ self.predictions = self.value + tf.subtract(self.advantage, tf.reduce_mean(self.
 
 ![](img/180e299e-e33a-4a27-b859-2b8afcd62782.png)
 
-其中，前一个 `r` 是奖励，*θ* 是主 Q 网络模型参数，*θ^t* 是目标网络参数。*ω* 是一个正的超参数，用于确定分布的形状。
+其中，前一个 `r` 是奖励，*θ* 是主 Q 网络模型参数，*θᵗ* 是目标网络参数。*ω* 是一个正的超参数，用于确定分布的形状。
 
 # 多步学习
 

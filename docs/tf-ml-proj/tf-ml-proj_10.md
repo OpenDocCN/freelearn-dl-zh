@@ -156,7 +156,7 @@ for r in range(ROUTING_ITERATIONS):
             v_j = squash(s_j)
             v_j = tf.tile(v_j, [1, u.shape[1].value, 1, 1, 1]) # [batch_size, 1152, 10, 16, 1]
 
-            # Multiplying in last two dimensions: [16, 1]^T x [16, 1] yields [1, 1]
+            # Multiplying in last two dimensions: [16, 1]ᐪ x [16, 1] yields [1, 1]
             u_hat_dot_v = tf.matmul(u_hat_stopped, v_j, transpose_a=True) # [batch_size, 1152, 10, 1, 1]
 
             b_ij = tf.add(b_ij,u_hat_dot_v)
