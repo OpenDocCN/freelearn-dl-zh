@@ -104,7 +104,7 @@ def epsilon_greedy(epsilon):
 
 ```py
 def epsilon_greedy(epsilon):
-**if** **np.random.uniform(**`0`**,**`1`**) < epsilon:**
+    if np.random.uniform(0,1) < epsilon:
         return env.action_space.sample()
     else:
         return np.argmax(Q) 
