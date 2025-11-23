@@ -315,7 +315,7 @@ model.add(Activation('softmax'))
 
 由于 `Dense` 层是线性操作，若仅有一系列 `Dense` 层，它们只能逼近线性函数。问题在于，MNIST 手写数字分类本质上是一个非线性过程。在 `Dense` 层之间插入 `relu` 激活函数将使得多层感知机（MLP）能够建模非线性映射。`relu` 或 **修正线性单元** (**ReLU**) 是一个简单的非线性函数。它就像一个过滤器，允许正输入保持不变，而将其它输入压制为零。数学上，`relu` 可以通过以下公式表示，并在 *图 1.3.5* 中绘制：
 
-*relu*(x) = *max*(0,`x`)
+`relu(x) = max(0,x)`
 
 ![使用 MLP 和 Keras 构建模型](img/B08956_01_06.jpg)
 
@@ -323,11 +323,11 @@ model.add(Activation('softmax'))
 
 还有其他非线性函数可以使用，如 `elu`、`selu`、`softplus`、`sigmoid` 和 `tanh`。然而，`relu` 是行业中最常用的，并且由于其简单性，在计算上非常高效。`sigmoid` 和 `tanh` 被用作输出层的激活函数，后文将详细描述。*表 1.3.1* 展示了这些激活函数的方程：
 
-| `relu` | *relu*(x) = *max*(0,`x`) | 1.3.1 |
+| `relu` | `relu(x) = max(0,x)` | 1.3.1 |
 | --- | --- | --- |
-| `softplus` | *softplus*(`x`) = log(1 + `e` `x`) | 1.3.2 |
+| `softplus` | `softplus(x) = log(1 + e x)` | 1.3.2 |
 | `elu` | ![使用 MLP 和 Keras 构建模型](img/B08956_01_001.jpg)，其中 `a >= 0`，并且是一个可调超参数 | 1.3.3 |
-| `selu` | *selu*(`x`) = `k` × *elu*(*x,a*)，其中 `k` = 1.0507009873554804934193349852946 和 `a` = 1.6732632423543772848170429916717 | 1.3.4 |
+| `selu` | `selu(x) = k × elu(x,a)`，其中 `k = 1.0507009873554804934193349852946` 和 `a = 1.6732632423543772848170429916717` | 1.3.4 |
 
 > 表 1.3.1：常见非线性激活函数的定义
 
@@ -799,11 +799,11 @@ print("\nTest accuracy: %.1f%%" % (100.0 * acc))
 
 RNN 与前两种模型之间有两个主要区别。首先是`input_shape = (image_size, image_size)`，实际上是`input_shape = (timesteps, input_dim)`，即一个长度为`timesteps`的`input_dim`维度向量序列。其次是使用`SimpleRNN`层来表示一个具有`units=256`的 RNN 单元。`units`变量表示输出单元的数量。如果 CNN 的特点是卷积核在输入特征图上进行卷积，那么 RNN 的输出不仅是当前输入的函数，还与上一输出或隐藏状态有关。由于上一输出也是上一输入的函数，因此当前输出也是上一输出和输入的函数，依此类推。Keras 中的`SimpleRNN`层是 RNN 的简化版本。以下方程描述了 SimpleRNN 的输出：
 
-`h`t = tanh(`b` + W`h`t-1 + U`x`t) (1.5.1)
+`ht = tanh(b + Wh[t-1] + Ux[t])` (1.5.1)
 
 在此方程中，`b`是偏置项，`W`和`U`分别被称为递归核（上一输出的权重）和核（当前输入的权重）。下标`t`用于表示序列中的位置。对于`SimpleRNN`层，`units=256`时，总参数数量为 256 + 256 × 256 + 256 × 28 = 72,960，分别对应`b`、`W`和`U`的贡献。
 
-以下图展示了在 MNIST 数字分类中使用的 SimpleRNN 和 RNN 的示意图。`SimpleRNN`比 RNN 更简单的原因是缺少在 softmax 计算之前的输出值`O`t = V`h`t + `c`：
+以下图展示了在 MNIST 数字分类中使用的 SimpleRNN 和 RNN 的示意图。`SimpleRNN`比 RNN 更简单的原因是缺少在 softmax 计算之前的输出值`O[t]` = `Vh[t]` + `c`：
 
 ![递归神经网络 (RNN)](img/B08956_01_17.jpg)
 
@@ -848,7 +848,7 @@ Non-trainable params: 0
 
 在许多深度神经网络中，RNN 家族的其他成员更常被使用。例如，**长短期记忆**（**LSTM**）网络已广泛应用于机器翻译和问答问题。LSTM 网络解决了长期依赖问题，即将相关的过去信息记忆到当前输出。
 
-与 RNN 或 SimpleRNN 不同，LSTM 单元的内部结构更为复杂。*图 1.5.4*展示了在 MNIST 数字分类上下文中的 LSTM 示意图。LSTM 不仅使用当前输入和过去的输出或隐藏状态，还引入了一个单元状态，`s`t，用于将信息从一个单元传递到另一个单元。单元状态之间的信息流由三个门控控制，分别是`f`t、`i`t 和`q`t。这三个门控的作用是决定哪些信息应被保留或替换，以及过去和当前输入中的哪些信息应对当前单元状态或输出做出贡献。本书中不讨论 LSTM 单元的内部结构的详细内容。但是，关于 LSTM 的直观指南可以参考：[`colah.github.io/posts/2015-08-Understanding-LSTMs`](http://colah.github.io/posts/2015-08-Understanding-LSTMs)。
+与 RNN 或 SimpleRNN 不同，LSTM 单元的内部结构更为复杂。*图 1.5.4*展示了在 MNIST 数字分类上下文中的 LSTM 示意图。LSTM 不仅使用当前输入和过去的输出或隐藏状态，还引入了一个单元状态，`s[t]`，用于将信息从一个单元传递到另一个单元。单元状态之间的信息流由三个门控控制，分别是`f[t]`、`i[t]` 和`q[t]`。这三个门控的作用是决定哪些信息应被保留或替换，以及过去和当前输入中的哪些信息应对当前单元状态或输出做出贡献。本书中不讨论 LSTM 单元的内部结构的详细内容。但是，关于 LSTM 的直观指南可以参考：[`colah.github.io/posts/2015-08-Understanding-LSTMs`](http://colah.github.io/posts/2015-08-Understanding-LSTMs)。
 
 `LSTM()`层可以作为`SimpleRNN()`的直接替代。如果 LSTM 对当前任务而言过于复杂，可以使用一个更简单的版本，称为**门控循环单元**（**GRU**）。GRU 通过将单元状态和隐藏状态结合来简化 LSTM。GRU 还通过减少一个门控来降低复杂度。`GRU()`函数也可以作为`SimpleRNN()`的直接替代。
 

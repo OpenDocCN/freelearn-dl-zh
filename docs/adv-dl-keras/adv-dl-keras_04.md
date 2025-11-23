@@ -483,7 +483,7 @@ def build_discriminator(inputs, y_labels, image_size):
     return discriminator
 ```
 
-以下列表突出显示了为了在生成器构建函数中加入条件化 one-hot 标签而做的代码更改。`Model`实例已针对`z`-向量和 one-hot 向量输入进行了修改。
+以下列表突出显示了为了在生成器构建函数中加入条件化 one-hot 标签而做的代码更改。`Model`实例已针对`z`向量和 one-hot 向量输入进行了修改。
 
 列表 4.3.2，`cgan-mnist-4.3.1.py` 显示了 CGAN 生成器。突出显示了 DCGAN 中所做的更改：
 
