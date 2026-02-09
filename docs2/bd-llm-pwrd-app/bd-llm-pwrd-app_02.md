@@ -1,6 +1,6 @@
-# 2
 
-# LLMs for AI-Powered Applications
+
+# 第二章：LLMs for AI-Powered Applications
 
 在*第一章*，*大型语言模型简介*中，我们介绍了**大型语言模型**（LLM）作为具有生成能力和强大常识推理能力的强大基础模型。现在，下一个问题是：我应该用这些模型做什么？
 

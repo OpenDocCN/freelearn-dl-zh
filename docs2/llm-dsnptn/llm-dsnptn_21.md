@@ -1,6 +1,6 @@
-# 21
 
-# 思维树（Tree-of-Thoughts）提示
+
+# 第二十一章：思维树（Tree-of-Thoughts）提示
 
 **思维树（Tree-of-thoughts**）(**ToT**)提示是一种技术，旨在通过允许对不同的推理路径进行更结构化的探索来增强 LLMs 的解决问题能力。
 

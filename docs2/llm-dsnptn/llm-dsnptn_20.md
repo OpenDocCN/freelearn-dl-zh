@@ -1,6 +1,6 @@
-# 20
 
-# 思维链提示
+
+# 第二十章：思维链提示
 
 **思维链**（**CoT**）**提示**起源于一篇名为《思维链提示引发大型语言模型中的推理》的研究论文，该论文由谷歌研究人员 Jason Wei、Xuezhi Wang、Dale Schuurmans、Maarten Bosma、Brian Ichter、Fei Xia、Ed Chi、Quoc Le 和 Denny Zhou 于 2022 年发表。
 
