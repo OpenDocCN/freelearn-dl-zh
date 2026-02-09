@@ -1,0 +1,2086 @@
+- en: <title>Querying Our Data, Part 2 – Postprocessing and Response Synthesis</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Querying Our Data, Part 2 – Postprocessing and Response Synthesis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Building on the knowledge acquired in the previous chapter, we will now explore
+    various postprocessing techniques to refine the retrieved context before covering
+    the final query response synthesis. Afterward, we will learn how to bring all
+    these components together into powerful query engines so that we can perform end-to-end
+    natural language querying over documents. We’ll also get to practice our new skills
+    by working on our tutoring project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Re-ranking, transforming, and filtering nodes using postprocessors
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the response synthesizers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing output parsing techniques
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building and using query engines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hands-on – building quizzes in PITS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: <title>Technical requirements</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For this chapter, you will need to install the following packages in your environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*spaCy* : https://spacy.io/'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Guardrails-AI* : https://www.guardrailsai.com/'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*pandas* : https://pandas.pydata.org/'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'All the code samples in this chapter can be found in the `ch7` subfolder of
+    this book’s GitHub repository: https://github.com/PacktPublishing/Building-Data-Driven-Applications-with-LlamaIndex
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <title>Re-ranking, transforming, and filtering nodes using postprocessors</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Re-ranking, transforming, and filtering nodes using postprocessors
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'from llama_index.core.postprocessor import SimilarityPostprocessor from llama_index.core
+    import VectorStoreIndex, SimpleDirectoryReader reader = SimpleDirectoryReader(''files/other'')
+    documents = reader.load_data() index = VectorStoreIndex.from_documents(documents)
+    retriever = index.as_retriever(retriever_mode=''default'') nodes = retriever.retrieve(
+    "What did Fluffy found in the gentle stream?" ) Print(''Initial nodes:'') for
+    node in nodes: print(f"Node: {node.node_id} – Score: {node.score}") Pp = SimilarityPostprocessor(
+        nodes=nodes,     similarity_cutoff=0.86 ) remaining_nodes = pp.postprocess_nodes(nodes)
+    print(''Remaining nodes:'') for node in remaining_nodes: print(f"Node: {node.node_id}
+    – Score: {node.score}") Initial nodes: Node: da51464d-e83f-4aec-a9db-8bd839ab3a4c
+    - Score: 0.8516122822966049 Node: f839ec27-e487-4132-b139-79e3695d5500 - Score:
+    0.8368901228748273 Remaining nodes: Node: da51464d-e83f-4aec-a9db-8bd839ab3a4c
+    - Score: 0.8516122822966049 pip install spacy from llama_index.core.postprocessor
+    import KeywordNodePostprocessor from llama_index.core.schema import TextNode,
+    NodeWithScore nodes = [     TextNode(         text="Entry no: 1, <SECRET>, Attack
+    at Dawn"     ),     TextNode(         text="Entry no: 2, <RESTRICTED>, Go to point
+    Bravo"     ),     TextNode(         text="Entry no: 3, <PUBLIC>, text: Roses are
+    Red"     ), ] node_with_score_list = [     NodeWithScore(node=node) for node in
+    nodes ] pp = KeywordNodePostprocessor(     exclude_keywords=["SECRET", "RESTRICTED"]
+    ) remaining_nodes = pp.postprocess_nodes(     node_with_score_list ) print(''Remaining
+    nodes:'') for node_with_score in remaining_nodes:     node = node_with_score.node
+        print(f"Text: {node.text}") from llama_index.core.postprocessor import     MetadataReplacementPostProcessor
+    from llama_index.core.schema import TextNode, NodeWithScore nodes = [     TextNode(
+            text="Article 1",         metadata={"summary": "Summary of article 1"}
+        ),     TextNode(         text="Article 2",         metadata={"summary": "Summary
+    of article 2"}     ), ] node_with_score_list = [     NodeWithScore(node=node)
+    for node in nodes ] pp = MetadataReplacementPostProcessor(     target_metadata_key="summary"
+    ) processed_nodes = pp.postprocess_nodes(     node_with_score_list ) for node_with_score
+    in processed_nodes:     print(f"Replaced Text: {node_with_score.node.text}") Replaced
+    Text: Summary of article 1 Replaced Text: Summary of article 2 from llama_index.core.postprocessor.optimizer
+    import     SentenceEmbeddingOptimizer optimizer = SentenceEmbeddingOptimizer(
+        percentile_cutoff=0.8,     threshold_cutoff=0.7 ) query_engine = index.as_query_engine(
+        optimizer=optimizer ) response = query_engine.query("<your_query_here>")'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the previous chapter, we discussed the various retrieval methods that LlamaIndex
+    offers. We extracted the necessary context to be able to enrich and improve the
+    query we are now sending to the LLM. But is this enough?
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we have already discussed, *naive* retrieval methods are unlikely to produce
+    ideal results in any scenario. There will probably be many situations where the
+    returned nodes will perhaps contain irrelevant information or will not be sorted
+    in chronological order. These kinds of situations could put the LLM in difficulty,
+    adversely affecting the quality of the prompt that our RAG application builds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A quick side notes
+  prefs: []
+  type: TYPE_NORMAL
+- en: In case it wasn’t already obvious, the main purpose of a RAG flow is to programmatically
+    build prompts. Instead of manually building these prompts and then inputting them
+    into a ChatGPT-like interface, LlamaIndex dynamically assembles the prompts from
+    our documents, which are split into nodes and then indexed and selected using
+    retrievers. Many things could go wrong in this process. Maybe we didn’t ingest
+    the original documents completely or correctly, or maybe we didn’t choose the
+    right `chunk_size` value and ended up with nodes that were too granular or too
+    loaded with irrelevant information. Maybe we didn’t index them correctly, or maybe
+    the retriever we used simply didn’t select the nodes in the correct order or brought
+    in more information than we wanted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are many points where errors could creep into the whole process. That
+    doesn’t sound very encouraging, does it?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The good news is that we still have an opportunity to improve this context before
+    the final step of sending the information to the LLM. This opportunity comes in
+    the form of **node postprocessors** and **response synthesizers** .
+  prefs: []
+  type: TYPE_NORMAL
+- en: But first, let’s understand how postprocessors work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Node postprocessors are critical in refining the results that are obtained from
+    the retrieval process. That is because no matter how good the retrieval step is,
+    there is always a chance of additional, unnecessary retrieved data *polluting*
+    our context and confusing the LLM. In other cases, the retrieved nodes might be
+    relevant but not necessarily in the correct order, and that can also affect the
+    quality of the LLM’s response.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 7* *.1* depicts the role of the postprocessors in a RAG workflow:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B21861_07_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.1 – The role of node postprocessors in RAG
+  prefs: []
+  type: TYPE_NORMAL
+- en: These processors operate on a set of nodes, applying transformations or filters
+    to enhance the relevance and quality of the information. They can be used on their
+    own, to process a given set of nodes, but they are more commonly used within query
+    engines, after the node retrieval step and before response synthesis. LlamaIndex
+    provides various built-in processors but also the option of building custom postprocessing
+    logic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s begin by understanding the different purposes and operating modes of node
+    postprocessors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring how postprocessors filter, transform, and re-rank nodes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At their core, all node postprocessors work by adjusting the retrieved context
+    before that context gets injected into a prompt and sent to the LLM for response
+    synthesis. They operate by either filtering, transforming, or re-ranking nodes.
+    Let’s have a look at these operating modes to get a better understanding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Node filtering postprocessors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Node filtering postprocessors are designed to remove irrelevant or unnecessary
+    nodes from the set of retrieved results. They work by applying specific criteria
+    to each node and discarding those that don’t meet the requirements. For example,
+    `SimilarityPostprocessor` filters out nodes whose similarity score falls below
+    a specified threshold, ensuring that only highly relevant nodes are passed to
+    the language model for response generation. Similarly, `KeywordNodePostprocessor`
+    keeps only the nodes that contain certain required keywords or excludes nodes
+    with specific unwanted keywords. Node filtering helps to reduce information overload
+    and improve the quality of the final response by focusing on the most pertinent
+    information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Node transforming postprocessors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Node transforming postprocessors modify the content of the retrieved nodes without
+    necessarily removing any of them. These postprocessors aim to enhance the relevance
+    and usefulness of the information within each node. One example is `MetadataReplacementPostprocessor`
+    , which replaces the content of a node with a specific field from that node’s
+    metadata. This allows the text being used to be dynamically adjusted to represent
+    a node based on its metadata rather than the original ingested content. Another
+    example is `SentenceEmbeddingOptimizer` , which optimizes longer text passages
+    by selecting the most relevant sentences within a node based on their semantic
+    similarity to the query. By transforming the nodes’ content, these postprocessors
+    help align the information more closely with the user’s query and improve the
+    overall quality of the generated response.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Node re-ranking postprocessors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: These postprocessors don’t specifically remove or change the retrieved nodes.
+    The purpose of a re-ranker is to take the initial set of nodes returned by the
+    retriever and reorder them based on their relevance to the given query. This is
+    particularly important when dealing with long-form queries or complex information
+    needs as many LLMs struggle to effectively process and generate accurate responses
+    when provided with lengthy or multi-faceted contexts. By employing a re-ranker,
+    the RAG system can prioritize the most pertinent information and present it to
+    the LLM in a more coherent format, thus leading to better responses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Re-rankers often leverage advanced techniques such as deep learning, transformers,
+    or LLMs themselves to assess the relevance of each retrieved document or passage.
+    They may consider factors such as semantic similarity, context overlap, or query-document
+    alignment to assign relevance scores to the retrieved nodes. The top-ranked nodes
+    are then fed into the LLM, which generates the final response based on this refined
+    context, enhancing the overall performance and utility of the RAG system. By incorporating
+    a re-ranking step into the RAG pipeline, the system can overcome the limitations
+    of LLMs in handling long or complex queries, ultimately providing more accurate,
+    relevant, and useful responses to users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll explore the built-in LlamaIndex postprocessors in all three categories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SimilarityPostprocessor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`SimilarityPostprocessor` filters nodes by comparing them to a similarity score
+    threshold. Nodes that score below this threshold are removed, ensuring only relevant
+    and similar content to the query remains. This is particularly useful because
+    it ensures that the nodes that are passed to the language model for response generation
+    are relevant by having a high degree of semantic correlation with the query.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A potential use cases
+  prefs: []
+  type: TYPE_NORMAL
+- en: An e-commerce company has a customer support chatbot powered by an LLM. Let’s
+    assume that the chatbot retrieves nodes from `KeywordTableIndex` and tries to
+    identify all contexts based on the keywords contained in the user query. For a
+    query such as, *How do I return a damaged item I received yesterday?* , the retrieved
+    nodes might include general return policies, product descriptions for items ordered
+    by the customer, shipping information, and even irrelevant product advertisements
+    or promotions. `SimilarityPostprocessor` could filter out nodes that are not closely
+    related to the specific context of the query. In this case, it would prioritize
+    nodes specifically discussing return policies for damaged items and recent orders
+    by the customer, while discarding general product advertisements and unrelated
+    shipping details. That would greatly increase the chance of the LLM producing
+    a more meaningful response.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This postprocessor takes a list of nodes, typically fetched by a retriever,
+    as input, each with an associated similarity score. The postprocessor can be configured
+    with a `similarity_cutoff` parameter. This threshold determines the minimum score
+    a node must have to be considered relevant. If a node’s similarity score is `None`
+    or if it’s lower than `similarity_cutoff` , the node is considered not to meet
+    the threshold and is therefore excluded from the final list. Essentially, this
+    postprocessor filters out any nodes that have a similarity score below the set
+    threshold. This ensures that only nodes closely related to the query are retained.
+    The nodes meeting or exceeding the similarity score threshold is then passed on
+    for further processing or response synthesis. Here’s a simple example of how we
+    can use it in practice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the first part of the code, we took care of the imports and then ingested
+    a sample file into a document. Then, we created a `VectorStoreIndex` index and
+    used the default retriever to fetch relevant nodes based on a query:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we printed the original list of nodes since they were fetched by the retriever.
+    Now, let’s apply the postprocessor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After building and applying the postprocessor on the nodes, we print the remaining
+    nodes. The output will be similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, the second node from the initial list was removed because it
+    had a score below the threshold we defined – 0.85.
+  prefs: []
+  type: TYPE_NORMAL
+- en: KeywordNodePostprocessor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`KeywordNodePostprocessor` is designed to refine the selection of nodes based
+    on specific keywords. This postprocessor works by ensuring that the retrieved
+    nodes either contain certain required keywords or exclude specific unwanted keywords.
+    It’s a great method for aligning the content of the nodes more closely with the
+    user’s query by focusing on keyword relevance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practical use case in a RAG scenario
+  prefs: []
+  type: TYPE_NORMAL
+- en: Imagine a scenario in a corporate environment where the RAG system is used to
+    retrieve information from a vast internal database for employee queries. However,
+    there are certain confidential files or sections of files that should not be accessible
+    to all employees. By configuring `KeywordNodePostprocessor` with keywords that
+    indicate sensitive content (such as *confidential* , *restricted* , or specific
+    project code names), the system can automatically exclude nodes containing these
+    keywords from the retrieval results. This setup ensures that sensitive information
+    is not inadvertently disclosed, maintaining the integrity and confidentiality
+    of the corporate data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It takes a list of nodes as input, typically fetched by a retriever, and is
+    configured with parameters for required and excluded keywords. `KeywordNodePostprocessor`
+    then processes these nodes, keeping only those that meet the keyword criteria.
+    This ensures that the final set of nodes is highly relevant to the specific query,
+    leading to more accurate and useful responses in a RAG system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quick note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The postprocessor relies on the `spaCy` library ( https://pypi.org/project/spacy/
+    ), which you must install on your system before running the next example. This
+    is a powerful Python library for advanced NLP. Its features include neural network
+    models for various NLP tasks such as tagging, parsing, and NER. It’s a piece of
+    commercial open source software available under an MIT license.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use `KeywordNodePostprocessor` , make sure you install spaCy in your environment
+    by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a basic example of how to use this postprocessor to filter out some
+    log entries based on their classification label:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this example, we’re manually defining the nodes instead of ingesting data
+    from external files. After we define the nodes, we have to wrap them into `NodeWithScore`
+    because that’s the expected input of the postprocessor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, `KeywordNodePostprocessor` filters the nodes fetched by the
+    retriever, excluding those that include `SECRET` and `RESTRICTED` .
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Several parameters can be customized with this postprocessor. The most important
+    ones are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`required_keywords` : This is a list of strings, where each string represents
+    a keyword that must be present in the node for it to be included in the final
+    output. If this list is not empty, the postprocessor will filter out any nodes
+    that do not contain these keywords.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`exclude_keywords` : Similar to `required_keywords` , this is also a list of
+    strings. However, in this case, any node containing a keyword from this list will
+    be excluded from the final output. It’s used for filtering out nodes based on
+    unwanted content.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`lang` : This argument specifies the language model to be used by the internal
+    spaCy NLP library. The default value is *en* for English, but it can be set to
+    other language codes supported by Spacy. The effectiveness and accuracy of keyword
+    matching might depend on the language-specific processing of the text. For example,
+    the way words are tokenized by Spacy can affect how keywords are identified.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Keep in mind that keywords – both required and excluded – are processed in a
+    case-sensitive way. To ensure consistent behavior regardless of case, you might
+    consider converting both the keywords and the text in the nodes into the same
+    case (for example, all lowercase) before processing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PrevNextNodePostprocessor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`PrevNextNodePostprocessor` is designed to enhance node retrieval by fetching
+    additional nodes based on their relational context in the document. This postprocessor
+    can operate in three modes – `previous` , `next` , or `both` – allowing users
+    to retrieve nodes that are either preceding, succeeding, or both concerning the
+    current set of nodes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A potential use cases
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consider a legal research scenario where a user queries a RAG system about a
+    specific legal case. `PrevNextNodePostprocessor` can be set in *both* modes to
+    retrieve not only the nodes directly related to the case but also the preceding
+    and succeeding nodes that might contain vital contextual information, such as
+    related legal precedents or subsequent rulings. This ensures a comprehensive understanding
+    of the case by providing a broader context, which is especially crucial in legal
+    research where every detail matters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The process begins by taking a list of nodes, typically fetched by a retriever.
+    It then extends this list by adding nodes that are directly preceding, succeeding,
+    or both, based on the configured mode. This results in a more contextually enriched
+    set of nodes, leading to responses that are more nuanced and comprehensive in
+    a RAG system. Here’s a list of the parameters for this postprocessor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`docstore` : The actual document store storing the nodes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`num_nodes` : This sets the number of nodes to return. By default, it returns
+    1 node in the chosen direction.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`mode` : Can be set to previous, next, or both.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Additionally, we have `AutoPrevNextNodePostprocessor` , which is an advanced
+    variation of `PrevNextNodePostprocessor` . This one is intelligently inferring
+    whether to fetch additional nodes based on the *previous* , *next* , or neither
+    relationship in response to the query context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In comparison to `PrevNextNodePostprocessor` , which requires manual setting
+    for mode selection, `AutoPrevNextNodePostprocessor` automates this process. It
+    utilizes specific prompts to infer the direction (previous, next, or none) based
+    on the current context and the query.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This inference is particularly useful in scenarios where the direction of node
+    retrieval isn’t explicitly clear or when it needs to be dynamically determined
+    based on the nature of the query and existing answers. For example, in a scenario
+    where a RAG system is used for historical research, `AutoPrevNextNodePostprocessor`
+    can automatically determine whether to fetch preceding or succeeding historical
+    events or data points based on the query’s context, enhancing the relevance and
+    comprehensiveness of the response.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This capability makes it useful in applications where the sequence of information
+    and its contextual relevance are essential for generating accurate and useful
+    responses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The prompts can be customized using the `infer_prev_next_tmpl` and `refine_prev_next_tmpl`
+    arguments. There’s also a `Verbose` argument, which provides more visibility on
+    the selection process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LongContextReorder
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`LongContextReorder` is specifically designed to improve the performance of
+    LLMs in handling long context scenarios. Research has shown that significant details
+    in extended contexts are better utilized when positioned at the start or end of
+    the input context *(Liu et al., Lost in the Middle: How Language Models Use Long
+    Contexts (2023)* – https://arxiv.org/abs/2307.03172 ). The `LongContextReorder`
+    postprocessor addresses this by reordering the nodes, placing crucial information
+    where it’s more accessible to the model.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A practical scenario
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a RAG system, particularly in academic or research-oriented queries where
+    long, detailed documents are common, `LongContextReorder` can be very useful.
+    For instance, if a user queries about detailed historical events, the system might
+    retrieve lengthy nodes encompassing extensive details. `LongContextReorder` would
+    rearrange these nodes, ensuring that the most relevant details are positioned
+    at the beginning or end, thereby enhancing the model’s ability to extract and
+    utilize this crucial information effectively. This results in responses that are
+    more coherent and contextually rich, significantly improving the overall quality
+    of the output in cases involving lengthy contexts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`LongContextReorder` takes a list of nodes, typically fetched by a retriever,
+    and reorders them based on their relevance scores. The goal is to optimize the
+    arrangement of information in a way that maximizes the language model’s ability
+    to access and process significant details, especially in cases where the context
+    length might otherwise hinder performance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This postprocessor is particularly effective in scenarios where detailed and
+    comprehensive responses are required, ensuring that the most relevant information
+    is presented in a way that is most accessible to the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PIINodePostprocessor and NERPIINodePostprocessor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: These postprocessors mask **personally identifiable information** ( **PII**
+    ) in nodes, improving privacy and security. `PIINodePostprocessor` is designed
+    to use a local model, while `NERPIINodePostprocessor` relies on a NER model from
+    Hugging Face. We saw an example of how this postprocessor works in *Chapter 4*
+    , *Ingesting Data into Our RAG Workflow* , in the *Scrubbing personal data and
+    other sensitive* *information* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`PIINodePostprocessor` takes the following arguments:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`llm` : This object should contain a local model for processing.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pii_str_tmpl` : This can be used to customize the default prompt template
+    used for masking personal data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pii_node_info_key` : This string serves as a key in the node’s metadata to
+    store information related to PII processing. It’s used to track and reference
+    the PII data processed within each node. It can be used to later recompose the
+    original information if required.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`NERPIINodePostprocessor` can be configured with the `pii_node_info_key` parameter.
+    Similar to the previous postprocessor, this string key is used to store information
+    related to PII processing in the node’s metadata. It’s a unique identifier within
+    the node metadata for tracking the PII data that has been processed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Best practice
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we discussed in *Chapter 4* , *Ingesting Data into Our RAG Workflow* , for
+    maximum privacy, the best approach is to apply PII masking before the actual retrieval.
+    This way, you ensure that no sensitive data is sent to any external LLM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s see what other postprocessors we have.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MetadataReplacementPostprocessor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`MetadataReplacementPostProcessor` is designed to replace the content of a
+    node with a specific field from that node’s metadata. This allows us to dynamically
+    switch the text that’s used to represent a node based on metadata instead of the
+    original ingested content.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A useful application for this postprocessor
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Imagine a workflow where files are ingested via `SentenceWindowNodeParser`
+    , which splits text into sentence-level nodes and captures the surrounding text
+    in metadata. By configuring the processor to swap the node’s content with the
+    metadata field containing the *sentence window* , queries would retrieve full
+    sentence context instead of sentence fragments. This allows the retriever to operate
+    on sentences for higher accuracy while still exposing broader document context
+    to the LLM. This technique can be very useful for processing large documents.
+    You can find a complete example here: https://docs.llamaindex.ai/en/stable/examples/node_postprocessor/MetadataReplacementDemo.html
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This postprocessor takes a list of nodes as input and is configured with the
+    `target_metadata_key` parameter, specifying which metadata field to use for the
+    replacement. `MetadataReplacementPostProcessor` processes the nodes by replacing
+    the `text` attribute of each node with the contents of the given metadata key.
+    If the key is missing, the original text is kept. This provides flexibility to
+    transform node content on the fly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s another, simple example that will help you understand its functionality:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we defined two sample nodes on which we’ll now apply the postprocessor.
+    We’ll instruct it to replace the content of each node with the values stored in
+    the `summary` metadata field:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After processing takes place, the output should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s explore the other postprocessing options that LlamaIndex provides.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SentenceEmbeddingOptimizer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`SentenceEmbeddingOptimizer` is built to optimize longer text passages by selecting
+    the most relevant sentences given a query based on semantic similarity. It uses
+    advanced NLP techniques to score sentence relevance and discard less useful sentences.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why and where should we use it?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a workflow that’s ingesting lengthy documents, retrieving full passages may
+    exceed model context size limits. `SentenceEmbeddingOptimizer` allows us to send
+    only the most important sentences to the LLM while preserving enough context.
+    This prevents wasted tokens on irrelevant text by reducing noisy content. Removing
+    irrelevant parts of the content also improves the response time and can greatly
+    reduce the cost associated with the final LLM call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The postprocessor takes a list of nodes as input and uses embeddings to analyze
+    the semantic similarity of each sentence to the search query. Sentences closest
+    to the query vector are retained while distant, unrelated sentences are stripped
+    away.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is how we use it in practice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this example, `SentenceEmbeddingOptimizer` uses a `percentile_cutoff` value
+    of 0.8 and a `threshold_cutoff` value of `0.7` to select sentences. This means
+    it aims to retain the top 80% of sentences by similarity score and further filters
+    to include only those with similarity scores above `0.7` . The main parameters
+    that can be customized are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`percentile_cutoff` : The percentage of top sentences above the similarity
+    threshold to preserve. This allows us to compact nodes to the most relevant 75%
+    of sentences, for example.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`threshold_cutoff` : An absolute similarity score threshold where only sentences
+    with similarity above this value are kept. This is useful for more stringent filtering.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`context_before` and `context_after` : These allow us to keep several sentences
+    before and after the matches for more context.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In a similar fashion to `KeywordNodePostprocessor` , the `SentenceEmbeddingOptimizer`
+    postprocessor removes less relevant sentences from nodes. However, in this case,
+    it does so use vector search rather than keywords.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This postprocessor is more about refining and shortening the content within
+    each node for better alignment with the query. This allows for optimal information
+    density tailored to the query while accounting for the LLM’s limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In contrast, processors such as `KeywordNodePostprocessor` and `SimilarityPostprocessor`
+    operate at the node level, keeping or removing entire nodes based on keywords
+    or similarity scores, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time-based postprocessors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Time-based postprocessors** are designed to prioritize recency and provide
+    users with the latest, most up-to-date information. They achieve this goal through
+    various techniques, such as sorting nodes by `date` metadata, filtering based
+    on embedding similarity, or applying time-decay scoring models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s get an overview of these processors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FixedRecencyPostprocessor
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This simple postprocessor focuses results on the most recent data by sorting
+    nodes based on their `date` metadata and then returning the `top_k` nodes sorted
+    by date. This ensures we get the latest data, which is critical for applications
+    such as environmental monitoring, where having current information is vital. For
+    example, when querying about recent air quality metrics, the postprocessor guarantees
+    that only the most up-to-date readings are provided. They focus the results on
+    the latest information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The two configurable parameters for this processor are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`top_k` : The number of top recent nodes to return'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`date_key` : The metadata key that’s used to identify the date in each node'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: EmbeddingRecencyPostprocessor
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This postprocessor further refines recency-sorted results by comparing node
+    contents using embedding similarity and removing those too similar to earlier
+    nodes. Nodes that are too similar to earlier ones are filtered out, ensuring that
+    the content is both recent and diverse. The output it produces is not just recent
+    but also diverse in terms of the information it contains.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`EmbeddingRecencyPostprocessor` sorts the nodes by date using the specified
+    `date_key` metadata field. Then, it generates a query embedding for each node
+    by inserting the node’s content into the `query_embedding_tmpl` template. This
+    query embedding is used to find similar documents.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Where could that be useful?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s think, for example, about a news aggregation service. When users query
+    about a recent event, the system retrieves a set of nodes (news articles, in this
+    case) sorted by date. However, many articles might cover the same event, leading
+    to redundant information. `EmbeddingRecencyPostprocessor` examines these articles
+    and filters out those that are too similar in content to more recent articles.
+    This prevents us from presenting multiple redundant articles about the same event
+    by eliminating those whose content significantly overlaps with more recent coverage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Its configurable parameters are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`similarity_cutoff` : The threshold for embedding similarity, above which nodes
+    are considered too similar and filtered out'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`date_key` : This specifies the metadata key that’s used for sorting nodes
+    by date'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`query_embedding_tmpl` : This is the template that’s used to generate query
+    embeddings for each node'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TimeWeightedPostprocessor
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`TimeWeightedPostprocessor` prioritizes newer results by reranking nodes based
+    on a **time-decay function** accounting for how recently they were accessed. This
+    favors fresh, less repeated content, which is critical for use cases such as trending
+    news aggregation, where users want the latest updates rather than the same information.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The scoring dynamically adapts to changing access patterns over time. `TimeWeightedPostprocessor`
+    is engineered to re-rank nodes based on their recency and prior access history,
+    applying a time-weighted scoring system. This postprocessor is particularly effective
+    in scenarios where it’s crucial to avoid repeatedly presenting the same information
+    and where the freshness of content matters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It works by adjusting the score of each node based on the last time it was accessed,
+    applying a decay factor to prioritize less recently accessed content. This dynamic
+    reranking ensures that the output is not just relevant but also timely and varied.
+    This works great for applications where keeping the users updated with the most
+    recent information is essential.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It also has several parameters that we can tweak:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`time_decay` : The decay factor for the time-weighted scoring'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`last_accessed_key` : Metadata key for tracking when a node was last accessed'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`time_access_refresh` : A Boolean to determine if the last accessed time should
+    be updated'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`now` : An optional parameter to set the current time. This is useful for testing'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`top_k` : The number of top nodes to return after reranking. The default value
+    is 1'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With these advanced time-aware postprocessors, our RAG system transforms into
+    a dynamic information curator, adept at navigating the temporal aspects of data.
+    They ensure that our system doesn’t just retrieve information but smartly selects
+    content that’s not only recent but also varied and relevant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This makes them indispensable for scenarios where timely and diverse information
+    is crucial, offering us a consistently fresh and rich experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Re-ranking postprocessors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Along with the basic processors we’ve discussed so far, LlamaIndex provides
+    several more sophisticated options that make use of LLMs or embedding models for
+    re-ranking nodes. As a general principle, they work by re-ordering the nodes based
+    on their relevance to the query, rather than removing them or altering their content.
+    Some of these postprocessors, such as `SentenceTransformerRerank` , also update
+    the relevance scores of the nodes to reflect their similarity to the query.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'They all accept a `top_n` parameter, which specifies how many re-ordered nodes
+    they should return. You can explore them in full detail by consulting the official
+    docs: https://docs.llamaindex.ai/en/stable/module_guides/querying/node_postprocessors/
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section provides a quick overview of the available LLM-based processors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LLMRerank
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This processor re-orders nodes by asking an LLM to assign relevance scores.
+    It selects the `top_n` most relevant nodes from a given set based on the user’s
+    query. The prompt that’s used by this postprocessor can be customized via the
+    `choice_select_prompt` parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To increase efficiency, it works in batches. The batch size can also be customized
+    by using the `choice_batch_size` argument. It requires a `query_bundle` argument
+    for processing and uses the model configured in `llm` . Its reranking process
+    involves formatting node contents into prompts, using the LLM to assess relevance,
+    and then reordering nodes based on their calculated relevance scores.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CohereRerank
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This processor re-ranks nodes using Cohere’s neural models ( https://cohere.com/rerank
+    ) to sort nodes by relevance. The default model that’s used is *rerank-english-v2.0*
+    . The `top_n` nodes deemed most relevant by the Cohere model are selected and
+    returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This processor allows us to leverage powerful relevance algorithms provided
+    by Cohere but requires a Cohere API key and their libraries to be installed in
+    the local environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SentenceTransformerRerank
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`SentenceTransformerRerank` uses sentence transformer models to re-rank nodes
+    based on their relevance to a given query.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This process involves scoring nodes using a sentence transformer model, with
+    the default being *cross-encoder/stsb-distilroberta-base* , and then reordering
+    them based on these scores. It selects the top-ranked nodes to return, up to the
+    specified `top_n` limit. You can find more information here: https://www.sbert.net/examples/applications/retrieve_rerank/README.html
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: RankGPTRerank
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This re-ranking postprocessor is designed to improve retrieval results relevance
+    using an LLM such as GPT-3.5\. It involves a process where the user’s query and
+    content from nodes are formatted into prompts, guiding the language model to rank
+    these nodes based on relevance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The model’s output is then used to re-order the nodes, ensuring that the most
+    relevant ones appear at the top. When the context that’s retrieved is too large
+    for the LLM’s context window, `RankGPTRerank` uses a sliding window approach to
+    gradually re-rank a segment of chunks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This method is based on a paper by Sun et al. (2023), *Is ChatGPT Good at Search?
+    Investigating Large Language Models as Re-Ranking* *Agents* ( https://arxiv.org/abs/2304.09542v2
+    ).
+  prefs: []
+  type: TYPE_NORMAL
+- en: LongLLMLinguaPostprocessor
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'This very useful postprocessor is designed to optimize node texts concerning
+    queries by compressing them. It’s based on a method described in a paper by Jiang
+    et al. (2023), *LLMLingua: Compressing Prompts for Accelerated Inference of Large
+    Language* *Models* ( https://arxiv.org/abs/2310.05736v2 ).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`LongLLMLinguaPostprocessor` addresses several issues associated with LLMs,
+    such as increased API latency, context window limit overruns, and expensive API
+    costs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The key idea is to intelligently compress prompts in a way that they focus on
+    the most relevant information, enabling more efficient and accurate processing
+    by the LLM. It offers a balance between performance and efficiency, demonstrating
+    that prompt compression – with up to 20x achievements – can lead to substantial
+    improvements in model inference and cost-effectiveness without considerable loss
+    in performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The processor is designed to work with a local, well-trained language model.
+    This setup allows for the efficient compression of prompts for use with LLMs,
+    supporting the optimization process locally without relying on external API calls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can find a complete demo here: https://github.com/microsoft/LLMLingua/blob/main/examples/RAGLlamaIndex.ipynb
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Measuring the effectiveness of LLM-based re-ranking
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A common source of concern – especially when using LLM-based re-rankers – is
+    the quality of their output. Because LLMs are trained on vast amounts of data,
+    they can sometimes generate results that are biased, inconsistent, or even factually
+    incorrect. This is particularly problematic when dealing with specialized domains
+    or sensitive information. To verify that the LLM-based postprocessors are re-ranking
+    the nodes well enough, it is important to properly evaluate their performance.
+    Here are a few approaches you can use to gauge the quality of the re-ranking step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Manual relevance assessment** : Manually examine the re-ranked results to
+    check if the most relevant nodes are indeed appearing at the top. This qualitative
+    evaluation depends on human judgment to determine if the re-ranking matches the
+    query’s intent. While not exactly very scientific, this simple approach may suffice
+    for simple use cases, experiments, or non-production RAG applications.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Benchmark datasets** : Evaluate the re-ranking performance on standard **information
+    retrieval** ( **IR** ) benchmarks that have pre-defined queries and relevance
+    judgments. This process can be time-consuming and it may require a well-prepared
+    evaluation dataset but it will save you from troubles later in the RAG workflow.
+    By comparing the re-ranked results against the ground truth, you can calculate
+    metrics such as precision, recall, and others to quantify the re-ranking quality.
+    We’ll cover the evaluation process in more detail in *Chapter 9* , *Customizing
+    and Deploying Our* *LlamaIndex Project.*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**User feedback** : In real-world applications, collect user feedback on the
+    re-ranked search results. User satisfaction scores, click-through rates, or other
+    engagement metrics can indicate if the re-ranking enhances the user experience
+    and provides more relevant results. There’s an inherent advantage to this method.
+    Because it relies on human feedback directly collected in the live environment,
+    it becomes a form of **continuous evaluation** . This makes it useful in detecting
+    any potential **model drift** , thus enabling timely adjustments to our pipeline
+    to help us avoid quality degradation over time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A/B testing** : Another form of gathering user feedback would be by running
+    controlled experiments where some users are shown the original ranking, while
+    others see the LLM-based re-ranked results. Compare the performance metrics between
+    the two groups to assess if the re-ranking leads to improved outcomes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Domain expert evaluation** : For specialized domains, ask subject matter
+    experts to review the re-ranked results and provide feedback on their relevance
+    and quality. While more expensive and difficult than the other options, this method
+    could be the best solution when dealing with highly technical or niche topics
+    that require a deep understanding of the subject matter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The evaluation method you choose will depend on your specific use case, available
+    resources, and the level of rigor you need. Using a mix of qualitative and quantitative
+    approaches can give you a thorough assessment of the LLM’s re-ranking performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the model drift phenomenon
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'While not necessarily specific to re-ranking, model drift can significantly
+    impact the quality of our RAG pipelines and it’s an important factor to consider.
+    Our models are static representations of the snapshot datasets that are used for
+    their training. But in time, that data changes. For example, new concepts may
+    emerge that were not included in the training data, or the data itself may shift
+    in distribution. This phenomenon is known as *model drift* , and it can manifest
+    in multiple forms:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Data drift** : This occurs when the statistical properties or distribution
+    of the input data change over time. For instance, if a model was trained on a
+    dataset of customer reviews from a specific period, it may not perform as well
+    on newer reviews that contain different language patterns, sentiments, or topics.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Concept drift** : This happens when the relationships between the input features
+    and the target variable evolve. In a RAG system designed to assist with medical
+    queries, the introduction of new diseases, treatments, or medical terminology
+    can lead to concept drift. The model’s understanding of the domain becomes outdated,
+    and its performance may degrade.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Upstream data changes** : This type of drift happens when the data used to
+    train the model is different from the data used in production. For example, if
+    a RAG system is trained on a curated dataset but then applied to raw, unprocessed
+    data in production, the model’s performance may suffer due to differences in data
+    quality, format, or distribution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Feedback loops** : In some cases, the outputs of a model can influence its
+    future inputs, creating a feedback loop. For instance, if a RAG system is used
+    to recommend articles to users, and those recommendations are then used to update
+    the retrieval component, the model may become biased toward its previous outputs,
+    leading to a narrowing of the information it provides over time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Domain shift** : This occurs when a model is applied to a different domain
+    or context than it was originally trained for. In a RAG workflow, if the retrieval
+    component is trained on data from one domain (for example, legal documents) but
+    then used to answer queries in another domain (for example, medical questions),
+    the model’s performance may suffer due to differences in language, terminology,
+    or underlying concepts.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Temporal drift** : This type of drift is related to the passage of time and
+    can encompass both data drift and concept drift. As time passes, the data and
+    concepts relevant to a particular task may evolve, leading to a gradual decline
+    in model performance if not addressed.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To mitigate these various types of model drift, it’s important to continuously
+    monitor the performance of a RAG system, regularly update its retrieval component
+    with new data, and adapt it to changes in the underlying data distribution, concepts,
+    or domain. Additionally, implementing feedback loops carefully and ensuring that
+    the training data is representative of the production environment can help minimize
+    the impact of upstream data changes and feedback-related drift. This helps ensure
+    that our RAG system remains accurate, up-to-date, and aligned with the evolving
+    needs of the users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Final thoughts about node postprocessors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If the existing ones are not exactly fit for our particular use case, we have
+    the option to build our own. **Custom postprocessors** can be built by extending
+    `BaseNodePostprocessor` . You can find a complete example here: https://docs.llamaindex.ai/en/stable/module_guides/querying/node_postprocessors/root.html#custom-node-postprocessor
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: In more complex scenarios, postprocessors can also be chained to apply multiple
+    transformations to the nodes before they’re passed to the response synthesizer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The key is applying the right processors to remove noise, improve relevance
+    signal, inject diversity, and handle sensitive content – leading to higher quality
+    and more reliable generated responses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For now, let’s shift our focus to the final piece of our puzzle: **response
+    synthesizers** .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: <title>Understanding response synthesizers</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding response synthesizers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: from llama_index.core.schema import TextNode, NodeWithScore from llama_index.core
+    import get_response_synthesizer nodes = [     TextNode(text=         "The town
+    square clock was built in 1895"     ),     TextNode(text=         "A turquoise
+    parrot lives in the Amazon"     ),     TextNode(text=         "A rare orchid blooms
+    only at midnight"     ), ] node_with_score_list = [NodeWithScore(node=node) for
+    node in nodes] synth = get_response_synthesizer(     response_mode="refine",     use_async=False,
+        streaming=False, ) response = synth.synthesize(     "When was the clock built?",
+        nodes=node_with_score_list ) print(response) The clock was built in 1895.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The final step before sending our hard-worked contextual data to the LLM is
+    the response synthesizer. It’s the component that’s responsible for generating
+    responses from a language model using a user query and the retrieved context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It simplifies the process of querying an LLM and synthesizing an answer across
+    our proprietary data. Just like the other components of the framework, response
+    synthesizers can be used on their own or configured in query engines to handle
+    the final step of response generation after nodes have been retrieved and postprocessed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a simple example demonstrating how to use one directly on a given set
+    of nodes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first part of the code, we’ve defined some arbitrary nodes. That’s going
+    to be our *proprietary* context. Next, we’ll use a response synthesizer to run
+    an LLM query based on our context:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Curious to take a peek under the hood? What happened in the background here?
+    OK, bear with me for the next few lines – once you understand this example, you’ll
+    know exactly how a response synthesizer works. Let me show you a diagram first:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B21861_07_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.2 – The refine response synthesizer
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a description of the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The synthesizer begins by building a special-purpose prompt, starting with
+    the first node in the list as context. This prompt includes the query, specific
+    instructions, and the context – which in this case is our first node. It uses
+    a default value but can be customized via the System: "You are an expert Q&A system
+    that is trusted around the world. Always answer the query using the provided context
+    information, and not prior knowledge. Some rules to follow: 1\. Never directly
+    reference the given context in your answer. 2\. Avoid statements like ''Based
+    on the context, '' or ''The context information '' or anything along those lines."
+    User: "Context information is below. The town square clock was built in 1895\.
+    Given the context information and not prior knowledge, answer the query. Query:
+    When was the clock built? Answer: " `text_qa_template` parameter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The next step is to send this prompt to the LLM and wait for an answer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After the initial answer comes back, it builds the prompt for the next node
+    while also integrating the first answer in the prompt and refining the final answer
+    using a prompt that can be customized with `refine_template` .
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It then repeats this iterative process for all nodes while constantly refining
+    the final answer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once the nodes are exhausted, it returns the *refined* final answer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In this case, the behavior of the synthesizer is dictated by `response_mode="refine"`
+    .
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, `refine` mode is just one of the several predefined synthesizers in
+    LlamaIndex. Synthesizer mode can be specified using the `response_mode` parameter.
+    Here’s a list of the available response modes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`refine` : As we saw in the previous example, `refine` queries each node individually
+    using `text_qa_template` and `refine_template prompts` to iteratively construct
+    a detailed response. This mode is ideal for constructing detailed responses, ensuring
+    that each piece of information is carefully considered. We can also set `Verbose`
+    to `True` for more visibility on the inner workings of this synthesizer and use
+    `output_cls` to specify a `pydantic` object to use as a response template.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`compact` : This one is similar to `refine` but it concatenates nodes to reduce
+    the number of required LLM queries, balancing detail, and efficiency.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tree_summarize` : This mode uses recursive summarization, processing each
+    node with `summary_template` . It recursively summarizes and queries nodes, concatenating
+    them in each iteration until a single final response remains. It’s very useful
+    for summarization and best suited for creating comprehensive summaries from multiple
+    pieces of information.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`simple_summarize` : This mode truncates nodes to fit in one LLM query for
+    basic summarization. It’s great for brief overviews as it’s quick and cheap, but
+    it may omit finer details.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`accumulate` : This mode applies the query to each node individually and accumulates
+    the responses. It’s best suited for analyzing or comparing responses from multiple
+    sources.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`no_text` : In this operating mode, the response synthesizer fetches nodes
+    without querying the LLM. This is mainly useful for debugging, analyzing raw data,
+    or inspecting the retrieval or postprocessing outputs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`compact_accumulate` : A blend of compact and accumulate, this mode compacts
+    prompts, similar to `compact` mode, and applies the query across nodes. This is
+    especially suitable for efficiently processing multiple sources.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In addition to these predefined modes, custom response synthesizers can be
+    created by subclassing `BaseSynthesizer` and implementing the `get_response` method.
+    You can find a complete example in the official documentation: https://docs.llamaindex.ai/en/stable/module_guides/querying/response_synthesizers/root.html#custom-response-synthesizers
+    . This provides you with the flexibility to design specialized response generation
+    approaches.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Features such as `structured_answer_filtering` can also be enabled on the *refine*
+    and *compact* synthesizers. It uses the LLM to filter out retrieved nodes that
+    are irrelevant to the question, improving response quality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prompt templates such as `text_qa_template` and `refine_template` allow us to
+    customize the prompts that are used at different stages of response synthesis.
+    Additional variables can also be passed to influence response generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overall, response synthesizers handle the critical task of querying nodes and
+    producing a final response, providing options to balance performance, customizability,
+    and accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But guess what? We’re not out of the woods yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s talk about another challenge in our path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: <title>Implementing output parsing techniques</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing output parsing techniques
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'pip install guardrails-ai from langchain.output_parsers import (     StructuredOutputParser,
+    ResponseSchema) from llama_index.core.output_parsers import LangchainOutputParser
+    from llama_index.llms.openai import OpenAI from llama_index.core.schema import
+    TextNode from llama_index.core import VectorStoreIndex from pydantic import BaseModel
+    from typing import List nodes = [     TextNode(         text="Roses have vibrant
+    colors and smell nice."),     TextNode(         text="Oak trees are tall and have
+    green leaves."), ] schemas = [     ResponseSchema(         name="answer",         description=(
+                "answer to the user''s question"         )     ),     ResponseSchema(
+            name="source",         description=(             "the source text used
+    to answer the user''s question, "             "should be a quote from the original
+    prompt."         )     ) ] lc_parser = StructuredOutputParser.from_response_schemas(schemas)
+    output_parser = LangchainOutputParser(lc_parser) llm = OpenAI(output_parser=output_parser)
+    index = VectorStoreIndex(nodes=nodes) query_engine = index.as_query_engine(llm=llm)
+    response = query_engine.query(     "Are oak trees small? yes or no", ) print(response)
+    {''answer'': ''no'', ''source'': ''Oak trees are tall and have green leaves.''}'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our next topic addresses a common problem that’s encountered in RAG applications
+    that rely on structured outputs produced by an LLM. When those outputs are to
+    become inputs in the next processing steps of the application, their structure
+    becomes very important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A bit of background
+  prefs: []
+  type: TYPE_NORMAL
+- en: Due to their non-deterministic nature, LLMs have the bad habit of sometimes
+    producing responses in a format other than the requested one, adding unsolicited
+    comments or descriptions – just like humans if you think about it. Simply relying
+    on clever prompting techniques may not be enough to completely avoid this behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even models specifically trained to follow precise instructions occasionally
+    deviate from the structure we’ve requested. In cases where that output is simply
+    returned to the user, this doesn’t matter much – it might even create a more natural
+    experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The problems arise when the structure of the response matters – for example,
+    when we are going to store that output in a set of variables and then send it
+    to further processing. Have a look at *Figure 7* *.3* for a better understanding:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B21861_07_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.3 – LLMs may produce unpredictable outputs
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, how can we make sure that we receive a structured and predictable output
+    from an LLM? As usual, LlamaIndex comes to our rescue – this time in the form
+    of the **output parsers** and **Pydantic programs** . Here’s an overview of the
+    methods that are used to ensure a structured output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extracting structured outputs using output parsers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Output parsers are essential for managing the unpredictability of LLM responses.
+    They ensure that outputs from LLMs are structured and formatted correctly for
+    subsequent steps in an application. These parsers come in various forms, each
+    with a unique approach to handling and refining the output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GuardrailsOutputParser
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'This particular one is based on the **Guardrails** library provided by Guardrails
+    AI: https://www.guardrailsai.com/ . Guardrails ensures the outputs from LLMs adhere
+    to specified structures and types. This is particularly useful in RAG applications,
+    where outputs need to be consistent and structured for further processing.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Guardrails does this by validating the LLM outputs against a defined format
+    and can take corrective actions such as re-asking the LLM if the outputs don’t
+    meet the specified standards. This feature is essential for maintaining the integrity
+    and usability of LLM outputs in automated processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Under the hood
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the core of how Guardrails works, we find the notion of **rails** . In the
+    Guardrails library, a rail serves as a specification tool for LLM outputs. It
+    is used to enforce specific structures, types, and validation criteria on these
+    outputs. Rails can be defined using either the **Reliable AI Markup Language**
+    ( **RAIL** ) for structured outputs or directly in Python Pydantic structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The purpose of a rail is to ensure that the LLM outputs adhere to predefined
+    quality and format standards, which includes setting validators and corrective
+    actions if the output deviates from these standards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This parser operates based on the following logic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, it takes the initial prompt and an output format specification as input.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Based on the output format specification, it re-formats the prompt, adapting
+    it for the target LLM.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It can also verify the output received from the LLM. If the specification is
+    not validated, it can regenerate the output until the structure is valid.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This parser can be configured with the following parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`guard` : An instance of the `Guard` class from the Guardrails library. This
+    class encapsulates the core functionality of the Guardrails system. It is responsible
+    for enforcing the specifications defined in a RAIL structure'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`llm` : This parameter is optional and is used to select the language model
+    that’s used in conjunction with the Guardrails parser'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`format_key` : This optional parameter is useful when you want to inject specific
+    formatting instructions into the query based on the output format required'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'You can find a complete example of using this method here: https://docs.llamaindex.ai/en/stable/module_guides/querying/structured_outputs/output_parser.html#guardrails
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you’ve familiarized yourself with the RAIL language, the Guardrails library
+    becomes an easy-to-use parsing solution for your apps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Just make sure you install the Guardrails library in your environment first
+    by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In case you’re wondering how you could build an output parser and implement
+    any custom guard rail logic in it, you can find a complete example here: [https://docs.llamaindex.ai/en/latest/examples/output_parsing/llm_program/#define-a-custom-output-parser](https://docs.llamaindex.ai/en/latest/examples/output_parsing/llm_program/#define-a-custom-output-parser)
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: LangchainOutputParser
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Apart from `GuardrailsOutputParser` , LlamaIndex also supports the output parsers
+    provided by Langchain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of using the more complex RAIL language to define validation criteria
+    and corrective actions, `LangchainOutputParser` relies on a simpler concept called
+    a **response schema** .
+  prefs: []
+  type: TYPE_NORMAL
+- en: Response schemas in Langchain are primarily used for structuring the output
+    and focus on defining specific fields that the output should contain. These schemas
+    guide the Langchain system to ensure that the output matches the expected format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This approach is less about enforcing stringent validation rules or corrective
+    actions and more about organizing the output data in a coherent and predictable
+    structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s an example that implements a very simple quotation system based on this
+    method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the first part of our code, we took care of the necessary imports and then
+    defined some random *proprietary data* contained in two nodes. Next, we must define
+    the response schemas that will be used to structure the LLM’s output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see, the schema defines the expected output structure. Now, we can
+    define the Langchain parser and an OpenAI `llm` object that’s been configured
+    to use it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, it’s time to build an index and `QueryEngine` from our Nodes. `QueryEngine`
+    will be configured to use the Langchain parser so that it can structure the output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Neat, isn’t it?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that citations are useful in a RAG system as they increase transparency
+    and allow the answers to be validated against our proprietary data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Langchain parser has two configurable parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`output_parser` : This parameter accepts an instance of a Langchain output
+    parser ( `LCOutputParser` ). This is where the primary logic for parsing and structuring
+    the output is defined. As seen in the previous example, the parser provided here
+    determines how the output from the LLM is processed and formatted'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`format_key` : This is an optional parameter that, if provided, is used to
+    insert additional format instructions into the query. This can be particularly
+    useful when the query needs to be formatted with specific instructions that guide
+    the output generation of the language model'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While both `GuardrailsOutputParser` and `LangchainOutputParser` aim to structure
+    and validate LLM outputs, their specific mechanisms and extent of control over
+    the output format vary. The Langchain parser is more focused on processing the
+    LLM output, while the Guardrails parser has a more proactive role in shaping the
+    query and output format. We’ll talk about the other method next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extracting structured outputs using Pydantic programs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Pydantic programs represent another way to generate structured outputs. Pydantic
+    programs are a form of abstraction in LLM workflows that convert input strings
+    into structured pydantic object types. They can either call functions or rely
+    on text completions, along with output parsers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: They are highly versatile and can be used for various applications, being both
+    composable and adaptable for general or specific use cases. There are multiple
+    programs available for various use cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can find an overview and working examples here: https://docs.llamaindex.ai/en/stable/module_guides/querying/structured_outputs/pydantic_program.html
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You’ll learn how to use a Pydantic program – in this case, `OpenAIPydanticProgram`
+    , later in this chapter, when we continue working on our PITS tutoring app.
+  prefs: []
+  type: TYPE_NORMAL
+- en: <title>Building and using query engines</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building and using query engines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'query_engine = index.as_query_engine() from llama_index.core.retrievers import
+    SummaryIndexEmbeddingRetriever from llama_index.core.postprocessor import SimilarityPostprocessor
+    from llama_index.core.query_engine import RetrieverQueryEngine from llama_index.core
+    import (     SummaryIndex, SimpleDirectoryReader, get_response_synthesizer) documents
+    = SimpleDirectoryReader("files").load_data() index = SummaryIndex.from_documents(documents)
+    retriever = SummaryIndexEmbeddingRetriever(     index=index,     similarity_top_k=3,
+    ) response_synthesizer = get_response_synthesizer(     response_mode="tree_summarize",
+        verbose=True ) pp = SimilarityPostprocessor(similarity_cutoff=0.7) query_engine
+    = RetrieverQueryEngine(     retriever=retriever,     response_synthesizer=response_synthesizer,
+        node_postprocessors=[pp] ) response = query_engine.query(     "Enumerate iconic
+    buildings in ancient Rome" ) print(response) The iconic buildings in ancient Rome
+    included the Colosseum and the Pantheon. from llama_index.core.tools import QueryEngineTool
+    from llama_index.core.query_engine import RouterQueryEngine from llama_index.core.selectors
+    import PydanticMultiSelector from llama_index.core import SummaryIndex, SimpleDirectoryReader
+    from llama_index.core.extractors import TitleExtractor documents = SimpleDirectoryReader("files").load_data()
+    title_extractor = TitleExtractor() for doc in documents:     title_metadata =
+    title_extractor.extract([doc])     doc.metadata.update(title_metadata[0]) indexes
+    = [] query_engines = [] tools = [] for doc in documents:     document_title =
+    doc.metadata[''document_title'']     index = SummaryIndex.from_documents([doc])
+        query_engine = index.as_query_engine(         response_mode="tree_summarize",
+            use_async=True,     )     tool = QueryEngineTool.from_defaults(         query_engine=query_engine,
+            description=f"Contains data about {document_title}",     )     indexes.append(index)
+        query_engines.append(query_engine)     tools.append(tool) qe = RouterQueryEngine(
+        selector=PydanticMultiSelector.from_defaults(),     query_engine_tools=tools
+    ) response = qe.query(     "Tell me about Rome and dogs" ) print(response) from
+    llama_index.core.tools import QueryEngineTool from llama_index.core.query_engine
+    import RouterQueryEngine from llama_index.core.query_engine import SubQuestionQueryEngine
+    from llama_index.core.selectors import PydanticMultiSelector from llama_index.core.extractors
+    import TitleExtractor from llama_index.core import SummaryIndex, SimpleDirectoryReader
+    documents = SimpleDirectoryReader("files/sample").load_data() title_extractor
+    = TitleExtractor() for doc in documents:     title_metadata = title_extractor.extract([doc])
+        doc.metadata.update(title_metadata[0]) indexes = [] query_engines = [] tools
+    = [] for doc in documents:     document_title = doc.metadata[''document_title'']
+        file_name = doc.metadata[''file_name'']     index = SummaryIndex.from_documents([doc])
+        query_engine = index.as_query_engine(         response_mode="tree_summarize",
+            use_async=True,     )     tool = QueryEngineTool.from_defaults(         query_engine=query_engine,
+            name=file_name,         description=f"Contains data about {document_title}",
+        )     indexes.append(index)     query_engines.append(query_engine)     tools.append(tool)
+    qe = SubQuestionQueryEngine.from_defaults(     query_engine_tools=tools,     use_async=True
+    ) response = qe.query(     "Compare buildings from ancient Athens and ancient
+    Rome" ) print(response)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our puzzle is now complete. Throughout the previous chapters, we’ve gradually
+    learned about the key ingredients in a RAG setup. Now, it’s time to bring everything
+    together: the nodes, indexes, retrievers, postprocessors, response synthesizers,
+    and output parsers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll focus on blending these elements into a complex construct:
+    the query engine. We’ll learn about how query engines work and the neat tricks
+    they have up their sleeves.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring different methods of building query engines
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At its core, `QueryEngine` is an interface that processes natural language queries
+    to generate rich responses. It often relies on one or more indexes through retrievers
+    and can also be combined with other query engines for enhanced capabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The easiest way to define `QueryEngine` is using the **high-level API** provided
+    by LlamaIndex, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With just a single line of code, we’ve built a simple query engine from an existing
+    index. Although fast, this method uses `RetrieverQueryEngine` under the hood with
+    the default settings and does not provide many opportunities for customization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we want to have complete control over its parameters and full customization
+    options, we can use the **low-level API** to explicitly build the query engine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s have a look at an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As usual, we start by handling the imports. Next, we ingest our demo files
+    and build a simple `SummaryIndex` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, we throw in a retriever, a response synthesizer, and a node postprocessor.
+    Building a query engine with this low-level API approach allows us to fully customize
+    each component:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, it’s time to bring them all together and assemble our `QueryEngine` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The output should look similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve built a simple query engine, let’s take a look at some more advanced
+    scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advanced uses of the QueryEngine interface
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The LlamaIndex community has gradually developed – and continues to develop
+    – various advanced query methods while using `QueryEngine` as a main component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Apart from the query engines that I’m already covering in this book, *Table
+    7.1* provides an overview of other available engines at the time of writing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **QueryEngine Class** | **Short Description and** **Use Cases** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CitationQueryEngine` | Designed for situations requiring citations from
+    multiple sources to support answers. It is especially useful in academic research,
+    legal analysis, or any context where validated, source-based information is important.
+    When generating responses, this query engine incorporates and cites relevant sources,
+    ensuring answers are not only accurate but also verifiably supported by documented
+    evidence. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CogniswitchQueryEngine` | Integrates with the Cogniswitch service ( https://www.cogniswitch.ai/
+    ) to answer queries using a combination of Cogniswitch’s knowledge processing
+    capabilities and OpenAI’s models. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ComposableGraphQueryEngine` | Designed to operate within a composable graph
+    structure, enabling flexible, modular querying across different data sources and
+    indices. It is ideal for complex data ecosystems where different types of information
+    are interconnected. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `QASummaryQueryEngineBuilder` | Combines `SummaryIndex` and `VectorStoreIndex`
+    . This is useful both to retrieve specific information from documents and to get
+    concise summaries of content. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `TransformQueryEngine` | Designed to preprocess queries using a specific
+    transformation before they are submitted to an underlying query engine. When queries
+    vary greatly in format or clarity, applying a transformation to normalize or enhance
+    them can greatly improve retrieval. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MultiStepQueryEngine` | Works by decomposing complex queries into simpler,
+    sequential steps. It can be useful for handling complex or multi-faceted questions
+    that require a series of logical steps. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ToolRetrieverRouterQueryEngine` | Can dynamically choose from multiple candidate
+    query engines based on the query’s context. It uses the most appropriate query
+    engine tool for each specific query. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SQLJoinQueryEngine` | Designed for cases that require a combination of SQL
+    database queries and additional information retrieval or processing. This is especially
+    useful when the SQL query results need to be augmented or refined using further
+    queries. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SQLAutoVectorQueryEngine` | Integrates SQL database queries with vector-based
+    retrieval, enabling a two-step process where a query can be executed against a
+    SQL database. Based on those results, further information can be fetched from
+    a vector store. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RetryQueryEngine` | When the initial response to a query does not meet certain
+    evaluation criteria, it automatically retries the query if it fails evaluation.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RetrySourceQueryEngine` | Designed to perform retries on a query with different
+    source nodes based on evaluation criteria. If the initial response from the query
+    engine does not pass the evaluator’s criteria, it attempts to find alternative
+    source nodes that may yield a better response. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RetryGuidelineQueryEngine` | Similar to `RetryQueryEngine` , this one also
+    transforms the query on each retry, based on feedback from the evaluation process.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `PandasQueryEngine` | Converts natural language queries into executable pandas
+    Python code, allowing for data manipulation and analysis over pandas DataFrames.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `JSONalyzeQueryEngine` | Designed to analyze JSON list-shaped data by converting
+    natural language queries into SQL queries that are executed within an in-memory
+    SQLite database. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `KnowledgeGraphQueryEngine` | Generates and processes queries for knowledge
+    graphs, translating natural language queries into graph-specific queries and synthesizing
+    responses based on graph query results. This is useful for applications requiring
+    interaction with knowledge graphs. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `FLAREInstructQueryEngine` | Implementing the **Forward-Looking Active REtrieval**
+    ( **FLARE** ) method, this query engine allows the model to continually access
+    and incorporate external knowledge as it generates content. This is particularly
+    useful for generating long, knowledge-intensive texts. By actively predicting
+    future content needs and retrieving information accordingly, FLARE aims to reduce
+    hallucinations and improve the factual accuracy of generated responses. It’s based
+    on a paper by Jiang et al. (2023), *Active Retrieval Augmented* *Generation* (
+    https://arxiv.org/abs/2305.06983v2 ). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SimpleMultiModalQueryEngine` | A multi-modal query engine that can process
+    queries involving both text and images, assuming that the retrieved text and images
+    can fit within the LLM’s context window. It retrieves relevant text and images
+    based on the query and then synthesizes a response using a multi-modal LLM. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SQLTableRetrieverQueryEngine` | Converts natural language queries into SQL
+    queries but also synthesizes responses from the query results, making the responses
+    more understandable and relevant to the user’s natural language query. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `PGVectorSQLQueryEngine` | Designed to work with PGvector (https://github.com/pgvector/pgvector),
+    an extension for PostgreSQL that allows vectors to be stored and embedded directly
+    within the database. |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 7.1 – Different query engine modules available in LlamaIndex
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The list of advanced implementations has already become so long that it could
+    probably be the subject of a separate book. Consequently, I did not set out to
+    give a detailed presentation of each method. Instead, I encourage you to consult
+    the official project documentation on the subject and discover how these building
+    blocks can be used in various scenarios: https://docs.llamaindex.ai/en/stable/module_guides/deploying/query_engine/modules.html
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There, you will find detailed explanations, use cases for each module, and,
+    most importantly, code examples with which you can understand the operation and
+    implementation of each method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, we cannot end this chapter without introducing you to at least a few
+    essential modules in a RAG scenario. So, that’s what we are going to cover next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing advanced routing with RouterQueryEngine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Remember when we talked about routing retrievers in *Chapter 6* , *Querying
+    Our Data, Part 1 – Context Retrieval* ? It’s time to see a more advanced routing
+    mechanism, this time implemented at the query engine level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 7* *.4* summarizes the operation of `RouterQueryEngine` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B21861_07_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.4 – How RouterQueryEngine works
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`RouterQueryEngine` is capable of choosing between different tools it has available.
+    Depending on the user query, the router will decide which `QueryEngineTool` should
+    be used to generate an answer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just like in the case of retrievers, we can use `PydanticMultiSelector` or `PydanticSingleSelector`
+    to configure its behavior. The multi-selector combines multiple options and can
+    handle a broader spectrum of user queries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Potential use case
+  prefs: []
+  type: TYPE_NORMAL
+- en: Imagine a real-life scenario where an organization has its knowledge split into
+    multiple individual documents. Such a router would allow for general queries over
+    the entire knowledge base, while still enabling and precisely pinpointing the
+    source data used to generate the answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following example, we’re building a `RouterQueryEngine` engine that
+    operates different query engine tools – each one built over a different document.
+    Here’s the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first part of the code handles the imports and ingests our sample data.
+    As before, we are using two simple text files: one containing information about
+    ancient Rome and another containing a generic text about dogs. In the next part,
+    we’ll go through each document and use `TitleExtractor` to extract a title and
+    store it as a `metadata` field:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the files have been ingested and we have generated document titles, we
+    can define `SummaryIndex` , `QueryEngine` , and `QueryEngineTool` for each of
+    the documents. We use the document title to provide the selector with a description
+    of each tool:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a list of available tools, we can build our `RouterQueryEngine`
+    based on `PydanticMultiSelector` .
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To do this, we must pass the query engine tools as an argument. These will
+    be the options that are available for the selector:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Depending on the query, the selector will decide which tools to use to gather
+    responses. After each tool has responded, the query engine will synthesize and
+    return a final response:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For relatively small documents, this method will probably work just fine. So
+    long as the text is short enough to be properly summarized into a title, this
+    query engine will handle most user queries pretty well. In a real-life scenario,
+    though, it’s highly unlikely that we could fully summarize the whole content in
+    a title. In that case, using a document summary instead of the title would be
+    preferable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Querying multiple documents with SubQuestionQueryEngine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In a real-life scenario involving multiple data sources, as in the previous
+    example, users may come up with more complex queries – for example, they may ask
+    for comparisons between different subjects documented in different files. For
+    this kind of situation, we can use `SubQuestionQueryEngine` . It is designed to
+    handle complex queries by breaking them down into smaller sub-questions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Each sub-question is processed by its designated query engine and the individual
+    responses are then combined. A response synthesizer is used to compile these into
+    a coherent final response, effectively managing queries that require a multi-faceted
+    approach. *Figure 7* *.5* describes its operation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B21861_07_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.5 – How SubQuestionQueryEngine works
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s have a look at the code. The first part is very similar to our previous
+    example regarding `RouterQueryEngine` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After importing the necessary modules, we load the files and extract their
+    titles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So far, we have completed the same steps that we did for `RouterQueryEngine`
+    . One notable change in the next part is that we also extract `file_name` from
+    the metadata and use it as a name for the corresponding tool. This way, we’ll
+    be able to tell exactly where each answer is coming from:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let’s build our `SubQuestionQueryEngine` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At this point, we’re ready to generate the output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Along with the final response, we’ll be able to see each sub-question generated
+    and its corresponding query engine tool name. In our case, the tool name will
+    correspond to the filename of each source text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`SubQuestionQueryEngine` is particularly useful for complex queries that cannot
+    be addressed directly in a single step. It produces great results in cases such
+    as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Comparative analysis** : For queries that require comparing and contrasting
+    different subjects, the engine can divide the query into smaller, focused sub-questions
+    to gather detailed information about each subject before synthesizing a comparative
+    response. Here’s a sample question: *Compare and contrast the economic policies
+    of Country A and Country B in the* *last decade.*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Multi-faceted questions** : In cases where a query involves multiple aspects
+    or criteria, this engine can break down the query into individual components,
+    handle each separately, and then combine the results for a comprehensive answer.
+    That means questions such as *What are the environmental, economic, and social
+    impacts of deforestation in the* *Amazon rainforest?*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Complex research tasks** : For research-oriented queries that require information
+    to be gathered from various sources or perspectives, this engine can efficiently
+    handle the task by segmenting it into more manageable sub-questions. Here’s the
+    type of query it could answer: *Investigate the historical development of renewable
+    energy technologies and their adoption across* *different continents.*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that you’ve got a general understanding of how query engines work, I’ll
+    let you explore the different possibilities and experiment with all the existing
+    query engine modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In case you’re wondering whether you can create custom ones, that option is
+    also available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can find an example here: https://docs.llamaindex.ai/en/stable/examples/query_engine/custom_query_engine.html#option-1-ragqueryengine
+    .'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve got some fresh knowledge, it’s about time we built some new components
+    into our tutoring project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: <title>Hands-on – building quizzes in PITS</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hands-on – building quizzes in PITS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'from llama_index.core import load_index_from_storage, StorageContext from llama_index.program.evaporate.df
+    import DFRowsProgram from llama_index.program.openai import OpenAIPydanticProgram
+    from global_settings import INDEX_STORAGE, QUIZ_SIZE, QUIZ_FILE import pandas
+    as pd pip install pandas def build_quiz(topic):     df = pd.DataFrame({         "Question_no":
+    pd.Series(dtype="int"),         "Question_text": pd.Series(dtype="str"),         "Option1":
+    pd.Series(dtype="str"),         "Option2": pd.Series(dtype="str"),         "Option3":
+    pd.Series(dtype="str"),         "Option4": pd.Series(dtype="str"),         "Correct_answer":
+    pd.Series(dtype="str"),         "Rationale": pd.Series(dtype="str"),     })'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the features we are building in our PITS project is the ability to generate
+    quizzes based on the learning material uploaded by the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These quizzes will initially be used to gauge the overall knowledge of the user
+    on the topic. Based on that assessment, the training slides and narration will
+    be adjusted to the level of the learner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The same mechanism can also be used to generate intermediate quizzes at the
+    end of each section to test the user’s current knowledge. Let’s see how we can
+    easily implement the quiz builder feature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll be using one of the LlamaIndex pre-packaged pydantic programs: the DataFrame
+    Pydantic extractor. This is designed to extract tabular DataFrames from raw text.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s have a look at the code in `quiz_builder.py` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we imported all the necessary modules, including our global variables
+    defined in `global_settings.py` :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`INDEX_STORAGE` : The index’s storage location'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`QUIZ_SIZE` : The number of questions to be included in a quiz'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`QUIZ_FILE` : The path where the quiz will be saved as a CSV'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We’re also importing the `load_index_from_storage` function, which we will use
+    to fetch our indexes from storage to avoid the cost and time of rebuilding them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because we’re using DataFrames, we’ll also need to import the pandas library.
+    If you don’t have it already installed in your environment, make sure you run
+    this first:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'OK – let’s build our main function. The `build_quiz` function will be responsible
+    for generating the quiz and saving the questions in a `CSV` file for further use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we set up a DataFrame to structure the quiz questions and their associated
+    options and answers. This DataFrame will serve as the foundation for our quiz.
+    It includes columns for the question number, question text, four answer options,
+    the correct answer, and a rationale for the answer. The use of a pandas DataFrame
+    will make handling and manipulating the quiz data much easier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Next, we need to load our vector index from storage. To do this, we must define
+    a `StorageContext` object while using the `INDEX_STORAGE` folder as a parameter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here, we used `index_id` to identify the *vector* index because there’s also
+    a `TreeIndex` index in that storage that we won’t be using for now. It’s time
+    to initialize our `DataFrame` extractor:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can define our query engine and craft a prompt that will generate the
+    quiz questions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, the prompt is passed to the query engine, and the response is then processed
+    by `DFRowsProgram` to convert it into a structured DataFrame format:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Finally, the new DataFrame containing the quiz questions is saved as a CSV file
+    in the path defined by `QUIZ_FILE` . The function returns the new DataFrame for
+    further use.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This serves as a simple demonstration of how to leverage a combination of LlamaIndex
+    features, Pydantic programs, and DataFrame manipulation to create a dynamic quiz
+    generator. We’ll continue working on the rest of the features in future chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: <title>Summary</title>
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter explored how to refine search results with various postprocessors,
+    generate responses using different synthesizers, and ensure structured outputs
+    with specific parsers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also explored how to construct query engines while integrating the various
+    components that we discussed in the previous chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter also covered handling diverse data sources with `RouterQueryEngine`
+    and decomposing complex queries with `SubQuestionQueryEngine` , and also demonstrated
+    quiz creation in our tutoring app.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See you in the next chapter, where we’ll talk about chatbots, agents, and conversation
+    tracking with LlamaIndex.
+  prefs: []
+  type: TYPE_NORMAL
