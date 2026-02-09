@@ -1,0 +1,274 @@
+<html><head></head><body><div id="book-content"><div id="sbo-rt-content"><div id="_idContainer024">
+			<h1 id="_idParaDest-116" class="chapter-number"><a id="_idTextAnchor141"/>9</h1>
+			<h1 id="_idParaDest-117"><a id="_idTextAnchor142"/>Regularization</h1>
+			<p><strong class="bold">Regularization</strong> is a set<a id="_idIndexMarker470"/> of methods that constrain or modify the learning process to prevent the model from memorizing training data too precisely, encouraging it to learn more robust and generalizable <span class="No-Break">patterns instead.</span></p>
+			<p>Regularization is a crucial aspect of training LLMs to prevent overfitting and improve generalization. Overfitting is detrimental because it causes a model to perform exceptionally well on training data while failing miserably on new, unseen data. When a model overfits, it essentially memorizes the noise and peculiarities of the training dataset, rather than learning generalizable patterns and relationships. This creates an illusion of high accuracy during development but leads to poor real-world performance, rendering the model ineffective for its intended purpose of making accurate predictions on <span class="No-Break">novel inputs.</span></p>
+			<p>In this chapter, you’ll learn about different regularization techniques specifically tailored to LLMs. We’ll explore methods such as layer-wise adaptive regularization, regularization in fine-tuning, and the combination of multiple techniques. You’ll gain insights into implementing these strategies and understanding their impact on <span class="No-Break">model performance.</span></p>
+			<p>In this chapter, we’ll be covering the <span class="No-Break">following topics:</span></p>
+			<ul>
+				<li>L2 regularization (<span class="No-Break">Ridge regression)</span></li>
+				<li><span class="No-Break">Dropout</span></li>
+				<li>Layer-wise <span class="No-Break">adaptive regularization</span></li>
+				<li>Gradient clipping and <span class="No-Break">noise injection</span></li>
+				<li>Regularization in transfer learning and <span class="No-Break">fine-tuning scenarios</span></li>
+				<li>Emerging regularization techniques for <span class="No-Break">next-generation LLMs</span></li>
+			</ul>
+			<h1 id="_idParaDest-118"><a id="_idTextAnchor143"/>L2 regularization (Ridge regression)</h1>
+			<p><strong class="bold">L2 regularization</strong>, also known as <a id="_idIndexMarker471"/>ridge regression<a id="_idIndexMarker472"/> or weight decay, is a technique used to prevent overfitting in machine learning models. It works by adding a penalty term to the loss function, which is <a id="_idIndexMarker473"/>proportional to the square of the model’s weights. This penalty term discourages the model from assigning large weights to individual features, leading to a simpler and more generalized model. By minimizing the combined loss function, which includes both the original loss and the penalty term, the model finds a balance between fitting the training data well and keeping the weights small, ultimately improving its ability to generalize to new, <span class="No-Break">unseen data</span></p>
+			<p>Here’s how to <span class="No-Break">use it:</span></p>
+			<pre class="source-code">
+from torch.optim import AdamW
+def train_with_weight_decay(
+    model, train_dataloader, weight_decay=0.01, lr=5e-5, epochs=3
+):
+    optimizer = AdamW(model.parameters(), lr=lr,
+        weight_decay=weight_decay)
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        for batch in train_dataloader:
+            optimizer.zero_grad()
+            outputs = model(batch)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(
+            f"Epoch {epoch + 1}, "
+            f"Loss: {total_loss / len(train_dataloader):.4f}"
+        )
+# Assuming you have a train_dataloader
+# train_with_weight_decay(model, train_dataloader)</pre>			<p>In this implementation, we use the AdamW optimizer that we discussed in <a href="B31249_07.xhtml#_idTextAnchor108"><span class="No-Break"><em class="italic">Chapter 7</em></span></a>, which<a id="_idIndexMarker474"/> correctly implements<a id="_idIndexMarker475"/> weight decay. The <strong class="source-inline">weight_decay</strong> parameter <a id="_idIndexMarker476"/>controls the strength of regularization. A typical value is <strong class="source-inline">0.01</strong>, but you may need to adjust this based on your specific model <span class="No-Break">and dataset.</span></p>
+			<h1 id="_idParaDest-119"><a id="_idTextAnchor144"/>Dropout</h1>
+			<p><strong class="bold">Dropout</strong> is <a id="_idIndexMarker477"/>another powerful regularization technique that randomly “drops out” a portion of neurons <span class="No-Break">during training.</span></p>
+			<p>Dropout helps combat overfitting by randomly deactivating a fraction of neurons during each training iteration, forcing the network to develop redundant pathways for information flow. This technique prevents neurons from becoming overly dependent on each other by creating a form of ensemble learning within a single network, where different subnetworks handle similar tasks. The result is a more robust model that relies on distributed representations rather than memorizing specific patterns, ultimately improving generalization to unseen data when all neurons are active <span class="No-Break">during inference.</span></p>
+			<p>It’s particularly effective in large neural networks such as LLMs. Here’s how to implement dropout in a <span class="No-Break">transformer-based LLM:</span></p>
+			<pre class="source-code">
+class TransformerWithDropout(nn.Module):
+    def __init__(
+    self, vocab_size, d_model, nhead, num_layers, dropout=0.1
+):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.pos_encoder = nn.Embedding(1000, d_model)  # Simplified positional encoding
+        self.transformer = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model, nhead,
+                dim_feedforward=4*d_model, dropout=dropout),
+            num_layers
+        )
+        self.fc_out = nn.Linear(d_model, vocab_size)
+        self.dropout = nn.Dropout(dropout)
+    def forward(self, x):
+        x = self.embedding(x) + self.pos_encoder(
+            torch.arange(x.size(1), device=x.device))
+        x = self.dropout(x)
+        x = x.transpose(0, 1)  # Transform to shape expected by transformer
+        x = self.transformer(x)
+        x = x.transpose(0, 1)  # Transform back
+        return self.fc_out(x)
+model = TransformerWithDropout(vocab_size=50257,
+    d_model=768, nhead=12, num_layers=12, dropout=0.1)
+print(
+    f"Model parameters: "
+    f"{sum(p.numel() for p in model.parameters()):,}"
+)</pre>			<p>In this implementation, dropout is applied after the embedding layer and within each transformer layer. The dropout rate of <strong class="source-inline">0.1</strong> is typical, but you may need to adjust this based on your specific <span class="No-Break">use case.</span></p>
+			<p>Keep in mind that dropout is only applied during training, not during inference (when the model is being used to <span class="No-Break">make predictions).</span></p>
+			<p>During<a id="_idIndexMarker478"/> training, neurons are randomly “dropped” (deactivated) with a specified probability (e.g., <strong class="source-inline">0.5</strong> means each neuron has a 50% chance of being turned off for that training batch). This forces the network to learn more robust features since it can’t rely on any single neuron always <span class="No-Break">being present.</span></p>
+			<p>During inference (testing, evaluation, or deployment), dropout is disabled and all neurons are active. However, the weights are typically scaled by the dropout rate to account for the fact that more neurons are active than during training. This scaling ensures the expected output magnitude <span class="No-Break">remains consistent.</span></p>
+			<p>This training-only application of dropout is a key part of what makes it effective as a regularization technique – it creates a form of ensemble learning during training while still allowing for full network capacity during <span class="No-Break">actual use.</span></p>
+			<h1 id="_idParaDest-120"><a id="_idTextAnchor145"/>Layer-wise adaptive regularization</h1>
+			<p>Layer-wise <a id="_idIndexMarker479"/>adaptive regularization involves applying different regularization strengths to different layers of the model. This can be particularly effective for LLMs, where lower layers may benefit from less regularization to capture fundamental patterns, while higher layers might need stronger regularization to <span class="No-Break">prevent overfitting.</span></p>
+			<p>The following Python code defines a <strong class="source-inline">LayerwiseAdaptiveRegularization</strong> class, which is a PyTorch <strong class="source-inline">nn.Module</strong> designed to wrap a base transformer model and apply a dropout rate that increases linearly with the depth of the <span class="No-Break">model’s layers:</span></p>
+			<pre class="source-code">
+class LayerwiseAdaptiveRegularization(nn.Module):
+    def __init__(
+        self, base_model, num_layers, base_dropout=0.1,
+        dropout_increase_per_layer=0.02
+    ):
+        super().__init__()
+        self.base_model = base_model
+        self.num_layers = num_layers
+        self.base_dropout = base_dropout
+        self.dropout_increase_per_layer = dropout_increase_per_layer
+        self.set_layerwise_dropout()
+    def set_layerwise_dropout(self):
+        for i, layer in enumerate(self.base_model.transformer.h):
+            dropout = self.base_dropout
+                + i * self.dropout_increase_per_layer
+            layer.attn.dropout.p = dropout
+            layer.mlp.dropout.p = dropout
+    def forward(self, *args, kwargs):
+        return self.base_model(*args, kwargs)
+base_model = create_lm_model()
+model = LayerwiseAdaptiveRegularization(base_model, num_layers=12)</pre>			<p>The <strong class="source-inline">LayerwiseAdaptiveRegularization</strong> class initializes with a base model, the number <a id="_idIndexMarker480"/>of layers, a starting dropout probability, and an increment for each subsequent layer. It then configures the dropout probabilities within the attention and MLP sub-layers of the transformer blocks. Finally, its forward method simply passes the input through the wrapped base model. An example of its usage is shown by wrapping a <strong class="source-inline">create_lm_model()</strong> with this layer-wise <span class="No-Break">dropout regularization.</span></p>
+			<p>This<a id="_idIndexMarker481"/> implementation wraps a base GPT-2 model and applies increasing dropout rates to higher layers. The base dropout rate is <strong class="source-inline">0.1</strong>, and it increases by <strong class="source-inline">0.02</strong> for each <span class="No-Break">subseq<a id="_idTextAnchor146"/>uent layer.</span></p>
+			<h1 id="_idParaDest-121"><a id="_idTextAnchor147"/>Gradient clipping and noise injection</h1>
+			<p>Gradient clipping <a id="_idIndexMarker482"/>and noise injection are techniques used to improve the training stability and generalization <span class="No-Break">of LLMs.</span></p>
+			<p>Gradient clipping, while primarily employed for optimization stability (see <a href="B31249_07.xhtml#_idTextAnchor108"><span class="No-Break"><em class="italic">Chapter 7</em></span></a>), can indirectly contribute to regularization. By limiting the magnitude of gradients, it can constrain the updates to model parameters, potentially leading to a smoother optimization path and preventing overfitting. In some cases, gradient clipping can effectively reduce the impact of certain parameters, especially when gradients for those parameters are consistently clipped. This can lead to a form of implicit sparsity, where less important parameters are <span class="No-Break">effectively downweighted.</span></p>
+			<p>Noise injection is <a id="_idIndexMarker483"/>a regularization technique commonly used to improve the generalization of machine learning models. By adding a small amount of noise to the input data, weights, or activation functions, noise injection helps prevent overfitting. The technique forces the model to be less reliant on specific patterns in the training data, encouraging it to learn more robust, general features that apply across different datasets. This approach is particularly useful in neural networks, where noise such as the following can be injected at <span class="No-Break">various stages:</span></p>
+			<ul>
+				<li><strong class="bold">Input noise</strong>: Adds<a id="_idIndexMarker484"/> noise directly to the input data, helping the model become more robust to variations in <span class="No-Break">the input</span></li>
+				<li><strong class="bold">Weight noise</strong>: Perturbs <a id="_idIndexMarker485"/>the weights during training, encouraging the model to <span class="No-Break">generalize better</span></li>
+				<li><strong class="bold">Activation noise</strong>: Adds<a id="_idIndexMarker486"/> noise to the activation functions, leading to smoother decision boundaries and <span class="No-Break">reducing overfitting</span></li>
+			</ul>
+			<p>These methods help prevent overfitting, reduce the impact of outliers, and encourage the model to explore a wider range of solutions, ultimately leading to more robust and reliable <span class="No-Break">language models.</span></p>
+			<p>Here’s how<a id="_idIndexMarker487"/> to implement <a id="_idIndexMarker488"/>gradient clipping and <span class="No-Break">noise injection:</span></p>
+			<pre class="source-code">
+import torch.nn.functional as F
+def train_with_grad_clip_and_noise(
+    model, train_dataloader, grad_clip=1.0,
+    noise_factor=0.01, lr=5e-5, epochs=3
+):
+    optimizer = AdamW(model.parameters(), lr=lr)
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        for batch in train_dataloader:
+            optimizer.zero_grad()
+            # Add noise to inputs
+            input_ids = batch['input_ids']
+            noise = torch.randn_like(
+                input_ids, dtype=torch.float) * noise_factor
+            noisy_inputs = input_ids.float() + noise
+            noisy_inputs = noisy_inputs.long().clamp(
+                min=0, max=model.config.vocab_size - 1)
+            outputs = model(input_ids=noisy_inputs, labels=input_ids)
+            loss = outputs.loss
+            loss.backward()
+            clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
+            total_loss += loss.item()
+        print(
+            f"Epoch {epoch + 1}, "
+            f"Loss: {total_loss / len(train_dataloader):.4f}"
+        )
+# Assuming you have a train_dataloader
+# train_with_grad_clip_and_noise(model, train_dataloader)</pre>			<p>This <a id="_idIndexMarker489"/>implementation applies gradient clipping to prevent <a id="_idIndexMarker490"/>exploding gradients and adds small amounts of noise to the input to improve robustness. <strong class="source-inline">noise_factor</strong> controls the amount of noise added; you may need to adjust this based on your specific <span class="No-Break">use case.</span></p>
+			<p>The function initializes<a id="_idIndexMarker491"/> an <strong class="bold">AdamW optimizer</strong> and iterates over the dataset for a specified number of epochs. During each training step, it clears old gradients, adds noise to input tokens (ensuring values remain within the vocabulary range), and feeds the noisy input into the model for forward and backward passes. <strong class="bold">Gradient clipping</strong> prevents <a id="_idIndexMarker492"/>exploding gradients, ensuring stable training. The optimizer updates the model parameters, and the loss is tracked to monitor progress. Finally, the function prints the average loss <span class="No-Break">per epoch.</span></p>
+			<p>Next, let us explore regularization in transfer learning and <span class="No-Break">fine-tuning scenarios.</span></p>
+			<h1 id="_idParaDest-122"><a id="_idTextAnchor148"/>Regularization in transfer learning and fine-tuning scenarios</h1>
+			<p>When<a id="_idIndexMarker493"/> fine-tuning pre-trained LLMs, it’s important to carefully adjust regularization to avoid hindering task-specific adaptation<a id="_idIndexMarker494"/> while still preventing overfitting. Here’s an approach to fine-tuning with <span class="No-Break">adaptive regularization:</span></p>
+			<pre class="source-code">
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+def fine_tune_with_adaptive_regularization(
+    pretrained_model_name, train_dataloader,
+    initial_dropout=0.1, epochs=3
+):
+    model = GPT2LMHeadModel.from_pretrained(pretrained_model_name)
+    tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_name)
+    optimizer = AdamW(model.parameters(), lr=5e-5, weight_decay=0.01)
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        current_dropout = initial_dropout * (1 - epoch / epochs)
+        for module in model.modules():
+            if isinstance(module, nn.Dropout):
+                module.p = current_dropout
+        for batch in train_dataloader:
+            optimizer.zero_grad()
+            outputs = model(batch)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(
+            f"Epoch {epoch + 1}, "
+            f"Loss: {total_loss / len(train_dataloader):.4f}, "
+            f"Dropout: {current_dropout:.4f}"
+        )
+# Assuming you have a train_dataloader
+# fine_tune_with_adaptive_regularization('gpt2', train_dataloader)</pre>			<p>This<a id="_idIndexMarker495"/> implementation starts with a higher<a id="_idIndexMarker496"/> dropout rate and gradually decreases it over the course of fine-tuning. This allows the model to adapt to the new task while still maintaining some regularization to prevent overfitting. This approach is also called <span class="No-Break">adaptive dropout.</span></p>
+			<p>Adaptive dropout works well because it dynamically adjusts dropout rates based on neuron importance, rather than applying uniform dropout across the network. By selectively dropping less critical neurons more frequently while preserving important feature detectors, adaptive dropout creates an optimal balance between regularization and information preservation. This targeted approach prevents overfitting more efficiently than standard dropout, as it maintains the network’s capacity to learn complex patterns through important neurons while aggressively regularizing redundant or noise-sensitive parts, resulting in models that generalize better with less performance sacrifice on <span class="No-Break">critical features.</span></p>
+			<h1 id="_idParaDest-123"><a id="_idTextAnchor149"/>Emerging regularization techniques</h1>
+			<p>Recent years <a id="_idIndexMarker497"/>have seen the emergence of sophisticated techniques that address the complex challenges of modern deep learning architectures. These <a id="_idIndexMarker498"/>new approaches go beyond simply preventing overfitting – they aim to improve model robustness, find better optima in the loss landscape, and enhance generalization through innovative training strategies. From geometrically motivated methods such as <strong class="bold">sharpness-aware minimization</strong> (<strong class="bold">SAM</strong>) to<a id="_idIndexMarker499"/> advanced optimization strategies<a id="_idIndexMarker500"/> such as <strong class="bold">stochastic weight averaging</strong> (<strong class="bold">SWA</strong>), these emerging regularization techniques are reshaping how we approach mode<a id="_idTextAnchor150"/>l training <span class="No-Break">and generalization.</span></p>
+			<h2 id="_idParaDest-124"><a id="_idTextAnchor151"/>Stochastic weight averaging</h2>
+			<p>SWA is a <a id="_idIndexMarker501"/>technique <a id="_idIndexMarker502"/>that improves neural network generalization by averaging weights from multiple points along the optimization trajectory, effectively finding flatter, more robust minima that perform better on unseen data than the typically sharp minima found by conventional optimization methods. <strong class="bold">Stochastic gradient descent</strong> (<strong class="bold">SGD</strong>) is a fundamental optimization algorithm <a id="_idIndexMarker503"/>that updates model parameters by following the negative gradient of the loss function computed on randomly selected small batches of training data, enabling efficient training of large models such as neural networks by approximating the full gradient computation while introducing beneficial noise that helps escape poor <span class="No-Break">local minima.</span></p>
+			<p>WA involves averaging multiple points along the trajectory of SGD with a modified learning rate schedule. It improves generalization by finding broader optima. Here is a <span class="No-Break">code example:</span></p>
+			<pre class="source-code">
+from torch.optim.swa_utils import AveragedModel, SWALR
+# Create SWA model and scheduler
+swa_model = AveragedModel(model)
+swa_scheduler = SWALR(optimizer, swa_lr=0.05)
+# Training loop with SWA
+for epoch in range(100):
+    if epoch &gt; 75:  # Start SWA after epoch 75
+        swa_model.update_parameters(mo<a id="_idTextAnchor152"/>del)
+        swa_scheduler.step()</pre>			<h2 id="_idParaDest-125"><a id="_idTextAnchor153"/>Sharpness-aware minimization</h2>
+			<p>SAM seeks<a id="_idIndexMarker504"/> parameters<a id="_idIndexMarker505"/> that lie in neighborhoods with uniformly low loss values, leading to better generalization. Its key features are <span class="No-Break">the following:</span></p>
+			<ul>
+				<li>Looks for “flat” minima instead of <span class="No-Break">sharp ones</span></li>
+				<li>Improves robustness against <span class="No-Break">input perturbations</span></li>
+				<li>Generally provides better generalization than <span class="No-Break">standard SGD</span></li>
+			</ul>
+			<p>Let us implement the <strong class="source-inline">SAM</strong> class in the following <span class="No-Break">Python code:</span></p>
+			<pre class="source-code">
+class SAM(torch.optim.Optimizer):
+    def __init__(self, params, base_optimizer, rho=0.05):
+        self.rho = rho
+        self.base_optimizer = base_optimizer(params)
+    def step(self):
+        # First forward-backward pass
+        grad_norm = self._grad_norm()
+        scale = self.rho / (grad_norm + 1e-12)
+        # Perturb weights
+        for group in self.param_groups:
+            for p in group['params']:
+                e_w = p.grad * scale
+                p.add_(e_w)
+        # Second forward-backward pass<a id="_idTextAnchor154"/>
+        self.base_optimizer.step()</pre>			<h2 id="_idParaDest-126"><a id="_idTextAnchor155"/>Differential privacy-based regularization</h2>
+			<p><strong class="bold">Differential privacy</strong> (<strong class="bold">DP</strong>) is<a id="_idIndexMarker506"/> a technique that adds carefully calibrated noise to data or computations to protect<a id="_idIndexMarker507"/> individual privacy while still allowing useful insights, ensuring that the inclusion or exclusion of any single data point does not significantly affect <span class="No-Break">model performance.</span></p>
+			<p>DP-based regularization is a technique used to enhance model privacy by adding noise to the model’s training process, which protects individual data points from being exposed in model outputs or learned representations. By introducing controlled randomness, DP-based regularization limits the model’s reliance on any specific data sample, thereby reducing the risk of overfitting and making the model less sensitive to variations in individual data points. This method is particularly valuable in privacy-sensitive applications, as it ensures that models can learn generalizable patterns without revealing specific information about the training data, making it useful in healthcare, finance, and other areas requiring <span class="No-Break">data confidentiality.</span></p>
+			<p>The following code snippet implements the <span class="No-Break"><strong class="source-inline">DPOptimizer</strong></span><span class="No-Break"> class:</span></p>
+			<pre class="source-code">
+class DPOptimizer(torch.optim.Optimizer):
+    def __init__(
+        self, params, noise_multiplier=1.0, max_grad_norm=1.0
+    ):
+        self.noise_multiplier = noise_multiplier
+        self.max_grad_norm = max_grad_norm
+    def step(self):
+        # Clip gradients
+        torch.nn.utils.clip_grad_norm_(self.param_groups[0]['params'],
+                                     self.max_grad_norm)
+        # Add noise
+        for p in self.param_groups[0]['params']:
+            noise = torch.randn_like(p.grad) * self.noise_mult<a id="_idTextAnchor156"/>iplier
+            p.grad.add_(noise)</pre>			<h2 id="_idParaDest-127"><a id="_idTextAnchor157"/>Fast gradient sign method</h2>
+			<p>The <strong class="bold">fast gradient sign method</strong> (<strong class="bold">FGSM</strong>) is a technique for creating adversarial examples by <a id="_idIndexMarker508"/>adding a<a id="_idIndexMarker509"/> small, targeted perturbation to input data, pushing the model to misclassify. It works by calculating the gradient of the loss function with respect to the input and applying a slight adjustment in the direction that maximizes the model’s error. The input data is slightly changed by a small amount, controlled by a factor called ϵ, to create an “adversarial example” that can fool a machine learning model. FGSM is commonly used to test model robustness and for adversarial training, where models are trained on adversarial examples to enhance security. However, FGSM’s one-step nature makes it fast but less effective against strong defenses, unlike iterative methods that achieve higher <span class="No-Break">attack success.</span></p>
+			<p>Let us see how it is <span class="No-Break">implemented here:</span></p>
+			<pre class="source-code">
+def fgsm_attack(image, epsilon, data_grad):
+    sign_data_grad = data_grad.sign()
+    perturbed_image = image + epsilon * sign_data_grad
+    perturbed_image = torch.clamp(perturbed_<a id="_idTextAnchor158"/>image, 0, 1)
+    return perturbed_image</pre>			<h2 id="_idParaDest-128"><a id="_idTextAnchor159"/>Lookahead optimizer</h2>
+			<p>The lookahead optimizer <a id="_idIndexMarker510"/>is an <a id="_idIndexMarker511"/>innovative optimization technique that enhances the training stability and convergence of traditional optimizers, such as Adam or SGD, by maintaining two sets of parameters: fast weights and slow weights. The fast weights are updated frequently using a standard optimizer, while the slow weights are updated less frequently by synchronizing them with the fast weights. This approach allows for better exploration of the loss landscape, as the optimizer can escape local minima and smooth out oscillations in the optimization trajectory. By leveraging the strengths of both the base optimizer and the lookahead mechanism, this optimizer leads to faster convergence and improved generalization, making it a valuable addition to deep learning <span class="No-Break">model training.</span></p>
+			<p>The following code snippet shows how the lookahead optimizer can <span class="No-Break">be implemented:</span></p>
+			<pre class="source-code">
+class Lookahead(torch.optim.Optimizer):
+    def __init__(self, optimizer, k=5, alpha=0.5):
+        self.optimizer = optimizer
+        self.k = k
+        self.alpha = alpha
+        self.step_counter = 0
+        self.slow_weights = [
+            [p.clone().detach() for p in group['params']]
+                            
+            for group in optimizer.param_groups
+        ]
+    def step(self):
+        self.step_counter += 1
+        self.optimizer.step()
+        if self.step_counter % self.k == 0:
+            for group, slow_weights in zip(
+                self.optimizer.param_groups, self.slow_weights
+            ):
+                for p, q in zip(group['params'], slow_weights):
+                    p.data.mul_(self.alpha).add_(
+                        q, alpha=1.0 - self.alpha)<a id="_idTextAnchor160"/>
+                    q.data.copy_(p.data)</pre>			<h1 id="_idParaDest-129"><a id="_idTextAnchor161"/>Summary</h1>
+			<p>In this chapter, we covered fundamental concepts such as weight decay and L2 regularization, dropout methods, layer-wise adaptive regularization, and combining multiple regularization approaches. We also discussed regularization strategies for transfer learning and fine-tuning scenarios, as well as techniques for enhancing model stability, such as gradient clipping and noise injection. Additionally, we introduced various emerging <span class="No-Break">regularization methods.</span></p>
+			<p>In the next chapter, we’ll explore checkpointing and recovery and investigate why these techniques are essential for managing long-running <span class="No-Break">training processes.</span></p>
+		</div>
+	</div></div></body></html>

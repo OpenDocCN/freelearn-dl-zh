@@ -1,0 +1,526 @@
+<html><head></head><body>
+  <div id="_idContainer143" class="Basic-Text-Frame">
+    <h1 class="chapterNumber">7</h1>
+    <h1 id="_idParaDest-184" class="chapterTitle">Evaluating LLMs</h1>
+    <p class="normal">LLM evaluation is a crucial process used to assess the performance and capabilities of LLM models. It can take multiple forms, such as multiple-choice question answering, open-ended instructions, and feedback from real users. Currently, there is no unified approach to measuring a model’s performance but there are patterns and recipes that we can adapt to specific use cases.</p>
+    <p class="normal">While general-purpose evaluations are the most popular ones, with benchmarks like <strong class="keyWord">Massive Multi-Task Language Understanding</strong> (<strong class="keyWord">MMLU</strong>) or LMSYS Chatbot Arena, domain- and task-specific models<a id="_idIndexMarker664"/> benefit from more narrow approaches. This is particularly true when dealing with entire LLM systems (as opposed to models), often centered around<a id="_idIndexMarker665"/> a <strong class="keyWord">retrieval-augmented generation</strong> (<strong class="keyWord">RAG</strong>) pipeline. In these scenarios, we need to expand our evaluation framework to encompass the entire system, including new modules like retrievers and post-processors.</p>
+    <p class="normal">In this chapter, we will cover the following topics:</p>
+    <ul>
+      <li class="bulletList">Model evaluation</li>
+      <li class="bulletList">RAG evaluation</li>
+      <li class="bulletList">Evaluating TwinLlama-3.1-8B</li>
+    </ul>
+    <p class="normal">By the end of this chapter, you will know the most popular LLM evaluations and how to evaluate models and RAG systems using different techniques.</p>
+    <h1 id="_idParaDest-185" class="heading-1">Model evaluation</h1>
+    <p class="normal">In model evaluation, the <a id="_idIndexMarker666"/>objective is to assess the capabilities of a single model without any prompt engineering, RAG pipeline, and so on. </p>
+    <p class="normal">This evaluation is essential for several reasons, such as selecting the most relevant LLM or making sure that the fine-tuning process actually improved the model. In this section, we will compare ML and LLM evaluation to understand the main differences between these two fields. We will then explore benchmarks for general-purpose, domain-specific, and task-specific models.</p>
+    <h2 id="_idParaDest-186" class="heading-2">Comparing ML and LLM evaluation</h2>
+    <p class="normal">ML evaluation is<a id="_idIndexMarker667"/> centered on assessing <a id="_idIndexMarker668"/>the performance of models designed for tasks <a id="_idIndexMarker669"/>like prediction, classification, and regression. Unlike the evaluation of LLMs, which often focuses on how well a model understands and generates language, ML evaluation is more concerned with how accurately and efficiently a model can process structured data to produce specific outcomes.</p>
+    <p class="normal">This difference comes from the nature of the tasks these models handle. ML models are generally designed for narrowly defined problems, such as predicting stock prices or detecting outliers, which often involve numerical or categorical data, making the evaluation process more straightforward. On the other hand, LLMs are tasked with interpreting and generating language, which adds a layer of subjectivity to the evaluation process. Instead of relying solely on numerical benchmarks, LLM evaluation requires a more nuanced approach and often incorporates qualitative assessments, examining how well the model produces coherent, relevant, and contextually accurate responses in natural language.</p>
+    <p class="normal">In particular, we can see three key differences in how these models work, which impact the evaluation process:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Numerical metrics</strong>: Evaluating ML models typically involves measuring objective performance metrics, such as accuracy, precision, recall, or mean squared error, depending on the type of task at hand. This is less clear with LLMs, which can handle multiple tasks (hence, multiple evaluations) and can rarely rely on the same numerical metrics.</li>
+      <li class="bulletList"><strong class="keyWord">Feature engineering</strong>: In traditional ML, a critical part of the process involves manually selecting and transforming relevant data features before training the model. Evaluating the success of this feature engineering often becomes part of the broader model evaluation. LLMs, however, are designed to handle raw text data directly, reducing the need for manual feature engineering.</li>
+      <li class="bulletList"><strong class="keyWord">Interpretability</strong>: With ML models, it is easier to interpret why a model made certain predictions or classifications, and this interpretability can be a core part of their evaluation. This direct interpretation is not possible with LLMs. However, requesting explanations during the generation process can give insights into the model’s decision-making process.</li>
+    </ul>
+    <p class="normal">In the following<a id="_idIndexMarker670"/> section, we will see a more<a id="_idIndexMarker671"/> fine-grained <a id="_idIndexMarker672"/>exploration of different types of LLMs. While evaluating general-purpose models is fairly disconnected from ML evaluation, task-specific LLMs are more closely aligned with traditional ML.</p>
+    <h2 id="_idParaDest-187" class="heading-2">General-purpose LLM evaluations</h2>
+    <p class="normal">General-purpose<a id="_idIndexMarker673"/> evaluations<a id="_idIndexMarker674"/> refer to metrics dedicated to base and general-purpose fine-tuned models. They cover a breadth of capabilities that are correlated with knowledge and usefulness without focusing on specific tasks or domains. This allows developers to get an overview of these capabilities, compare themselves with competitors, and identify strengths and weaknesses. Based on these results, it is possible to tweak the dataset and hyperparameters, or even modify the architecture.</p>
+    <p class="normal">We can broadly categorize general-purpose evaluations in three phases: during pre-training, after pre-training, and after fine-tuning.</p>
+    <p class="normal">During pre-training, we closely monitor how the model learns, as shown at the end of <em class="italic">Chapter 5</em>. The most straightforward metrics are low-level and correspond to how models are trained:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Training loss</strong>: Based on the cross-entropy loss, measures the difference between the model’s predicted probability distribution and the true distribution of the next token</li>
+      <li class="bulletList"><strong class="keyWord">Validation loss</strong>: Calculates the same loss as training loss, but on a held-out validation set to assess generalization</li>
+      <li class="bulletList"><strong class="keyWord">Perplexity</strong>: Exponential of the cross-entropy loss, representing how “surprised” the model is by the data (lower is better)</li>
+      <li class="bulletList"><strong class="keyWord">Gradient norm</strong>: Monitors the magnitude of gradients during training to detect potential instabilities or vanishing/exploding gradients</li>
+    </ul>
+    <p class="normal">It’s also possible<a id="_idIndexMarker675"/> to include benchmarks <a id="_idIndexMarker676"/>like HellaSwag (common sense reasoning) during this stage but there’s a risk of overfitting these evaluations.</p>
+    <p class="normal">After pre-training, it is common to use a suite of evaluations to evaluate the base model. This suite can include internal and public benchmarks. Here’s a non-exhaustive list of common public pre-training evaluations:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">MMLU (knowledge)</strong>: Tests models on multiple-choice questions across 57 subjects, from elementary to professional levels</li>
+      <li class="bulletList"><strong class="keyWord">HellaSwag (reasoning)</strong>: Challenges models to complete a given situation with the most plausible ending from multiple choices</li>
+      <li class="bulletList"><strong class="keyWord">ARC-C (reasoning)</strong>: Evaluates models on grade-school-level multiple-choice science questions requiring causal reasoning</li>
+      <li class="bulletList"><strong class="keyWord">Winogrande (reasoning)</strong>: Assesses common sense reasoning through pronoun resolution in carefully crafted sentences</li>
+      <li class="bulletList"><strong class="keyWord">PIQA (reasoning)</strong>: Measures physical common sense understanding through questions about everyday physical interactions</li>
+    </ul>
+    <p class="normal">Many of these datasets are also used to evaluate general-purpose fine-tuned models. In this case, we focus on the difference in a given score between the base and the fine-tuned model. For example, bad fine-tuning can degrade the knowledge of the model, measured by MMLU. On the contrary, a good one might instill even more knowledge and increase the MMLU score.</p>
+    <p class="normal">This can also help identify any contamination issues, where the model might have been fine-tuned on data that is too close to a test set. For instance, improving the MMLU score of a base model by 10 points during the fine-tuning phase is unlikely. This is a sign that the instruction data might be contaminated.</p>
+    <p class="normal">In addition to these pre-trained evaluations, fine-tuned models also have their own benchmarks. Here, we use the term “fine-tuned model” to designate a model that has been trained <a id="_idIndexMarker677"/>with <strong class="keyWord">supervised fine-tuning</strong> (<strong class="keyWord">SFT</strong>) and preference alignment. These<a id="_idIndexMarker678"/> benchmarks target <a id="_idIndexMarker679"/>capabilities connected to the ability of fine-tuned models to understand and answer questions. In particular, they test instruction-following, multi-turn conversation, and agentic skills:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">IFEval (instruction following)</strong>: Assesses a model’s ability to follow instructions <a id="_idIndexMarker680"/>with particular constraints, like not outputting any commas in your answer</li>
+      <li class="bulletList"><strong class="keyWord">Chatbot Arena (conversation)</strong>: A framework where humans vote for the best<a id="_idIndexMarker681"/> answer to an instruction, comparing two models in head-to-head conversations</li>
+      <li class="bulletList"><strong class="keyWord">AlpacaEval (instruction following)</strong>: Automatic <a id="_idIndexMarker682"/>evaluation for fine-tuned models that is highly correlated with Chatbot Arena</li>
+      <li class="bulletList"><strong class="keyWord">MT-Bench (conversation)</strong>: Evaluates<a id="_idIndexMarker683"/> models on multi-turn conversations, testing their ability to maintain context and provide coherent responses</li>
+      <li class="bulletList"><strong class="keyWord">GAIA (agentic)</strong>: Tests a wide<a id="_idIndexMarker684"/> range of abilities like tool use and web browsing, in a multi-step fashion</li>
+    </ul>
+    <p class="normal">Understanding how these evaluations are designed and used is important to choose the best LLM for your application. For example, if you want to fine-tune a model, you want the best base model in terms of knowledge and reasoning for a given size. This allows you to compare the capabilities of different LLMs and pick the one that will offer the strongest foundation for your fine-tuning.</p>
+    <p class="normal">Even if you don’t want to fine-tune a model, benchmarks like Chatbot Arena or IFEval are a good way to compare different instruct models. For instance, you want great conversational abilities if you’re building a chatbot. However, this is not necessary if your end goal is something like information extraction from unstructured documents. In this case, you will benefit more from excellent instruction-following skills to understand and execute tasks.</p>
+    <p class="normal">While these benchmarks are popular and useful, they also suffer from inherent flaws. For example, public benchmarks can be gamed by training models on test data or samples <a id="_idIndexMarker685"/>that are very similar <a id="_idIndexMarker686"/>to benchmark datasets. Even human evaluation is not perfect and is often biased toward long and confident answers, especially when they’re nicely formatted (e.g., using Markdown). On the other hand, private test sets have not been scrutinized as much as public ones and might have their own issues and biases.</p>
+    <p class="normal">This means that benchmarks are not a single source of truth but should be used as signals. Once <a id="_idIndexMarker687"/>multiple evaluations provide a similar <a id="_idIndexMarker688"/>answer, you can raise your confidence level about the real capabilities of a model.</p>
+    <h2 id="_idParaDest-188" class="heading-2">Domain-specific LLM evaluations</h2>
+    <p class="normal">Domain-specific LLMs <a id="_idIndexMarker689"/>don’t have the<a id="_idIndexMarker690"/> same scope as general-purpose models. This is helpful to target more fine-grained capabilities with more depth than the previous benchmarks.</p>
+    <p class="normal">Within the category, the choice of benchmarks entirely depends on the domain in question. For common applications like a language-specific model or a code model, it is recommended to search for relevant evaluations and even benchmark suites. These suites encompass different benchmarks and are designed to be reproducible. By targeting different aspects of a domain, they often capture domain performance more accurately.</p>
+    <p class="normal">To illustrate this, here is a list of domain-specific evaluations with leaderboards on the Hugging Face Hub:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Open Medical-LLM Leaderboard</strong>: Evaluates the performance of LLMs in medical <a id="_idIndexMarker691"/>question-answering tasks. It regroups 9 metrics, with 1,273 questions from the US medical license exams (MedQA), 500 questions from PubMed articles (PubMedQA), 4,183 questions from Indian medical entrance exams (MedMCQA), and 1,089 questions from 6 sub-categories of MMLU (clinical knowledge, medical genetics, anatomy, professional medicine, college biology, and college medicine).</li>
+      <li class="bulletList"><strong class="keyWord">BigCodeBench Leaderboard</strong>: Evaluates <a id="_idIndexMarker692"/>the performance of code LLMs, featuring two main categories: BigCodeBench-Complete for code completion based on structured docstrings, and BigCodeBench-Instruct for code generation from natural language instructions. Models are ranked by their Pass@1 scores using greedy decoding, with an additional Elo rating for the Complete variant. It covers a wide range of programming scenarios that<a id="_idIndexMarker693"/> test LLMs’ compositional reasoning and instruction-following capabilities.</li>
+      <li class="bulletList"><strong class="keyWord">Hallucinations Leaderboard</strong>: Evaluates LLMs’ tendency to produce false or unsupported <a id="_idIndexMarker694"/>information across 16 diverse tasks spanning 5 categories. These include <em class="italic">Question Answering</em> (with datasets like NQ Open, TruthfulQA, and SQuADv2), <em class="italic">Reading Comprehension</em> (using TriviaQA and RACE), <em class="italic">Summarization</em> (employing HaluEval Summ, XSum, and CNN/DM), <em class="italic">Dialogue</em> (featuring HaluEval Dial and FaithDial), and <em class="italic">Fact Checking</em> (utilizing MemoTrap, SelfCheckGPT, FEVER, and TrueFalse). The leaderboard also assesses instruction-following ability using IFEval.</li>
+      <li class="bulletList"><strong class="keyWord">Enterprise Scenarios Leaderboard</strong>: Evaluates the performance of LLMs on six<a id="_idIndexMarker695"/> real-world enterprise use cases, covering diverse tasks relevant to business applications. The benchmarks include FinanceBench (100 financial questions with retrieved context), Legal Confidentiality (100 prompts from LegalBench for legal reasoning), Writing Prompts (creative writing evaluation), Customer Support Dialogue (relevance in customer service interactions), Toxic Prompts (safety assessment for harmful content generation), and Enterprise PII (business safety for sensitive information protection). Some test sets are closed-source to prevent gaming of the leaderboard. The evaluation focuses on specific capabilities such as answer accuracy, legal reasoning, creative writing, contextual relevance, and safety measures, providing a comprehensive assessment of LLMs’ suitability for enterprise environments.</li>
+    </ul>
+    <p class="normal">Leaderboards can have different approaches based on their domain. For example, BigCodeBench<a id="_idIndexMarker696"/> is significantly <a id="_idIndexMarker697"/>different from others because it relies on only two metrics that sufficiently capture the entire domain. On the other hand, the Hallucinations Leaderboard regroups 16 metrics, including many general-purpose evaluations. It shows that in addition to custom benchmarks, reusing general-purpose ones can complete your own suite.</p>
+    <p class="normal">In particular, language-specific LLMs often reuse translated versions of general-purpose benchmarks. This can be completed with original evaluations in the native language. While some of these benchmarks use machine translation, it is better to rely on human-translated evaluations to improve their quality. We selected the following three task-specific leaderboards and their respective evaluation suites to give you <a id="_idIndexMarker698"/>an idea of how to build your own:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">OpenKo-LLM Leaderboard</strong>: Evaluates the performance of Korean LLMs using nine<a id="_idIndexMarker699"/> metrics. These metrics are a combination of general-purpose benchmarks translated into Korean (GPQA, Winogrande, GSM8K, EQ-Bench, and IFEval) and custom evaluations (Knowledge, Social Value, Harmlessness, and Helpfulness).</li>
+      <li class="bulletList"><strong class="keyWord">Open Portuguese LLM Leaderboard</strong>: Evaluates the performance of Portuguese <a id="_idIndexMarker700"/>language LLMs using nine diverse benchmarks. These benchmarks include educational assessments (ENEM with 1,430 questions, and BLUEX with 724 questions from university entrance exams), professional exams (OAB Exams with over 2,000 questions), language understanding tasks (ASSIN2 RTE and STS, FAQUAD NLI), and social media content analysis (HateBR with 7,000 Instagram comments, PT Hate Speech with 5,668 tweets, and tweetSentBR).</li>
+      <li class="bulletList"><strong class="keyWord">Open Arabic LLM Leaderboard</strong>: Evaluates the performance of Arabic language<a id="_idIndexMarker701"/> LLMs using a comprehensive set of benchmarks, including both native Arabic tasks and translated datasets. The leaderboard features two native Arabic benchmarks: AlGhafa and Arabic-Culture-Value-Alignment. Additionally, it incorporates 12 translated benchmarks covering various domains, such<a id="_idIndexMarker702"/> as MMLU, ARC-Challenge, HellaSwag, and PIQA.</li>
+    </ul>
+    <p class="normal">Both general-purpose <a id="_idIndexMarker703"/>and domain-specific evaluations are designed with three main principles. First, they should be complex and challenge models to distinguish good and bad outputs. Second, they should be diverse and cover as many topics and scenarios as possible. When one benchmark is not enough, additional ones can create a stronger suite. Finally, they should be practical and easy to run. This is more connected to evaluation libraries, which can be more or less complex to work with. We recommend lm-evaluation-harness (<a href="https://github.com/EleutherAI/lm-evaluation-harness"><span class="url">github.com/EleutherAI/lm-evaluation-harness</span></a>) from Eleuther AI and lighteval (<a href="https://github.com/huggingface/lighteval"><span class="url">github.com/huggingface/lighteval</span></a>) from <a id="_idIndexMarker704"/>Hugging <a id="_idIndexMarker705"/>Face to run your benchmarks.</p>
+    <h2 id="_idParaDest-189" class="heading-2">Task-specific LLM evaluations</h2>
+    <p class="normal">While general-purpose<a id="_idIndexMarker706"/> and domain-specific <a id="_idIndexMarker707"/>evaluations indicate strong base or instruct models, they cannot provide insights into how well these models work for a given task. This requires benchmarks specifically designed for this purpose, measuring downstream performance.</p>
+    <p class="normal">Because of their narrow focus, task-specific LLMs can rarely rely on pre-existing evaluation datasets. This can be advantageous because their outputs also tend to be more structured and easier to evaluate using traditional ML metrics. For example, a summarization task can leverage the <strong class="keyWord">Recall-Oriented Understudy for Gisting Evaluation</strong> (<strong class="keyWord">ROUGE</strong>) metric, which <a id="_idIndexMarker708"/>measures the overlap between the generated text and reference text using n-grams.</p>
+    <p class="normal">Likewise, classification tasks also benefit from it and use the following classic metrics, among others:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Accuracy</strong>: Accuracy refers to the proportion of correctly predicted instances compared to the total instances. It’s particularly useful for tasks with categorical outputs or where there is a clear distinction between right and wrong answers, such as <strong class="keyWord">named entity recognition</strong> (<strong class="keyWord">NER</strong>).</li>
+      <li class="bulletList"><strong class="keyWord">Precision</strong>: The ratio of true positive predictions to the total positive predictions made by the model.</li>
+      <li class="bulletList"><strong class="keyWord">Recall</strong>: The ratio of true positive predictions to the total actual positive instances.</li>
+      <li class="bulletList"><strong class="keyWord">F1 Score</strong>: The harmonic mean of precision and recall, used to balance both metrics. These are particularly useful in tasks such as classification or entity extraction.</li>
+    </ul>
+    <p class="normal">When the task cannot be directly mapped to a traditional ML task, it is possible to create a custom benchmark. This benchmark can be inspired by general-purpose and domain-specific evaluation datasets. A common and successful pattern is the use of multiple-choice question answering. In this framework, the instruction consists of a question with several options. See the following example with a<a id="_idIndexMarker709"/> question <a id="_idIndexMarker710"/>from the MMLU dataset (abstract algebra):</p>
+    <table id="table001-3" class="table-container">
+      <tbody>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Instruction</strong></p>
+            <p class="normal">Find the degree for the given field extension Q(sqrt(2), sqrt(3)) over Q.</p>
+            <p class="normal">A. 0</p>
+            <p class="normal">B. 4</p>
+            <p class="normal">C. 2</p>
+            <p class="normal">D. 6</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Output</strong></p>
+            <p class="normal">B</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="packt_figref"><em class="italic">Table 7.1</em>: Example from the MMLU dataset</p>
+    <p class="normal">There are two main ways of evaluating models with this scheme—text generation and log-likelihood evaluations:</p>
+    <ul>
+      <li class="bulletList">The first approach involves having the model generate text responses and comparing those to predefined answer choices. For example, the model generates a letter (A, B, C, or D) as its answer, which is then checked against the correct answer. This method tests the model’s ability to produce coherent and accurate responses in a format similar to how it would be used in real-world applications.</li>
+      <li class="bulletList">Evaluation using probabilities, on the other hand, looks at the model’s predicted probabilities for different answer options without requiring text generation. For MMLU, lm-evaluation-harness compares the probabilities for the full text of each answer choice. This approach allows for a more nuanced assessment of the model’s understanding, as it can capture the relative confidence the model has in different options, even if it wouldn’t necessarily generate the exact correct answer text.</li>
+    </ul>
+    <p class="normal">For simplicity, we recommend the text-generation version of the evaluation that mimics human test-taking. It is<a id="_idIndexMarker711"/> easier to implement, and generally more discriminative, as low-quality models tend to overperform on probability-based evaluations. You can adapt this technique to quiz your models about a particular task, and even expand it to specific domains.</p>
+    <p class="normal">Conversely, if the task is too open-ended, traditional ML metrics and multiple-choice question answering might not be relevant. In this scenario, the LLM-as-a-judge technique introduced in <em class="italic">Chapter 5</em> can be used to evaluate the quality of the answers. If you have ground-truth answers, providing them as additional context improves <a id="_idIndexMarker712"/>the accuracy of the evaluation. Otherwise, defining different dimensions (such as relevance or toxicity, depending on your task) can also ground the evaluation in more interpretable categories.</p>
+    <p class="normal">It is recommended to use large models for evaluation and to iteratively refine your prompt. In this process, the explanations outputted by the model are important for understanding errors in its reasoning and fixing them through additional prompt engineering. </p>
+    <p class="normal">In order to easily parse answers, one can specify a structure in the <a id="_idIndexMarker713"/>instruction or use some kind of structured generation (like Outlines or OpenAI’s JSON mode). Here is an example of an instruction with a structure:</p>
+    <table id="table002-2" class="table-container">
+      <tbody>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><span class="url">You are an evaluator who assesses the quality of an answer to an instruction.</span></p>
+            <p class="normal"><span class="url">Your goal is to provide a score that represents how well the answer addresses the instruction.</span></p>
+            <p class="normal"><span class="url">You will use a scale of 1 to 4, where each number represents the following:</span></p>
+            <p class="normal"><span class="url">1. The answer is not relevant to the instruction.</span></p>
+            <p class="normal"><span class="url">2. The answer is relevant but not helpful.</span></p>
+            <p class="normal"><span class="url">3. The answer is relevant and helpful but could be more detailed.</span></p>
+            <p class="normal"><span class="url">4. The answer is relevant, helpful, and detailed.</span></p>
+            <p class="normal"><span class="url">Please provide your evaluation as follows:</span></p>
+            <p class="normal"><span class="url">##Evaluation##</span></p>
+            <p class="normal"><span class="url">Explanation: (analyze the relevant, helpfulness, and complexity of the answer)</span></p>
+            <p class="normal"><span class="url">Total rating: (final score as a number between 1 and 4)</span></p>
+            <p class="normal"><strong class="keyWord">Instruction</strong>:</p>
+            <p class="normal">{instruction}</p>
+            <p class="normal"><strong class="keyWord">Answer</strong>:</p>
+            <p class="normal">{answer}</p>
+            <p class="normal">##Evaluation##</p>
+            <p class="normal">Explanation: </p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="packt_figref"><em class="italic">Table 7.2</em>: Example of general-purpose LLM-as-a-judge prompt for answer evaluation</p>
+    <p class="normal">Naturally, you can <a id="_idIndexMarker714"/>tweak the scale, add a ground-truth answer to this prompt, and customize it for your own use cases.</p>
+    <p class="normal">However, judge LLMs can exhibit biases favoring assertive or verbose responses, potentially overrating answers that sound more confident but are less accurate. They may also lack domain expertise for specialized topics, leading to misjudgments. Consistency is also a concern, as LLMs might score similar responses differently. Additionally, they could have implicit preferences for certain writing styles unrelated to actual answer quality. To mitigate these issues, it’s possible to combine LLM evaluations with other metrics, use multiple judges, and carefully design prompts to address biases.</p>
+    <p class="normal">Once a model has been properly evaluated and works as intended, it might be included within a<a id="_idIndexMarker715"/> broader system. In the next section, we will see how systems change the <a id="_idIndexMarker716"/>evaluation framework.</p>
+    <h1 id="_idParaDest-190" class="heading-1">RAG evaluation</h1>
+    <p class="normal">While traditional LLM <a id="_idIndexMarker717"/>evaluation focuses on the model’s inherent capabilities, RAG evaluation requires a more comprehensive approach that considers both the model’s generative abilities and its interaction with external information sources.</p>
+    <p class="normal">RAG systems combine the strengths of LLMs with information retrieval mechanisms, allowing them to generate responses that are not only coherent and contextually appropriate but also grounded in up-to-date, externally sourced information. This makes RAG particularly valuable in fields where current and accurate information is crucial, such as news reporting, research, and customer support.</p>
+    <p class="normal">The evaluation of RAG systems goes beyond assessing a standalone LLM. It requires examining the entire system’s performance, including:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Retrieval accuracy</strong>: How well does the system fetch relevant information?</li>
+      <li class="bulletList"><strong class="keyWord">Integration quality</strong>: How effectively is the retrieved information incorporated into the generated response?</li>
+      <li class="bulletList"><strong class="keyWord">Factuality and relevance</strong>: Does the final output address the query appropriately while seamlessly blending retrieved and generated content?</li>
+    </ul>
+    <p class="normal">Key metrics for RAG evaluation include retrieval precision and recall, which measure the accuracy and comprehensiveness of the retrieved information. Additionally, the quality of integration between retrieved data and generated text is crucial, as is the overall factuality and coherence of the output.</p>
+    <p class="normal">To illustrate how<a id="_idIndexMarker718"/> these metrics are applied in practice, consider a RAG system designed for a customer support chatbot in an e-commerce setting. In this scenario, the user asks “What’s your return policy for laptops purchased during the holiday sale?” The RAG pipeline finds relevant documents on the electronics return policy and documents on holiday sale terms. This additional context is appended at the end of the question, and the model uses it to respond:</p>
+    <table id="table003-1" class="table-container">
+      <tbody>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><span class="url">For laptops purchased during our holiday sale, you have an extended return period of 60 days from the date of purchase. This is longer than our standard 30-day return policy for electronics. Please ensure the laptop is in its original packaging with all accessories to be eligible for a full refund.</span></p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="packt_figref"><em class="italic">Table 7.3</em>: Example of output from a RAG pipeline designed for customer support</p>
+    <p class="normal">In this pipeline, we can evaluate if the retrieved documents correspond to what was expected (retrieval accuracy). We can also measure the difference between responses with and without additional context (integration quality). Finally, we can assess whether the output is relevant and grounded in the information provided by the<a id="_idIndexMarker719"/> documents (factuality and relevance).</p>
+    <p class="normal">In this section, we will cover two methods to evaluate how well RAG models incorporate external information into their responses.</p>
+    <h2 id="_idParaDest-191" class="heading-2">Ragas</h2>
+    <p class="normal"><strong class="keyWord">Retrieval-Augmented Generation Assessment </strong>(<strong class="keyWord">Ragas</strong>) is an open-source toolkit designed to<a id="_idIndexMarker720"/> provide<a id="_idIndexMarker721"/> developers with a comprehensive set of tools for RAG evaluation and optimization. It’s designed around the idea of <strong class="keyWord">metrics-driven development</strong> (<strong class="keyWord">MDD</strong>), a product development approach that relies on data to<a id="_idIndexMarker722"/> make well-informed decisions, involving the ongoing monitoring of essential metrics over time to gain valuable insights into an application’s performance. By embracing this methodology, Ragas enables developers to objectively assess their RAG systems, identify areas for improvement, and track the impact of changes over time.</p>
+    <p class="normal">One of the key capabilities of Ragas is its ability to synthetically generate diverse and complex test datasets. This feature addresses a significant pain point in RAG development, as manually creating hundreds of questions, answers, and contexts is both time-consuming and labor-intensive. Instead, it uses an evolutionary approach paradigm inspired by works like Evol-Instruct to craft questions with varying characteristics such as reasoning complexity, conditional elements, and multi-context requirements. This approach ensures a comprehensive evaluation of different components within the RAG pipeline. </p>
+    <p class="normal">Additionally, Ragas can generate conversational samples that simulate chat-based question-and-follow-up interactions, allowing developers to evaluate their systems in more realistic scenarios.</p>
+    <figure class="mediaobject"><img src="../Images/B31105_07_01.png" alt=""/></figure>
+    <p class="packt_figref">Figure 7.1: Overview of the Ragas evaluation framework</p>
+    <p class="normal">As illustrated in <em class="italic">Figure 7.1</em>, Ragas provides a suite of LLM-assisted evaluation metrics designed<a id="_idIndexMarker723"/> to objectively measure different aspects of RAG system performance. These <a id="_idIndexMarker724"/>metrics include:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Faithfulness</strong>: This metric measures the factual consistency of the generated answer against the given context. It works by breaking down the answer into individual claims and verifying if each claim can be inferred from the provided context. The faithfulness score is calculated as the ratio of verifiable claims to the total number of claims in the answer.</li>
+      <li class="bulletList"><strong class="keyWord">Answer relevancy</strong>: This metric evaluates how pertinent the generated answer is to the given prompt. It uses an innovative approach where an LLM is prompted to generate multiple questions based on the answer and then calculates the mean cosine similarity between these generated questions and the original question. This method helps identify answers that may be factually correct but off-topic or incomplete.</li>
+      <li class="bulletList"><strong class="keyWord">Context precision</strong>: This metric evaluates whether all the ground-truth relevant items present in the contexts are ranked appropriately. It considers the position of relevant information within the retrieved context, rewarding systems that place the most pertinent information at the top.</li>
+      <li class="bulletList"><strong class="keyWord">Context recall</strong>: This metric measures the extent to which the retrieved context aligns with the annotated answer (ground truth). It analyzes each claim in the ground truth answer to determine whether it can be attributed to the retrieved context, providing insights into the completeness of the retrieved information.</li>
+    </ul>
+    <p class="normal">Finally, Ragas also provides building blocks for monitoring RAG quality in production environments. This facilitates continuous improvement of RAG systems. By leveraging the evaluation results from test datasets and insights gathered from production monitoring, developers can iteratively enhance their applications. This might involve fine-tuning retrieval algorithms, adjusting prompt engineering strategies, or<a id="_idIndexMarker725"/> optimizing the balance between retrieved context and<a id="_idIndexMarker726"/> LLM generation.</p>
+    <p class="normal">Ragas can be complemented with another approach, based on custom classifiers.</p>
+    <h2 id="_idParaDest-192" class="heading-2">ARES</h2>
+    <p class="normal">ARES (an automated<a id="_idIndexMarker727"/> evaluation framework for RAG systems) is a<a id="_idIndexMarker728"/> comprehensive tool designed to evaluate RAG systems. It offers an automated process that combines synthetic data generation with fine-tuned classifiers to assess various aspects of RAG performance, including context relevance, answer faithfulness, and answer relevance.</p>
+    <p class="normal">The ARES framework operates in three main stages: synthetic data generation, classifier training, and RAG evaluation. Each stage is configurable, allowing users to tailor the evaluation process to their specific needs and datasets.</p>
+    <p class="normal">In the synthetic data generation stage, ARES creates datasets that closely mimic real-world scenarios for robust RAG testing. Users can configure this process by specifying document file paths, few-shot prompt files, and output locations for the synthetic queries. The framework supports various pre-trained language models for this task, with the default being google/flan-t5-xxl. Users can control the number of documents sampled and other parameters to balance between comprehensive coverage and computational efficiency.</p>
+    <figure class="mediaobject"><img src="../Images/B31105_07_02.png" alt="A screenshot of a cell phone  Description automatically generated"/></figure>
+    <p class="packt_figref">Figure 7.2: Overview of the ARES evaluation framework</p>
+    <p class="normal">The classifier training stage involves creating high-precision classifiers to determine the relevance and faithfulness of RAG outputs. Users can specify the classification dataset (typically generated from the previous stage), test set for evaluation, label columns, and model choice. ARES uses microsoft/deberta-v3-large as the default model but supports other Hugging Face models. Training parameters such as the number of epochs, patience value for early stopping, and learning rate can be fine-tuned to optimize classifier performance.</p>
+    <p class="normal">The final stage, RAG <a id="_idIndexMarker729"/>evaluation, leverages the trained classifiers<a id="_idIndexMarker730"/> and synthetic data to assess the RAG model’s performance. Users provide evaluation datasets, few-shot examples for guiding the evaluation, classifier checkpoints, and gold label paths. ARES supports various evaluation metrics and can generate confidence intervals for its assessments.</p>
+    <p class="normal">ARES offers flexible model execution options, supporting both cloud-based and local runs through vLLM integration. The framework also supports various artifact types (code snippets, documents, HTML, images, and so on), enabling comprehensive evaluation across different RAG system outputs.</p>
+    <p class="normal">In summary, Ragas and ARES complement each other through their distinct approaches to evaluation and dataset generation. Ragas’s strength in production monitoring and LLM-assisted metrics can be combined with ARES’s highly configurable evaluation process and classifier-based assessments. While Ragas may offer more nuanced evaluations based on LLM capabilities, ARES provides consistent and potentially faster evaluations once its classifiers are trained. Combining them offers a comprehensive evaluation framework, benefiting from quick iterations with<a id="_idIndexMarker731"/> Ragas and in-depth, customized evaluations with<a id="_idIndexMarker732"/> ARES at key stages.</p>
+    <p class="normal">In the next section, we will create our own evaluation framework to evaluate our task-specific TwinLlama-3.1-8B model.</p>
+    <h1 id="_idParaDest-193" class="heading-1">Evaluating TwinLlama-3.1-8B</h1>
+    <p class="normal">In the previous<a id="_idIndexMarker733"/> chapters, we created two models fine-tuned to generate high-quality posts and articles: TwinLlama-3.1-8B and TwinLlama-3.1-8B-DPO. Based on this summary, we want to assess their abilities to write text that is both accurate and well-written. In comparison, general-purpose fine-tuned models are accurate thanks to their extensive knowledge but often use overly formal and verbose language. With this fine-tuning, we want to adopt a more natural writing style, based on the original articles from the training set.</p>
+    <p class="normal">Due to the open-ended nature of this problem, we will leverage a judge LLM to evaluate the quality of the generated text. It will take both the instruction and the answer as inputs, and score it on a 1–3 scale based on two criteria:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Accuracy</strong>: The degree of factual correctness and comprehensiveness of the information presented in the answer</li>
+      <li class="bulletList"><strong class="keyWord">Style</strong>: The appropriateness of the tone and writing style for blog posts or social media content (no formal or academic expressions)</li>
+    </ul>
+    <p class="normal">In our evaluation framework, we will use the test split of our instruction dataset to get test instructions. We will feed them to our models and generate answers. These answers will then be evaluated by our judge LLM (GPT-4o-mini), based on a prompt that <a id="_idIndexMarker734"/>specifies our criteria. Finally, we will analyze the scores and draw conclusions based on qualitative and quantitative evaluations.</p>
+    <h2 id="_idParaDest-194" class="heading-2">Generating answers</h2>
+    <p class="normal">The first step consists <a id="_idIndexMarker735"/>of efficiently generating answers for each instruction in our test set. In addition to our two models, we will also use meta-llama/Meta-Llama-3.1-8B-Instruct, the official instruct version of Llama-3.1-8B, as a reference point to better understand the trade-offs we made.</p>
+    <p class="normal">Let’s start the first stage of the implementation:</p>
+    <ol>
+      <li class="numberedList" value="1">We import the relevant libraries, including vLLM for fast generation. This library is a lot faster than transformers for batch generation with local models:
+        <pre class="programlisting code-one"><code class="hljs-code"><span class="hljs-keyword">from</span> vllm <span class="hljs-keyword">import</span> LLM, SamplingParams
+<span class="hljs-keyword">from</span> datasets <span class="hljs-keyword">import</span> load_dataset
+<span class="hljs-keyword">from</span> tqdm.auto <span class="hljs-keyword">import</span> tqdm
+<span class="hljs-keyword">import</span> gc
+</code></pre>
+      </li>
+      <li class="numberedList">We define a function called <code class="inlineCode">generate_answers</code> that will process our dataset and generate responses using a specified model. It takes two inputs—the ID of the model we want to use and the name of the test dataset:
+        <pre class="programlisting code-one"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">generate_answers</span>(<span class="hljs-params">model_id, dataset_name</span>):
+    dataset = load_dataset(dataset_name, split=<span class="hljs-string">"test"</span>)
+</code></pre>
+      </li>
+      <li class="numberedList">We need to format the raw instructions using the chat template our models have been trained on. Note that Llama-3.1-8B-Instruct has been used with a different template, but it can follow this simple format. Here, we use the same chat template with every model for simplicity. We map the entire test set to this template with the <code class="inlineCode">format()</code> function:
+        <pre class="programlisting code-one"><code class="hljs-code">    <span class="hljs-keyword">def</span> <span class="hljs-title">format</span>(<span class="hljs-params">sample</span>):
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{}\n\n### Response:\n"</span>.<span class="hljs-built_in">format</span>(sample[<span class="hljs-string">"instruction"</span>])
+    dataset = dataset.<span class="hljs-built_in">map</span>(<span class="hljs-keyword">lambda</span> sample: {<span class="hljs-string">"prompt"</span>: <span class="hljs-built_in">format</span>(sample)})
+</code></pre>
+      </li>
+      <li class="numberedList">Let’s initialize<a id="_idIndexMarker736"/> the LLM object used by vLLM with a maximum length of 4,096 tokens. We can also specify sampling parameters, which correspond to variables used in the decoding strategy. Here, we use parameters to encourage diversity (high temperature) while removing the most unlikely tokens (<code class="inlineCode">top_p</code> and <code class="inlineCode">min_p</code>). Finally, we start the generation by providing the list of prompts with <code class="inlineCode">dataset["prompt"]</code>:
+        <pre class="programlisting code-one"><code class="hljs-code">    llm = LLM(model=model_id, max_model_len=<span class="hljs-number">4096</span>)
+    sampling_params = SamplingParams(temperature=<span class="hljs-number">0.8</span>, top_p=<span class="hljs-number">0.95</span>, min_p=<span class="hljs-number">0.05</span>, max_tokens=<span class="hljs-number">4096</span>)
+    outputs = llm.generate(dataset[<span class="hljs-string">"prompt"</span>], sampling_params)
+</code></pre>
+      </li>
+      <li class="numberedList">This process should take a few minutes with our 334 prompts. Once this is done, we extract the answers from the object that is outputted by vLLM. We then add these answers as a new column to our dataset. This is useful to log the answers and review them later:
+        <pre class="programlisting code-one"><code class="hljs-code">    answers = [output.outputs[<span class="hljs-number">0</span>].text <span class="hljs-keyword">for</span> output <span class="hljs-keyword">in</span> outputs]
+    dataset = dataset.add_column(<span class="hljs-string">"answers"</span>, answers)
+</code></pre>
+      </li>
+      <li class="numberedList">We save our results to the Hugging Face Hub for easy access later. Then, we clear our GPU memory to prevent running out of space when we process the next model:
+        <pre class="programlisting code-one"><code class="hljs-code">    <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Uploading results for </span><span class="hljs-subst">{model_id}</span><span class="hljs-string">"</span>)
+    dataset.push_to_hub(<span class="hljs-string">f"mlabonne/</span><span class="hljs-subst">{model_id.split(</span><span class="hljs-string">'/'</span><span class="hljs-subst">)[-</span><span class="hljs-number">1</span><span class="hljs-subst">]}</span><span class="hljs-string">-results"</span>)
+    gc.collect()
+    <span class="hljs-keyword">return</span> dataset
+</code></pre>
+      </li>
+      <li class="numberedList">We create a list of the three models we want to test. Then, we run our <code class="inlineCode">generate_answers()</code> function for each of these models, one at a time. This will create and upload a separate set of results for each model:
+        <pre class="programlisting code-one"><code class="hljs-code">model_ids = [
+    <span class="hljs-string">'mlabonne/TwinLlama-3.1-8B'</span>,
+    <span class="hljs-string">'mlabonne/TwinLlama-3.1-8B-DPO'</span>,
+    <span class="hljs-string">'meta-llama/Meta-Llama-3.1-8B-Instruct'</span>
+]
+<span class="hljs-keyword">for</span> model_id <span class="hljs-keyword">in</span> model_ids:
+    generate_answers(model_id, <span class="hljs-string">"mlabonne/llmtwin"</span>)
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">Now that we have <a id="_idIndexMarker737"/>the answer generation, we can move on to the evaluation process.</p>
+    <h2 id="_idParaDest-195" class="heading-2">Evaluating answers</h2>
+    <p class="normal">To evaluate our <a id="_idIndexMarker738"/>answers, we will rely on GPT-4o-mini as a judge. This strategy is similar to what we used for data generation. As a matter of fact, you could adapt it to filter out bad samples during the data generation process. Here, we will score every generated answer from every model in terms of accuracy and style. The average scores will inform us about the quality of our fine-tuning compared to Llama-3.1-8B-Instruct:</p>
+    <ol>
+      <li class="numberedList" value="1">First, we import the required libraries, including <code class="inlineCode">openai</code>:
+        <pre class="programlisting code-one"><code class="hljs-code"><span class="hljs-keyword">import</span> json
+<span class="hljs-keyword">from</span> typing <span class="hljs-keyword">import</span> <span class="hljs-type">List</span>
+<span class="hljs-keyword">from</span> datasets <span class="hljs-keyword">import</span> Dataset, load_dataset
+<span class="hljs-keyword">from</span> openai <span class="hljs-keyword">import</span> OpenAI
+<span class="hljs-keyword">from</span> tqdm.auto <span class="hljs-keyword">import</span> tqdm
+<span class="hljs-keyword">import</span> concurrent.futures
+</code></pre>
+      </li>
+      <li class="numberedList">We then define the <code class="inlineCode">evaluate_answer()</code> function. This function contains our evaluation prompt, which sets up the context for evaluating answers based on accuracy and style:
+        <pre class="programlisting code-one"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">evaluate_answer</span>(
+<span class="hljs-params">    instruction: </span><span class="hljs-built_in">str</span><span class="hljs-params">, answer: </span><span class="hljs-built_in">str</span><span class="hljs-params">, client: OpenAI</span>
+) -&gt; <span class="hljs-built_in">dict</span>:
+    prompt = <span class="hljs-string">f"""You are an expert judge. Please evaluate the quality of a given answer to an instruction based on two criteria:</span>
+<span class="hljs-string">1. Accuracy: How factually correct is the information presented in the answer? You are a technical expert in this topic.</span>
+<span class="hljs-string">2. Style: Is the tone and writing style appropriate for a blog post or social media content? It should use simple but technical words and avoid formal or academic language.</span>
+</code></pre>
+      </li>
+      <li class="numberedList">In the same <a id="_idIndexMarker739"/>prompt, we define our scales for each metric. Those are three-point Likert scales with a precise definition for each score:
+        <pre class="programlisting code-one"><code class="hljs-code">Accuracy scale:
+1 (Poor): Contains factual errors or misleading information
+2 (Good): Mostly accurate with minor errors or omissions
+3 (Excellent): Highly accurate and comprehensive
+Style scale:
+1 (Poor): Too formal, uses some overly complex words
+2 (Good): Good balance of technical content and accessibility, but still uses formal words and expressions
+3 (Excellent): Perfectly accessible language for blog/social media, uses simple but precise technical terms when necessary
+</code></pre>
+      </li>
+      <li class="numberedList">Finally, we conclude the prompt with two examples to illustrate what we mean by “<em class="italic">complex words</em>” and “<em class="italic">formal</em> or <em class="italic">academic language</em>.” We provide the corresponding instruction-answer pair and ask the model to return a response in JSON:
+        <pre class="programlisting code-one"><code class="hljs-code">Example of bad style: The Llama2 7B model constitutes a noteworthy progression in the field of artificial intelligence, serving as the successor to its predecessor, the original Llama architecture.
+Example of excellent style: Llama2 7B outperforms the original Llama model across multiple benchmarks.
+Instruction: {instruction}
+Answer: {answer}
+Provide your evaluation in JSON format with the following structure:
+{{
+    <span class="hljs-string">"accuracy"</span>: {{
+        <span class="hljs-string">"analysis"</span>: <span class="hljs-string">"..."</span>,
+        <span class="hljs-string">"score"</span>: <span class="hljs-number">0</span>
+    }},
+    <span class="hljs-string">"style"</span>: {{
+        <span class="hljs-string">"analysis"</span>: <span class="hljs-string">"..."</span>,
+        <span class="hljs-string">"score"</span>: <span class="hljs-number">0</span>
+    }}
+}}
+<span class="hljs-string">"""</span>
+</code></pre>
+      </li>
+      <li class="numberedList">This prompt is <a id="_idIndexMarker740"/>given as a user query to the GPT-4o-mini model. The system prompt reinforces that we are interested in answer evaluation based on accuracy and style:
+        <pre class="programlisting code-one"><code class="hljs-code">    completion = client.chat.completions.create(
+        model=<span class="hljs-string">"gpt-4o-mini"</span>,
+        messages=[
+            {
+                <span class="hljs-string">"role"</span>: <span class="hljs-string">"system"</span>,
+                <span class="hljs-string">"content"</span>: <span class="hljs-string">"You are a helpful assistant who evaluates answers based on accuracy and style. Provide your response in JSON format with a short analysis and score for each criterion."</span>,
+            },
+            {<span class="hljs-string">"role"</span>: <span class="hljs-string">"</span><span class="hljs-string">user"</span>, <span class="hljs-string">"content"</span>: prompt},
+        ],
+        response_format={<span class="hljs-string">"type"</span>: <span class="hljs-string">"json_object"</span>},
+        max_tokens=<span class="hljs-number">1000</span>,
+        temperature=<span class="hljs-number">0.8</span>,
+    )
+</code></pre>
+      </li>
+      <li class="numberedList">As in the previous chapters, we will batch our requests to speed up the process. This is why we create an <code class="inlineCode">evaluate_batch()</code> function, which returns a list of parsed structured outputs with their corresponding indices. These indices are important to ensure a correct<a id="_idIndexMarker741"/> ordering of the evaluations:
+        <pre class="programlisting code-one"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">evaluate_batch</span>(<span class="hljs-params">batch, start_index</span>):
+    client = OpenAI(api_key=OPENAI_KEY)
+    <span class="hljs-keyword">return</span> [
+        (i, evaluate_answer(instr, ans, client))
+        <span class="hljs-keyword">for</span> i, (instr, ans) <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(batch, start=start_index)
+    ]
+</code></pre>
+      </li>
+      <li class="numberedList">We can now orchestrate the previous code in the <code class="inlineCode">evaluate_answers()</code> function. It takes the model ID, number of threads, and batch size as inputs. First, we load the dataset with the generations we previously saved:
+        <pre class="programlisting code-one"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">evaluate_answers</span>(<span class="hljs-params">model_id: </span><span class="hljs-built_in">str</span><span class="hljs-params">, num_threads: </span><span class="hljs-built_in">int</span><span class="hljs-params"> = </span><span class="hljs-number">10</span><span class="hljs-params">, batch_size: </span><span class="hljs-built_in">int</span><span class="hljs-params"> = </span><span class="hljs-number">5</span>) -&gt; Dataset:
+    dataset = load_dataset(<span class="hljs-string">f"mlabonne/</span><span class="hljs-subst">{model_id.split(</span><span class="hljs-string">'/'</span><span class="hljs-subst">)[-</span><span class="hljs-number">1</span><span class="hljs-subst">]}</span><span class="hljs-string">-results"</span>, split=<span class="hljs-string">"all"</span>)
+</code></pre>
+      </li>
+      <li class="numberedList">We create batches of instruction-answer pairs from our dataset. Each batch contains <code class="inlineCode">batch_size</code> number of pairs:
+        <pre class="programlisting code-one"><code class="hljs-code">    batches = [
+        (i, <span class="hljs-built_in">list</span>(<span class="hljs-built_in">zip</span>(dataset[<span class="hljs-string">"instruction"</span>][i:i+batch_size], dataset[<span class="hljs-string">"answers"</span>][i:i+batch_size])))
+        <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0</span>, <span class="hljs-built_in">len</span>(dataset), batch_size)
+    ]
+</code></pre>
+      </li>
+      <li class="numberedList">We perform parallel evaluation of batches of instruction-answer pairs using multiple threads. We use parallel processing to evaluate multiple batches simultaneously, speeding up the overall evaluation process. The<a id="_idIndexMarker742"/> <code class="inlineCode">ThreadPoolExecutor</code> submits each batch to <code class="inlineCode">evaluate_batch()</code>. The results are stored in the evaluations list:
+        <pre class="programlisting code-one"><code class="hljs-code">    evaluations = [<span class="hljs-literal">None</span>] * <span class="hljs-built_in">len</span>(dataset)
+    <span class="hljs-keyword">with</span> concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) <span class="hljs-keyword">as</span> executor:
+        futures = [executor.submit(evaluate_batch, batch, start_index) <span class="hljs-keyword">for</span> start_index, batch <span class="hljs-keyword">in</span> batches]
+        <span class="hljs-keyword">for</span> future <span class="hljs-keyword">in</span> tqdm(concurrent.futures.as_completed(futures), total=<span class="hljs-built_in">len</span>(futures)):
+            <span class="hljs-keyword">for</span> index, evaluation <span class="hljs-keyword">in</span> future.result():
+                evaluations[index] = evaluation
+</code></pre>
+      </li>
+      <li class="numberedList">We create a new column with the result of the evaluation process. This column will store the raw JSON output of the judge model, including scores and explanations:
+        <pre class="programlisting code-one"><code class="hljs-code">    <span class="hljs-keyword">if</span> <span class="hljs-string">'evaluation'</span> <span class="hljs-keyword">in</span> dataset.column_names:
+        dataset = dataset.remove_columns([<span class="hljs-string">'evaluation'</span>])
+    dataset = dataset.add_column(<span class="hljs-string">"evaluation"</span>, evaluations)
+</code></pre>
+      </li>
+      <li class="numberedList">We can directly parse this JSON object with <code class="inlineCode">json.loads()</code> and try to retrieve the accuracy and style scores that should have been generated. This generation is in best-effort mode, which means that scores are not guaranteed. If there’s an error in parsing, we use <code class="inlineCode">None</code> values as a<a id="_idIndexMarker743"/> fallback:
+        <pre class="programlisting code-one"><code class="hljs-code">    accuracy_scores = []
+    style_scores = []
+    <span class="hljs-keyword">for</span> evaluation <span class="hljs-keyword">in</span> dataset[<span class="hljs-string">'evaluation'</span>]:
+        <span class="hljs-keyword">try</span>:
+            eval_dict = json.loads(evaluation) <span class="hljs-keyword">if</span> <span class="hljs-built_in">isinstance</span>(evaluation, <span class="hljs-built_in">str</span>) <span class="hljs-keyword">else</span> evaluation
+            accuracy_score = eval_dict[<span class="hljs-string">'accuracy'</span>][<span class="hljs-string">'score'</span>]
+            style_score = eval_dict[<span class="hljs-string">'style'</span>][<span class="hljs-string">'score'</span>]
+            accuracy_scores.append(accuracy_score)
+            style_scores.append(style_score)
+        <span class="hljs-keyword">except</span> (json.JSONDecodeError, KeyError, TypeError):
+            accuracy_scores.append(<span class="hljs-literal">None</span>)
+            style_scores.append(<span class="hljs-literal">None</span>)
+</code></pre>
+      </li>
+      <li class="numberedList">We add two new columns to store the accuracy and style scores for further analysis:
+        <pre class="programlisting code-one"><code class="hljs-code">    <span class="hljs-keyword">if</span> <span class="hljs-string">'accuracy'</span> <span class="hljs-keyword">in</span> dataset.column_names:
+        dataset = dataset.remove_columns([<span class="hljs-string">'accuracy'</span>])
+    dataset = dataset.add_column(<span class="hljs-string">'accuracy'</span>, accuracy_scores)
+    <span class="hljs-keyword">if</span> <span class="hljs-string">'style'</span> <span class="hljs-keyword">in</span> dataset.column_names:
+        dataset = dataset.remove_columns([<span class="hljs-string">'style'</span>])
+    dataset = dataset.add_column(<span class="hljs-string">'style'</span>, style_scores)
+</code></pre>
+      </li>
+      <li class="numberedList">Let’s push the final dataset with generated answers, evaluations, and scores to the Hugging Face Hub:
+        <pre class="programlisting code-one"><code class="hljs-code">    dataset.push_to_hub(<span class="hljs-string">f"mlabonne/</span><span class="hljs-subst">{model_id.split(</span><span class="hljs-string">'/'</span><span class="hljs-subst">)[-</span><span class="hljs-number">1</span><span class="hljs-subst">]}</span><span class="hljs-string">-results"</span>)
+    <span class="hljs-keyword">return</span> dataset
+</code></pre>
+      </li>
+      <li class="numberedList">We can now call the <code class="inlineCode">evaluate_answers()</code> function with the three models we selected:
+        <pre class="programlisting code-one"><code class="hljs-code">model_ids = [
+    <span class="hljs-string">'mlabonne/TwinLlama-3.1-8B'</span>,
+    <span class="hljs-string">'mlabonne/TwinLlama-3.1-8B-DPO'</span>,
+    <span class="hljs-string">'meta-llama/Meta-Llama-3.1-8B-Instruct'</span>
+]
+<span class="hljs-keyword">for</span> model_id <span class="hljs-keyword">in</span> model_ids:
+    evaluate_answers(model_id)
+</code></pre>
+      </li>
+    </ol>
+    <p class="normal">By saving intermediate <a id="_idIndexMarker744"/>results, our evaluation framework becomes more robust to failures. It is also easily extendable to other models, datasets, and criteria.</p>
+    <h2 id="_idParaDest-196" class="heading-2">Analyzing results</h2>
+    <p class="normal">There are three <a id="_idIndexMarker745"/>elements we can review at the end of this evaluation process: model answers, explanations from evaluations, and scores.</p>
+    <p class="normal">While reviewing answers is not scalable, it is a crucial step that can help to identify a lot of common mistakes, such as a wrong chat template or incorrect model. Here, we will focus on a single instruction and read the answers provided by our two models and Llama-3.1-8B-Instruct.</p>
+    <table id="table004-1" class="table-container">
+      <tbody>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Instruction</strong></p>
+            <p class="normal">Discuss the concept of algorithm bias and its implications.</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">TwinLlama-3.1-8B</strong></p>
+            <p class="normal">Algorithm bias refers to the tendency of algorithms to produce outcomes that are skewed or unfair due to underlying assumptions or programming biases. This can have significant implications, particularly in fields like machine learning and AI, where algorithms are relied upon to make critical decisions. If an algorithm is not properly vetted for bias, it may lead to discriminatory outcomes, such as lending practices that disproportionately affect certain demographic groups or recruitment processes that unfairly favor certain candidates. It is essential to ensure that algorithms are designed and implemented with fairness and accuracy in mind to mitigate these risks.</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">TwinLlama-3.1-8B-DPO</strong></p>
+            <p class="normal">Algorithm bias refers to the tendency of algorithms to produce outcomes that are skewed or unfair due to underlying assumptions or programming biases. This can have significant implications, particularly in fields like machine learning and AI, where algorithms are relied upon to make critical decisions. If an algorithm is not properly vetted for bias, it could lead to discriminatory outcomes, such as denying loans to certain demographic groups or perpetuating stereotypes. Therefore, it is essential to address algorithmic bias proactively to ensure that the technology we develop is equitable and just.</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Llama-3.1-8B-Instruct</strong></p>
+            <p class="normal">Algorithm bias, also known as algorithmic bias, refers to the unintended or inherent bias in machine learning models that can affect their performance, accuracy, and fairness. This bias can be caused by various factors, including the data used to train the model, the algorithm itself, and the biases present in the society or culture. One of the most significant implications of algorithm bias is its potential to perpetuate and exacerbate existing social inequalities. For instance, facial recognition software has been shown to be less accurate for people of color, leading to wrongful arrests and discrimination. Similarly, language processing models have been found to be biased towards the language and dialect of the dominant group, making it difficult for marginalized communities to access information and services. Algorithm bias can also have severe consequences in areas such as healthcare, education, and employment. For example, a medical diagnosis algorithm that is biased towards certain demographics may misdiagnose or underdiagnose conditions in other groups, leading to delayed or inadequate treatment. In education, an algorithm that is biased towards certain learning styles may disproportionately affect students with different learning abilities, leading to unequal opportunities. To mitigate the effects of algorithm bias, it is essential to address the root causes of bias and implement measures to ensure fairness and transparency in machine learning models. This can be achieved through techniques such as data cleansing, regularization, and debiasing, as well as implementing diverse and representative datasets. Additionally, it is crucial to involve diverse stakeholders, including members of marginalized communities, in the development and testing of algorithms to ensure that they are fair and equitable. In conclusion, algorithm bias is a significant concern that can have far-reaching implications for individuals and society as a whole. It is essential to recognize the potential biases in machine learning models and take proactive steps to mitigate their effects. By doing so, we can create more equitable and just systems that benefit everyone, regardless of their background or demographic characteristics.</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="packt_figref"><em class="italic">Table 7.4</em>: Example of generated answers for a given instruction</p>
+    <p class="normal">Immediately, we can see that the answers from our models are very close to each other. This is not the case with Llama-3.1-8B-Instruct’s answer, which is extremely verbose and lists many examples. This is typically the kind of answer that is correct but can feel artificial and unpleasant to read because of its length. On the other hand, the DPO model slightly simplifies the language of the SFT version, making it <a id="_idIndexMarker746"/>less academic. This is exactly the behavior we want to capture, modifying the writing style but not the actual content of the answer.</p>
+    <p class="normal">Let’s now review the evaluations provided by GPT-4o-mini for each answer.</p>
+    <table id="table005-1" class="table-container">
+      <tbody>
+        <tr>
+          <td class="table-cell" colspan="2">
+            <p class="normal"><strong class="keyWord">TwinLlama-3.1-8B</strong></p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Accuracy</strong></p>
+            <p class="normal">The answer accurately defines algorithm bias and highlights its implications in fields like machine learning and AI. It correctly identifies the risks of discriminatory outcomes due to biased algorithms. There are no apparent factual errors, making this a comprehensive response.</p>
+            <p class="normal">Score: 3</p>
+          </td>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Style</strong></p>
+            <p class="normal">The tone is informative and relatively accessible, though it tends towards a formal tone in some sections (e.g., ‘underlying assumptions or programming biases’). While it does use some technical terms appropriately, it could be simplified further for a broader audience, especially for blog or social media content.</p>
+            <p class="normal">Score: 2</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell" colspan="2">
+            <p class="normal"><strong class="keyWord">TwinLlama-3.1-8B-DPO</strong></p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Accuracy</strong></p>
+            <p class="normal">The answer accurately defines algorithm bias and outlines its implications in critical fields like machine learning and AI. It highlights the potential for discriminatory outcomes, making it a comprehensive overview of the topic without any factual errors.</p>
+            <p class="normal">Score: 3</p>
+          </td>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Style</strong></p>
+            <p class="normal">The writing style is clear, accessible, and effectively communicates the technical concept of algorithm bias without becoming overly formal. While it uses some technical terms, they are appropriate and explained well for a general audience.</p>
+            <p class="normal">Score: 3</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell" colspan="2">
+            <p class="normal"><strong class="keyWord">Llama-3.1-8B-Instruct</strong></p>
+          </td>
+        </tr>
+        <tr>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Accuracy</strong></p>
+            <p class="normal">The answer accurately defines algorithm bias and discusses its causes and implications in various domains such as facial recognition, healthcare, and education. It also correctly identifies methods to mitigate bias, such as involving diverse stakeholders and employing debiasing techniques. Overall, the information is factually correct and comprehensive.</p>
+            <p class="normal">Score: 3</p>
+          </td>
+          <td class="table-cell">
+            <p class="normal"><strong class="keyWord">Style</strong></p>
+            <p class="normal">The tone is informative and accessible, with technical terms explained clearly. However, some phrases like ‘unintended or inherent bias’ and ‘implementation of diverse and representative datasets’ could be simplified for broader audience appeal. The writing is generally suitable for blog or social media content, but it could benefit from a more conversational tone.</p>
+            <p class="normal">Score: 2</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="packt_figref"><em class="italic">Table 7.5</em>: Evaluations of each answer made by GPT-4o-mini, according to style and accuracy</p>
+    <p class="normal">According to our judge LLM, there is no issue with the accuracy of the answers, which get a perfect score. However, the style is considered too formal for TwinLlama-3.1-8B (SFT) and Llama-3.1-8B-Instruct, with a score of 2. The judge LLM agreed with our <a id="_idIndexMarker747"/>previous analysis and assigned a perfect score to TwinLlama-3.1-8B-DPO’s answer for communicating “the technical concept of algorithm bias without becoming overly formal.”</p>
+    <p class="normal">This trend is confirmed by the average scores obtained by each model:</p>
+    <pre class="programlisting con"><code class="hljs-con">TwinLlama-3.1-8B - Accuracy: 2.45
+TwinLlama-3.1-8B - Style: 2.04
+TwinLlama-3.1-8B-DPO - Accuracy: 2.46
+<span class="code-highlight"><strong class="hljs-slc">TwinLlama-3.1-8B-DPO - Style: 2.12</strong></span>
+<span class="code-highlight"><strong class="hljs-slc">Llama-3.1-8B-Instruct - Accuracy: 2.62</strong></span>
+Llama-3.1-8B-Instruct - Style: 1.86
+</code></pre>
+    <p class="normal">In terms of accuracy, our two fine-tuned models get similar scores, while Llama-3.1-8B-Instruct achieves the highest accuracy score of 2.62. This suggests that the instruct-tuned Llama model may have a slight edge in providing factually correct information. This is probably due to its extensive post-training process with over 10 million samples (compared to 13,000 in our case).</p>
+    <p class="normal">However, when it comes to style, we see a different pattern. TwinLlama-3.1-8B-DPO leads with a score of 2.12, successfully achieving a more accessible and less formal writing style without sacrificing content quality. TwinLlama-3.1-8B (SFT) follows with 2.04, showing improvement but retaining some formality, while Llama-3.1-8B-Instruct trails with 1.86, tending toward verbosity.</p>
+    <p class="normal">Based on this feedback and the manual review of the generated answers, we can detect mistakes and identify areas for improvement. This is essential for refining the data generation process through additional filtering or augmenting the dataset with missing <a id="_idIndexMarker748"/>information. While this first version already shows promising results, iterating over different datasets and models will allow us to significantly outperform our baseline and create the best possible model for our use case.</p>
+    <h1 id="_idParaDest-197" class="heading-1">Summary</h1>
+    <p class="normal">In this chapter, we explored LLM evaluation with models and RAG systems. We saw how to interpret classic benchmarks like MMLU to select strong candidates to use or fine-tune. We also detailed how domain-specific and task-specific evaluations work, and how to create our own based on publicly available examples. </p>
+    <p class="normal">We focused on two techniques (multiple-choice question answering and LLM-as-a-judge) as the backbone of these custom evaluation frameworks.</p>
+    <p class="normal">However, models are commonly integrated into broader systems that provide additional context. We introduced two evaluation frameworks for RAG systems, Ragas and ARES. We saw both similarities (for example, synthetic data generation) and differences in how they evaluate RAG systems (context-based metrics versus trained classifiers). Finally, we evaluated TwinLlama-3.1-8B with a judge LLM according to three criteria: relevance, coherence, and conciseness. This provided insights into how we can improve it.</p>
+    <p class="normal">In the next chapter, we will explore inference optimization techniques to improve speed and reduce memory usage, without significantly compromising model performance. We will also delve into optimization methods, model parallelism techniques and examine different quantization approaches.</p>
+    <h1 id="_idParaDest-198" class="heading-1">References</h1>
+    <ul>
+      <li class="bulletList">Lianmin Zheng et al.. “<em class="italic">Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</em>.” arXiv preprint arXiv:2306.05685, June 2023.</li>
+      <li class="bulletList">Aymeric Roucher. “<em class="italic">Using LLM-as-a-judge for an automated and versatile evaluation - Hugging Face Open-Source AI Cookbook</em>.” huggingface.co, No date found, <a href="https://huggingface.co/learn/cookbook/en/llm_judge"><span class="url">https://huggingface.co/learn/cookbook/en/llm_judge</span></a>.</li>
+      <li class="bulletList">LangChain. “<em class="italic">Aligning LLM-as-a-Judge with Human Preferences.” blog.langchain.dev</em>, June 26, 2024, <a href="https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/"><span class="url">https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/</span></a>.</li>
+      <li class="bulletList">Dan Hendrycks et al.. “<em class="italic">Measuring Massive Multitask Language Understanding</em>.” arXiv preprint arXiv:2009.03300, September 2020.</li>
+      <li class="bulletList">Jeffrey Zhou et al.. “<em class="italic">Instruction-Following Evaluation for Large Language Models</em>.” arXiv preprint arXiv:2311.07911, November 2023.</li>
+      <li class="bulletList">Yann Dubois et al.. “<em class="italic">Length-Controlled AlpacaEval: A Simple Way to Debias Automatic Evaluators</em>.” arXiv preprint arXiv:2404.04475, April 2024.</li>
+      <li class="bulletList">Grégoire Mialon et al.. “<em class="italic">GAIA: a benchmark for General AI Assistants</em>.” arXiv preprint arXiv:2311.12983, November 2023.</li>
+      <li class="bulletList">Giwon Hong et al.. “<em class="italic">The Hallucinations Leaderboard -- An Open Effort to Measure Hallucinations in Large Language Models</em>.” arXiv preprint arXiv:2404.05904, April 2024.</li>
+      <li class="bulletList">Shahul Es et al.. “<em class="italic">RAGAS: Automated Evaluation of Retrieval Augmented Generation</em>.” arXiv preprint arXiv:2309.15217, September 2023.</li>
+      <li class="bulletList">Jon Saad-Falcon et al.. “<em class="italic">ARES: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems</em>.” arXiv preprint arXiv:2311.09476, November 2023.</li>
+    </ul>
+    <h1 id="_idParaDest-199" class="heading-1">Join our book’s Discord space</h1>
+    <p class="normal">Join our community’s Discord space for discussions with the authors and other readers:</p>
+    <p class="normal"><a href="https://packt.link/llmeng"><span class="url">https://packt.link/llmeng</span></a></p>
+    <p class="normal"><span class="url"><img src="../Images/QR_Code79969828252392890.png" alt=""/></span></p>
+  </div>
+</body></html>

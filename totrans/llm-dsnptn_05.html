@@ -1,0 +1,300 @@
+<html><head></head><body><div id="book-content"><div id="sbo-rt-content"><div id="_idContainer017">
+			<h1 id="_idParaDest-72" class="chapter-number"><a id="_idTextAnchor084"/>5</h1>
+			<h1 id="_idParaDest-73"><a id="_idTextAnchor085"/>Data Versioning</h1>
+			<p><strong class="bold">Data versioning</strong> refers to the <a id="_idIndexMarker211"/>systematic tracking and management of different iterations of datasets used throughout the life cycle of model development, including pre-training, fine-tuning, evaluation, and deployment. It involves assigning unique identifiers to datasets or subsets thereof, capturing changes over time, and enabling reproducibility by ensuring that any specific model version can be linked back to the exact data <span class="No-Break">version used.</span></p>
+			<p>In this chapter, you’ll learn how to implement effective data versioning strategies for LLM development. For instance, when we want to add 10,000 new oncology research papers to a dataset, the system automatically creates a new dataset version. If the model performance then degrades, the dataset can instantly roll back to the previous verified dataset version, ensuring reproducibility and maintaining the integrity of the <span class="No-Break">research process.</span></p>
+			<p>This design pattern transforms dataset management from a chaotic, manual process into a structured, trackable workflow in LLM <span class="No-Break">model development.</span></p>
+			<p>In this chapter, we’ll be covering the <span class="No-Break">following topics:</span></p>
+			<ul>
+				<li>Understanding the need for <span class="No-Break">data versioning</span></li>
+				<li>Data versioning strategies for large <span class="No-Break">language datasets</span></li>
+				<li>Tools for <span class="No-Break">data versioning</span></li>
+				<li>Integrating data versioning in <span class="No-Break">training workflows</span></li>
+				<li>Version control for <span class="No-Break">text corpora</span></li>
+				<li>Managing dataset variants <span class="No-Break">and experiments</span></li>
+				<li>Best practices for <span class="No-Break">data versioning</span></li>
+			</ul>
+			<h1 id="_idParaDest-74"><a id="_idTextAnchor086"/>Understanding the need for data versioning</h1>
+			<p>Data versioning is particularly important in LLM projects due to the massive scale and complexity of language <a id="_idIndexMarker212"/>datasets. As an LLM engineer, you need to track changes in your datasets to ensure the reproducibility of your models and maintain a clear history of <span class="No-Break">data modifications.</span></p>
+			<p>Let’s start by implementing a basic data versioning system <span class="No-Break">using Python:</span></p>
+			<pre class="source-code">
+from datetime import datetime
+import hashlib
+import json
+class DatasetVersion:
+    def __init__(self, data, metadata=None):
+        self.data = data
+        self.metadata = metadata or {}
+        self.timestamp = datetime.now().isoformat()
+    //creation timestamp for each version
+        self.version_hash = self._generate_hash()
+    def _generate_hash(self):
+        data_str = json.dumps(self.data, sort_keys=True).encode()
+        return hashlib.sha256(data_str).hexdigest()</pre>			<p>This part of the <strong class="source-inline">DatasetVersion</strong> class initializes the basic structure for versioning your LLM datasets. It generates a unique hash for each version of the data and timestamps the version. The <strong class="source-inline">_generate_hash</strong> method creates a deterministic hash based on the sorted JSON representation of the data, ensuring that identical data always produces the <span class="No-Break">same hash.</span></p>
+			<p>Now, let’s add the <strong class="source-inline">save</strong> and <strong class="source-inline">load</strong> methods for <span class="No-Break">dataset versions:</span></p>
+			<pre class="source-code">
+class DatasetVersion:
+    # ... (previous methods)
+    def save(self, filename):
+        with open(filename, 'w') as f:
+            json.dump({
+                'data': self.data,
+                'metadata': self.metadata,
+                'timestamp': self.timestamp,
+                'version_hash': self.version_hash
+            }, f, indent=2)
+    @classmethod
+    def load(cls, filename):
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        instance = cls(data['data'], data['metadata'])
+        instance.timestamp = data['timestamp']
+        instance.version_hash = data['version_hash']
+        return instance</pre>			<p>The <strong class="source-inline">save</strong> method serializes <a id="_idIndexMarker213"/>the dataset version to a JSON file, including all relevant information. The <strong class="source-inline">load</strong> method is a class method that reconstructs a <strong class="source-inline">DatasetVersion</strong> instance from a saved file. This allows you to easily store and retrieve different versions of <span class="No-Break">your dataset.</span></p>
+			<p>Having discussed the need for data versioning, now let us outline key strategies for managing versioning in<a id="_idIndexMarker214"/> large language datasets to support traceability, reproducibility, and <span class="No-Break">efficient storage.</span></p>
+			<h1 id="_idParaDest-75"><a id="_idTextAnchor087"/>Data versioning strategies for large language datasets</h1>
+			<p>Among the various <a id="_idIndexMarker215"/>strategies available for handling data versioning—such as snapshotting, content-addressable storage, and checksum-based <a id="_idIndexMarker216"/>tracking—this section focuses on the <strong class="bold">delta-based system</strong> due to its potential for minimizing storage costs when dealing with iterative updates in large language datasets. Delta-based versioning stores only the differences between dataset versions rather than duplicating entire files, making it particularly effective in scenarios involving frequent but minor changes. However, its effectiveness decreases when the dataset structure undergoes significant reformatting or involves binary files. Schema changes, column reordering, or file splitting can disrupt the delta mechanism, often necessitating a full dataset rewrite. Similarly, binary files, due to their opaque structure and compression, tend to change globally with even minor edits, limiting the advantage of delta-based storage. This approach is discussed here for its relevance in typical LLM workflows where data evolves gradually but remains largely text-based <span class="No-Break">and structured.</span></p>
+			<p>Here’s an example of how you might implement a delta-based <span class="No-Break">versioning system:</span></p>
+			<pre class="source-code">
+import difflib
+class DeltaDatasetVersion(DatasetVersion):
+    def __init__(
+        self, data, base_version=None, metadata=None
+    ):
+        super().__init__(data, metadata)
+        self.base_version = base_version
+        self.delta = self._compute_delta() if base_version else None
+    def _compute_delta(self):
+        base_data = json.dumps(
+            self.base_version.data, sort_keys=True).splitlines()
+        current_data = json.dumps(
+            self.data, sort_keys=True).splitlines()
+        diff = list(
+            difflib.unified_diff(
+                base_data, current_data, lineterm='')
+            )
+        return '\n'.join(diff)</pre>			<p>This part of the <strong class="source-inline">DeltaDatasetVersion</strong> class extends our previous <strong class="source-inline">DatasetVersion</strong> class to implement delta-based versioning. The <strong class="source-inline">_compute_delta</strong> method <a id="_idIndexMarker217"/>calculates the differences between the current version and a base version using Python’s <strong class="source-inline">difflib</strong>. This approach can significantly reduce storage requirements for large datasets by only storing <span class="No-Break">the changes.</span></p>
+			<p>Now, let’s add methods to save and load these <span class="No-Break">delta-based versions:</span></p>
+			<pre class="source-code">
+class DeltaDatasetVersion(DatasetVersion):
+    # ... (previous methods)
+    def save(self, filename):
+        with open(filename, 'w') as f:
+            json.dump({
+                'metadata': self.metadata,
+                'timestamp': self.timestamp,
+                'version_hash': self.version_hash,
+                'base_version_hash': (
+                    self.base_version.version_hash
+                    if self.base_version else None
+                ),
+                'delta': self.delta
+            }, f, indent=2)
+    @classmethod
+    def load(cls, filename, base_version):
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        # Apply delta to base version
+        base_data = json.dumps(
+            base_version.data, sort_keys=True
+        ).splitlines()
+        patched_data = difflib.restore(
+            base_data, data['delta'].splitlines(), 1
+        )
+        current_data = json.loads('\n'.join(patched_data))
+        instance = cls(current_data, base_version, data['metadata'])
+        instance.timestamp = data['timestamp']
+        instance.version_hash = data['version_hash']
+        instance.delta = data['delta']
+        return instance</pre>			<p>The <strong class="source-inline">save</strong> method now <a id="_idIndexMarker218"/>stores only the delta and metadata, significantly reducing the file size of large datasets. The <strong class="source-inline">load</strong> method reconstructs the full dataset by applying the delta to the base version. This approach allows for the efficient storage and retrieval of multiple versions of large <span class="No-Break">language datasets.</span></p>
+			<h1 id="_idParaDest-76"><a id="_idTextAnchor088"/>Tools for data versioning</h1>
+			<p>While custom solutions <a id="_idIndexMarker219"/>can be effective, there are also specialized tools designed for data versioning in machine learning projects. One such tool is <strong class="bold">Data Version Control</strong> (<strong class="bold">DVC</strong>), which<a id="_idIndexMarker220"/> integrates with Git and provides powerful features for managing large datasets and is widely used. DVC is an open-source tool that extends Git to manage large datasets and machine learning artifacts by storing data in external storage while tracking metadata in the Git repository. It enables reproducible pipelines, efficient data sharing, and experiment tracking, making it a popular choice for managing LLM datasets and <span class="No-Break">training workflows.</span></p>
+			<p>Given the scale of LLM models, DVC’s versioning approach must carefully balance comprehensive tracking with computational efficiency, requiring intelligent checksum and metadata calculation strategies that minimize latency and processing overhead to prevent versioning from becoming a bottleneck in the model <span class="No-Break">development workflow.</span></p>
+			<p>Here’s an example of how you might use DVC in your <span class="No-Break">LLM project:</span></p>
+			<pre class="source-code">
+import subprocess
+def initialize_dvc():
+    subprocess.run(["dvc", "init"])
+    print("DVC initialized in the current directory.")
+def add_dataset_to_dvc(dataset_path):
+    subprocess.run(["dvc", "add", dataset_path])
+    print(f"Dataset {dataset_path} added to DVC.")
+def commit_dataset_version(message):
+    subprocess.run(["git", "add", ".dvc"])
+    subprocess.run(["git", "commit", "-m", message])
+    print(f"Dataset version committed with message: {message}")</pre>			<p>This part of the script demonstrates how to initialize DVC, add a dataset to DVC tracking, and commit a new version<a id="_idIndexMarker221"/> of the dataset. DVC works alongside Git, allowing you to version your data in a similar way to how you version <span class="No-Break">your code.</span></p>
+			<p>Similar to Git, DVC uses <strong class="source-inline">init</strong>, <strong class="source-inline">add</strong>, <strong class="source-inline">commit</strong>, and <strong class="source-inline">push</strong> commands. The following list briefly describes <span class="No-Break">each command:</span></p>
+			<ul>
+				<li><strong class="source-inline">dvc init</strong>: Initializes a new DVC project by creating a <strong class="source-inline">.dvc</strong> directory in your project and setting up the necessary metadata tracking infrastructure. This is analogous to <strong class="source-inline">git init</strong>, but specifically for data version control, preparing your project to track large datasets and <span class="No-Break">model files.</span></li>
+				<li><strong class="source-inline">dvc add</strong>: Adds large data files to DVC tracking, creating a lightweight <strong class="source-inline">.dvc</strong> metadata file that contains a hash of the file. This command moves the actual data to a separate storage location while maintaining a reference in your Git repository, allowing you to version large files without bloating your <span class="No-Break">Git repository.</span></li>
+				<li><strong class="source-inline">dvc commit</strong>: Creates a snapshot of the current state of your tracked data files, similar to a Git commit but specifically for data files. This command helps you mark significant points in your data’s history and creates a clear record of when and how your <span class="No-Break">datasets changed.</span></li>
+				<li><strong class="source-inline">dvc push</strong>: Uploads your tracked data files to a remote storage location (such as cloud storage, network drive, or local external storage). This command ensures that your data versions are safely backed up and can be retrieved by other team members or across different <span class="No-Break">development environments.</span></li>
+			</ul>
+			<p>Now, let’s add a function to push the dataset to <span class="No-Break">remote storage:</span></p>
+			<pre class="source-code">
+def push_dataset_to_remote():
+    subprocess.run(["dvc", "push"])
+    subprocess.run(["git", "push"])
+    print("Dataset pushed to remote storage.")
+# Usage example
+if __name__ == "__main__":
+    initialize_dvc()
+    add_dataset_to_dvc("path/to/your/large_language_dataset.txt")
+    commit_dataset_version("Add initial version of language dataset")
+    push_dataset_to_remote()</pre>			<p>The <strong class="source-inline">push_dataset_to_remote</strong> function pushes both the DVC-tracked data and the Git repository to their <a id="_idIndexMarker222"/>respective remote storage locations. This allows you to store your large datasets separately from your code repository while maintaining version control <span class="No-Break">for both.</span></p>
+			<p>Next, we will focus on integrating data versioning within the <span class="No-Break">training workflow.</span></p>
+			<h1 id="_idParaDest-77"><a id="_idTextAnchor089"/>Integrating data versioning in training workflows</h1>
+			<p>To make data versioning<a id="_idIndexMarker223"/> an integral part of your LLM training workflow, you need to incorporate version checking and logging into your training scripts. Here’s an example of how you might <span class="No-Break">do this:</span></p>
+			<pre class="source-code">
+import json
+from dataclasses import dataclass
+from typing import Dict, Any
+@dataclass
+class DatasetInfo:
+    version_hash: str
+    metadata: Dict[str, Any]
+def load_dataset_info(filename: str) -&gt; DatasetInfo:
+    with open(filename, 'r') as f:
+        data = json.load(f)
+    return DatasetInfo(data['version_hash'], data['metadata'])
+def train_llm(model, dataset, dataset_info: DatasetInfo):
+    # Log dataset version information
+    print(
+        f"Training model with dataset version: "
+        f"{dataset_info.version_hash}"
+    )
+    print(f"Dataset metadata: {dataset_info.metadata}")
+    # Actual training code would go here
+    # ...
+    # Save model with dataset version information
+    model.save(f"model_trained_on_{dataset_info.version_hash[:8]}.pt")</pre>			<p>This code snippet shows how to incorporate dataset version information into your LLM training workflow. The <strong class="source-inline">DatasetInfo</strong> class encapsulates the essential version information, while the <strong class="source-inline">load_dataset_info</strong> function retrieves this information from a JSON file. The <strong class="source-inline">train_llm</strong> function <a id="_idIndexMarker224"/>demonstrates how to log the dataset version and metadata during training, ensuring that each trained model is associated with a specific version of <span class="No-Break">the data.</span></p>
+			<p>Here’s how you might use this in a <span class="No-Break">training script:</span></p>
+			<pre class="source-code">
+# Usage in training script
+dataset_info = load_dataset_info("dataset_info.json")
+dataset = load_dataset()  # Your dataset loading function
+model = initialize_model()  # Your model initialization function
+train_llm(model, dataset, dataset_info)</pre>			<p>By integrating dataset version information<a id="_idIndexMarker225"/> into your training process, you enhance reproducibility and make it easier to track which version of the data was used for each <span class="No-Break">trained model.</span></p>
+			<h1 id="_idParaDest-78"><a id="_idTextAnchor090"/>Version control for text corpora</h1>
+			<p>When dealing with <a id="_idIndexMarker226"/>text corpora for LLM training, you often need to handle large collections of documents. Here’s an approach to version control for text corpora using a combination of file hashing and <span class="No-Break">metadata tracking:</span></p>
+			<pre class="source-code">
+import os
+import hashlib
+from typing import Dict, List
+def hash_file(filepath: str) -&gt; str:
+    with open(filepath, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+def generate_corpus_manifest(corpus_dir: str) -&gt; Dict[str, str]:
+    manifest = {}
+    for root, _, files in os.walk(corpus_dir):
+        for file in files:
+            filepath = os.path.join(root, file)
+            manifest[os.path.relpath(filepath, corpus_dir)] = \
+                hash_file(filepath)
+    return manifest</pre>			<p>This part of the code defines functions to hash individual files and generate a manifest of all files in a corpus directory. The manifest is a dictionary mapping relative file paths to their corresponding hash <a id="_idIndexMarker227"/>values, providing a snapshot of the entire corpus. The manifest file is important because it serves as a compact, reproducible fingerprint of the entire dataset, enabling quick integrity checks, facilitating version tracking, and allowing researchers to verify the exact state of their corpus across different environments or points in time without needing to store or transfer the entire <span class="No-Break">large dataset.</span></p>
+			<p>Now, let’s add a function to compare two manifests and <span class="No-Break">identify changes:</span></p>
+			<pre class="source-code">
+def compare_manifests(
+    old_manifest: Dict[str, str], new_manifest: Dict[str, str]
+) -&gt; Dict[str, List[str]]:
+    changes = {
+        "added": [],
+        "removed": [],
+        "modified": []
+    }
+    for file, hash in new_manifest.items():
+        if file not in old_manifest:
+            changes["added"].append(file)
+        elif old_manifest[file] != hash:
+            changes["modified"].append(file)
+    for file in old_manifest:
+        if file not in new_manifest:
+            changes["removed"].append(file)
+    return changes
+# Usage example
+old_manifest = generate_corpus_manifest("path/to/old_corpus")
+new_manifest = generate_corpus_manifest("path/to/new_corpus")
+changes = compare_manifests(old_manifest, new_manifest)
+print("Corpus changes:")
+for change_type, files in changes.items():
+    print(f"{change_type.capitalize()}:")
+    for file in files:
+        print(f"  - {file}")</pre>			<p>The <strong class="source-inline">compare_manifests</strong> function identifies added, removed, and modified files between two versions of the <a id="_idIndexMarker228"/>corpus. This approach allows you to track changes in your text corpus efficiently, even when dealing with large numbers <span class="No-Break">of files.</span></p>
+			<h1 id="_idParaDest-79"><a id="_idTextAnchor091"/>Managing dataset variants and experiments</h1>
+			<p>In LLM development, you <a id="_idIndexMarker229"/>often need to manage multiple variants of your dataset for different experiments. Here’s a simple system for managing <span class="No-Break">dataset variants:</span></p>
+			<pre class="source-code">
+from typing import Dict, Any
+import json
+import os
+class DatasetVariantManager:
+    def __init__(self, base_path: str):
+        self.base_path = base_path
+        self.variants: Dict[str, Dict[str, Any]] = {}
+        self._load_variants()
+    def _load_variants(self):
+        if os.path.exists(
+            os.path.join(self.base_path, "variants.json")
+        ):
+            with open(
+                os.path.join(self.base_path, "variants.json"), 'r'
+            ) as f:
+                self.variants = json.load(f)
+    def save_variants(self):
+        with open(
+            os.path.join(self.base_path, "variants.json"), 'w'
+        ) as f:
+            json.dump(self.variants, f, indent=2)</pre>			<p>This part of the <strong class="source-inline">DatasetVariantManager</strong> class sets up the basic structure for managing dataset variants. It initializes<a id="_idIndexMarker230"/> the manager with a base path and loads existing variants from a JSON file, <span class="No-Break">if available.</span></p>
+			<p>Now, let’s add methods to create and <span class="No-Break">retrieve variants:</span></p>
+			<pre class="source-code">
+class DatasetVariantManager:
+    # ... (previous methods)
+    def create_variant(
+        self, name: str, base_variant: str, changes: Dict[str, Any]
+    ):
+        if name in self.variants:
+            raise ValueError(f"Variant {name} already exists")
+        self.variants[name] = {
+            "base": base_variant,
+            "changes": changes
+        }
+        self.save_variants()
+    def get_variant(self, name: str) -&gt; Dict[str, Any]:
+        if name not in self.variants:
+            raise ValueError(f"Variant {name} does not exist")
+        variant = self.variants[name]
+        base_data = self.get_variant(variant["base"]) 
+            if variant["base"] else {}
+        return {base_data, variant["changes"]}
+# Usage example
+manager = DatasetVariantManager("path/to/dataset/variants")
+manager.create_variant(
+    "base", None, {"size": 1000000, "language": "en"})
+manager.create_variant("large", "base", {"size": 5000000})
+manager.create_variant(
+    "multilingual", "large", {"language": ["en", "es", "fr"]})
+print(manager.get_variant("multilingual"))</pre>			<p>The <strong class="source-inline">create_variant</strong> method allows you to create new dataset variants based on existing ones, specifying only the changes. The <strong class="source-inline">get_variant</strong> method retrieves a variant, applying all changes<a id="_idIndexMarker231"/> from its base variants recursively. This system allows you to efficiently manage and track different configurations of your dataset for <span class="No-Break">various experiments.</span></p>
+			<p>A clear and consistent naming convention is recommended for managing dataset variants in LLM development to ensure traceability, reproducibility, and clarity. Here is a suggested naming convention that balances readability and scalability for managing <span class="No-Break">dataset variants:</span></p>
+			<p><strong class="source-inline">&lt;</strong><span class="No-Break"><strong class="source-inline">base&gt;_&lt;modifier1&gt;_&lt;modifier2&gt;_..._&lt;description&gt;</strong></span></p>
+			<p>This format uses a <strong class="bold">base name</strong> to indicate the root dataset, followed by <strong class="bold">modifiers</strong> and optional descriptions to <a id="_idIndexMarker232"/>specify what changes or<a id="_idIndexMarker233"/> attributes differentiate the variant. Modifiers are concise and ordered hierarchically to reflect the <span class="No-Break">t<a id="_idTextAnchor092"/>ransformation process.</span></p>
+			<p>Let’s look at the key <span class="No-Break">components closely:</span></p>
+			<ul>
+				<li><strong class="bold">Base name</strong>: Represents the initial dataset, such as <strong class="source-inline">base</strong> or a descriptive name (e.g., <strong class="source-inline">clean</strong> <span class="No-Break">or </span><span class="No-Break"><strong class="source-inline">raw</strong></span><span class="No-Break">).</span></li>
+				<li><strong class="bold">Modifiers</strong>: Sequential changes or transformations applied to the base. Each modifier reflects an aspect of the<a id="_idIndexMarker234"/> dataset such as size, language, or <span class="No-Break">preprocessing applied.</span></li>
+				<li><strong class="bold">Description</strong>: An optional <a id="_idIndexMarker235"/>part that provides extra context or details about the changes, typically used <span class="No-Break">for experiments.</span></li>
+			</ul>
+			<h1 id="_idParaDest-80"><a id="_idTextAnchor093"/>Best practices for data versioning</h1>
+			<p> Over the years, I have <a id="_idIndexMarker236"/>gathered the following <span class="No-Break">best practices:</span></p>
+			<ul>
+				<li>Use a dedicated data versioning tool such as DVC for <span class="No-Break">large-scale projects.</span></li>
+				<li>Include dataset version information in your <span class="No-Break">model metadata.</span></li>
+				<li>Use delta-based versioning for large datasets to save <span class="No-Break">storage space.</span></li>
+				<li>Implement regular backups of your <span class="No-Break">versioned datasets.</span></li>
+				<li>Use consistent naming conventions for dataset versions <span class="No-Break">and variants.</span></li>
+				<li>Integrate data versioning<a id="_idIndexMarker237"/> checks into your <strong class="bold">continuous integration and continuous delivery</strong> (<strong class="bold">CI/CD</strong>) pipeline for LLM training. This can be achieved by adding DVC-specific validation steps in your CI/CD workflow, such as running <strong class="source-inline">dvc status</strong> to verify no unexpected modifications have occurred, automatically comparing dataset checksums against approved versions, and blocking model training if any data discrepancies are detected. Key steps include creating a pre-training validation stage that compares current dataset versions with expected reference versions, automatically triggering alerts or stopping the pipeline if unverified data modifications are detected, and maintaining a comprehensive audit trail of dataset changes throughout the machine learning <span class="No-Break">development process.</span></li>
+			</ul>
+			<h1 id="_idParaDest-81"><a id="_idTextAnchor094"/>Summary</h1>
+			<p>In this chapter, we explored various aspects of data versioning for LLM development. We implemented basic versioning systems and delta-based versioning for large datasets. We examined tools such as DVC for more advanced versioning needs. We also looked at integrating data versioning into LLM training workflows, managing text corpora versions, and handling dataset variants <span class="No-Break">for experiments.</span></p>
+			<p>Data versioning is a critical practice in LLM development, ensuring reproducibility, facilitating collaboration, and enabling robust model governance. By implementing these techniques and best practices, you can significantly improve the manageability and reliability of your <span class="No-Break">LLM projects.</span></p>
+			<p>In the upcoming chapter, we’ll explore dataset annotation and labeling techniques specifically tailored for LLMs. In particular, we’ll cover strategies for efficient annotation, quality control measures, and methods for scaling annotation processes to meet the demands of large <span class="No-Break">language datasets.</span></p>
+		</div>
+	</div></div></body></html>
