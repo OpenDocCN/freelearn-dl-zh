@@ -1,0 +1,1325 @@
+- en: '3'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Data Engineering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter will begin exploring the LLM Twin project in more depth. We will
+    learn how to design and implement the data collection pipeline to gather the raw
+    data we will use in all our LLM use cases, such as fine-tuning or inference. As
+    this is not a book on data engineering, we will keep this chapter short and focus
+    only on what is strictly necessary to collect the required raw data. Starting
+    with *Chapter 4*, we will concentrate on LLMs and GenAI, exploring its theory
+    and concrete implementation details.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When working on toy projects or doing research, you usually have a static dataset
+    with which you work. But in our LLM Twin use case, we want to mimic a real-world
+    scenario where we must gather and curate the data ourselves. Thus, implementing
+    our data pipeline will connect the dots regarding how an end-to-end ML project
+    works. This chapter will explore how to design and implement an **Extract, Transform,
+    Load** (**ETL**) pipeline that crawls multiple social platforms, such as Medium,
+    Substack, or GitHub, and aggregates the gathered data into a MongoDB data warehouse.
+    We will show you how to implement various crawling methods, standardize the data,
+    and load it into a data warehouse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will begin by designing the LLM Twin’s data collection pipeline and explaining
+    the architecture of the ETL pipeline. Afterward, we will move directly to implementing
+    the pipeline, starting with ZenML, which will orchestrate the entire process.
+    We will investigate the crawler implementation and understand how to implement
+    a dispatcher layer that instantiates the right crawler class based on the domain
+    of the provided link while following software best practices. Next, we will learn
+    how to implement each crawler individually. Also, we will show you how to implement
+    a data layer on top of MongoDB to structure all our documents and interact with
+    the database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we will explore how to run the data collection pipeline using ZenML
+    and query the collected data from MongoDB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Thus, in this chapter, we will study the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing the LLM Twin’s data collection pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing the LLM Twin’s data collection pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Gathering raw data into the data warehouse
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will know how to design and implement an ETL
+    pipeline to extract, transform, and load raw data ready to be ingested into the
+    ML application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing the LLM Twin’s data collection pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before digging into the implementation, we must understand the LLM Twin’s data
+    collection ETL architecture, illustrated in *Figure 3.1*. We must explore what
+    platforms we will crawl to extract data from and how we will design our data structures
+    and processes. However, the first step is understanding how our data collection
+    pipeline maps to an ETL process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An ETL pipeline involves three fundamental steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We **extract** data from various sources. We will crawl data from platforms
+    like Medium, Substack, and GitHub to gather raw data.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We **transform** this data by cleaning and standardizing it into a consistent
+    format suitable for storage and analysis.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We **load** the transformed data into a data warehouse or database.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For our project, we use MongoDB as our NoSQL data warehouse. Although this is
+    not a standard approach, we will explain the reasoning behind this choice shortly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_01.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.1: LLM Twin’s data collection ETL pipeline architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We want to design an ETL pipeline that inputs a user and a list of links as
+    input. Afterward, it crawls each link individually, standardizes the collected
+    content, and saves it under that specific author in a MongoDB data warehouse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hence, the signature of the data collection pipeline will look as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Input:** A list of links and their associated user (the author)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Output:** A list of raw documents stored in the NoSQL data warehouse'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will use `user` and `author` interchangeably, as in most scenarios across
+    the ETL pipeline, a user is the author of the extracted content. However, within
+    the data warehouse, we have only a user collection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ETL pipeline will detect the domain of each link, based on which it will
+    call a specialized crawler. We implemented four different crawlers for three different
+    data categories, as seen in *Figure 3.2*. First, we will explore the three fundamental
+    data categories we will work with across the book. All our collected documents
+    can be boiled down to an article, repository (or code), and post. It doesn’t matter
+    where the data comes from. We are primarily interested in the document’s format.
+    In most scenarios, we will have to process these data categories differently.
+    Thus, we created a different domain entity for each, where each entity will have
+    its class and collection in MongoDB. As we save the source URL within the document’s
+    metadata, we will still know its source and can reference it in our GenAI use
+    cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_02.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.2: The relationship between the crawlers and the data categories'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our codebase supports four different crawlers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Medium crawler**: Used to collect data from Medium. It outputs an article
+    document. It logs in to Medium and crawls the HTML of the article’s link. Then,
+    it extracts, cleans, and normalizes the text from the HTML and loads the standardized
+    text of the article into the NoSQL data warehouse.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Custom article crawler**: It performs similar steps to the Medium crawler
+    but is a more generic implementation for collecting articles from various sites.
+    Thus, as it doesn’t implement any particularities of any platform, it doesn’t
+    perform the login step and blindly gathers all the HTML from a particular link.
+    This is enough for articles freely available online, which you can find on Substack
+    and people’s blogs. We will use this crawler as a safety net when the link’s domain
+    isn’t associated with the other supported crawlers. For example, when providing
+    a Substack link, it will default to the custom article crawler, but when providing
+    a Medium URL, it will use the Medium crawler.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**GitHub crawler**:This collects data from GitHub. It outputs a repository
+    document. It clones the repository, parses the repository file tree, cleans and
+    normalizes the files, and loads them to the database.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**LinkedIn crawler**:This is used to collect data from LinkedIn. It outputs
+    multiple post documents. It logs in to LinkedIn, navigates to the user’s feed,
+    and crawls all the user’s latest posts. For each post, it extracts its HTML, cleans
+    and normalizes it, and loads it to MongoDB.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the next section, we will examine each crawler’s implementation in detail.
+    For now, note that each crawler accesses a specific platform or site in a particular
+    way and extracts HTML from it. Afterward, all the crawlers parse the HTML, extract
+    the text from it, and clean and normalize it so it can be stored in the data warehouse
+    under the same interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By reducing all the collected data to three data categories and not creating
+    a new data category for every new data source, we can easily extend this architecture
+    to multiple data sources with minimal effort. For example, if we want to start
+    collecting data from X, we only have to implement a new crawler that outputs a
+    post document, and that’s it. The rest of the code will remain untouched. Otherwise,
+    if we introduced the source dimension in the class and document structure, we
+    would have to add code to all downstream layers to support any new data source.
+    For example, we would have to implement a new document class for each new source
+    and adapt the feature pipeline to support it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our proof of concept, crawling a few hundred documents is enough, but if
+    we want to scale it to a real-world product, we would probably need more data
+    sources to crawl from. LLMs are data-hungry. Thus, you need thousands of documents
+    for ideal results instead of just a few hundred. But in many projects, it’s an
+    excellent strategy to implement an end-to-end project version that isn’t the most
+    accurate and iterate through it later. Thus, by using this architecture, you can
+    easily add more data sources in future iterations to gather a larger dataset.
+    More on LLM fine-tuning and dataset size will be covered in the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**How is the ETL process connected to the feature pipeline?** The feature pipeline
+    ingests the raw data from the MongoDB data warehouse, cleans it further, processes
+    it into features, and stores it in the Qdrant vector DB to make it accessible
+    for the LLM training and inference pipelines. *Chapter 4* provides more information
+    on the feature pipeline. The ETL process is independent of the feature pipeline.
+    The two pipelines communicate with each other strictly through the MongoDB data
+    warehouse. Thus, the data collection pipeline can write data for MongoDB, and
+    the feature pipeline can read from it independently and on different schedules.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Why did we use MongoDB as a data warehouse?** Using a transactional database,
+    such as MongoDB, as a data warehouse is uncommon. However, in our use case, we
+    are working with small amounts of data, which MongoDB can handle. Even if we plan
+    to compute statistics on top of our MongoDB collections, it will work fine at
+    the scale of our LLM Twin’s data (hundreds of documents). We picked MongoDB to
+    store our raw data primarily because of the nature of our unstructured data: text
+    crawled from the internet. By mainly working with unstructured text, selecting
+    a NoSQL database that doesn’t enforce a schema made our development easier and
+    faster. Also, MongoDB is stable and easy to use. Their Python SDK is intuitive.
+    They provide a Docker image that works out of the box locally and a cloud freemium
+    tier that is perfect for proofs of concept, such as the LLM Twin. Thus, we can
+    freely work with it locally and in the cloud. However, when working with big data
+    (millions of documents or more), using a dedicated data warehouse such as Snowflake
+    or BigQuery will be ideal.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve understood the architecture of the LLM Twin’s data collection
+    pipeline, let’s move on to its implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing the LLM Twin’s data collection pipeline
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we presented in *Chapter 2*, the entry point to each pipeline from our LLM
+    Twin project is a ZenML pipeline, which can be configured at runtime through YAML
+    files and run through the ZenML ecosystem. Thus, let’s start by looking into the
+    ZenML `digital_data_etl` pipeline. You’ll notice that this is the same pipeline
+    we used as an example in *Chapter 2* to illustrate ZenML. But this time, we will
+    dig deeper into the implementation, explaining how the data collection works behind
+    the scenes. After understanding how the pipeline works, we will explore the implementation
+    of each crawler used to collect data from various sites and the MongoDB documents
+    used to store and query data from the data warehouse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ZenML pipeline and steps
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Figure 3.3* shows a run of the `digital_data_etl` pipeline on the ZenML dashboard.
+    The next phase is to explore the `get_or_create_user` and `crawl_links` ZenML
+    steps individually. The step implementation is available in our repository at
+    `steps/etl`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_03.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.3: Example of a digital_data_etl pipeline run from ZenML’s dashboard'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start with the `get_or_create_user` ZenML step. We begin by importing
+    the necessary modules and functions used throughout the script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we define the function’s signature, which takes a user’s full name as
+    input and retrieves an existing user or creates a new one in the MongoDB database
+    if it doesn’t exist:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Using a utility function, we split the full name into first and last names.
+    Then, we attempt to retrieve the user from the database or create a new one if
+    it doesn’t exist. We also retrieve the current step context and add metadata about
+    the user to the output, which will be reflected in the metadata of the `user`
+    ZenML output artifact:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Additionally, we define a helper function called `_get_metadata()`, which builds
+    a dictionary containing the query parameters and the retrieved user information,
+    which will be added as metadata to the user artifact:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will move on to the `crawl_links` ZenML step, which collects the data from
+    the provided links. The code begins by importing essential modules and libraries
+    for web crawling:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Following the imports, the main function inputs a list of links written by
+    a specific author. Within this function, a crawler dispatcher is initialized and
+    configured to handle specific domains such as LinkedIn, Medium, and GitHub:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The function initializes variables to store the output metadata and count successful
+    crawls. It then iterates over each link. It attempts to crawl and extract data
+    for each link, updating the count of successful crawls and accumulating metadata
+    about each URL:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After processing all links, the function attaches the accumulated metadata
+    to the output artifact:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The code includes a helper function that attempts to extract information from
+    each link using the appropriate crawler based on the link’s domain. It handles
+    any exceptions that may occur during extraction and returns a tuple indicating
+    the crawl’s success and the link’s domain:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Another helper function is provided to update the metadata dictionary with
+    the results of each crawl:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: As seen in the abovementioned `_crawl_link()` function, the `CrawlerDispatcher`
+    class knows what crawler to initialize based on each link’s domain. The logic
+    is then abstracted away under the crawler’s `extract()` method. Let’s zoom in
+    on the `CrawlerDispatcher` class to understand how this works fully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The dispatcher: How do you instantiate the right crawler?'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The entry point to our crawling logic is the `CrawlerDispatcher` class. As illustrated
+    in *Figure 3.4*, the dispatcher acts as the intermediate layer between the provided
+    links and the crawlers. It knows what crawler to associate with each URL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `CrawlerDispatcher` class knows how to extract the domain of each link and
+    initialize the proper crawler that collects the data from that site. For example,
+    if it detects the [https://medium.com](https://medium.com) domain when providing
+    a link to an article, it will build an instance of the `MediumCrawler` used to
+    crawl that particular platform. With that in mind, let’s explore the implementation
+    of the `CrawlerDispatcher` class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All the crawling logic is available in the GitHub repository at `llm_engineering/application/crawlers`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_04.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.4: The relationship between the provided links, the CrawlerDispatcher,
+    and the crawlers'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We begin by importing the necessary Python modules for URL handling and regex,
+    along with importing our crawler classes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `CrawlerDispatcher` class is defined to manage and dispatch appropriate
+    crawler instances based on given URLs and their domains. Its constructor initializes
+    a registry to store the registered crawlers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we are using the builder creational pattern to instantiate and configure
+    the dispatcher, we define a `build()` class method that returns an instance of
+    the dispatcher:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The dispatcher includes methods to register crawlers for specific platforms
+    like Medium, LinkedIn, and GitHub. These methods use a generic `register()` method
+    under the hood to add each crawler to the registry. By returning self, we follow
+    the builder creational pattern (more on the builder pattern: [https://refactoring.guru/design-patterns/builder](https://refactoring.guru/design-patterns/builder)).
+    We can chain multiple `register_*()` methods when instantiating the dispatcher
+    as follows: `CrawlerDispatcher.build().register_linkedin().register_medium()`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The generic `register()` method normalizes each domain to ensure its format
+    is consistent before it’s added as a key to the `self._crawlers` registry of the
+    dispatcher. This is a critical step, as we will use the key of the dictionary
+    as the domain pattern to match future links with a crawler:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, the `get_crawler()` method determines the appropriate crawler for a
+    given URL by matching it against the registered domains. If no match is found,
+    it logs a warning and defaults to using the `CustomArticleCrawler`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The next step in understanding how the data collection pipeline works is analyzing
+    each crawler individually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The crawlers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before exploring each crawler’s implementation, we must present their base
+    class, which defines a unified interface for all the crawlers. As shown in *Figure
+    3.4*, we can implement the dispatcher layer because each crawler follows the same
+    signature. Each class implements the `extract()` method, allowing us to leverage
+    OOP techniques such as polymorphism, where we can work with abstract objects without
+    knowing their concrete subclass. For example, in the `_crawl_link()` function
+    from the ZenML steps, we had the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note how we called the `extract()` method without caring about what specific
+    type of crawler we instantiated. To conclude, working with abstract interfaces
+    ensures core reusability and ease of extension.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Base classes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now, let’s explore the `BaseCrawler` interface, which can be found in the repository
+    at [https://github.com/PacktPublishing/LLM-Engineers-Handbook/blob/main/llm_engineering/application/crawlers/base.py](https://github.com/PacktPublishing/LLM-Engineers-Handbook/blob/main/llm_engineering/application/crawlers/base.py).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: As mentioned above, the interface defines an `extract()` method that takes as
+    input a link. Also, it defines a model attribute at the class level that represents
+    the data category document type used to save the extracted data into the MongoDB
+    data warehouse. Doing so allows us to customize each subclass with different data
+    categories while preserving the same attributes at the class level. We will soon
+    explore the `NoSQLBaseDocument` class when digging into the document entities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also extend the `BaseCrawler` class with a `BaseSeleniumCrawler` class, which
+    implements reusable functionality that uses Selenium to crawl various sites, such
+    as Medium or LinkedIn. **Selenium** is a tool for automating web browsers. It’s
+    used to interact with web pages programmatically (like logging into LinkedIn,
+    navigating through profiles, etc.).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Selenium can programmatically control various browsers such as Chrome, Firefox,
+    or Brave. For these specific platforms, we need Selenium to manipulate the browser
+    programmatically to log in and scroll through the newsfeed or article before being
+    able to extract the entire HTML. For other sites, where we don’t have to go through
+    the login step or can directly load the whole page, we can extract the HTML from
+    a particular URL using more straightforward methods than Selenium.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the Selenium-based crawlers to work, you must install Chrome on your machine
+    (or a Chromium-based browser such as Brave).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code begins by setting up the necessary imports and configurations for web
+    crawling using Selenium and the ChromeDriver initializer. The `chromedriver_autoinstaller`
+    ensures that the appropriate version of ChromeDriver is installed and added to
+    the system path, maintaining compatibility with the installed version of your
+    Google Chrome browser (or other Chromium-based browser). Selenium will use the
+    ChromeDriver to communicate with the browser and open a headless session, where
+    we can programmatically manipulate the browser to access various URLs, click on
+    specific elements, such as buttons, or scroll through the newsfeed. Using the
+    `chromedriver_autoinstaller`, we ensure we always have the correct ChromeDriver
+    version installed that matches our machine’s Chrome browser version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we define the `BaseSeleniumCrawler` class for use cases where we need
+    Selenium to collect the data, such as collecting data from Medium or LinkedIn.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Its constructor initializes various Chrome options to optimize performance,
+    enhance security, and ensure a headless browsing environment. These options disable
+    unnecessary features like GPU rendering, extensions, and notifications, which
+    can interfere with automated browsing. These are standard configurations when
+    crawling in headless mode:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After configuring the Chrome options, the code allows subclasses to set any
+    additional driver options by calling the `set_extra_driver_options()` method.
+    It then initializes the scroll limit and creates a new instance of the Chrome
+    driver with the specified options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `BaseSeleniumCrawler` class includes placeholder methods for `set_extra_driver_options()`
+    and `login()`, which subclasses can override to provide specific functionality.
+    This ensures modularity, as every platform has a different login page with a different
+    HTML structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the `scroll_page()` method implements a scrolling mechanism to navigate
+    through pages, such as LinkedIn, up to a specified scroll limit. It scrolls to
+    the bottom of the page, waits for new content to load, and repeats the process
+    until it reaches the end of the page or the scroll limit is exceeded. This method
+    is essential for feeds where the content appears as the user scrolls:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We’ve understood what the base classes of our crawlers look like. Next, we
+    will look into the implementation of the following specific crawlers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`GitHubCrawler(BaseCrawler)`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`CustomArticleCrawler(BaseCrawler)`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`MediumCrawler(BaseSeleniumCrawler)`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can find the implementation of the above crawlers in the GitHub repository
+    at [https://github.com/PacktPublishing/LLM-Engineers-Handbook/tree/main /llm_engineering/application/crawlers](https://github.com/PacktPublishing/LLM-Engineers-Handbook/tree/main/llm_engineering/application/crawlers).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: GitHubCrawler class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The `GithubCrawler` class is designed to scrape GitHub repositories, extending
+    the functionality of the `BaseCrawler`. We don’t have to log in to GitHub through
+    the browser, as we can leverage Git’s clone functionality. Thus, we don’t have
+    to leverage any Selenium functionality. Upon initialization, it sets up a list
+    of patterns to ignore standard files and directories found in GitHub repositories,
+    such as `.git`, `.toml`, `.lock`, and `.png`, ensuring that unnecessary files
+    are excluded from the scraping process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we implement the `extract()` method, where the crawler first checks if
+    the repository has already been processed and stored in the database. If it exists,
+    it exits the method to prevent storing duplicates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the repository is new, the crawler extracts the repository name from the
+    link. Then, it creates a temporary directory to clone the repository to ensure
+    that the cloned repository is cleaned up from the local disk after it’s processed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Within a try block, the crawler changes the current working directory to the
+    `temporary` directory and executes the `git clone` command in a different process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After successfully cloning the repository, the crawler constructs the path
+    to the cloned repository. It initializes an empty dictionary used to aggregate
+    the content of the files in a standardized way. It walks through the directory
+    tree, skipping over any directories or files that match the ignore patterns. For
+    each relevant file, it reads the content, removes any spaces, and stores it in
+    the dictionary with the file path as the key:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It then creates a new instance of the `RepositoryDocument` model, populating
+    it with the repository content, name, link, platform information, and author details.
+    The instance is then saved to MongoDB:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, whether the scraping succeeds or an exception occurs, the crawler
+    ensures that the temporary directory is removed to clean up any resources used
+    during the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: CustomArticleCrawler class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The `CustomArticleCrawler` class takes a different approach to collecting data
+    from the internet. It leverages the `AsyncHtmlLoader` class to read the entire
+    HTML from a link and the `Html2TextTransformer` class to extract the text from
+    that HTML. Both classes are made available by the `langchain_community` Python
+    package, as seen below, where we import all the necessary Python modules:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we define the `CustomArticleCrawler` class, which inherits from `BaseCrawler`.
+    As before, we don’t need to log in or use the scrolling functionality provided
+    by Selenium. In the `extract` method, we first check if the article exists in
+    the database to avoid duplicating content:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the article doesn’t exist, we proceed to scrape it. We use the `AsyncHtmlLoader`
+    class to load the HTML from the provided link. After, we transform it into plain
+    text using the `Html2TextTransformer` class, which returns a list of documents.
+    We are only interested in the first document. As we delegate the whole logic to
+    these two classes, we don’t control how the content is extracted and parsed. That’s
+    why we used this class as a fallback system for domains where we don’t have anything
+    custom implemented. These two classes follow the LangChain paradigm, which provides
+    high-level functionality that works decently in most scenarios. It is fast to
+    implement but hard to customize. That is one of the reasons why many developers
+    avoid using LangChain in production use cases:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We get the page content from the extracted document, plus relevant metadata
+    such as the `title`, `subtitle`, `content`, and `language`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we parse the URL to determine the platform (or domain) from which the
+    article was scraped:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then create a new instance of the article model, populating it with the
+    extracted content. Finally, we save this instance to the MongoDB data warehouse:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: So far, we have seen how to crawl GitHub repositories and random sites using
+    LangChain utility functions. Lastly, we must explore a crawler using Selenium
+    to manipulate the browser programmatically. Thus, we will continue with the `MediumCrawler`
+    implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MediumCrawler class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The code begins by importing essential libraries and defining the `MediumCrawler`
+    class, which inherits from `BaseSeleniumCrawler`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Within the `MediumCrawler` class, we leverage the `set_extra_driver_options()`
+    method to extend the default driver options used by Selenium:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `extract()` method implements the core functionality, first checking whether
+    the article exists in the database to prevent duplicate entries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the article is new, the method proceeds to navigate to the article’s link
+    and scroll through the page to ensure all content is loaded:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After fully loading the page, the method uses `BeautifulSoup` to parse the
+    HTML content and extract the article’s title, subtitle, and full text. `BeautifulSoup`
+    is a popular Python library for web scraping and parsing HTML or XML documents.
+    Thus, we used it to extract all the HTML elements we needed from the HTML accessed
+    with Selenium. Finally, we aggregate everything into a dictionary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the method closes the WebDriver to free up resources. It then creates
+    a new `ArticleDocument` instance, populates it with the extracted content and
+    user information provided via `kwargs`, and saves it to the database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: With that, we conclude the `MediumCrawler` implementation. The LinkedIn crawler
+    follows a similar pattern to the Medium one, where it uses Selenium to log in
+    and access the feed of a user’s latest posts. Then, it extracts the posts and
+    scrolls through the feed to load the next page until a limit is hit. You can check
+    the full implementation in our repository at [https://github.com/PacktPublishing/LLM-Engineers-Handbook/blob/main/llm_engineering/application/crawlers/linkedin.py](https://github.com/PacktPublishing/LLM-Engineers-Handbook/blob/main/llm_engineering/application/crawlers/linkedin.py).
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the rise of LLMs, collecting data from the internet has become a critical
+    step in many real-world AI applications. Hence, more high-level tools have appeared
+    in the Python ecosystem, such as Scrapy ([https://github.com/scrapy/scrapy](https://github.com/scrapy/scrapy)),
+    which crawls websites and extracts structured data from their pages, and Crawl4AI
+    ([https://github.com/unclecode/crawl4ai](https://github.com/unclecode/crawl4ai)),
+    which is highly specialized in crawling data for LLMs and AI applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we’ve looked at implementing three types of crawlers: one
+    that leverages the `git` executable in a subprocess to clone GitHub repositories,
+    one that uses LangChain utilities to extract the HTML of a single web page, and
+    one that leverages Selenium for more complex scenarios where we have to navigate
+    through the login page, scroll the article to load the entire HTML, and extract
+    it into text format. The last step is understanding how the document classes we’ve
+    used across the chapter, such as the `ArticleDocument`, work.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The NoSQL data warehouse documents
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We had to implement three document classes to structure our data categories.
+    These classes define the specific attributes we require for a document, such as
+    the content, author, and source link. It is best practice to structure your data
+    in classes instead of dictionaries, as the attributes we expect for each item
+    are more verbose, reducing run errors. For example, when accessing a value from
+    a Python dictionary, we can never be sure it is present or its type is current.
+    By wrapping our data items with classes, we can ensure each attribute is as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By leveraging Python packages such as Pydantic, we have out-of-the-box type
+    validation, which ensures consistency in our datasets. Thus, we modeled the data
+    categories as the following document classes, which we already used in the code
+    up until point:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ArticleDocument` class'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`PostDocument` class'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`RepositoryDocument` class'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These are not simple Python data classes or Pydantic models. They support read
+    and write operations on top of the MongoDB data warehouse. To inject the read-and-write
+    functionality into all the document classes without repeating any code, we used
+    the **Object-Document Mapping** (ODM) software pattern, which is based on the
+    **object-relational mapping** (**ORM**) pattern. Thus, let’s first explore ORM,
+    then move to ODM, and, finally, dig into our custom ODM implementation and document
+    classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ORM and ODM software patterns
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Before we talk about software patterns, let’s see what ORM is. It’s a technique
+    that lets you query and manipulate data from a database using an object-oriented
+    paradigm. Instead of writing SQL or API-specific queries, you encapsulate all
+    the complexity under an ORM class that knows how to handle all the database operations,
+    most commonly CRUD operations. Thus, working with ORM removes the need to handle
+    the database operations manually and reduces the need to write boilerplate code
+    manually. An ORM interacts with a SQL database, such as PostgreSQL or MySQL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most modern Python applications use ORMs when interacting with the database.
+    Even though SQL is still a popular choice in the data world, you rarely see raw
+    SQL queries in Python backend components. The most popular Python ORM is SQLAlchemy
+    ([https://www.sqlalchemy.org/](https://www.sqlalchemy.org/)). Also, with the rise
+    of FastAPI, SQLModel is ([https://github.com/fastapi/sqlmodel](https://github.com/fastapi/sqlmodel))
+    a common choice, which is a wrapper over SQLAlchemy that makes the integration
+    easier with FastAPI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, using SQLAlchemy, we defined a `User` ORM with the ID and name
+    fields. The `User` ORM is mapped to the `users` table within the SQL database.
+    Thus, when we create a new user and commit it to the database, it is automatically
+    saved to the `users` table. The same applies to all the CRUD operations on top
+    of the `User` class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Using the `User` ORM, we can quickly insert or query users directly from Python
+    without writing a line of SQL. Note that an ORM usually supports all **CRUD**
+    operations. Here is a code snippet that shows how to save an instance of the User
+    ORM to a SQLite database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Also, this is how we can query a user from the `users` SQLite table:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: Find the entire script and how to run it in the GitHub repository at `code_snippets/03_orm.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ODM pattern is extremely similar to ORM, but instead of working with SQL
+    databases and tables, it works with NoSQL databases (such as MongoDB) and unstructured
+    collections. As we work with NoSQL databases, the data structure is centered on
+    collections, which store JSON-like documents rather than rows in tables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To conclude, ODM simplifies working with document-based NoSQL databases and
+    maps object-oriented code to JSON-like documents. We will implement a light ODM
+    module on top of MongoDB to fully understand how ODM works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing the ODM class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This section will explore how to implement an ODM class from scratch. This is
+    an excellent exercise to learn how ODM works and sharpen our skills in writing
+    modular and reusable Python classes. Hence, we will implement a base ODM class
+    called `NoSQLBaseDocument`, from which all the other documents will inherit to
+    interact with the MongoDB data warehouse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The class can be found in our repository at `llm_engineering/domain/base/nosql.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The code starts by importing essential modules and setting up the database
+    connection. Through the `_database` variable, we establish a connection to the
+    database specified in the settings, which is by default called `twin`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we define a type variable `T` bound to the `NoSQLBaseDocument` class.
+    The variable leverages Python’s generic module, allowing us to generalize the
+    class’s types. For example, when we implement the `ArticleDocument` class, which
+    will inherit from the `NoSQLBaseDocument` class, all the instances where `T` was
+    used will be replaced with the `ArticleDocument` type when analyzing the signature
+    of functions (more on Python generics: [https://realpython.com/python312-typing](https://realpython.com/python312-typing)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `NoSQLBaseDocument` class is then declared as an abstract base class inheriting
+    from Pydantic’s BaseModel, Python’s Generic (which provides the functionality
+    described earlier), and `ABC` (making the class abstract) classes. This class
+    serves as the foundational ODM class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Within the `NoSQLBaseDocument` class, an id field is defined as a UUID4, with
+    a default factory generating a unique UUID. The class also implements the `__eq__`
+    and `__hash__` methods to allow instances to be compared and used in hashed collections
+    like sets or as dictionary keys based on their unique `id` attribute:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The class provides methods for converting between MongoDB documents and class
+    instances. The `from_mongo()` class method transforms a dictionary retrieved from
+    MongoDB into an instance of the class. The `to_mongo()` instance method converts
+    the model instance into a dictionary suitable for MongoDB insertion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `save()` method allows an instance of the model to be inserted into a MongoDB
+    collection. It retrieves the appropriate collection, converts the instance into
+    a MongoDB-compatible document leveraging the `to_mongo()` method described above,
+    and attempts to insert it into the database, handling any write errors that may
+    occur:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `get_or_create()` class method attempts to find a document in the database
+    matching the provided filter options. If a matching document is found, it is converted
+    into an instance of the class. If not, a new instance is created with the filter
+    options as its initial data and saved to the database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `bulk_insert()` class method allows multiple documents to be inserted into
+    the database at once:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `find()` class method searches for a single document in the database that
+    matches the given filter options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Similarly, the `bulk_find()` class method retrieves multiple documents matching
+    the filter options. It converts each retrieved MongoDB document into a model instance,
+    collecting them into a list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the `get_collection_name()` class method determines the name of the
+    MongoDB collection associated with the class. It expects the class to have a nested
+    `Settings` class with a name attribute specifying the collection name. If this
+    configuration is missing, an `ImproperlyConfigured` exception will be raised specifying
+    that the subclass should define a nested `Settings` class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can configure each subclass using the nested `Settings` class, such as defining
+    the collection name, or anything else specific to that subclass. Within the Python
+    ecosystem, there is an ODM implementation on top of MongoDB, called `mongoengine`,
+    which you can find on GitHub. It follows a pattern similar to ours but more comprehensive.
+    We implemented it by ourselves, as it was an excellent exercise to practice writing
+    modular and generic code following best OOP principles, which are essential for
+    implementing production-level code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data categories and user document classes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The last piece of the puzzle is to see the implementation of the subclasses
+    that inherit from the `NoSQLBaseDocument` base class. These are the concrete classes
+    that define our data categories. You’ve seen these classes used across the chapter
+    when working with articles, repositories, and posts within the crawler classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We begin by importing the essential Python modules and the ODM base class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: We define an `enum` class, where we centralize all our data category types.
+    These variables will act as constants in configuring all our ODM classes throughout
+    the book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The class can be found in the repository at `llm_engineering/domain/types.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `Document` class is introduced as an abstract base model for other documents
+    on top of the `NoSQLBaseDocument` ODM class. It includes common attributes like
+    content, platform, and author details, providing a standardized structure for
+    documents that will inherit from it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, specific document types are defined by extending the `Document` class.
+    The `RepositoryDocument`, `PostDocument`, and `ArticleDocument` classes represent
+    different categories of data, each with unique fields and settings that specify
+    their respective collection names in the database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we define the `UserDocument` class, which is used to store and query
+    all the users from the LLM Twin project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: By implementing the `NoSQLBaseDocument` ODM class, we had to focus solely on
+    the fields and specific functionality of each document or domain entity. All the
+    CRUD functionality is delegated to the parent class. Also, by leveraging Pydantic
+    to define the fields, we have out-of-the-box type validation. For example, when
+    creating an instance of the `ArticleDocument` class, if the provided link is `None`
+    or not a string, it will throw an error signaling that the data is invalid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we’ve finished implementing our data collection pipeline, starting
+    with the ZenML components. Then, we looked into the implementation of the crawlers
+    and, finally, wrapped it up with the ODM class and data category documents. The
+    last step is to run the data collection pipeline and ingest raw data into the
+    MongoDB data warehouse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gathering raw data into the data warehouse
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: ZenML orchestrates the data collection pipeline. Thus, leveraging ZenML, the
+    data collection pipeline can be run manually, scheduled, or triggered by specific
+    events. Here, we will show you how to run it manually, while we will discuss the
+    other scenarios in *Chapter 11* when digging deeper into MLOps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We configured a different pipeline run for each author. We provided a ZenML
+    configuration file for Paul Iusztin’s or Maxime Labonne’s data. To call the data
+    collection pipeline to collect Maxime’s data, for example, you can run the following
+    CLI command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'That will call the pipeline with the following ZenML YAML configuration file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: In *Figure 3.3* earlier, we saw the pipeline’s run DAG and details in ZenML’s
+    dashboard. Meanwhile, *Figure 3.5* shows the `user` output artifact generated
+    by this data collection pipeline. You can inspect the query `user_full_name` and
+    the retrieved `user` from the MongoDB database, for which we collected the links
+    in this specific run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_05.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.5: Example of the user output artifact after running the data collection
+    pipeline using Maxime’s configuration file'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, in *Figure 3.6*, you can observe the `crawled_links` output artifact,
+    which lists all the domains from which we collected data, the total number of
+    links crawled for each domain, and the number of successfully collected links.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We want to highlight again the power of these artifacts, as they trace each
+    pipeline’s results and metadata, making it extremely easy to monitor and debug
+    each pipeline run individually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_06.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.6: Example of the crawled_links output artifact after running the
+    data collection pipeline using Maxime’s configuration file'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can download the `crawled_links` artifact anywhere in our code by running
+    the following code, where the `ID` of the artifact can be found in ZenML and is
+    unique for every artifact version:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, we can easily run the same data collection pipeline but with Paul
+    Iusztin’s YAML configuration, listed below:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To run the pipeline using Paul’s configuration, we call the following `poe`
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'That, under the hood, calls the following CLI command that references Paul’s
+    config file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can find all the configs in the repository in the `configs/` directory.
+    Also, using `poe`, we configured a command that calls the data collection pipeline
+    for all the supported authors:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can easily query the MongoDB data warehouse using our ODM classes. For example,
+    let’s query all the articles collected for Paul Iusztin:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output of the code from above is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: With only two lines of code, we can query and filter our MongoDB data warehouse
+    using any ODM defined within our project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Also, to ensure that your data collection pipeline works as expected, you can
+    search your MongoDB collections using your **IDE’s MongoDB plugin,** which you
+    must install separately. For example, you can use this plugin for VSCode: [https://www.mongodb.com/products/tools/vs-code](https://www.mongodb.com/products/tools/vs-code).
+    For other IDEs, you can use similar plugins or external NoSQL visualization tools.
+    After connecting to the MongoDB visualization tool, you can connect to our local
+    database using the following URI: `mongodb://llm_engineering:llm_engineering@127.0.0.1:27017`.
+    For a cloud MongoDB cluster, you must change the URI, which we will explore in
+    *Chapter 11*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: And just like that, you’ve learned how to run the data collection pipeline with
+    different ZenML configs and how to visualize the output artifacts of each run.
+    We also looked at how to query the data warehouse for a particular data category
+    and author. Thus, we’ve finalized our data engineering chapter and can move to
+    the conclusion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The raw data stored in the MongoDB database is central to all future steps.
+    Thus, if you haven’t successfully run the code from this chapter due to any issues
+    with the crawlers, this section provides solutions for fixing potential issues
+    to allow you to move forward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Selenium issues
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: It is a well-known issue that running Selenium can cause problems due to issues
+    with the browser driver, such as the `ChromeDriver`. Thus, if the crawlers that
+    use Selenium, such as the `MediumCrawler`, fail due to problems with your `ChromeDriver`,
+    you can easily bypass this by commenting out the Medium links added to the data
+    collection YAML configs. To do so, go to the `configs/` directory and find all
+    the YAML files that start with `digital_data_etl_*`, such as `digital_data_etl_maxime_labonne.yaml`.
+    Open them and comment on all the Medium-related URLs, as illustrated in *Figure
+    3.7*. You can leave out the Substack or personal blog URLs as these use the `CustomArticleCrawler`,
+    which is not dependent on Selenium.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B31105_03_07.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3.7: Fix Selenium issues when crawling raw data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Import our backed-up data
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'If nothing works, there is the possibility of populating the MongoDB database
+    with your backed-up data saved under the `data/data_warehouse_raw_data directory`.
+    This will allow you to proceed to the fine-tuning and inference sections without
+    running the data collection ETL code. To import all the data within this directory,
+    run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running the CLI command from above, you will have a one-to-one replica
+    of the dataset we used while developing the code. To ensure the import is completed
+    successfully, you should have 88 articles and 3 users in your MongoDB database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we’ve learned how to design and build the data collection pipeline
+    for the LLM Twin use case. Instead of relying on static datasets, we collected
+    our custom data to mimic real-world situations, preparing us for real-world challenges
+    in building AI systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we examined the architecture of LLM Twin’s data collection pipeline,
+    which functions as an ETL process. Next, we started digging into the pipeline
+    implementation. We began by understanding how we can orchestrate the pipeline
+    using ZenML. Then, we looked into the crawler implementation. We learned how to
+    crawl data in three ways: using CLI commands in subprocesses or using utility
+    functions from LangChain or Selenium to build custom logic that programmatically
+    manipulates the browser. Finally, we looked into how to build our own ODM class,
+    which we used to define our document class hierarchy, which contains entities
+    such as articles, posts, and repositories.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end of the chapter, we learned how to run ZenML pipelines with different
+    YAML configuration files and explore the results in the dashboard. We also saw
+    how to interact with the MongoDB data warehouse through the ODM classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will cover the key steps of the RAG feature pipeline,
+    including chunking and embedding documents, ingesting these documents into a vector
+    DB, and applying pre-retrieval optimizations to improve performance. We will also
+    set up the necessary infrastructure programmatically using Pulumi and conclude
+    by deploying the RAG ingestion pipeline to AWS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Breuss, M. (2023, July 26). *Beautiful Soup: Build a Web Scraper With Python*.
+    [https://realpython.com/beautiful-soup-web-scraper-python/](https://realpython.com/beautiful-soup-web-scraper-python/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: David, D. (2024, July 8). *Guide to Web Scraping with Selenium in 2024*. Bright
+    Data. [https://brightdata.com/blog/how-tos/using-selenium-for-web-scraping](https://brightdata.com/blog/how-tos/using-selenium-for-web-scraping)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Hjelle, G. A. (2023, October 21). *Python 3.12 Preview: Static Typing Improvements*.
+    [https://realpython.com/python312-typing/](https://realpython.com/python312-typing/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*ORM Quick Start — SQLAlchemy 2.0 documentation*. (n.d.). [https://docs.sqlalchemy.org/en/20/orm/quickstart.html](https://docs.sqlalchemy.org/en/20/orm/quickstart.html
+    )'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Ramos, L. P. (2023, August 4). *Python and MongoDB: Connecting to NoSQL Databases*.
+    [https://realpython.com/introduction-to-mongodb-and-python/](https://realpython.com/introduction-to-mongodb-and-python/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Refactoring.Guru. (2024, January 1). *Builder*. [https://refactoring.guru/design-patterns/builder](https://refactoring.guru/design-patterns/builder)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*What is ETL? A complete guide*. (n.d.). Qlik. [https://www.qlik.com/us/etl](https://www.qlik.com/us/etl  )'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Join our book’s Discord space
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Join our community’s Discord space for discussions with the authors and other
+    readers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://packt.link/llmeng](https://packt.link/llmeng)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/QR_Code79969828252392890.png)'
+  prefs: []
+  type: TYPE_IMG
