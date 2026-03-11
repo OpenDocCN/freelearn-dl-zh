@@ -1,0 +1,313 @@
+# <st c="0">10</st>
+
+# <st c="3">使用 Whisper API 进行语音识别和语音合成</st>
+
+<st c="62">欢迎来到</st> *<st c="74">第十章</st>* <st c="84">我们探索尖端人工智能技术世界的旅程。</st> <st c="148">在本章中，我们将开始探索令人瞩目的</st> **<st c="214">Whisper API</st>**<st c="225">。借助先进的语音识别和翻译能力，Whisper API 为将音频转换为文本开辟了令人兴奋的可能性。</st> <st c="242">想象一下，能够轻松转录对话、访谈、播客或任何口语内容的能力。</st> <st c="375">无论你旨在从多语言音频文件中提取有价值的见解，还是为全球受众创建可访问的内容，Whisper API 都能为你提供解决方案。</st> <st c="489">Whisper API 涵盖了广泛的语音，确保与各种语音需求兼容。</st>
+
+<st c="648">在本章中，我们将通过使用 Python 开发语言转录项目来深入探讨 Whisper API 的核心功能。</st> <st c="799">我们将熟悉其基本端点，即转录和翻译，这些构成了其语音转文本能力的基础。</st> <st c="950">凭借其最先进的开源模型，Whisper 为开发者提供了强大的工具，可以无缝地将音频文件转录成多种语言，甚至翻译成英语。</st> <st c="1138">Whisper API 处理广泛的语音，确保与各种语音需求兼容。</st> <st c="1252">它可以用于智能扬声器、免提设备和其他语音启用技术，通过提供准确和响应迅速的语音合成能力来提升用户体验。</st>
+
+<st c="1442">在全球化交流比以往任何时候都重要的世界里，Whisper API 的翻译端点发挥着至关重要的作用。</st> <st c="1575">此端点不仅转录音频文件，还将它们翻译成英语，弥合语言之间的差距，促进</st> <st c="1713">无缝理解。</st>
+
+<st c="1736">在本章中，你将学习以下主题：</st> <st c="1778">以下内容：</st>
+
++   <st c="1795">使用</st> <st c="1853">Whisper API</st> <st c="1795">实现文本翻译和转录</st>
+
++   <st c="1864">构建语音</st> <st c="1882">转录应用程序</st>
+
++   <st c="636">使用 PyDub 处理更长的音频输入</st>
+
+<st c="1943">在本章结束时，你将全面了解 Whisper API 及其卓越功能，包括语音转文本转换和语言翻译。</st> <st c="2137">你还将学习如何利用 API 准确转录音频文件，将其翻译成英语，处理更长的输入，并在你的应用程序中释放口语的潜力。</st>
+
+# <st c="2342">技术要求</st>
+
+<st c="2365">为了成功进行开发桌面翻译应用程序的项目，您必须满足以下</st> <st c="2495">技术先决条件：</st>
+
++   <st c="2519">确保您的机器已安装 Python 3.7 或更高版本</st> <st c="2571">。</st>
+
++   <st c="2588">拥有代码编辑器，如 VSCode（推荐）</st> <st c="2637">设置</st>
+
++   <st c="2643">创建一个 Python</st> <st c="2660">虚拟环境</st>
+
++   <st c="2679">获取 OpenAI</st> <st c="2697">API 密钥</st>
+
++   <st c="2704">在您的项目中安装 PyDub</st>
+
+<st c="2734">本章展示的代码片段可在 GitHub 平台上找到。</st> <st c="2817">您可以通过以下</st> <st c="2855">链接</st> 访问它们：[<st c="2861">https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-API</st>](https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-API)<st c="2937">。</st>
+
+# <st c="2938">使用 Whisper API 实现文本翻译和转录</st>
+
+<st c="3007">在本节中，我们将</st> <st c="3028">探讨 Whisper API 的功能</st> <st c="3058">，以使用 Python 无缝转录和翻译</st> <st c="3080">音频文件。</st> <st c="3142">随着语音识别和翻译技术的进步，我们现在可以轻松地将口语转换为文本，并有效地消除语言障碍。</st> <st c="3314">通过遵循提供的逐步说明，您将获得将 Whisper API 集成到 Python 项目中并释放基于</st> <st c="3511">音频数据</st> 的潜力的知识和技能。</st>
+
+<st c="3528">在本节中，我们将</st> <st c="3624">探讨音频文件的转录和翻译</st> <st c="3637">的不同方面。</st> <st c="3655">从设置和安装</st> <st c="3678">要求开始，我们将确保您拥有必要的工具，包括 Python、代码编辑器、Python 虚拟环境和 OpenAI</st> <st c="3819">API 密钥。</st>
+
+<st c="3827">要使用 Python 中的 Whisper API 进行音频文件的转录和翻译，建议创建一个名为</st> `<st c="3965">WhisperAPI</st>` <st c="3975">的目录，并使用 VSCode IDE 加载它。</st> <st c="4009">按照</st> *<st c="4100">第一章</st>*<st c="4109">中概述的步骤，从终端窗口激活您的虚拟环境，*<st c="4111">开始使用 ChatGPT API 进行 NLP 任务</st>*<st c="4161">。</st>
+
+<st c="4162">一旦项目创建完成，您将看到 VSCode 编辑器窗口，在那里您可以开始编写您的 Python 代码。</st> <st c="4291">您可以在 VSCode 项目视图中创建 Python 脚本、导入库和组织项目结构。</st> <st c="4394">。</st>
+
+<st c="4407">现在您已经设置了项目，下一步是安装必要的库，即 OpenAI 和 PyDub。</st> <st c="4525">要这样做，请转到终端窗口打开终端。</st> <st c="4589">从那里，输入以下命令：</st>
+
+```py
+ $pip install openai
+$pip install pydub
+$brew install ffmpeg
+```
+
+<st c="4689">通过执行这些命令，您将自动下载并安装 OpenAI 和 PyDub 库，确保它们可以随时用于您的项目。</st> <st c="4854">FFmpeg 是一个功能强大且多才多艺的开源多媒体框架，用于处理音频和</st> <st c="4952">视频文件。</st>
+
+<st c="4964">安装这些库至关重要，因为 OpenAI 提供了与 Whisper API 交互所需的必要功能，而 PyDub 允许高效处理音频文件，包括分割和</st> <st c="5164">导出它们。</st>
+
+<st c="5179">现在，是时候在您的项目中创建一个名为</st> `<st c="5223">config.py</st>` <st c="5232">的新文件了。</st> <st c="5250">此文件将安全存储您的 API 密钥，允许您的代码访问</st> <st c="5327">Whisper API。</st>
+
+<st c="5339">为了创建</st> `<st c="5354">config.py</st>` <st c="5363">文件并添加您的 API 密钥，请按照以下步骤操作：</st> <st c="5398">这些步骤：</st>
+
+1.  <st c="5410">在您的项目视图区域上右键点击。</st>
+
+1.  <st c="5449">从</st> <st c="5457">上下文菜单</st> <st c="5465">中选择</st> **<st c="5475">新建文件</st>** <st c="5475">。</st>
+
+1.  <st c="5488">将文件命名为</st> `<st c="5503">config.py</st>` <st c="5512">并</st> <st c="5517">按</st> *<st c="5523">Enter</st>*<st c="5528">。</st>
+
+<st c="5529">现在，您</st> <st c="5539">已经创建了</st> `<st c="5556">config.py</st>` <st c="5565">文件。</st> <st c="5572">在编辑器中打开该文件，并添加以下代码行：</st> <st c="5627">以下代码行：</st>
+
+```py
+ API_KEY = "YOUR_API_KEY"
+```
+
+<st c="5660">为了使</st> <st c="5669">您的</st> <st c="5674">音频文件在整章中组织有序且易于访问，建议在您的项目中创建一个名为</st> `<st c="5787">audio_files</st>` <st c="5798">的文件夹。</st> <st c="5806">此文件夹将作为集中存储所有将在本章的各种示例和演示中使用的音频文件的地点。</st> <st c="5820">This folder will serve as a centralized location to store all the audio files that will be used in the various examples and demonstrations covered in</st> <st c="5970">the chapter.</st>
+
+<st c="5982">要创建</st> `<st c="5997">audio_files</st>` <st c="6008">文件夹，请按照以下步骤操作：</st> <st c="6024">这些步骤：</st>
+
+1.  <st c="6036">在您的项目视图区域上右键点击。</st>
+
+1.  <st c="6075">从</st> <st c="6083">上下文菜单</st> <st c="6093">中选择</st> **<st c="6103">新建文件夹</st>** <st c="6103">。</st>
+
+1.  <st c="6116">将目录命名为</st> `<st c="6136">audio_files</st>` <st c="6147">并</st> <st c="6152">按</st> *<st c="6158">Enter</st>*<st c="6163">。</st>
+
+<st c="6164">现在您已经设置了必要的配置和文件夹结构，是时候创建一个名为</st> `<st c="6286">transcribe.py</st>`<st c="6299">的新 Python 文件了。</st> <st c="6407">在编辑器中打开该文件，这将是你编写与 Whisper API 交互并转录音频文件的代码的空间。</st>
+
+<st c="6551">在编写任何代码之前，您可以将您选择的英语语音音频文件放入</st> `<st c="6642">audio_files</st>` <st c="6653">文件夹中。</st> <st c="6662">在这个例子中，我将使用一个名为</st> `<st c="6712">apple.mp3</st>`<st c="6721">的音频文件。该文件包含关于苹果电脑的几句话，您可以从我们的 Git</st> <st c="6820">仓库下载它：</st> [<st c="6832">https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-API/blob/main/Chapter10%20Whisper/audio_files/apple.mp3</st>](https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-API/blob/main/Chapter10%20Whisper/audio_files/apple.mp3)<st c="6960">。</st>
+
+<st c="6961">重要提示</st>
+
+<st c="6976">在使用 Whisper API 进行音频处理和转录任务时，确保提供的输入音频文件格式是受支持的至关重要。</st> <st c="7155">Whisper API 目前接受以下文件类型：</st> `<st c="7215">mp3</st>`<st c="7218">,</st> `<st c="7220">mp4</st>`<st c="7223">,</st> `<st c="7225">mpeg</st>`<st c="7229">,</st> `<st c="7231">mpga</st>`<st c="7235">,</st> `<st c="7237">m4a</st>`<st c="7240">,</st> `<st c="7242">wav</st>`<st c="7245">,</st> <st c="7247">和</st> `<st c="7251">webm</st>`<st c="7255">。</st>
+
+<st c="7256">现在让我们按照以下步骤转录我们的音频文件：</st>
+
+1.  <st c="7318">一旦您的音频</st> <st c="7335">文件就绪，您可以通过向</st> `<st c="7407">transcribe.py</st>`<st c="7420">添加以下代码来</st> <st c="7361">转录它：</st>
+
+    ```py
+     from openai import OpenAI
+    import config
+    # API Token
+    client = OpenAI(api_key=config.API_KEY)
+    file= open("audio_files/apple.mp3", "rb")
+    result = client.audio.transcriptions.create(model="whisper-1", file=file)
+    print(result)
+    ```
+
+    <st c="7644">在这里，</st> `<st c="7655">openai</st>` <st c="7661">库提供了访问 OpenAI API 的权限，这使得开发者能够与各种语言模型和 AI 功能进行交互。</st> <st c="7791">API 密钥分配给</st> `<st c="7822">OpenAI(api_key=config.API_KEY)</st>` <st c="7852">变量，使用存储在</st> <st c="7893">API 密钥中的值。</st>
+
+1.  <st c="7901">然后，我们以读取二进制模式打开一个名为</st> `<st c="7929">apple.mp3</st>` <st c="7938">的文件，该文件位于</st> `<st c="7954">audio_files/apple.mp3</st>` <st c="7975">本地文件路径中，</st> `<st c="8013">rb</st>`<st c="8015">。这表明代码的意图是读取一个</st> <st c="8064">音频文件。</st>
+
+1.  <st c="8075">之后，调用了</st> `<st c="8092">client.audio.transcriptions.create()</st>` <st c="8128">函数，并传入两个参数：</st> `<st c="8168">whisper-1</st>` <st c="8177">和打开的音频文件。</st> <st c="8205">此函数是 OpenAI 库的一部分，用于转录音频文件。</st> <st c="8256">其中，</st> `<st c="8295">whisper-1</st>` <st c="8304">参数</st> <st c="8315">是 OpenAI 系统中的特定</st> <st c="8331">转录模型。</st>
+
+1.  <st c="8376">最后，我们在</st> <st c="8428">控制台中看到了转录的结果：</st>
+
+    ```py
+    <st c="8440">{</st>
+     <st c="8442">"text": "Macbook laptops are known for their modern design and high-quality build, offering seamless experience.</st> <st c="8556">They are favored by many professionals and creators for their powerful performance and integration with A</st><st c="8661">pple's ecosystem."</st>
+    <st c="8680">}</st>
+    ```
+
+<st c="8682">转录的结果，在控制台中打印出来，是一个包含单个键值对的 JSON 对象。</st> <st c="8792">键是</st> `<st c="8803">text</st>`<st c="8807">，对应的值是</st> <st c="8844">转录的文本。</st>
+
+<st c="8861">这表明转录过程已成功将音频文件转换为文本，捕捉了与 MacBook 笔记本的功能和声誉相关的</st> <st c="9024">内容。</st>
+
+<st c="9040">如果您的音频文件不是英语，Whisper 也会处理这种情况，通过在后台自动转录并翻译文件。</st> <st c="9215">现在，我们将指导您如何使用 Whisper API 翻译转录的文本。</st> <st c="9303">在这个例子中，我们将使用一个名为</st> `<st c="9361">german.mp3</st>`<st c="9371">的德语语音文件：</st> [<st c="9374">https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-APIs/blob/main/Chapter10%20Whisper/audio_files/german.mp3</st>](https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-APIs/blob/main/Chapter10%20Whisper/audio_files/german.mp3)<st c="9504">。</st>
+
+<st c="9505">您还可以使用任何语言的</st> `<st c="9526">mp3</st>` <st c="9529">文件。</st>
+
+<st c="9560">要使用 Whisper API 翻译音频文件，您可以创建一个名为</st> `<st c="9657">translate.py</st>` <st c="9669">的新 Python 文件，并添加以下代码：</st>
+
+```py
+ from openai import OpenAI
+import config
+# API Token
+client = OpenAI(api_key=config.API_KEY)
+whisper_file= open("audio_files/german.mp3", "rb")
+result = client.audio.translations.create(model="whisper-1", file=whisper_file)
+print(result)
+```
+
+<st c="9934">一旦正确设置了 API 密钥和音频文件的路径，代码就会调用</st> `<st c="10027">client.audio.translations.create()</st>` <st c="10061">函数，提供模型名称或</st> `<st c="10100">whisper-1</st>` <st c="10109">配置</st> <st c="10124">和打开的音频文件</st> `<st c="10151">whisper_file</st>`<st c="10163">。此函数使用</st> <st c="10210">Whisper API</st> <st c="10214">进行翻译。</st>
+
+<st c="10226">翻译结果</st> <st c="10249">将存储在</st> `<st c="10271">result</st>` <st c="10277">变量中，</st> <st c="10288">可以使用</st> `<st c="10316">print(result)</st>` <st c="10329">来打印，并在</st> <st c="10364">控制台</st>中显示翻译后的文本：</st>
+
+```py
+ {
+  "text": "The Germans are known for not liking to do small talk. Today I'm going to try here in Berlin to see if I can do a little small talk with the people here. Let's go!" }
+```
+
+<st c="10554">正如你所见，文本已成功使用 Whisper API 和不到 10 行 Python 代码从德语翻译成英语。</st>
+
+<st c="10722">在本节中，你了解了 Whisper API 使用 Python 无缝转录和翻译音频文件的能力。</st> <st c="10864">逐步说明指导你完成了转录和翻译音频文件的设置过程，包括支持的文件格式。</st> <st c="11011">本节展示了成功的转录和翻译示例，展示了 Whisper API 在将音频转换为文本和通过最小代码跨越语言障碍方面的有效性。</st>
+
+<st c="11212">在下一节中，你将学习如何集成 Tkinter 和 Whisper API 来开发一个用户友好的语言转录应用程序，该应用程序可以将口语语言实时转换为文本。</st>
+
+# <st c="11412">构建语音转录应用程序</st>
+
+<st c="11455">在本节中，我们将探讨通过集成 Tkinter（一个流行的 Python GUI 工具包）和强大的 Whisper API 来开发语言转录应用程序的开发。</st> <st c="11476">这种集成将使我们能够创建一个用户友好的界面，实现口语语言的实时转录。</st> <st c="11629">通过遵循逐步说明并利用 Tkinter 和 Whisper API 的功能，你将能够开发自己的 GUI 应用程序，为语音识别和语言处理打开无数可能性。</st> <st c="11757">通过遵循逐步说明并利用 Tkinter 和 Whisper API 的功能，你将能够开发自己的 GUI 应用程序，为语音识别和语言处理打开无数可能性。</st>
+
+<st c="12003">无论你渴望创建用于转录访谈的工具、为视频生成字幕，还是仅仅探索语音到文本技术的潜力，本节都将为你提供将你的想法付诸实践的知识和技能。</st> <st c="12253">因此，让我们深入其中，开始使用 Tkinter 和 Whisper API 构建语言转录应用程序的激动人心的旅程。</st> <st c="12369">Whisper API。</st>
+
+<st c="12381">为了继续进行语言转录应用程序项目，你可以在同一项目中创建一个名为</st> `<st c="12487">app.py</st>` <st c="12493">的新 Python 文件。</st> <st c="12519">此文件将作为开发</st> <st c="12577">应用程序的主要代码库。</st>
+
+<st c="12593">通过创建</st> `<st c="12610">app.py</st>` <st c="12616">文件，你将拥有一个专门的空间来编写必要的代码以集成 Tkinter 和 Whisper API，使你的应用程序能够实现实时转录功能。</st>
+
+<st c="12792">在我们追求简洁的过程中，我们的应用程序将采用具有文本字段和按钮的最简设计。</st> <st c="12907">文本字段将作为显示转录文本的专用空间，而按钮将提供轻松浏览文件系统并定位所需音频文件以进行转录的功能</st> <st c="13122">。</st>
+
+<st c="13140">要将我们的语言翻译代码转换为实际的应用程序，我们需要创建</st> `<st c="13237">transcribe_audio()</st>` <st c="13255">函数，并从</st> `<st c="13285">Tkinter 图形界面</st>` <st c="13285">中使用它：</st>
+
+```py
+ import tkinter as tk
+from tkinter import filedialog
+from openai import OpenAI
+import config
+# API Token
+client = OpenAI(api_key=config.API_KEY)
+def transcribe_audio():
+    file_path = filedialog.askopenfilename(filetypes=[("Audio Files", "*.mp3")])
+    if file_path:
+        try:
+            audio_file = open(file_path, "rb")
+            transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
+            text_window.insert(tk.END, transcript.text)
+        except Exception as e:
+            text_window.insert(tk.END, f"Error: {str(e)}")
+    else:
+        text_window.insert(tk.END, "No file selected.")
+# Create the Tkinter window
+window = tk.Tk()
+window.title("Chapter 10 Whisper Transcription App")
+# Create a text window
+text_window = tk.Text(window, height=30, width=60)
+text_window.pack()
+# Create a button to select the audio file
+button = tk.Button(window, text="Select Audio File", command=transcribe_audio)
+button.pack()
+# Start the Tkinter event loop
+window.mainloop()
+```
+
+<st c="14229">在执行函数时，它首先使用</st> `<st c="14308">filedialog.askopenfilename()</st>` <st c="14336">方法打开文件对话框，允许用户选择用于转录的音频文件。</st> <st c="14406">文件对话框仅显示具有</st> `<st c="14467">.mp3</st>` <st c="14471">扩展名的文件，这是由</st> `<st c="14503">filetypes</st>` <st c="14512">参数指定的。</st>
+
+<st c="14523">如果从文件对话框中获取了有效的文件路径，表示用户已选择了一个音频文件，则代码将进入转录音频的步骤。</st> <st c="14675">在</st> `<st c="14684">try</st>` <st c="14687">块中，使用</st> `<st c="14755">open()</st>` <st c="14761">以读取二进制模式打开选定的音频文件，并将其分配给</st> `<st c="14782">audio_file</st>` <st c="14792">变量。</st>
+
+<st c="14802">使用</st> `<st c="14813">client.audio.transcriptions.create()</st>` <st c="14849">函数，将音频文件与特定的转录模型一起传递，通过 Whisper API 启动转录过程。</st> <st c="14987">生成的转录存储在</st> `<st c="15032">transcript</st>` <st c="15042">变量中。</st>
+
+<st c="15052">最后，将转录的文本插入到文本窗口中。</st> <st c="15115">`<st c="15119">tk.END</st>` <st c="15125">参数确保文本被插入到文本窗口的末尾。</st> <st c="15200">如果在过程中出现任何异常或错误，将在</st> `<st c="15293">文本窗口</st>` <st c="15293">中显示错误消息。</st>
+
+<st c="15305">如果没有从文件对话框中获取文件路径，表示用户未选择音频文件，则将在</st> `<st c="15413">未选择文件</st>` <st c="15429">消息插入到</st> `<st c="15459">文本窗口</st>` <st c="15459">中。</st>
+
+<st c="15471">在</st> `<st c="15482">transcribe_audio()</st>` <st c="15500">函数下，我们创建了使用它的 Tkinter 应用程序。</st> <st c="15561">首先，使用</st> `<st c="15602">tk.Tk()</st>`<st c="15609">创建了一个 Tkinter 窗口。窗口的标题设置为</st> `<st c="15640">Whisper</st>` `<st c="15648">转录应用程序</st>`<st c="15665">。</st>
+
+<st c="15666">接下来，使用</st> `<st c="15704">tk.Text()</st>`<st c="15713">创建了一个文本窗口，其中将显示 Whisper API 的转录结果。</st> <st c="15770">还使用</st> `<st c="15821">tk.Button()</st>`<st c="15832">在 Tkinter 窗口中添加了一个按钮。按钮的标签设置为</st> `<st c="15863">选择音频文件</st>`<st c="15880">，并将</st> `<st c="15890">command</st>` <st c="15897">参数设置为</st> `<st c="15918">transcribe_audio</st>`<st c="15934">。这意味着当按钮被点击时，将执行之前定义的</st> `<st c="15984">transcribe_audio()</st>` <st c="16002">函数。</st>
+
+<st c="16050">要运行 Whisper 转录应用程序，请按照</st> <st c="16096">以下步骤操作：</st>
+
+1.  <st c="16108">在 VSCode 中，找到</st> `<st c="16131">app.py</st>` <st c="16137">文件并</st> <st c="16147">运行它。</st>
+
+1.  <st c="16154">一旦应用程序运行，将出现一个标题为</st> **<st c="16212">Whisper 转录应用程序</st>** <st c="16237">的 Tkinter 窗口。</st>
+
+1.  <st c="16250">窗口将显示一个文本区域，其中将显示转录的文本。</st>
+
+1.  <st c="16328">点击</st> **<st c="16342">选择音频文件</st>** <st c="16359">按钮。</st> <st c="16368">将打开一个文件对话框窗口，允许您浏览您的</st> <st c="16430">文件系统。</st>
+
+1.  <st c="16442">找到并选择您想要</st> <st c="16491">转录的 MP3 音频文件。</st>
+
+<st c="16505">选择文件后，代码将尝试转录音频。</st> <st c="16579">如果成功，转录的文本将在 Tkinter 窗口内的文本区域中显示（见</st> *<st c="16681">图 10</st>**<st c="16690">.1</st>*<st c="16692">）。</st> <st c="16696">如果在转录过程中出现任何错误，将显示错误消息。</st>
+
+![图 10.1 – Whisper 转录应用程序](img/B22414_10_01.jpg)
+
+<st c="17072">图 10.1 – Whisper 转录应用程序</st>
+
+<st c="17119">重要提示</st>
+
+<st c="17134">请注意，在某些屏幕分辨率下，</st> **<st c="17191">选择音频文件</st>** <st c="17208">按钮可能会被隐藏。</st> <st c="17236">为了确保其可见性，请最大化应用程序窗口。</st>
+
+通过运行应用程序并选择一个 MP3 文件，您将能够见证 Whisper API 的转录功能在行动中。<st c="17294">应用程序将利用所选的音频文件，使用 Whisper API 启动转录过程，并在 Tkinter 窗口中显示转录的文本。</st> <st c="17425">这允许您将口语转换为书面文字，为各种应用和用例打开可能性。</st> <st c="17590">使用 Whisper API，您只需花上`20 min`就能深入理解知识点，而且记忆深刻，*难以遗忘*。</st>
+
+在本节中，我们开始了语言转录应用程序的开发，集成了 Tkinter 和 Whisper API。<st c="17713">该应用程序采用极简设计，具有文本字段和按钮，允许用户选择用于转录的 MP3 音频文件。</st> <st c="17844">选择文件后，代码将使用 Whisper API 启动转录过程，并在 Tkinter 窗口中显示转录的文本。</st>
+
+在下一节中，您将学习如何将 PyDub 与 Whisper API 集成以克服文件大小限制，并有效地分割大型音频文件以实现无缝转录。
+
+# 使用 PyDub 处理较长的音频输入
+
+在本节中，我们将探讨**<st c="18405">PyDub</st>**<st c="18410">，一个强大的 Python 音频处理库，与 Whisper API 的集成，以克服 API 强加的 25 MB 文件大小限制。<st c="18414">使用 PyDub，我们可以有效地将大型音频文件分割成更小的片段，从而实现长时间录音的无缝转录。</st> <st c="18547">通过遵循说明并利用 PyDub 的功能，您将能够充分发挥 Whisper API 的潜力，转录任何大小的音频文件。</st>
+
+利用 PyDub 的强大功能来增强您的语言转录工作流程是一个简单的过程。<st c="18858">通过使用这个库，您可以轻松地将长音频文件分割成更小的片段。</st> <st c="18967">例如，如果您有一个 10 分钟的音频文件，您可以轻松地将其分割成两个单独的文件，每个文件持续 5 分钟。</st> <st c="19065">然后，您可以将这些较小的文件提交给 Whisper API 进行转录，确保您的文件不会因为其大小限制而被拒绝。</st> <st c="19199">使用 PyDub，您可以无缝克服文件大小限制并简化您的转录过程。</st>
+
+在这个练习中，我们使用了一个大约十一分钟的 iPhone 评测音频文件。<st c="19561">现在，你可以在你的项目中创建一个新的 Python 文件，具体命名为</st> `<st c="19639">longer_files.py</st>`<st c="19654">。这个文件将作为一个专门的空间来实施处理更大音频文件的语言</st> <st c="19779">转录工作流程：</st>
+
+```py
+ from openai import OpenAI
+from pydub import AudioSegment
+import config
+# API Token
+client = OpenAI(api_key=config.API_KEY)
+song = AudioSegment.from_mp3("audio_files/phone.mp3")
+# 5 minute portion
+five_minutes = 5 * 60 * 1000
+first_min_5 = song[:five_minutes]
+first_min_5.export("audio_files/phone_first_5.mp3", format="mp3")
+last_min_5 = song[five_minutes:]
+last_min_5.export("audio_files/phone_last_5.mp3", format="mp3")
+file= open("audio_files/phone_first_5.mp3", "rb")
+result = client.audio.transcriptions.create(model="whisper-1", file=file)
+print(result)
+file= open("audio_files/phone_last_5.mp3", "rb")
+result = client.audio.transcriptions.create(model="whisper-1", file=file)
+print(result)
+```
+
+<st c="20499">提供的代码演示了在语言</st> <st c="20632">转录工作流程中处理更大音频文件时使用</st> `<st c="20548">PyDub</st>` <st c="20553">库和 Whisper API 的方法。</st>
+
+<st c="20655">您可以从</st> `<st c="20677">phone.mp3</st>` <st c="20686">文件中下载，链接如下：</st> [<st c="20697">https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-API/blob/main/Chapter10%20Whisper/audio_files/phone.mp3</st>](https://github.com/PacktPublishing/Building-AI-Applications-with-ChatGPT-API/blob/main/Chapter10%20Whisper/audio_files/phone.mp3)
+
+<st c="20831">首先，执行必要的导入，包括从相应库中的</st> `<st c="20885">openai</st>` <st c="20891">和</st> `<st c="20896">AudioSegment</st>` <st c="20908">模块。</st> <st c="20948">我们使用 PyDub 的</st> `<st c="20976">phone.mp3</st>` <st c="20985">文件，通过</st> `<st c="21000">AudioSegment.from_mp3()</st>` <st c="21023">方法加载，并将其分配给</st> `<st c="21052">song</st>` <st c="21056">变量。</st>
+
+<st c="21066">为了将音频文件分解成更小的片段，代码使用</st> `<st c="21168">five_minutes</st>` <st c="21180">变量定义了五分钟的部分，该变量代表所需的持续时间（以毫秒为单位）。</st> <st c="21246">然后，</st> `<st c="21250">song</st>` <st c="21254">变量使用指定的持续时间进行切片，以获取音频的前五分钟，并将其存储在</st> `<st c="21378">first_min_5</st>` <st c="21389">变量中。</st> <st c="21400">这个片段随后被导出为一个名为</st> `<st c="21459">phone_first_5.mp3</st>` <st c="21476">的单独 MP3 文件，使用的是</st> `<st c="21487">export()</st>` <st c="21495">方法。</st>
+
+<st c="21503">同样，代码使用切片操作获取音频文件的剩余部分，从五分钟标记开始直到结束，并将其分配给</st> `<st c="21674">last_min_5</st>` <st c="21684">变量。</st> <st c="21695">这个片段也被导出为一个名为</st> `<st c="21754">phone_last_5.mp3</st>`<st c="21770">的单独 MP3 文件。</st>
+
+<st c="21771">代码继续使用</st> `<st c="21802">phone_first_5.mp3</st>` <st c="21819">文件，并通过</st> `<st c="21834">client.audio.transcriptions.create()</st>` <st c="21870">方法调用打开。</st> <st c="21887">生成的转录结果存储在</st> `<st c="21932">result</st>` <st c="21938">变量中，然后将其打印到控制台。</st> <st c="21987">按照相同的程序，代码重复对</st> `<st c="22068">phone_last_5.mp3</st>` <st c="22084">文件进行转录过程，打开它，转录它，并打印</st> <st c="22133">结果。</st>
+
+<st c="22144">你可以在控制台看到每个文件的独特转录结果，如下所示：</st>
+
+```py
+ {
+  "text": "It's finally here, the most wanted phone this year, the most amazing camera set ever built in a phone. Here is the iPhone 13 Pro.…….reduced the front camera module, now the phone will look good." }
+{
+  "text": "weights about 10 grams more which is something you can't really feel. However, while everybody is trying to reduce the weight on the phones, Apple actually increased it……... Now thanks for watching and I will see you in the next one." }
+```
+
+<st c="22688">通过使用 PyDub 将较大的音频文件分解成更小的片段，代码使得这些片段可以在 Whisper API 的</st> `<st c="22823">大小限制</st>` <st c="22855">内进行处理。</st> <st c="22855">这种方法允许我们有效地处理较大的音频文件，同时利用 Whisper API 提供的转录能力。</st>
+
+<st c="23001">这就是我们如何将 PyDub 与 Whisper API 集成以克服文件大小限制，从而实现更长音频文件的流畅转录。</st>
+
+# <st c="23154">总结</st>
+
+<st c="23162">在本章中，我们探讨了 Whisper API，这是一个通过高级语音识别和翻译将音频转换为文本的强大工具。</st> <st c="23309">本章提供了使用 Python 开发语言转录项目的逐步指导，涵盖了处理音频文件、安装必要的库和设置 API 密钥等基本方面。</st> <st c="23534">你学习了如何使用 Whisper API 转录和翻译音频文件。</st> <st c="23613">本章还介绍了一个语音转录应用程序，它集成了 Tkinter 和 Whisper API 以实现</st> <st c="23720">实时转录。</st>
+
+<st c="23744">你还学习了如何使用 PyDub，一个强大的 Python 音频处理库，结合 Whisper API 来克服 25 MB 的文件大小限制。</st> <st c="23896">通过利用 PyDub 的功能，我们可以有效地将大型音频文件分割成更小的片段，从而实现长时间录音的无缝转录。</st> <st c="24057">你看到了如何使用 PyDub 和 Whisper API 在语言转录工作流程中处理更大的音频文件。</st> <st c="24172">通过将音频文件分解成更小的片段并逐个转录每个片段，我们可以在利用 Whisper API 的转录能力的同时处理更大的音频文件。</st>
+
+<st c="24374">在第</st> *<st c="24378">第十一章</st>*<st c="24388">中，你将了解 ChatGPT API 中可用的不同 API 模型，并获得如何为你的特定项目选择最合适的模型的见解。</st> <st c="24554">我们将探讨在 API 请求中可以使用的各种参数，以实现更高效、改进的提示完成。</st> <st c="24686">你还将了解与不同</st> <st c="24753">AI 模型相关的限制。</st>
+
+# <st c="0">第四部分：为 ChatGPT 应用提供高级概念</st>
+
+<st c="52">在本最后一部分，你将探索 AI 模型及其独特的属性，从而让你全面了解它们的成本、质量和提示长度考虑因素。</st> <st c="237">掌握这些知识后，你将能够选择与你的特定应用需求相匹配的最佳模型。</st> <st c="379">此外，你将解锁构建自己的 ChatGPT 模型的能力，并通过微调和嵌入来增强其功能，从而使其完美地满足你的</st> <st c="574">个人需求。</st>
+
+<st c="591">本部分包含以下章节：</st>
+
++   *<st c="629">第十一章</st>*<st c="640">,</st> *<st c="642">选择正确的 ChatGPT API 模型</st>*
+
++   *<st c="678">第十二章</st>*<st c="689">,</st> *<st c="691">微调 ChatGPT 以创建独特的 API 模型</st>*
