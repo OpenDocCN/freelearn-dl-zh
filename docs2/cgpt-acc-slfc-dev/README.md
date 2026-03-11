@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# ChatGPT Salesforce 开发加速指南
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/6cf5280a714f18246f6644fe558538ef`](https://zh.annas-archive.org/md5/6cf5280a714f18246f6644fe558538ef)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
