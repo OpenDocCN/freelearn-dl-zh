@@ -1,6 +1,6 @@
-# 5
 
-# LangChain 入门
+
+# 第五章：LangChain 入门
 
 在本章中，我们将探讨 LangChain 以及这个框架如何使用户能够构建复杂的 LLM 应用。您将了解 LangChain 及其解决的问题，以及 LangChain 的核心组件、LangChain 表达式语言和您可以创建的不同类型的链的介绍。
 

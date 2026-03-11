@@ -1,6 +1,6 @@
-# 5
 
-# 使用 ChatGPT 为他人编写的 Salesforce Apex 代码
+
+# 第五章：使用 ChatGPT 为他人编写的 Salesforce Apex 代码
 
 Salesforce Apex 在 Salesforce 生态系统中代表了一个卓越的工具，它允许开发者编写和执行强大且高度可定制的服务器端逻辑。作为 Salesforce 可编程性的动力源泉，Apex 提供了创建动态业务逻辑、自动化流程以及与外部系统集成的能力。与如流程这样的声明性自动化工具不同，Apex 提供了更细粒度的控制，使开发者能够满足可能超出开箱即用工具范围的复杂需求。Apex 的表达式语法源自 Java，使其成为解决复杂商业问题的强大工具。
 

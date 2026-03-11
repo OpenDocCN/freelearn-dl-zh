@@ -1,6 +1,6 @@
-# 9
 
-# 使用 ChatGPT 进行 Lightning Web Components 开发
+
+# 第九章：使用 ChatGPT 进行 Lightning Web Components 开发
 
 近年来，Salesforce 踏上了一段变革之旅，通过引入**Lightning Web Components**（LWC）来调整其 UI 开发策略。在核心上，LWC 代表了现代网络标准和 Salesforce 专有生态系统的融合。与它的前身 Aura 框架不同，LWC 引入了一种基于组件的架构，与原生网络组件的能力相一致。这种与尖端网络标准的同步意味着开发者可以无缝地将最新的网络开发技术、工具和实践集成到他们的 Salesforce 项目中。转向 LWC 强调了 Salesforce 致力于培养一个不仅交互性强且用户友好的 UI，同时利用现代网络技术提供的效率、模块化和力量。因此，配备 LWC 的开发者可以塑造更丰富、更具吸引力和高度响应式的用户界面，在 CRM 用户体验方面设定新的基准。
 

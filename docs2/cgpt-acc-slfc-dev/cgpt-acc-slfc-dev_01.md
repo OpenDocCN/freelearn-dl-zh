@@ -1,6 +1,6 @@
-# 1
 
-# Salesforce 开发中使用 ChatGPT 入门
+
+# 第一章：Salesforce 开发中使用 ChatGPT 入门
 
 欢迎来到一本全面且独特定制的参考指南，旨在探索 Salesforce 项目和生成式**人工智能**（**AI**）之间迷人的交汇点，由 ChatGPT 提供动力。这本书不仅仅是一次线性旅程；它是一个灵活的路线图，旨在服务于希望利用 ChatGPT 在 Salesforce 生态系统中变革能力的初学者和经验丰富的专业人士。
 

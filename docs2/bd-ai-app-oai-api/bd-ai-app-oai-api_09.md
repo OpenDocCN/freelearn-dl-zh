@@ -1,6 +1,6 @@
-# 9
 
-# 集成 ChatGPT 和 DALL-E API：构建端到端 PowerPoint 演示生成器
+
+# 第十章：集成 ChatGPT 和 DALL-E API：构建端到端 PowerPoint 演示生成器
 
 在这个令人兴奋的章节中，我们将深入 AI 艺术的世界，并探索由 OpenAI 开发的 AI 模型 **DALL-E** 的惊人能力。<st c="246">我们将首先向您介绍 DALL-E 及其从文本描述生成图像的开创性方法。</st> <st c="367">您将学习如何通过 DALL-E API 访问 DALL-E 的力量，使您能够将这项尖端技术集成到您自己的 Python 应用程序中。</st> <st c="528">随着您发现使用 DALL-E 生成 AI 艺术的迷人可能性，您将释放您的创造力。</st> <st c="628">您将能够使用 DALL-E 生成引人入胜的 AI 艺术作品。</st>
 

@@ -1,6 +1,6 @@
-# 13
 
-# 使用 ChatGPT 进行 Salesforce 调试
+
+# 第十三章：使用 ChatGPT 进行 Salesforce 调试
 
 本章将深入 Salesforce 调试的世界，探讨 ChatGPT 与调试过程之间的协同作用。本章回顾了 Salesforce 调试的基本原则，为深入理解这一主题奠定了基础。它展示了 ChatGPT 在这一领域的变革潜力，向开发者介绍了大量可以显著减少问题检测和解决时间的优势与见解。
 

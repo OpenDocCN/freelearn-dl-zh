@@ -1,6 +1,6 @@
-# 8
 
-# 使用 ChatGPT 进行 Salesforce 触发器
+
+# 第八章：使用 ChatGPT 进行 Salesforce 触发器
 
 在 Salesforce 的世界中，`触发器` 突出作为基本构建块之一，作为自动化流程启动的前锋。简单来说，Salesforce 的 `触发器` 是一段代码，它在 Salesforce 记录的特定事件（如插入、更新或删除）之前或之后自动执行。
 

@@ -1,4 +1,4 @@
-# <st c="0">6</st>
+# 第七章：<st c="0">6</st>
 
 # <st c="2">使用 ChatGPT API 和 Microsoft Word 的桌面语言翻译应用</st>
 

@@ -1,6 +1,6 @@
-# 7
 
-# 使用 ChatGPT 进行 Salesforce Web Services 和 Callouts
+
+# 第七章：使用 ChatGPT 进行 Salesforce Web Services 和 Callouts
 
 Salesforce Web Services 和 Callouts 构成了 Salesforce 生态系统的重要组成部分，它们使得无缝集成和扩展功能成为可能，这些功能超越了标准 Salesforce 功能。在一个日益互联的世界中，不同系统需要相互通信，这些工具比以往任何时候都更加关键。让我们深入了解它们是什么以及它们是如何工作的。
 

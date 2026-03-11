@@ -1,6 +1,6 @@
-# 6
 
-# 使用 ChatGPT 进行 Salesforce Apex 开发
+
+# 第六章：使用 ChatGPT 进行 Salesforce Apex 开发
 
 Apex 是 Salesforce 提供的一种专有编程语言，旨在允许开发者在 Salesforce 服务器上执行流程和事务控制语句。它使开发者能够将业务逻辑添加到系统事件中，例如按钮点击或更新，并通过 Apex 类、批处理作业和可调度类创建自定义逻辑。Apex 与 Salesforce 的数据模型紧密集成，并针对构建与 Salesforce 应用程序交互的复杂业务流程进行了优化。
 

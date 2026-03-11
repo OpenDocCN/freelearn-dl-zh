@@ -1,6 +1,6 @@
-# 14
 
-# 将传感器数据发布到 AWS IoT Core
+
+# 第十四章：将传感器数据发布到 AWS IoT Core
 
 在前一章中，我们成功指导 ChatGPT 生成代码，通过 TLS/MQTT 加密连接将 ESP32 连接到 AWS IoT Core。在本章中，我们将使用 MQTT 协议将传感器数据发布到 AWS 云。
 
