@@ -1,0 +1,329 @@
+<html><head></head><body>
+  <div id="_idContainer099" class="Basic-Text-Frame">
+    <h1 class="chapterNumber"><a id="_idTextAnchor271"/>11</h1>
+    <h1 id="_idParaDest-260" class="chapterTitle"><a id="_idTextAnchor272"/>Using LangChain to Get More from RAG</h1>
+    <p class="normal">We have mentioned <strong class="keyWord">LangChain</strong> several <a id="_idIndexMarker706"/>times already, and we have shown you a lot of LangChain code, including code that implements the LangChain-specific language: <strong class="keyWord">LangChain Expression Language</strong> (<strong class="keyWord">LCEL</strong>). Now <a id="_idIndexMarker707"/>that you are familiar with different ways to implement <strong class="keyWord">retrieval-augmented generation</strong> (<strong class="keyWord">RAG</strong>) with<a id="_idIndexMarker708"/> LangChain, we thought now would be a good time to dive more into the various capabilities of LangChain that you can use to make your RAG pipeline better.</p>
+    <p class="normal">In this chapter, we explore lesser-known but highly important components of LangChain that can enhance a RAG application. We will cover the following:</p>
+    <ul>
+      <li class="bulletList">Code lab 11.1 – document loaders for loading and processing documents from different sources</li>
+      <li class="bulletList">Code lab 11.2 – text splitters for dividing documents into chunks suitable for retrieval</li>
+      <li class="bulletList">Code lab 11.3 – output parsers for structuring the responses from the language model</li>
+    </ul>
+    <p class="normal">We will use different code labs to step through examples of each type of component, starting with document loaders.</p>
+    <h1 id="_idParaDest-261" class="heading-1"><a id="_idTextAnchor273"/>Technical requirements</h1>
+    <p class="normal">The code for this chapter has been placed in the following GitHub repository: <a href="https://github.com/PacktPublishing/Unlocking-Data-with-Generative-AI-and-RAG-Second-Edition/tree/main/CHAPTER_11"><span class="url">https://github.com/PacktPublishing/Unlocking-Data-with-Generative-AI-and-RAG-Second-Edition/tree/main/CHAPTER_11</span></a>.</p>
+    <p class="normal">Individual filenames for each code lab are mentioned in the respective sections.</p>
+    <h1 id="_idParaDest-262" class="heading-1"><a id="_idTextAnchor274"/>Code lab 11.1 – document loaders</h1>
+    <p class="normal">The file you need<a id="_idIndexMarker709"/> to access from the GitHub repository is titled <code class="inlineCode">CHAPTER11-1_DOCUMENT_LOADERS.ipynb</code>.</p>
+    <p class="normal">Document loaders play a key role in accessing, extracting, and pulling in the data that makes our RAG application function. Document loaders are used to load and process documents from various sources, such as text files, PDFs, web pages, or databases. They convert the documents into a format suitable for indexing and retrieval.</p>
+    <p class="normal">Let’s install some new packages to support our document loading, which, as you might have guessed, involves some different file format-related packages:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-tag">%</span><span class="hljs-selector-tag">pip</span> install bs4
+<span class="hljs-tag">%</span><span class="hljs-selector-tag">pip</span> install python-docx
+<span class="hljs-tag">%</span><span class="hljs-selector-tag">pip</span> install docx2txt
+<span class="hljs-tag">%</span><span class="hljs-selector-tag">pip</span> install jq
+</code></pre>
+    <p class="normal">The first one may look familiar, <code class="inlineCode">bs4</code> (for Beautiful Soup 4), as we used it in <a href="B34736_02_ePub.xhtml#_idTextAnchor043"><em class="italic">Chapter 2</em></a> for parsing HTML. We also have a couple of Microsoft Word-related packages, such as <code class="inlineCode">python_docx</code>, which helps create and update Microsoft Word (<code class="inlineCode">.docx</code>) files, and <code class="inlineCode">docx2txt</code>, which extracts text and images from <code class="inlineCode">.docx</code> files. The <code class="inlineCode">jq</code> package is a lightweight JSON processor.</p>
+    <p class="normal">Next, we are going to take an extra step you likely will not have to take in a <em class="italic">real</em> situation, which is turning our PDF document into a bunch of other formats, so we can test out the extraction of those formats. We are going to add a whole new document loaders section to our code right after the OpenAI setup.</p>
+    <p class="normal">In this section, we will provide code to generate the files, and then the different document loaders and their related packages to extract data from those types of files. Right now, we have a PDF version of our document. We will need an HTML/web version, a Microsoft Word version, and a JSON version of our document.</p>
+    <p class="normal">We are going to start with a new cell under the OpenAI setup cell, where we will import the new packages we need for these conversions:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> bs4 <span class="hljs-keyword">import</span> BeautifulSoup
+<span class="hljs-keyword">import</span> docx
+<span class="hljs-keyword">import</span> json
+</code></pre>
+    <p class="normal">As we mentioned, the <code class="inlineCode">BeautifulSoup</code> package helps us parse HTML-based web pages. We also import <code class="inlineCode">docx</code>, which represents the Microsoft Word processing format. Lastly, we import <code class="inlineCode">json</code> to interpret and manage JSON-formatted code.</p>
+    <p class="normal">Next, we want to establish the filenames we will use for each of our formats:</p>
+    <pre class="programlisting code"><code class="hljs-code">pdf_path = <span class="hljs-string">"google-2023-environmental-report.pdf"</span>
+html_path = <span class="hljs-string">"google-2023-environmental-report.html"</span>
+word_path = <span class="hljs-string">"google-2023-environmental-report.docx"</span>
+json_path = <span class="hljs-string">"google-2023-environmental-report.json"</span>
+</code></pre>
+    <p class="normal">Here, we are defining the paths for each of the files that we use in this code, and later, when we use the loaders to load each document. These are going to be the final files that we generate from the original PDF document we have been using.</p>
+    <p class="normal">Then, this key part of <a id="_idIndexMarker710"/>our new code will extract the text from the PDF and use it to generate all of these new types of documents:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(pdf_path, <span class="hljs-string">"</span><span class="hljs-string">rb"</span>) <span class="hljs-keyword">as</span> pdf_file:
+    pdf_reader = PdfReader(pdf_file)
+    pdf_text = <span class="hljs-string">""</span>.join(
+        page.extract_text() <span class="hljs-keyword">for</span> page <span class="hljs-keyword">in</span> pdf_reader.pages)
+    soup = BeautifulSoup(<span class="hljs-string">"&lt;html&gt;&lt;body&gt;&lt;/body&gt;&lt;/html&gt;"</span>,
+                         <span class="hljs-string">"html.parser"</span>)
+    soup.body.append(pdf_text)
+    <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(html_path, <span class="hljs-string">"w"</span>,
+              encoding=<span class="hljs-string">"</span><span class="hljs-string">utf-8"</span>) <span class="hljs-keyword">as</span> html_file:
+                  html_file.write(<span class="hljs-built_in">str</span>(soup))
+                  doc = docx.Document()
+                  doc.add_paragraph(pdf_text)
+                  doc.save(word_path)
+    <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(json_path, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> json_file:
+        json.dump({<span class="hljs-string">"text"</span>: pdf_text}, json_file)
+</code></pre>
+    <p class="normal">We generate an HTML, Word, and JSON version of our document in a very basic sense. If you were generating these documents to actually use in a pipeline, we recommend applying more formatting and extraction, but for the purposes of this demonstration, this will provide us with the necessary data.</p>
+    <p class="normal">Next, we are going to add our document loaders under the indexing stage of our code. We have worked with the first two document loaders already, which we will show in this code lab, but updated so that they can be used interchangeably. For each document loader, we show what package imports are specific to that loader alongside the loader code. In earlier chapters, we used a web loader that loaded directly from a website, so if that is a use case you have, refer to that document loader. In the meantime, we are sharing a slightly different type of document loader here that is focused on using local HTML files, such as the one we just generated.</p>
+    <p class="normal">Here is the code for this HTML loader:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> langchain_community.document_loaders <span class="hljs-keyword">import</span> BSHTMLLoader
+loader = BSHTMLLoader(html_path)
+docs = loader.load()
+</code></pre>
+    <p class="normal">Here, we use the HTML file we defined earlier to load the code from an HTML document. The final variable, <code class="inlineCode">docs</code>, can be used interchangeably with any other <em class="italic">docs</em> we define in the following document loaders. The way this code works, you can only use one loader at a time, and it will replace <code class="inlineCode">docs</code> with its version of the docs (including a metadata source tag of what document it came from). If you run this cell and then skip down to run the splitter cell, you can run the remaining code in the lab and see similar results from what is the same data coming from different source file types. We did have to make a slight update later in the code, which we will note in a moment.</p>
+    <p class="normal">There are some alternative HTML loaders listed on the LangChain website that you can see here:</p>
+    <p class="normal"><a href="https://python.langchain.com/v0.2/docs/how_to/document_loader_html/ "><span class="url">https://python.langchain.com/v0.2/docs/how_to/document_loader_html/</span></a></p>
+    <p class="normal">The next file type we will talk about is the other type we have been working with already, PDF:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> PyPDF2 <span class="hljs-keyword">import</span> PdfReader
+docs = []
+<span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(pdf_path, <span class="hljs-string">"rb"</span>) <span class="hljs-keyword">as</span> pdf_file:
+    pdf_reader = PdfReader(pdf_file)
+    pdf_text = <span class="hljs-string">""</span>.join(page.extract_text() <span class="hljs-keyword">for</span> page <span class="hljs-keyword">in</span>
+               pdf_reader.pages)
+    docs = [Document(page_content=page) <span class="hljs-keyword">for</span> page <span class="hljs-keyword">in</span>
+            pdf_text.split(<span class="hljs-string">"\n\n"</span>)]
+</code></pre>
+    <p class="normal">Here, we have a slightly <a id="_idIndexMarker711"/>more streamlined version of the code we have used previously to extract the data from the PDF. Using this new approach shows you an alternative way to access this data, but either will work for you in your code, ultimately loading up the docs with the data pulled from the PDF using <code class="inlineCode">PdfReader</code> from <code class="inlineCode">PyPDF2</code>.</p>
+    <p class="normal">It should be noted that there are numerous and very capable ways of loading PDF documents into LangChain, which is supported by many integrations with popular tools for PDF extraction. Here are a few: <code class="inlineCode">PyPDF2</code> (what we use here), <code class="inlineCode">PyPDF</code>, <code class="inlineCode">PyMuPDF</code>, <code class="inlineCode">MathPix</code>, <code class="inlineCode">Unstructured</code>, <code class="inlineCode">AzureAIDocumentIntelligenceLoader</code>, and <code class="inlineCode">UpstageLayoutAnalysisLoader</code>.</p>
+    <p class="normal">We recommend you look at the latest list of PDF document loaders. LangChain provides a helpful set of tutorials for many of them here:</p>
+    <p class="normal"><a href="https://python.langchain.com/v0.2/docs/how_to/document_loader_pdf/ "><span class="url">https://python.langchain.com/v0.2/docs/how_to/document_loader_pdf/</span></a></p>
+    <p class="normal">Next, we will load the data from a Microsoft Word document:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> langchain_community.document_loaders <span class="hljs-keyword">import</span> Docx2txtLoader
+loader = Docx2txtLoader(word_path)
+docs = loader.load()
+</code></pre>
+    <p class="normal">This code uses the <code class="inlineCode">Docx2txtLoader</code> document loader from LangChain to turn the Word document we previously generated into text and load it up into our <code class="inlineCode">docs</code> variable that can be later used by the splitter. Again, stepping through the rest of the code will work with this data, just as it did with the HTML or PDF documents. There are many options for loading Word documents as well, which you can find listed here: <a href="https://python.langchain.com/v0.2/docs/integrations/document_loaders/microsoft_word/ "><span class="url">https://python.langchain.com/v0.2/docs/integrations/document_loaders/microsoft_word/</span></a></p>
+    <p class="normal">Lastly, we see a similar approach with the JSON loader:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> langchain_community.document_loaders <span class="hljs-keyword">import</span> JSONLoader
+loader = JSONLoader(
+    file_path=json_path,
+    jq_schema=<span class="hljs-string">'.text'</span>,
+)
+docs = loader.load()
+</code></pre>
+    <p class="normal">Here, we use a JSON loader to load data that was stored in a JSON object format, but the results are the same: a <code class="inlineCode">docs</code> variable that can be passed to the splitter and converted into the format we use throughout the remaining code. Other options for JSON loaders can be found here:</p>
+    <p class="normal"><a href="https://python.langchain.com/v0.2/docs/how_to/document_loader_json/ "><span class="url">https://python.langchain.com/v0.2/docs/how_to/document_loader_json/</span></a></p>
+    <p class="normal">Note that some document loaders add additional metadata to the metadata dictionary within the <code class="inlineCode">Document</code> objects that are generated during this process. This causes some issues with our code when we add our own <a id="_idIndexMarker712"/>metadata. To fix this, we update these lines when we index and create the vector store:</p>
+    <pre class="programlisting code"><code class="hljs-code">dense_documents = [
+    Document(
+        page_content=doc.page_content,
+        metadata={**doc.metadata, <span class="hljs-string">"</span><span class="hljs-string">id"</span>: <span class="hljs-built_in">str</span>(i), <span class="hljs-string">"search_source"</span>: <span class="hljs-string">"dense"</span>}
+    )<span class="hljs-keyword">for</span> i, doc <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(splits)
+]
+sparse_documents = [
+    Document(
+        page_content=doc.page_content,
+        metadata={**doc.metadata, <span class="hljs-string">"id"</span>: <span class="hljs-built_in">str</span>(i),
+            <span class="hljs-string">"search_source"</span>: <span class="hljs-string">"</span><span class="hljs-string">sparse"</span>}
+    )<span class="hljs-keyword">for</span> i, doc <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(splits)]
+</code></pre>
+    <p class="normal">We also update the code in the final output to test the response, changing the second line in this code to handle the changed metadata tag:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">for</span> i, doc <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(retrieved_docs, start=<span class="hljs-number">1</span>):
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Document </span><span class="hljs-subst">{i}</span><span class="hljs-string">: Document ID: </span><span class="hljs-subst">{doc.metadata[</span><span class="hljs-string">'id'</span><span class="hljs-subst">]}</span>
+        <span class="hljs-string">source: </span><span class="hljs-subst">{doc.metadata[</span><span class="hljs-string">'source'</span><span class="hljs-subst">]}</span><span class="hljs-string">"</span>)
+    <span class="hljs-built_in">print</span>(<span class="hljs-string">f"Content:\n</span><span class="hljs-subst">{doc.page_content}</span><span class="hljs-string">\n"</span>)
+</code></pre>
+    <p class="normal">Run each loader and then run the remaining code to see each document in action! There are numerous more integrations with third parties, allowing you to access just about any data source you can imagine and format that data in a way that you can better utilize LangChain’s other components. Take a look at more examples here on the LangChain website: <a href="https://python.langchain.com/docs/modules/data_connection/document_loaders/ "><span class="url">https://python.langchain.com/docs/modules/data_connection/document_loaders/</span></a></p>
+    <p class="normal">Document loaders play a supporting and very important role in your RAG application. But for RAG-specific applications that typically utilize <em class="italic">chunks</em> of your data, document loaders are not nearly as useful until you <a id="_idIndexMarker713"/>pass them through a text splitter. Next, we will review text splitters and how each one can be used to improve your RAG application.</p>
+    <h1 id="_idParaDest-263" class="heading-1"><a id="_idTextAnchor275"/>Code lab 11.2 – text splitters</h1>
+    <p class="normal">The file you need to <a id="_idIndexMarker714"/>access from the GitHub repository is titled <code class="inlineCode">CHAPTER11-2_TEXT_SPLITTERS.ipynb</code>.</p>
+    <p class="normal">Text splitters split a <a id="_idIndexMarker715"/>document into chunks that can be used for retrieval. Larger documents pose a threat to many parts of our RAG application, and the splitter is our first line of defense. If you were able to vectorize a very large document, the larger the document, the more context representation you will lose in the vector embedding. But this assumes you can even vectorize a very large document, which you often can’t! Most embedding models have relatively small limits on the size of documents we can pass to them compared to the large documents many of us work with. For example, the context length for the OpenAI model we are using to generate our embeddings is 8,191 tokens. If we try to pass a document larger than that to the model, it will generate an error. These are the main reasons splitters exist, but these are not the only complexities introduced with this step in the process.</p>
+    <p class="normal">The key element of text splitters for us to consider is how they split the text. Let’s say you have 100 paragraphs that you want to split up. In some cases, there may be two or three that are semantically meant to be together, such as the paragraphs in this section. In some cases, you may have a section title, a URL, or some other type of text. Ideally, you want to keep the semantically related pieces of text together, but this can be much more complex than it first seems! For a real-world example of this, go to this website and copy a large set of text: <a href="https://chunkviz.up.railway.app/"><span class="url">https://chunkviz.up.railway.app/</span></a>.</p>
+    <p class="normal">ChunkViz is a utility created by Greg Kamradt that helps you visualize how your text splitter is working. Change the parameters for the splitters to use what we are using: a chunk size of 1,000 and a chunk overlap of 200. Try the character splitter compared to the recursive character text splitter. Note that with the example they provide, shown in <em class="italic">Figure 11.1</em>, the recursive character splitter captures all of the paragraphs separately at around a 434 chunk size:</p>
+    <figure class="mediaobject"><img src="../Images/B34736_11_1.png" alt="Figure 11.1 – Recursive character text splitter captures whole paragraphs at 434 characters"/></figure>
+    <p class="packt_figref">Figure 11.1 – Recursive character text splitter captures whole paragraphs at 434 characters</p>
+    <p class="normal">As you increase the chunk <a id="_idIndexMarker716"/>size, it <a id="_idIndexMarker717"/>stays on the paragraph splits well, but eventually gets more and more paragraphs per chunk. Note, though, that this is going to be different for different texts. If you have text with very long paragraphs, you will need a larger chunk setting to capture whole paragraphs.</p>
+    <p class="normal">Meanwhile, if you try the character splitter, it will cut off in the middle of a sentence on any setting:</p>
+    <figure class="mediaobject"><img src="../Images/B34736_11_2.png" alt="Figure 11.2 – Character splitter captures partial paragraphs at 434 characters"/></figure>
+    <p class="packt_figref">Figure 11.2 – Character splitter captures partial paragraphs at 434 characters</p>
+    <p class="normal">This split of a sentence could have a significant impact on the ability of your chunks to capture all of the important semantic meanings of the text within them. You can offset this by changing the chunk overlap, but <a id="_idIndexMarker718"/>you<a id="_idIndexMarker719"/> still have partial paragraphs, which will equate to noise to your LLM, distracting it from providing the optimal response.</p>
+    <p class="normal">Let’s step through actual coding examples of each to -understand some of the options available.</p>
+    <h2 id="_idParaDest-264" class="heading-2"><a id="_idTextAnchor276"/>Character text splitter</h2>
+    <p class="normal">This is the<a id="_idIndexMarker720"/> simplest <a id="_idIndexMarker721"/>approach to splitting your document. A text splitter enables you to divide your text into arbitrary N-character-sized chunks. You can improve this slightly by adding a separator parameter, such as <code class="inlineCode">\n</code>. But this is a great place to start to understand how chunking works, and then we can move on to more approaches that work better but have added complexity to them.</p>
+    <p class="normal">Here is code that uses the <code class="inlineCode">CharacterTextSplitter</code> object with our documents that can be used interchangeably with the other splitter outputs:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> langchain_text_splitters <span class="hljs-keyword">import</span> CharacterTextSplitter
+text_splitter = CharacterTextSplitter(
+    separator=<span class="hljs-string">"\n"</span>,
+    chunk_size=<span class="hljs-number">1000</span>,
+    chunk_overlap=<span class="hljs-number">200</span>,
+    is_separator_regex=<span class="hljs-literal">False</span>,
+)
+splits = text_splitter.split_documents(docs)
+</code></pre>
+    <p class="normal">The output from the first split (<code class="inlineCode">split[0]</code>) looks like this:</p>
+    <pre class="programlisting con"><code class="hljs-con">Document(page_content='Environmental \nReport\n2023What's \ninside\nAbout this report\nGoogle's 2023 Environmental Report provides an overview of our environmental \nsustainability strategy and targets and our annual progress towards them.\u20091  \nThis report features data, performance highlights, and progress against our targets from our 2022 fiscal year (January 1 to December 31, 2022). It also mentions some notable achievements from the first half of 2023. After two years of condensed reporting, we're sharing a deeper dive into our approach in one place.\nADDITIONAL RESOURCES\n• 2023 Environmental Report: Executive Summary\n• Sustainability.google\n• Sustainability reports\n• Sustainability blog\n• Our commitments\n• Alphabet environmental, social, and governance (ESG)\n• About GoogleIntroduction  3\nExecutive letters  4\nHighlights  6\nOur sustainability strategy 7\nTargets and progress summary 8\nEmerging opportunities 9\nEmpowering individuals  12\nOur ambition 13\nOur appr\noach 13\nHelp in\ng people make  14')
+</code></pre>
+    <p class="normal">There are a lot of <code class="inlineCode">\n</code> (also called newline) markup characters, and some <code class="inlineCode">\u</code> as well. We see that it counts out around 1,000 characters, finds<a id="_idIndexMarker722"/> the <code class="inlineCode">\n</code> character nearest to that, and that<a id="_idIndexMarker723"/> becomes the first chunk. It is right in the middle of a sentence, which could be problematic!</p>
+    <p class="normal">The next chunk looks like this:</p>
+    <pre class="programlisting con"><code class="hljs-con">Document(page_content='Highlights  6\nOur sustainability strategy 7\nTargets and progress summary 8\nEmerging opportunities 9\nEmpowering individuals  12\nOur ambition 13\nOur appr\noach 13\nHelp in\ng people make  14 \nmore sustainable choices  \nReducing home energy use 14\nProviding sustainable  \ntrans\nportation options  17 \nShari\nng other actionable information 19\nThe journey ahead  19\nWorking together 20\nOur ambition 21\nOur approach 21\nSupporting partners  22\nInvesting in breakthrough innovation 28\nCreating ecosystems for collaboration  29\nThe journey ahead  30Operating sustainably 31\nOur ambiti\non 32\nOur oper a\ntions  32\nNet-\nzero c\narbon  33\nWater stewardship 49\nCircular econom\ny 55\nNature and biodiversity 67\nSpotlight: Building a more sustainable  \ncam\npus in Mountain View73 \nGovernance and engagement  75\nAbout Google\n 76\nSustainab i\nlity governance  76\nRisk management  77\nStakeholder engagement  78\nPublic policy and advocacy  79\nPartnerships  83\nAwards and recognition 84\nAppendix  85')
+</code></pre>
+    <p class="normal">As you can see here, it backtracked a little, which is due to the chunk overlap we set of 200 characters. It then<a id="_idIndexMarker724"/> goes<a id="_idIndexMarker725"/> forward another 1,000 characters from there and breaks on another <code class="inlineCode">\n</code> character.</p>
+    <p class="normal">Let’s step through the parameters for this:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Separators</strong>: Depending <a id="_idIndexMarker726"/>on the separator you use, you may get a wide variety of results. For this, we used <code class="inlineCode">\n</code>, and it works for this document. But if you use <code class="inlineCode">\n\n</code> (the double-newline character) for your separator on this particular document, where there are no double-newline characters, it never splits! <code class="inlineCode">\n\n</code> is actually the default, so make sure you keep an eye on this and use a separator that will work with your content!</li>
+      <li class="bulletList"><strong class="keyWord">Chunk size</strong>: This defines the arbitrary number of characters you are aiming for with your chunk size. This may still vary, such as at the end of the text, but for the most part, the chunks will be consistently this size.</li>
+      <li class="bulletList"><strong class="keyWord">Chunk overlap</strong>: This is the number of characters you would like overlapping in your sequential chunks. This is a simple way to make sure you are capturing all of the context within your chunks. For example, if you had no chunk overlap and cut a sentence in half, the majority of that context would likely not be captured in either chunk very well. But with overlap, you can get better coverage of this context on the edges.</li>
+      <li class="bulletList"><strong class="keyWord">Is separator regex</strong>: This is yet another parameter that indicates whether the separator used is in regex format.</li>
+    </ul>
+    <p class="normal">In this case, we are setting the chunk size to 1,000 and the chunk overlap to 200. What we are saying here with this code is that we want it to use chunks that are smaller than 1,000 characters, but with a 200-character overlap. This overlapping technique is similar to the sliding window technique you<a id="_idIndexMarker727"/> see in <strong class="keyWord">convolutional neural networks</strong> (<strong class="keyWord">CNNs</strong>) when you are <em class="italic">sliding</em> the window over <a id="_idIndexMarker728"/>smaller<a id="_idIndexMarker729"/> parts of the image with overlap, so that you capture the context between the different windows. In this case, it is the context within the chunks that we are trying to capture.</p>
+    <p class="normal">Here are some other things to note:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Document objects</strong>: We are using the LangChain <code class="inlineCode">Document</code> object to store our text, so we use the <code class="inlineCode">create_documents</code> function that allows it to work in the next step when these documents are vectorized. If you want to obtain the string content directly, you can use the <code class="inlineCode">split_text</code> function.</li>
+      <li class="bulletList"><strong class="keyWord">create_documents expects a list</strong>: <code class="inlineCode">create_documents</code> expects a list of texts, so if you just have a string, you’ll need to wrap it in <code class="inlineCode">[]</code>. In our case, we have already set <code class="inlineCode">docs</code> as a list, so this requirement is satisfied.</li>
+      <li class="bulletList"><strong class="keyWord">Splitting versus chunking</strong>: These terms can be used interchangeably.</li>
+    </ul>
+    <p class="normal">You can find more information about this specific text splitter on the LangChain website: <a href="https://python.langchain.com/v0.2/docs/how_to/character_text_splitter/"><span class="url">https://python.langchain.com/v0.2/docs/how_to/character_text_splitter/</span></a>.</p>
+    <p class="normal">The API documentation can be found here: <a href="https://api.python.langchain.com/en/latest/character/langchain_text_splitters.character.CharacterTextSplitter.html"><span class="url">https://api.python.langchain.com/en/latest/character/langchain_text_splitters.character.CharacterTextSplitter.html</span></a>.</p>
+    <p class="normal">We can do <a id="_idIndexMarker730"/>better <a id="_idIndexMarker731"/>than this, though; let’s take a look at a more sophisticated approach, called <strong class="keyWord">recursive character</strong> <strong class="keyWord">text splitting</strong>.</p>
+    <h2 id="_idParaDest-265" class="heading-2"><a id="_idTextAnchor277"/>Recursive character text splitter</h2>
+    <p class="normal">We have seen this<a id="_idIndexMarker732"/> one <a id="_idIndexMarker733"/>before! We have used this splitter the most in our code labs so far because it is what LangChain recommends using when splitting generic text. That is what we are doing!</p>
+    <p class="normal">As the name states, this splitter recursively splits text, with the intention of keeping related pieces of text next to each other. You can pass a list of characters as a parameter and it will try to split those characters in order until the chunks are small enough. The default list is <code class="inlineCode">["\n\n", "\n", " ", ""]</code>, which works well, but we are going to add <code class="inlineCode">". "</code> to this list as well. This has the effect of trying to keep all paragraphs together, sentences defined by both <code class="inlineCode">"\n"</code> and <code class="inlineCode">". "</code>, and words as long as possible.</p>
+    <p class="normal">Here is our code:</p>
+    <pre class="programlisting code"><code class="hljs-code">recursive_splitter = RecursiveCharacterTextSplitter(
+    separators=[<span class="hljs-string">"\n\n"</span>, <span class="hljs-string">"\n"</span>, <span class="hljs-string">". "</span>, <span class="hljs-string">" "</span>, <span class="hljs-string">""</span>],
+    chunk_size=<span class="hljs-number">1000</span>,
+    chunk_overlap=<span class="hljs-number">200</span>
+)
+splits = recursive_splitter.split_documents(docs)
+</code></pre>
+    <p class="normal">Under the hood with this splitter, the chunks are split based on the <code class="inlineCode">"\n\n"</code> separator, representing paragraph splits. But it doesn’t stop there; it will look at the chunk size, and if it is larger than the 1,000 we set, then it will split by the next separator (<code class="inlineCode">"\n"</code>), and so on.</p>
+    <p class="normal">Let’s talk about the recursive aspect of this that splits the text into chunks using a recursive algorithm. The algorithm will only be applied if the text provided is longer than the chunk size, but it follows these steps:</p>
+    <ol>
+      <li class="numberedList" value="1">It finds a suitable split boundary at or before <code class="inlineCode">chunk_size</code> (i.e., within [<code class="inlineCode">0</code>, <code class="inlineCode">chunk_size</code>]) based on the available separators. After emitting a chunk, it begins the next chunk <code class="inlineCode">chunk_overlap</code> characters earlier (target overlap), so adjacent chunks share context.</li>
+      <li class="numberedList">If a suitable split point is found, it splits the text into two parts: the chunk before the split point and the remaining text after the split point.</li>
+      <li class="numberedList">It recursively applies the same splitting process to the remaining text until all chunks are within the <code class="inlineCode">chunk_size</code> limit.</li>
+    </ol>
+    <p class="normal">Similar to the character splitter approach, the recursive splitter is driven largely by the chunk size you set, but then it combines this with the recursive approach outlined previously to provide a straightforward and logical way to properly capture context within your chunks.</p>
+    <p class="normal"><code class="inlineCode">RecursiveCharacterTextSplitter</code> is particularly useful when dealing with large text documents that need to be processed by language models with input size limitations. By splitting the text into smaller chunks, you can feed the chunks to the language model individually and then combine the results if needed.</p>
+    <p class="normal">Clearly, recursive splitters are a step up from the character splitter, but they are still not splitting our content based on the semantics as much as just general separators such as paragraph and sentence breaks. But this will not handle cases where two paragraphs are semantically part of one ongoing thought that should really be captured together in their vector representations.</p>
+    <p class="normal">This code lab is set up so that you can use each type of splitter. Run through each splitter and then the rest of the<a id="_idIndexMarker734"/> code<a id="_idIndexMarker735"/> to see how each one impacts your results. Also, try changing parameter settings such as <code class="inlineCode">chunk_size</code> and <code class="inlineCode">chunk_overlap</code> to better understand how they affect your chunks.</p>
+    <h1 id="_idParaDest-266" class="heading-1"><a id="_idTextAnchor278"/>Code lab 11.3 – output parsers</h1>
+    <p class="normal">The file you need to<a id="_idIndexMarker736"/> access from the GitHub repository is titled <code class="inlineCode">CHAPTER11-3_OUTPUT_PARSERS.ipynb</code>.</p>
+    <p class="normal">The end result of any RAG application is going to be text, along with potentially some formatting, metadata, and some other related data. This output typically comes from the LLM itself. But there are times when you want to get a more structured format than just text. Output parsers are classes that help to structure the responses of the LLM wherever you use it in your RAG application. The output that this provides will then be provided to the next step in the chain, or, in the case of all of our code labs, as the final output from the model.</p>
+    <p class="normal">We will cover two different output parsers at the same time, and use them at different times in our RAG pipeline. We will start with the parser we know, the string output parser.</p>
+    <p class="normal">Under the <code class="inlineCode">relevance_prompt</code> function, add this code to a new cell:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> langchain_core.output_parsers <span class="hljs-keyword">import</span> StrOutputParser
+str_output_parser = StrOutputParser()
+</code></pre>
+    <p class="normal">Note that we were already using this in the LangChain chain code that appears later, but we are going to assign this <a id="_idIndexMarker737"/>parser to a variable called <code class="inlineCode">str_output_parser</code>. Let’s talk about this type of parser in more depth.</p>
+    <h2 id="_idParaDest-267" class="heading-2"><a id="_idTextAnchor279"/>String output parser</h2>
+    <p class="normal">This is a basic <a id="_idIndexMarker738"/>output parser. In <a id="_idIndexMarker739"/>very simple approaches, as in our previous code labs, you can use the <code class="inlineCode">StrOutputParser</code> class outright as the instance for your output parser. Or you can do what we just did and assign it to a variable, particularly if you expect to see it in multiple areas of the code, which we will. But we have seen this many times already. It takes the output from the LLM in both places it is used and outputs the string response from the LLM to the next link in the chain. The documentation for this parser can be found here: <a href="https://api.python.langchain.com/en/latest/output_parsers/langchain_core.output_parsers.string.StrOutputParser.html#langchain_core.output_parsers.string.StrOutputParser"><span class="url">https://api.python.langchain.com/en/latest/output_parsers/langchain_core.output_parsers.string.StrOutputParser.html#langchain_core.output_parsers.string.StrOutputParser</span></a>.</p>
+    <p class="normal">Let’s look at a new type of parser, the JSON output parser.</p>
+    <h2 id="_idParaDest-268" class="heading-2"><a id="_idTextAnchor280"/>JSON output parser</h2>
+    <p class="normal">As you can imagine, this<a id="_idIndexMarker740"/> output parser takes input from an LLM and outputs it as JSON. It is <a id="_idIndexMarker741"/>important to note that you may not need this parser, as many newer model providers support built-in ways to return structured output such as JSON and XML. This approach is for those that do not.</p>
+    <p class="normal">We start with some new imports, coming from a library we have already installed from LangChain (<code class="inlineCode">langchain_core</code>):</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> langchain_core.output_parsers <span class="hljs-keyword">import</span> JsonOutputParser
+<span class="hljs-keyword">from</span> pydantic <span class="hljs-keyword">import</span> BaseModel, Field
+<span class="hljs-keyword">from</span> langchain_core.outputs <span class="hljs-keyword">import</span> Generation
+<span class="hljs-keyword">import</span> json
+</code></pre>
+    <p class="normal">These lines import the necessary classes and modules from the <code class="inlineCode">langchain_core</code> library and the <code class="inlineCode">json</code> module. <code class="inlineCode">JsonOutputParser</code> is used to parse the JSON output. <code class="inlineCode">BaseModel</code> and <code class="inlineCode">Field</code> are used to define the structure of the JSON output model. <code class="inlineCode">Generation</code> is used to represent the generated output. And not surprisingly, we import a package for <code class="inlineCode">json</code>, so that we can better manage our JSON inputs/outputs.</p>
+    <p class="normal">Next, we will create a <code class="inlineCode">Pydantic</code> model called <code class="inlineCode">FinalOutputModel</code> that represents the structure of the JSON output:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">class</span> <span class="hljs-title">FinalOutputModel</span>(<span class="hljs-title">BaseModel</span>):
+    relevance_score: <span class="hljs-built_in">float</span> = Field(description=<span class="hljs-string">"The</span>
+<span class="hljs-string">        relevance score of the retrieved context to the</span>
+<span class="hljs-string">        question"</span>)
+    answer: <span class="hljs-built_in">str</span> = Field(description=<span class="hljs-string">"The final answer to</span>
+<span class="hljs-string">        the question"</span>)
+</code></pre>
+    <p class="normal">It has two fields: <code class="inlineCode">relevance_score</code> (float) and <code class="inlineCode">answer</code> (string), along with their descriptions. In a <em class="italic">real-world</em> application, this model is likely to get substantially more complex, but this gives you a general idea of how it can be defined.</p>
+    <p class="normal">Next, we will create an instance of the <code class="inlineCode">JsonOutputParser</code> parser:</p>
+    <pre class="programlisting code"><code class="hljs-code">json_parser = JsonOutputParser(pydantic_model=FinalOutputModel)
+</code></pre>
+    <p class="normal">This line assigns <code class="inlineCode">JsonOutputParser</code> with the <code class="inlineCode">FinalOutputModel</code> class as a parameter to <code class="inlineCode">json_parser</code> for use later in our code when we want to use this parser.</p>
+    <p class="normal">Next, we are going to add a new function right in between our two other helper functions, and then we will update <code class="inlineCode">conditional_answer</code> to use that new function. This code goes under the existing <code class="inlineCode">extract_score</code> function, which remains the same:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">format_json_output</span>(<span class="hljs-params">x</span>):
+    <span class="hljs-comment"># print(x)</span>
+    json_output = {<span class="hljs-string">"relevance_score"</span>:extract_score(
+        x[<span class="hljs-string">'relevance_score'</span>]),<span class="hljs-string">"answer"</span>: x[<span class="hljs-string">'answer'</span>],
+    }
+    <span class="hljs-keyword">return</span> json_parser.parse_result(
+        [Generation(text=json.dumps(json_output))])
+</code></pre>
+    <p class="normal">This <code class="inlineCode">format_json_output</code> function takes a dictionary, <code class="inlineCode">x</code>, as input and formats it into a JSON output. It creates a <code class="inlineCode">json_output</code> dictionary with two keys: <code class="inlineCode">"</code><code class="inlineCode">relevance_score"</code> (obtained by calling <code class="inlineCode">extract_score</code> on the <code class="inlineCode">'relevance_score'</code> value from <code class="inlineCode">x</code>) and <code class="inlineCode">"answer"</code> (directly taken from <code class="inlineCode">x</code>). It then uses <code class="inlineCode">json.dumps</code> to convert the <code class="inlineCode">json_output</code> dictionary to a JSON string and creates a <code class="inlineCode">Generation</code> object<a id="_idIndexMarker742"/> with the JSON string as its text. Finally, it uses <code class="inlineCode">json_parser</code> to parse<a id="_idIndexMarker743"/> the <code class="inlineCode">Generation</code> object and returns the parsed result.</p>
+    <p class="normal">We will need to reference this function in the function we were previously using, <code class="inlineCode">conditional_answer</code>. Update <code class="inlineCode">conditional_answer</code> like this:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">def</span> <span class="hljs-title">conditional_answer</span>(<span class="hljs-params">x</span>):
+    relevance_score = extract_score(x[<span class="hljs-string">'relevance_score'</span>])
+    <span class="hljs-keyword">if</span> relevance_score &lt; <span class="hljs-number">4</span>:
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"</span><span class="hljs-string">I don't know."</span>
+    <span class="hljs-keyword">else</span>:
+        <span class="hljs-keyword">return</span> format_json_output(x)
+</code></pre>
+    <p class="normal">Here, we update the <code class="inlineCode">conditional_answer</code> function to apply that <code class="inlineCode">format_json_output</code> function if it determines that the answer is relevant, and before it provides the returned output.</p>
+    <p class="normal">Next, we are going to take the two chains we had before in our code and combine them into one larger chain handling the entire pipeline. In the past, it was helpful to show this separately to give more focus to certain areas, but now we have a chance to clean up and show how these chains can be grouped together to handle our entire logic flow:</p>
+    <pre class="programlisting code"><code class="hljs-code">rag_chain = (
+    RunnableParallel(
+        {<span class="hljs-string">"context"</span>: ensemble_retriever,
+            <span class="hljs-string">"question"</span>: RunnablePassthrough()})
+    | RunnablePassthrough.assign(
+        context=(<span class="hljs-keyword">lambda</span> x: format_docs(x[<span class="hljs-string">"context"</span>])))
+    | RunnableParallel(
+        {
+            <span class="hljs-string">"relevance_score"</span>: (
+                RunnablePassthrough()
+                | (
+                    <span class="hljs-keyword">lambda</span> x: relevance_prompt_template.<span class="hljs-built_in">format</span>(
+                        question=x[<span class="hljs-string">"question"</span>],
+                        retrieved_context=x[<span class="hljs-string">"context"</span>]
+                    )
+                )
+                | llm
+                | str_output_parser
+            ),
+            <span class="hljs-string">"answer"</span>: (
+                RunnablePassthrough()
+                | prompt
+                | llm
+                | str_output_parser
+            ),
+        }
+    )
+    | RunnablePassthrough().assign(final_result=conditional_answer)
+)
+</code></pre>
+    <p class="normal">If you look back at previous code labs, this was represented by two chains. Note that this is using <code class="inlineCode">str_output_parser</code> in the same way it was before. You do not see the JSON parser here because it is applied in the <code class="inlineCode">format_json_output</code> function, which is called from the <code class="inlineCode">conditional_answer</code> function, which you see in the last line. This simplification of these chains works for this example, focused on parsing our output into JSON, but we should note that we do lose the<a id="_idIndexMarker744"/> context<a id="_idIndexMarker745"/> that we have used in previous code labs. This is really just an example of an alternative approach to setting up our chain(s).</p>
+    <p class="normal">Lastly, because our final output is in JSON format, which we needed to add the context to, we need to update our <em class="italic">test run</em> code:</p>
+    <pre class="programlisting code"><code class="hljs-code">result = rag_chain.invoke(user_query)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Original Question: </span><span class="hljs-subst">{user_query}</span><span class="hljs-string">\n"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Relevance Score: </span><span class="hljs-subst">{result[</span><span class="hljs-string">'relevance_score'</span><span class="hljs-subst">]}</span><span class="hljs-string">\n"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Final Answer:\n</span><span class="hljs-subst">{result[</span>
+<span class="hljs-subst">    </span><span class="hljs-string">'</span><span class="hljs-string">final_result'</span><span class="hljs-subst">][</span><span class="hljs-string">'answer'</span><span class="hljs-subst">]}</span><span class="hljs-string">\n\n"</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Final JSON Output:\n</span><span class="hljs-subst">{result}</span><span class="hljs-string">\n\n"</span>)
+</code></pre>
+    <p class="normal">When we print this out, we see a similar result as in the past, but we show how the JSON-formatted final output looks:</p>
+    <pre class="programlisting con"><code class="hljs-con">Original Question: What are Google's environmental initiatives?
+Relevance Score: 5
+Final Answer:
+Google's environmental initiatives include empowering individuals to take action, working together with partners and customers, operating sustainably… [TRUNCATED]
+Final JSON Output:
+{
+'relevance_score': '5',
+'answer': "Google's environmental initiatives include empowering individuals to take action, working together with partners and customers, operating sustainably, achieving net-zero carbon emissions, water stewardship, engaging in a circular economy, and supporting sustainable consumption of public goods. They also engage with suppliers to reduce energy consumption and greenhouse gas emissions, report environmental data, and assess environmental criteria. Google is involved in various sustainability initiatives, such as the iMasons Climate Accord, ReFED, and projects with The Nature Conservancy. They also invest in breakthrough innovation and support sustainability-focused accelerators. Additionally, Google focuses on renewable energy, data analytics tools for sustainability, and AI for sustainability to drive more intelligent supply chains.",
+'final_result': {
+     'relevance_score': 5.0,
+     'answer': "Google's environmental initiatives include empowering individuals to take action, working together with partners and customers, operating sustainably, achieving net-zero carbon emissions, water stewardship, engaging in a circular economy, and supporting sustainable consumption of public goods. They also engage with suppliers to reduce energy consumption and greenhouse gas emissions, report environmental data, and assess environmental criteria. Google is involved in various sustainability initiatives, such as the iMasons Climate Accord, ReFED, and projects with The Nature Conservancy. They also invest in breakthrough innovation and support sustainability-focused accelerators. Additionally, Google focuses on renewable energy, data analytics tools for sustainability, and AI for sustainability to drive more intelligent supply chains."
+}
+}
+</code></pre>
+    <p class="normal">This is a<a id="_idIndexMarker746"/> simple <a id="_idIndexMarker747"/>example of a JSON output, but you can build off this and shape the JSON to anything you need using the <code class="inlineCode">FinalOutputModel</code> class we defined and passed into our output parser.</p>
+    <p class="normal">You can find more information about the JSON parser here: <a href="https://python.langchain.com/v0.2/docs/how_to/output_parser_json/"><span class="url">https://python.langchain.com/v0.2/docs/how_to/output_parser_json/</span></a>.</p>
+    <p class="normal">It is important to note that it is difficult to rely on LLMs to output in a certain format. A more robust system would incorporate the parser deeper into the system, where it will likely be able to better utilize the JSON output, but it will also entail more checks to make sure the formatting is as required for the next step to work off properly formatted JSON. In our code here, we implemented a very<a id="_idIndexMarker748"/> lightweight <a id="_idIndexMarker749"/>layer for JSON formatting to show how the output parser could fit into our RAG application in a very simple way.</p>
+    <h1 id="_idParaDest-269" class="heading-1"><a id="_idTextAnchor281"/>Summary</h1>
+    <p class="normal">In this chapter, we learned about various components of LangChain that can enhance a RAG application. <em class="italic">Code lab 11.1</em> focused on document loaders, which are used to load and process documents from various sources such as text files, PDFs, web pages, or databases. The chapter covered examples of loading documents from HTML, PDF, Microsoft Word, and JSON formats using different LangChain document loaders, noting that some document loaders add metadata, which may require adjustments in the code.</p>
+    <p class="normal"><em class="italic">Code lab 11.2</em> discussed text splitters, which divide documents into chunks suitable for retrieval, addressing issues with large documents and context representation in vector embeddings. The chapter covered <code class="inlineCode">CharacterTextSplitter</code>, which splits text into arbitrary N-character-sized chunks, and <code class="inlineCode">RecursiveCharacterTextSplitter</code>, which recursively splits text while trying to keep related pieces together. Lastly, <em class="italic">Code lab 11.3</em> focused on output parsers, which structure the responses from the language model in a RAG application. The chapter covered the string output parser, which outputs the LLM’s response as a string, and the JSON output parser, which formats the output as JSON using a defined structure. An example was provided to show how the JSON output parser can be integrated into the RAG application.</p>
+    <p class="normal">In the next chapter, we will cover a relatively advanced but very powerful topic, LangGraph and AI agents.</p>
+    <div class="unlock">
+      <table id="table001-6" class="table-container">
+        <tbody>
+          <tr>
+            <td class="table-cell">
+              <h2 id="_idParaDest-270" class="heading-2"><a id="_idTextAnchor282"/>Get This Book’s PDF Version and Exclusive Extras</h2>
+              <p class="normal">Scan the QR code (or go to <a href="http://packtpub.com/unlock"><span class="url">packtpub.com/unlock</span></a>). Search for this book by name, confirm the edition, and then follow the steps on the page.</p>
+            </td>
+            <td class="table-cell" rowspan="2">
+              <p class="center"><img src="../Images/Unlock-01.png" alt=""/></p>
+              <p class="center"><img src="../Images/Unlock.png" alt=""/></p>
+            </td>
+          </tr>
+          <tr>
+            <td class="table-cell">
+              <p class="normal"><strong class="bold-italic" style="font-style: italic;">Note</strong><em class="italic">: Keep your invoice handy. Purchases made directly from Packt don’t require an invoice.</em></p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body></html>
