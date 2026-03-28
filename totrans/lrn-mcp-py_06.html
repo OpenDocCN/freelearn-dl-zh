@@ -1,0 +1,583 @@
+<html><head></head><body>
+  <div class="Basic-Text-Frame" id="_idContainer092">
+    <h1 class="chapterNumber"><a id="_idTextAnchor180"/>6</h1>
+    <h1 class="chapterTitle" id="_idParaDest-105"><a id="_idTextAnchor181"/>Advanced Servers</h1>
+    <p class="normal">In <a href="Chapter_6.xhtml"><em class="italic">Chapter 3</em></a>, you saw how you can build MCP servers. However, there’s another way to build these servers – namely, by using a more advanced approach. The reason for using this more advanced approach is that you want to be more in control.</p>
+    <p class="normal"><a id="_idTextAnchor182"/>In this chapter, you will learn how to do the following:</p>
+    <ul>
+      <li class="bulletList">Use context managers to manage the lifecycle of your server</li>
+      <li class="bulletList">Improve the architecture of your server</li>
+      <li class="bulletList">Understand low-level access to MCP servers</li>
+    </ul>
+    <p class="normal">The chapter covers the following topics:</p>
+    <ul>
+      <li class="bulletList">Why this low-level approach?</li>
+      <li class="bulletList">Context managers</li>
+      <li class="bulletList">Context managers in MCP servers</li>
+      <li class="bulletList">Low-level access</li>
+      <li class="bulletList">Organizing your architecture</li>
+    </ul>
+    <h1 class="heading-1" id="_idParaDest-106"><a id="_idTextAnchor183"/>Why this low-level approach?</h1>
+    <p class="normal">At this point, you might be thinking, <em class="italic">Why would I want to do that? The previous approach was so easy!</em> Well, there are a few reasons why you might want to use this approach. You may want to do the following:</p>
+    <ul>
+      <li class="bulletList"><strong class="keyWord">Use context managers to manage the lifecycle of your server</strong>: Here, you can do things such as connecting to a database or other services that are connected to your server. By having more control over the lifecycle of your server, you can ensure that your server is properly initialized and cleaned up when it’s no longer needed.</li>
+      <li class="bulletList"><strong class="keyWord">Improve the architecture of your server</strong>: Having more control over how the server is built allows for more freedom in how tools and resources are registered, but also how incoming requests are handled. This increased control allows you to organize your code in a way that is more maintainable and scalable. This chapter shows you how you can organize your code with both a low-level server and a normal MCP server. It’s possible to create a clean architecture in both cases. However, it could be argued that the low-level server approach is a bit cleaner, as you don’t have to pass the server instance around. You’ll see more about what’s meant by that last statement later in this chapter.</li>
+      <li class="bulletList"><strong class="keyWord">The only way forward in some cases</strong>: There are cases when you deal with certain features where there simply is no other way forward than a low-level approach. This is true for using <a href="Chapter_9.xhtml#_idTextAnchor302"><em class="italic">Chapter 9</em></a>, on sampling, and <a href="Chapter_10.xhtml#_idTextAnchor330"><em class="italic">Chapter 10</em></a>, on elicitation.</li>
+    </ul>
+    <p class="normal">Let’s dive into a more low-level approach, so you know what it looks like, so you can choose the approach that suits your project the best.</p>
+    <h1 class="heading-1" id="_idParaDest-107"><a id="_idTextAnchor184"/>Context managers</h1>
+    <p class="normal">So, what’s a <a id="_idIndexMarker214"/>context manager to begin with? A <strong class="keyWord">context manager</strong> is a construct that allows you to allocate and release resources precisely when you want to. The most common way to use a context manager is with the <code class="inlineCode">with</code> statement, which ensures that resources are properly cleaned up after use, even if an error occurs. By using a context manager, your code becomes cleaner and more readable. Let’s look at a simple example:<a id="_idTextAnchor185"/></p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">with</span> Database_connection() <span class="hljs-keyword">as</span> conn:
+    <span class="hljs-comment"># Use the connection</span>
+    result = conn.execute(<span class="hljs-string">"SELECT * FROM table"</span>)
+    <span class="hljs-keyword">for</span> row <span class="hljs-keyword">in</span> result:
+        <span class="hljs-built_in">print</span>(row)
+</code></pre>
+    <h2 class="heading-2" id="_idParaDest-108"><a id="_idTextAnchor186"/>Using contextlib to create context managers</h2>
+    <p class="normal">Another way to use <a id="_idIndexMarker215"/>context managers is to create a custom context manager using the <code class="inlineCode">contextlib</code> (there’s a corresponding NPM library called <code class="inlineCode">contextlib</code>) module. This allows you to create context managers without defining a class. Here’s an example:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">import</span> contextlib
+<span class="hljs-meta">@contextlib.contextmanager</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">database_connection</span>():
+    conn = connect_to_database()
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-keyword">yield</span> conn  <span class="hljs-comment"># This is where the resource is provided to the block</span>
+    <span class="hljs-keyword">finally</span>:
+        close_connection(conn)  <span class="hljs-comment"># Cleanup happens here   </span>
+</code></pre>
+    <p class="normal">Here, you can see how the <code class="inlineCode">DatabaseConnection</code> class is replaced with a <code class="inlineCode">database_connection()</code> function that uses the <code class="inlineCode">contextlib.contextmanager</code> decorator. The <code class="inlineCode">yield</code> statement <a id="_idIndexMarker216"/>provides the resource to the block, and the code after the <code class="inlineCode">yield</code> statement is executed when the block is exited, ensuring proper cleanup. Is this better than the previous example? Well, at least you type less cod<a id="_idTextAnchor187"/>e.</p>
+    <h2 class="heading-2" id="_idParaDest-109"><a id="_idTextAnchor188"/>Implementing a context manager</h2>
+    <p class="normal">If you’re <a id="_idIndexMarker217"/>interested in knowing how to implement a context manager, because you’re curious or because you don’t want yet another dependency, here’s how you can do that:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">class</span> <span class="hljs-title">DatabaseConnection</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__enter__</span>(<span class="hljs-params">self</span>):
+        <span class="hljs-variable">self</span>.conn = <span class="hljs-variable">self</span>.connect_to_database()
+        <span class="hljs-keyword">return</span> <span class="hljs-variable">self</span>.conn
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__exit__</span>(<span class="hljs-params">self, exc_type, exc_value, traceback</span>):
+        <span class="hljs-variable">self</span>.close_connection(<span class="hljs-variable">self</span>.conn)
+    <span class="hljs-keyword">def</span> <span class="hljs-title">connect_to_database</span>(<span class="hljs-params">self</span>):
+        <span class="hljs-comment"># Logic to connect to the database</span>
+        <span class="hljs-keyword">pass</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title">close_connection</span>(<span class="hljs-params">self, conn</span>):
+        <span class="hljs-comment"># Logic to close the database connection</span>
+        <span class="hljs-keyword">pass</span>
+</code></pre>
+    <p class="normal">In the preceding, the <code class="inlineCode">DatabaseConnection</code> class implements the context manager protocol by defining the <code class="inlineCode">__enter__</code> and <code class="inlineCode">__exit__</code> methods. The <code class="inlineCode">__enter__</code> method is called when the <code class="inlineCode">with</code> block is entered, and it returns the resource (in this case, a database connection). The <code class="inlineCode">__exit__</code> method is called when the block is exited, and it handles any cleanup necessary, such as closing the connection. Let’s call it like so:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">with</span> DatabaseConnection() <span class="hljs-keyword">as</span> conn:
+    <span class="hljs-comment"># Use the connection</span>
+    result = conn.execute(<span class="hljs-string">"SELECT * FROM table"</span>)
+    <span class="hljs-keyword">for</span> row <span class="hljs-keyword">in</span> result:
+        <span class="hljs-built_in">print</span>(row)
+</code></pre>
+    <p class="normal">Without a context manager, your code would look like so:</p>
+    <pre class="programlisting code"><code class="hljs-code">conn = DatabaseConnection().connect_to_database()
+<span class="hljs-keyword">try</span>:
+    <span class="hljs-comment"># Use the connection</span>
+    result = conn.execute(<span class="hljs-string">"SELECT * FROM table"</span>)
+    <span class="hljs-keyword">for</span> row <span class="hljs-keyword">in</span> result:
+        <span class="hljs-built_in">print</span>(row)
+<span class="hljs-keyword">finally</span>:
+    DatabaseConnection().close_connection(conn)
+</code></pre>
+    <p class="normal">Imagine what<a id="_idIndexMarker218"/> would happen if you forgot to close the connection in the <code class="inlineCode">finally</code> block? You might be a very disciplined programmer and always remember to close the connection, but in a larger code base, it’s easy to forget. Context managers help you avoid such pitfalls by ensuring that resources are always cleaned up properly.</p>
+    <p class="normal">Let’s look at how context managers are used in the context of MCP servers n<a id="_idTextAnchor189"/>ext.</p>
+    <h1 class="heading-1" id="_idParaDest-110"><a id="_idTextAnchor190"/>Context managers in MCP servers</h1>
+    <p class="normal">MCP allows <a id="_idIndexMarker219"/>you to control the lifecycle management of your resources. Let’s have a look at some code:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">load_settings</span>() -&gt; <span class="hljs-built_in">dict</span>:
+    <span class="hljs-string">"""Load settings from a configuration file."""</span>
+    <span class="hljs-comment"># Simulate loading settings</span>
+    <span class="hljs-keyword">return</span> {<span class="hljs-string">"setting1"</span>: <span class="hljs-string">"value1"</span>, <span class="hljs-string">"setting2"</span>: <span class="hljs-string">"value2"</span>}
+<span class="hljs-meta">@asynccontextmanager</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">server_lifespan</span>(<span class="hljs-params">server: Server</span>) -&gt; AsyncIterator[<span class="hljs-built_in">dict</span>]:
+    <span class="hljs-string">"""Manage server startup and shutdown lifecycle."""</span>
+    <span class="hljs-comment"># Initialize resources on startup</span>
+    db = <span class="hljs-keyword">await</span> Database.connect()
+    settings = <span class="hljs-keyword">await</span> load_settings()
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-keyword">yield</span> {<span class="hljs-string">"db"</span>: db, <span class="hljs-string">"settings"</span>: settings}
+    <span class="hljs-keyword">finally</span>:
+        <span class="hljs-comment"># Clean up on shutdown</span>
+        <span class="hljs-keyword">await</span> db.disconnect()
+</code></pre>
+    <p class="normal">Here, we’ve done several things:</p>
+    <ul>
+      <li class="bulletList">Defined an asynchronous context manager, <code class="inlineCode">server_lifespan</code>, that manages the lifecycle of the server</li>
+      <li class="bulletList">Initialized resources such as a database connection and settings when the server starts, cleaning them up when the server shuts down</li>
+      <li class="bulletList">Exposed these resources to the server’s request context, allowing handlers to access them easily</li>
+    </ul>
+    <p class="normal">Speaking <a id="_idIndexMarker220"/>of handlers, let’s see how you can access these resources in your server’s handlers in the following code:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># Pass lifespan to server</span>
+server = Server(<span class="hljs-string">"example-server"</span>, lifespan=server_lifespan)
+<span class="hljs-comment"># Access lifespan context in handlers</span>
+<span class="hljs-meta">@server.call_tool()</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">query_db</span>(<span class="hljs-params">name: </span><span class="hljs-built_in">str</span><span class="hljs-params">, arguments: </span><span class="hljs-built_in">dict</span>) -&gt; <span class="hljs-built_in">list</span>:
+    ctx = server.request_context
+    db = ctx.lifespan_context[<span class="hljs-string">"db"</span>]
+    settings = ctx.lifespan_context[<span class="hljs-string">"settings"</span>]
+    <span class="hljs-comment"># </span><span class="hljs-doctag">TODO:</span><span class="hljs-comment"> Use the database connection and settings</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">await</span> db.query(arguments[<span class="hljs-string">"query"</span>])
+</code></pre>
+    <p class="normal">In the preceding code, we’ve done the following:</p>
+    <ul>
+      <li class="bulletList">Defined a tool, <code class="inlineCode">query_db</code>, that accesses the resources initialized in the <code class="inlineCode">server_lifespan</code> context manager.</li>
+      <li class="bulletList">Accessed the database connection and settings from the <code class="inlineCode">lifespan_context</code> of the server’s request context using the <code class="inlineCode">db = ctx.lifespan_context["db"]</code> and <code class="inlineCode">settings = ctx.lifespan_context["settings"]</code> code.</li>
+    </ul>
+    <p class="normal">Great – now we have an understanding of context management and why it exists. Let’s look more at low-level access in the next se<a id="_idTextAnchor191"/>ction.</p>
+    <h1 class="heading-1" id="_idParaDest-111"><a id="_idTextAnchor192"/>Low-level access</h1>
+    <p class="normal">Let’s recap<a id="_idIndexMarker221"/> how we first build a server so we can easily compare it to how low-level access is different. Here’s how you build a simple MCP server with a high-level API:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> mcp.server.fastmcp <span class="hljs-keyword">import</span> FastMCP
+mcp = FastMCP(<span class="hljs-string">"Echo"</span>)
+<span class="hljs-meta">@mcp.resource(</span><span class="hljs-string">"echo://{message}"</span><span class="hljs-meta">)</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">echo_resource</span>(<span class="hljs-params">message: </span><span class="hljs-built_in">str</span>) -&gt; <span class="hljs-built_in">str</span>:
+    <span class="hljs-string">"""</span><span class="hljs-string">Echo a message as a resource"""</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-string">f"Resource echo: </span><span class="hljs-subst">{message}</span><span class="hljs-string">"</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">echo_tool</span>(<span class="hljs-params">message: </span><span class="hljs-built_in">str</span>) -&gt; <span class="hljs-built_in">str</span>:
+    <span class="hljs-string">"""Echo a message as a tool"""</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-string">f"Tool echo: </span><span class="hljs-subst">{message}</span><span class="hljs-string">"</span>
+</code></pre>
+    <p class="normal">The <code class="inlineCode">FastMCP</code> class is what you use to instantiate a server – in this case, an instance called <code class="inlineCode">mcp</code>. Then we use <code class="inlineCode">@mcp</code> to define resources, tools, and prompts.</p>
+    <p class="normal">This is a high-level way<a id="_idIndexMarker222"/> of building a server, but what if you want more control over how the server is built? Here’s how you can do that using low-level access.</p>
+    <p class="normal">Let’s look at how registering features is different. In the past, you would have been used to using decorators associated with specific tools or resources, and so on. What’s different in a low-level server is that you need to handle all requests yourself. Instead of handling one tool or resource at a time, you handle all requests related to tools, resources, and prompts in one place.</p>
+    <p class="normal">First, the import is different. See how we import from <code class="inlineCode">from mcp.server.lowlevel</code> and <code class="inlineCode">Server</code>:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> mcp.server.lowlevel <span class="hljs-keyword">import</span> Server
+</code></pre>
+    <p class="normal">That’s followed by instantiating a server like so:</p>
+    <pre class="programlisting code"><code class="hljs-code">server = Server(<span class="hljs-string">"low-level-server"</span>)
+</code></pre>
+    <p class="normal">Instead of using <code class="inlineCode">@mcp.tools()</code> or <code class="inlineCode">@mcp.resource()</code>, you register using handlers such as <code class="inlineCode">@server.list_tools()</code> and <code class="inlineCode">@server.call_tool()</code>. That’s a huge difference. The difference lies in that, instead of there being one decorator for every feature, in a low-level server, you respond to all tool requests, whether to call a tool or list tools, resources, or prompts. That means <code class="inlineCode">@server.list_tools()</code> is responsible for listing all tools, and you need to implement that logic yourself, whereas a high-level server does that for you. Here’s an example of how <code class="inlineCode">@server.list_tools()</code> can be implemented:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-meta">@server.list_tools()</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">handle_list_tools</span>() -&gt; <span class="hljs-built_in">list</span>[types.Tool]:
+    tool_list = []
+    <span class="hljs-built_in">print</span>(tools)
+    <span class="hljs-keyword">for</span> tool <span class="hljs-keyword">in</span> tools.tools.values():
+        tool_list.append(
+            types.Tool(
+                name=tool[<span class="hljs-string">"name"</span>],
+                description=tool[<span class="hljs-string">"description"</span>],
+                inputSchema=tool[<span class="hljs-string">"input_schema"</span>],
+            )
+        )
+    <span class="hljs-keyword">return</span> tool_list
+</code></pre>
+    <p class="normal">In the<a id="_idIndexMarker223"/> preceding code, we’ve done the following:</p>
+    <ul>
+      <li class="bulletList">Defined a handler, <code class="inlineCode">handle_list_tools</code>, that responds to the <code class="inlineCode">list_tools</code> request.</li>
+      <li class="bulletList">Used the <code class="inlineCode">@server.list_tools()</code> decorator to register this handler with the server.</li>
+      <li class="bulletList">Iterated over <code class="inlineCode">tools.tools.values()</code> to collect all tools and return them in the required format – in this case, a list of <code class="inlineCode">types.Tool</code> objects. In this case, <code class="inlineCode">tools.tools</code> is a dictionary that contains all the tools registered with the server that we’ve created, so it looks something like this:
+        <pre class="programlisting code"><code class="hljs-code">{
+    <span class="hljs-string">"tools"</span>: {
+        <span class="hljs-string">"echo_tool"</span>: {
+            <span class="hljs-string">"name"</span>: <span class="hljs-string">"echo_tool"</span>,
+            <span class="hljs-string">"description"</span>: <span class="hljs-string">"Echo a message as a tool"</span>,
+            <span class="hljs-string">"input_schema"</span>: {<span class="hljs-string">"type"</span>: <span class="hljs-string">"object"</span>, <span class="hljs-string">"properties"</span>:
+                {<span class="hljs-string">"message"</span>: {<span class="hljs-string">"type"</span>: <span class="hljs-string">"string"</span>}}}
+        }
+    }
+}
+</code></pre>
+      </li>
+    </ul>
+    <p class="normal">Isn’t this more work? Well, actually, let’s explore in the next section how this could be a great way to organize y<a id="_idTextAnchor193"/>our code.</p>
+    <h1 class="heading-1" id="_idParaDest-112"><a id="_idTextAnchor194"/>Organizing your architecture</h1>
+    <p class="normal">A huge advantage <a id="_idIndexMarker224"/>of using a low-level server is that you can control the architecture of your server. You can organize your code in a way that makes sense for your project. For example, you can define all your tools in a folder called <code class="inlineCode">tools</code>. Tools also don’t need to know about the server instance. Sounds promising, right? Let’s see how next.</p>
+    <div class="note">
+      <p class="normal"> You can organize your code well with a high-level server too, but it’s usually a bit messier as you need to pass the server instance around, as we said initially in this chapter.</p>
+    </div>
+    <p class="normal">Here’s <a id="_idIndexMarker225"/>how you have defined MCP server features so far in a high-level server:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> mcp.server.fastmcp <span class="hljs-keyword">import</span> FastMCP
+mcp = FastMCP(<span class="hljs-string">"Echo"</span>)
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">echo_tool</span>(<span class="hljs-params">message: </span><span class="hljs-built_in">str</span>) -&gt; <span class="hljs-built_in">str</span>:
+    <span class="hljs-string">"""Echo a message as a tool"""</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-string">f"Tool echo: </span><span class="hljs-subst">{message}</span><span class="hljs-string">"</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">add_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">int</span>:
+    <span class="hljs-string">"""Add two numbers as a tool"""</span>
+    <span class="hljs-keyword">return</span> a + b
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">subtract_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">int</span>:
+    <span class="hljs-string">"""</span><span class="hljs-string">Subtract two numbers as a tool"""</span>
+    <span class="hljs-keyword">return</span> a - b
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">multiply_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">int</span>:
+    <span class="hljs-string">"""Multiply two numbers as a tool"""</span>
+    <span class="hljs-keyword">return</span> a * b
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">divide_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">float</span>:
+    <span class="hljs-string">"""Divide two numbers as a tool"""</span>
+    <span class="hljs-keyword">if</span> b == <span class="hljs-number">0</span>:
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">"</span><span class="hljs-string">Cannot divide by zero"</span>)
+    <span class="hljs-keyword">return</span> a / b
+</code></pre>
+    <p class="normal">There’s nothing wrong with defining a server and its features like the preceding. However, it might be tempting to keep your entry point file relatively empty (save for the server definition) and define all your features in that file. So, you might resort to having a project structure like this:</p>
+    <pre class="programlisting code"><code class="hljs-code">project/
+├── server.py
+├── tools.py
+</code></pre>
+    <p class="normal">Then your <code class="inlineCode">server.py</code> might look like so:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># server.py</span>
+<span class="hljs-keyword">from</span> mcp.server.fastmcp <span class="hljs-keyword">import</span> FastMCP
+<span class="hljs-keyword">import</span> tools
+mcp = FastMCP(<span class="hljs-string">"Echo"</span>)
+tools.register_tools(mcp)
+<span class="hljs-comment"># code for running the server</span>
+</code></pre>
+    <p class="normal">Your <code class="inlineCode">tools.py</code> might<a id="_idIndexMarker226"/> look like so:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> mcp.server.fastmcp <span class="hljs-keyword">import</span> FastMCP
+<span class="hljs-keyword">def</span> <span class="hljs-title">register_tools</span>(<span class="hljs-params">mcp: FastMCP</span>):
+    <span class="hljs-meta">@mcp.tool()</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title">echo_tool</span>(<span class="hljs-params">message: </span><span class="hljs-built_in">str</span>) -&gt; <span class="hljs-built_in">str</span>:
+        <span class="hljs-string">"""Echo a message as a tool"""</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-string">f"Tool echo: </span><span class="hljs-subst">{message}</span><span class="hljs-string">"</span>
+    <span class="hljs-meta">@mcp.tool()</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title">add_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">int</span>:
+        <span class="hljs-string">"""Add two numbers as a tool"""</span>
+        <span class="hljs-keyword">return</span> a + b
+    <span class="hljs-meta">@mcp.tool()</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title">subtract_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">int</span>:
+        <span class="hljs-string">"""Subtract two numbers as a tool"""</span>
+        <span class="hljs-keyword">return</span> a - b
+    <span class="hljs-meta">@mcp.tool()</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title">multiply_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">int</span>:
+        <span class="hljs-string">"""Multiply two numbers as a tool"""</span>
+        <span class="hljs-keyword">return</span> a * b
+    <span class="hljs-meta">@mcp.tool()</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title">divide_tool</span>(<span class="hljs-params">a: </span><span class="hljs-built_in">int</span><span class="hljs-params">, b: </span><span class="hljs-built_in">int</span>) -&gt; <span class="hljs-built_in">float</span>:
+        <span class="hljs-string">"""Divide two numbers as a tool"""</span>
+        <span class="hljs-keyword">if</span> b == <span class="hljs-number">0</span>:
+            <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">"Cannot divide by zero"</span>)
+        <span class="hljs-keyword">return</span> a / b
+</code></pre>
+    <p class="normal">You might even have dedicated files for each tool:</p>
+    <pre class="programlisting code"><code class="hljs-code">project/
+├── server.py
+├── tools/
+│   ├── echo.py
+│   ├── add.py
+│   ├── subtract.py
+│   ├── multiply.py
+│   └── divide.py
+</code></pre>
+    <p class="normal">So yes, you <a id="_idIndexMarker227"/>can organize your code in a way that makes sense for your project. It’s hard to get away from having to pass the server instance. It should be said that the high-level server does provide a <code class="inlineCode">create_tool()</code> function that allows you to create tools without you having to use the <code class="inlineCode">@mcp.tool()</code> decorator. However, and this is the opinion of the author, it’s just easier to use the low-level server for this purpose. Let’s look at how you can do this in the <a id="_idTextAnchor195"/>next section.</p>
+    <h2 class="heading-2" id="_idParaDest-113"><a id="_idTextAnchor196"/>Constructing a list tools response in a low-level server</h2>
+    <p class="normal">So, let’s <a id="_idIndexMarker228"/>see whether low-level access can help improve our architecture further. The goal is to have a server that can register tools, resources, and prompts in a way that is easy to maintain and extend.</p>
+    <p class="normal">So, we said the following so far about the low-level server:</p>
+    <ul>
+      <li class="bulletList">Instead of using <code class="inlineCode">FastMCP</code>, you use the <code class="inlineCode">Server</code> class from <code class="inlineCode">mcp.server.lowlevel</code></li>
+      <li class="bulletList">You can register features using handlers such as <code class="inlineCode">@server.list_tools()</code> and <code class="inlineCode">@server.call_tool()</code> to handle listing all tools and handling all tool calls</li>
+    </ul>
+    <p class="normal">Let’s study these handlers in more detail and how we can construct them, to see how we can leverage them:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-meta">@server.list_tools()</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">handle_list_tools</span>() -&gt; <span class="hljs-built_in">list</span>[types.Tool]:
+    tool_list = []
+    tool_list.append(
+        types.Tool(
+            name=tool[<span class="hljs-string">"name"</span>],
+            description=tool[<span class="hljs-string">"</span><span class="hljs-string">description"</span>],
+            inputSchema=tool[<span class="hljs-string">"input_schema"</span>],
+        )
+    )
+    <span class="hljs-keyword">return</span> tool_list
+</code></pre>
+    <p class="normal">Here, we observe that the return type is a list of <code class="inlineCode">types.Tool</code> objects. This is reflected in the code, where we <a id="_idIndexMarker229"/>append a <code class="inlineCode">types.Tool</code> object to <code class="inlineCode">too<a id="_idTextAnchor197"/>l_list</code> like so:</p>
+    <pre class="programlisting code"><code class="hljs-code">tool_list.append(
+    types.Tool(
+        name=tool[<span class="hljs-string">"name"</span>],
+        description=tool[<span class="hljs-string">"description"</span>],
+        inputSchema=tool[<span class="hljs-string">"input_schema"</span>],
+    )
+)
+</code></pre>
+    <h2 class="heading-2" id="_idParaDest-114"><a id="_idTextAnchor198"/>Organizing your code and creating tools and schemas</h2>
+    <p class="normal">Now that<a id="_idIndexMarker230"/> we know how to register tools, let’s see how <a id="_idIndexMarker231"/>we can organize the code a bit. The goal is to achieve the following:</p>
+    <ul>
+      <li class="bulletList">A file for each tool, so we can easily manage the code</li>
+      <li class="bulletList">Register all the tools in one place</li>
+    </ul>
+    <p class="normal">Sounds like a great goal, right? Who doesn’t want maintainability? Let’s create a folder structure like so:</p>
+    <pre class="programlisting code"><code class="hljs-code">server.py
+tools/
+├── __init__.py
+├── add.py
+</code></pre>
+    <p class="normal">What we’re seeing here is that we have a <code class="inlineCode">server.py</code> file that will be the entry point of our server, and a <code class="inlineCode">tools/</code> folder that contains all the tools. The <code class="inlineCode">tools/init.py</code> file is used to register to collect all the tools, and <code class="inlineCode">server.py</code> and <code class="inlineCode">@mcp.list_tools()</code> will be used to register all the tools. Let’s look at <code class="inlineCode">__init__.py</code> first:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> .add <span class="hljs-keyword">import</span> tool_add
+tools = {
+    tool_add[<span class="hljs-string">"name"</span>] : tool_add
+}
+</code></pre>
+    <p class="normal">That looks super simple – just a dictionary that imports the <code class="inlineCode">tool_add</code> function from the <code class="inlineCode">add.py</code> file and adds it to the <code class="inlineCode">tools</code> dictionary. Now let’s look at the <code class="inlineCode">add.py</code> file:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># add.py</span>
+<span class="hljs-keyword">from</span> .schema <span class="hljs-keyword">import</span> AddInputModel
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">add_handler</span>(<span class="hljs-params">args</span>) -&gt; <span class="hljs-built_in">float</span>:
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-comment"># Validate input using Pydantic model</span>
+        input_model = AddInputModel(**args)
+    <span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Invalid input: </span><span class="hljs-subst">{</span><span class="hljs-built_in">str</span><span class="hljs-subst">(e)}</span><span class="hljs-string">"</span>)
+    <span class="hljs-comment"># </span><span class="hljs-doctag">TODO:</span><span class="hljs-comment"> add Pydantic, so we can create an AddInputModel and validate     args</span>
+    <span class="hljs-string">"""Handler function for the add tool."""</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-built_in">float</span>(input_model.a) + <span class="hljs-built_in">float</span>(input_model.b)
+tool_add = {
+    <span class="hljs-string">"name"</span>: <span class="hljs-string">"add"</span>,
+    <span class="hljs-string">"description"</span>: <span class="hljs-string">"Adds two numbers"</span>,
+    <span class="hljs-string">"input_schema"</span>: AddInputModel,
+    <span class="hljs-string">"handler"</span>: add_handler
+}
+</code></pre>
+    <p class="normal">In the <a id="_idIndexMarker232"/>preceding code, we’ve done <a id="_idIndexMarker233"/>the following:</p>
+    <ul>
+      <li class="bulletList">Imported <code class="inlineCode">AddInputModel</code> and added that as <code class="inlineCode">input_schema</code></li>
+      <li class="bulletList">Defined an <code class="inlineCode">add_handler</code> function that takes the arguments and returns their sum</li>
+      <li class="bulletList">Created a <code class="inlineCode">tool_add</code> dictionary that contains the tool’s name, description, input schema, and handler function</li>
+    </ul>
+    <p class="normal">As you can see, there are no imports to anything MCP, and it therefore looks pretty clean.</p>
+    <p class="normal">Finally, let’s look at the <code class="inlineCode">schema.py</code> file:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-keyword">from</span> pydantic <span class="hljs-keyword">import</span> BaseModel
+<span class="hljs-keyword">class</span> <span class="hljs-title">AddInputModel</span>(<span class="hljs-title">BaseModel</span>):
+    a: <span class="hljs-built_in">float</span>
+    b: <span class="hljs-built_in">float</span>
+</code></pre>
+    <p class="normal">Here we’re using the <strong class="keyWord">Pydantic</strong> library to define input models. We can extend this file with new types as we add more too<a id="_idTextAnchor199"/>ls to our solution.</p>
+    <h2 class="heading-2" id="_idParaDest-115"><a id="_idTextAnchor200"/>Handling a tool being called</h2>
+    <p class="normal">So far, you’ve<a id="_idIndexMarker234"/> seen how we’re able to take care of a call asking us to list all the tools. But there’s another case we need to handle, namely when a client is trying to call a tool. For that, we need to do the following with the incoming tool calling request:</p>
+    <ul>
+      <li class="bulletList">Identify which tool to call.</li>
+      <li class="bulletList">Parse out the arguments and, in doing so, also validate them. This is where our Pydantic schemas will come in handy to help us with this.</li>
+    </ul>
+    <p class="normal">Let’s start with the request on the server:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># server.py</span>
+<span class="hljs-meta">@server.call_tool()</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">handle_call_tool</span>(
+<span class="hljs-params">    name: </span><span class="hljs-built_in">str</span><span class="hljs-params">, arguments: </span><span class="hljs-built_in">dict</span><span class="hljs-params">[</span><span class="hljs-built_in">str</span><span class="hljs-params">, </span><span class="hljs-built_in">str</span><span class="hljs-params">] | </span><span class="hljs-literal">None</span>
+) -&gt; <span class="hljs-built_in">list</span>[types.TextContent]:
+    <span class="hljs-keyword">pass</span>
+</code></pre>
+    <p class="normal">Note how we need to refer to the <code class="inlineCode">@server.call_tool</code> decorator and that the return type needs to be <code class="inlineCode">list[types.TextContext]</code>.</p>
+    <p class="normal">Next, let’s see if we can identify the correct tool:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># server.py</span>
+<span class="hljs-keyword">if</span> name <span class="hljs-keyword">not</span> <span class="hljs-keyword">in</span> tools.tools:
+    <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Unknown tool: </span><span class="hljs-subst">{name}</span><span class="hljs-string">"</span>)
+  
+tool = tools.tools[name]
+</code></pre>
+    <p class="normal">Okay, let’s get ready to call a handler on the tool and construct a response to the calling client:</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># server.py</span>
+<span class="hljs-keyword">try</span>:
+    result = <span class="hljs-keyword">await</span> tool[<span class="hljs-string">"handler"</span>](arguments)
+<span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+    <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Error calling tool </span><span class="hljs-subst">{name}</span><span class="hljs-string">: </span><span class="hljs-subst">{</span><span class="hljs-built_in">str</span><span class="hljs-subst">(e)}</span><span class="hljs-string">"</span>)
+<span class="hljs-keyword">return</span> [
+    types.TextContent(<span class="hljs-built_in">type</span>=<span class="hljs-string">"text"</span>, text=<span class="hljs-built_in">str</span>(result))
+]
+</code></pre>
+    <p class="normal">Note how we invoke the <code class="inlineCode">handler</code> property on the <code class="inlineCode">tool</code> object with <code class="inlineCode">arguments</code> as a parameter. What does the handler look like on the tool, though, and how does it work?</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># add.py</span>
+<span class="hljs-keyword">from</span> .schema <span class="hljs-keyword">import</span> AddInputModel
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title">add_handler</span>(<span class="hljs-params">args</span>) -&gt; <span class="hljs-built_in">float</span>:
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-comment"># Validate input using Pydantic model</span>
+        input_model = AddInputModel(**args)
+    <span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Invalid input: </span><span class="hljs-subst">{</span><span class="hljs-built_in">str</span><span class="hljs-subst">(e)}</span><span class="hljs-string">"</span>)
+    <span class="hljs-built_in">print</span> (<span class="hljs-string">f"Adding </span><span class="hljs-subst">{args[</span><span class="hljs-string">'a'</span><span class="hljs-subst">]}</span><span class="hljs-string"> and </span><span class="hljs-subst">{args[</span><span class="hljs-string">'</span><span class="hljs-string">b'</span><span class="hljs-subst">]}</span><span class="hljs-string">"</span>)
+    <span class="hljs-string">"""Handler function for the add tool."""</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-built_in">float</span>(args[<span class="hljs-string">'a'</span>]) + <span class="hljs-built_in">float</span>(args[<span class="hljs-string">'b'</span>])
+</code></pre>
+    <p class="normal">Here, we <a id="_idIndexMarker235"/>use a <code class="inlineCode">try-catch</code> to pass <code class="inlineCode">args</code> into the <code class="inlineCode">AddInputModel</code> class. It takes a dictionary, and by passing it as <code class="inlineCode">**args</code>, we’re unpacking the dictionary into keyword arguments. If the input is invalid, <code class="inlineCode">ValueError</code> is raised, with a message indicating what went wrong. This way, you can ensure that the input to your tool is always valid and meets the expected schema.</p>
+    <p class="normal">Great, we’ve now managed to handle both listing all tools and calling a specific tool while also ensuring some validation of input arguments takes place.</p>
+    <p class="normal">I’m sure you could improve this setup further, but this is a lot better than <a id="_idTextAnchor201"/><a id="_idTextAnchor202"/>what we started with.</p>
+    <h1 class="heading-1" id="_idParaDest-116"><a id="_idTextAnchor203"/>Summary</h1>
+    <p class="normal">In this chapter, you learned how to use the low-level server to create a more maintainable architecture for your MCP server. You saw how to register tools, handle requests, and validate input using schemas. This approach allows you to easily add new tools and manage existing ones, making your server more flexible and easier to maintain.</p>
+    <p class="normal">In our next chapter, we’ll cover how to build clients that can interact with our MCP servers.</p>
+    <h1 class="heading-1" id="_idParaDest-117"><a id="_idTextAnchor204"/>Assignment</h1>
+    <p class="normal">Let’s see if we can organize the e-commerce server that we created in <a href="Chapter_6.xhtml"><em class="italic">Chapter 3</em></a>. Here’s the code for reference. Create a tools directory – use Pydantic<a id="_idTextAnchor205"/> and a low-level API.</p>
+    <pre class="programlisting code"><code class="hljs-code"><span class="hljs-comment"># server.py</span>
+<span class="hljs-keyword">from</span> mcp.server.fastmcp <span class="hljs-keyword">import</span> FastMCP
+<span class="hljs-keyword">import</span> uuid
+<span class="hljs-comment"># Create an MCP server</span>
+mcp = FastMCP(<span class="hljs-string">"Demo"</span>)
+<span class="hljs-keyword">class</span> <span class="hljs-title">Customer</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span>(<span class="hljs-params">self,</span><span class="hljs-built_in">id</span><span class="hljs-params">: </span><span class="hljs-built_in">int</span><span class="hljs-params">, name: </span><span class="hljs-built_in">str</span><span class="hljs-params">, email: </span><span class="hljs-built_in">str</span>):
+        <span class="hljs-variable">self</span>.<span class="hljs-built_in">id</span> = <span class="hljs-built_in">id</span>
+        <span class="hljs-variable">self</span>.name = name
+        <span class="hljs-variable">self</span>.email = email
+<span class="hljs-keyword">class</span> <span class="hljs-title">Category</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span>(<span class="hljs-params">self, name: </span><span class="hljs-built_in">str</span><span class="hljs-params">, description: </span><span class="hljs-built_in">str</span>):
+        <span class="hljs-variable">self</span>.<span class="hljs-built_in">id</span> = uuid.uuid4()
+        <span class="hljs-variable">self</span>.name = name
+        <span class="hljs-variable">self</span>.description = description
+<span class="hljs-keyword">class</span> <span class="hljs-title">Product</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span>(<span class="hljs-params">self, name: </span><span class="hljs-built_in">str</span><span class="hljs-params">, price: </span><span class="hljs-built_in">float</span><span class="hljs-params">, description: </span><span class="hljs-built_in">str</span>):
+        <span class="hljs-variable">self</span>.name = name
+        <span class="hljs-variable">self</span>.price = price
+        <span class="hljs-variable">self</span>.description = description
+<span class="hljs-keyword">class</span> <span class="hljs-title">CartItem</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span>(<span class="hljs-params">self, cart_id: </span><span class="hljs-built_in">int</span><span class="hljs-params">, product_id: </span><span class="hljs-built_in">int</span><span class="hljs-params">, quantity: </span><span class="hljs-built_in">int</span>):
+        <span class="hljs-keyword">if</span> cart_id != <span class="hljs-number">0</span>:
+            <span class="hljs-variable">self</span>.cart_id = cart_id
+        <span class="hljs-keyword">else</span>:
+            <span class="hljs-variable">self</span>.cart_id = uuid.uuid4()
+        <span class="hljs-variable">self</span>.product_id = product_id
+        <span class="hljs-variable">self</span>.quantity = quantity
+<span class="hljs-keyword">class</span> <span class="hljs-title">Cart</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span>(<span class="hljs-params">self, cart_id: </span><span class="hljs-built_in">int</span><span class="hljs-params">, customer_id: </span><span class="hljs-built_in">int</span>):
+        <span class="hljs-keyword">if</span> cart_id != <span class="hljs-number">0</span>:
+            <span class="hljs-variable">self</span>.cart_id = cart_id
+        <span class="hljs-keyword">else</span>:
+            <span class="hljs-variable">self</span>.cart_id = uuid.uuid4()
+        <span class="hljs-variable">self</span>.customer_id = customer_id
+<span class="hljs-keyword">class</span> <span class="hljs-title">Order</span>:
+    <span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span>(<span class="hljs-params">self, order_id: </span><span class="hljs-built_in">int</span><span class="hljs-params">, customer_id: </span><span class="hljs-built_in">int</span>):
+        <span class="hljs-keyword">if</span> order_id != <span class="hljs-number">0</span>:
+            <span class="hljs-variable">self</span>.order_id = order_id
+        <span class="hljs-keyword">else</span>:
+            <span class="hljs-variable">self</span>.order_id = uuid.uuid4()
+        <span class="hljs-variable">self</span>.customer_id = customer_id
+products = [
+    Product(<span class="hljs-string">"Product 1"</span>, <span class="hljs-number">10.0</span>, <span class="hljs-string">"Description of Product 1"</span>),
+    Product(<span class="hljs-string">"Product 2"</span>, <span class="hljs-number">20.0</span>, <span class="hljs-string">"Description of Product 2"</span>),
+    Product(<span class="hljs-string">"Product 3"</span>, <span class="hljs-number">30.0</span>, <span class="hljs-string">"Description of Product 3"</span>)
+]
+orders = [
+    Order(<span class="hljs-number">1</span>, <span class="hljs-number">101</span>),
+    Order(<span class="hljs-number">0</span>, <span class="hljs-number">101</span>),
+    Order(<span class="hljs-number">0</span>, <span class="hljs-number">102</span>)
+]
+carts = []
+customers = [
+    Customer(<span class="hljs-number">1</span>, <span class="hljs-string">"Customer 1"</span>, <span class="hljs-string">"email"</span>)
+]
+categories = [
+    Category(<span class="hljs-string">"Category 1"</span>, <span class="hljs-string">"Description of Category 1"</span>),
+    Category(<span class="hljs-string">"Category 2"</span>, <span class="hljs-string">"Description of Category 2"</span>),
+    Category(<span class="hljs-string">"Category 3"</span>, <span class="hljs-string">"Description of Category 3"</span>)
+]
+product_catalog = [
+    {
+        <span class="hljs-string">"</span><span class="hljs-string">name"</span>: <span class="hljs-string">"Product 1"</span>,
+        <span class="hljs-string">"price"</span>: <span class="hljs-number">10.0</span>,
+        <span class="hljs-string">"description"</span>: <span class="hljs-string">"Description of Product 1"</span>,
+        <span class="hljs-string">"category_id"</span>: <span class="hljs-number">1</span>
+    },
+    {
+        <span class="hljs-string">"name"</span>: <span class="hljs-string">"Product 2"</span>,
+        <span class="hljs-string">"</span><span class="hljs-string">price"</span>: <span class="hljs-number">20.0</span>,
+        <span class="hljs-string">"description"</span>: <span class="hljs-string">"Description of Product 2"</span>,
+        <span class="hljs-string">"category_id"</span>: <span class="hljs-number">2</span>
+    },
+    {
+        <span class="hljs-string">"name"</span>: <span class="hljs-string">"Product 3"</span>,
+        <span class="hljs-string">"price"</span>: <span class="hljs-number">30.0</span>,
+        <span class="hljs-string">"</span><span class="hljs-string">description"</span>: <span class="hljs-string">"Description of Product 3"</span>,
+        <span class="hljs-string">"category_id"</span>: <span class="hljs-number">3</span>
+    }
+]
+<span class="hljs-comment"># get orders</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_orders</span>(<span class="hljs-params">customer_id:</span><span class="hljs-built_in">int</span><span class="hljs-params"> = </span><span class="hljs-number">0</span>) -&gt; [Order]:
+    <span class="hljs-string">"""get all orders"""</span>
+    <span class="hljs-keyword">if</span> customer_id != <span class="hljs-number">0</span> <span class="hljs-keyword">and</span> <span class="hljs-keyword">not</span> <span class="hljs-built_in">any</span>(customer.<span class="hljs-built_in">id</span> == customer_id <span class="hljs-keyword">for</span>         customer <span class="hljs-keyword">in</span> customers):
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Invalid customer_id: </span><span class="hljs-subst">{customer_id}</span><span class="hljs-string">"</span>)
+    filtered_orders = orders
+    <span class="hljs-keyword">if</span> customer_id != <span class="hljs-number">0</span>:
+        filtered_orders = [order <span class="hljs-keyword">for</span> order <span class="hljs-keyword">in</span> orders <span class="hljs-keyword">if</span> order.customer_id             == customer_id]
+    <span class="hljs-keyword">return</span> [{<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{order.order_id}</span><span class="hljs-string">,customer:         </span><span class="hljs-subst">{order.customer_id}</span><span class="hljs-string">"</span>} <span class="hljs-keyword">for</span> order <span class="hljs-keyword">in</span> filtered_orders]
+<span class="hljs-comment"># get order by id</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_order</span>(<span class="hljs-params">order_id:</span><span class="hljs-built_in">int</span>) -&gt; Order:
+    <span class="hljs-string">"""</span><span class="hljs-string">get order by id"""</span>
+    <span class="hljs-keyword">for</span> order <span class="hljs-keyword">in</span> orders:
+        <span class="hljs-keyword">if</span> order.order_id == order_id:
+            <span class="hljs-keyword">return</span> {<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{order.order_                id}</span><span class="hljs-string">,customer: </span><span class="hljs-subst">{order.customer_id}</span><span class="hljs-string">"</span>}
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">None</span>
+<span class="hljs-comment"># place order</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">place_order</span>(<span class="hljs-params">customer_id:</span><span class="hljs-built_in">int</span>) -&gt; Order:
+    <span class="hljs-string">"""place order"""</span>
+    <span class="hljs-keyword">if</span> customer_id != <span class="hljs-number">0</span> <span class="hljs-keyword">and</span> <span class="hljs-keyword">not</span> <span class="hljs-built_in">any</span>(customer.<span class="hljs-built_in">id</span> == customer_id <span class="hljs-keyword">for</span>         customer <span class="hljs-keyword">in</span> customers):
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Invalid customer_id: </span><span class="hljs-subst">{customer_id}</span><span class="hljs-string">"</span>)
+    new_order = Order(<span class="hljs-number">0</span>, customer_id)
+    orders.append(new_order)
+    <span class="hljs-keyword">return</span> {<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{new_order.order_id}</span><span class="hljs-string">,customer:         </span><span class="hljs-subst">{new_order.customer_id}</span><span class="hljs-string">"</span>}
+<span class="hljs-comment"># get carts</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_cart</span>(<span class="hljs-params">customer_id:</span><span class="hljs-built_in">int</span>) -&gt; [Cart]:
+    <span class="hljs-string">"""get a singular cart"""</span>
+    <span class="hljs-keyword">if</span> customer_id != <span class="hljs-number">0</span> <span class="hljs-keyword">and</span> <span class="hljs-keyword">not</span> <span class="hljs-built_in">any</span>(customer.<span class="hljs-built_in">id</span> == customer_id <span class="hljs-keyword">for</span>         customer <span class="hljs-keyword">in</span> customers):
+        <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">f"Invalid customer_id: </span><span class="hljs-subst">{customer_id}</span><span class="hljs-string">"</span>)
+    cart = <span class="hljs-built_in">next</span>((cart <span class="hljs-keyword">for</span> cart <span class="hljs-keyword">in</span> carts <span class="hljs-keyword">if</span> cart.customer_id == customer_        id), <span class="hljs-literal">None</span>)
+    <span class="hljs-keyword">if</span> cart:
+        <span class="hljs-keyword">return</span> {<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{cart.cart_id}</span><span class="hljs-string">,customer:             </span><span class="hljs-subst">{cart.customer_id}</span><span class="hljs-string">"</span>}
+    <span class="hljs-keyword">else</span>:
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">None</span>
+   
+<span class="hljs-comment"># get cart items</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_cart_items</span>(<span class="hljs-params">cart_id:</span><span class="hljs-built_in">int</span>) -&gt; [CartItem]:
+    <span class="hljs-string">"""get cart items"""</span>
+    cart_items = [item <span class="hljs-keyword">for</span> item <span class="hljs-keyword">in</span> carts <span class="hljs-keyword">if</span> item.cart_id == cart_id]
+    <span class="hljs-keyword">return</span> [{<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{item.cart_id}</span><span class="hljs-string">,product: </span><span class="hljs-subst">{item.        product_id}</span><span class="hljs-string">,quantity: </span><span class="hljs-subst">{item.quantity}</span><span class="hljs-string">"</span>} <span class="hljs-keyword">for</span> item <span class="hljs-keyword">in</span> cart_items]
+<span class="hljs-comment"># add to cart</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">add_to_cart</span>(<span class="hljs-params">cart_id:</span><span class="hljs-built_in">int</span><span class="hljs-params">, product_id:</span><span class="hljs-built_in">int</span><span class="hljs-params">, quantity:</span><span class="hljs-built_in">int</span>) -&gt; CartItem:
+    <span class="hljs-string">"""add to cart"""</span>
+    new_cart_item = CartItem(cart_id, product_id, quantity)
+    carts.append(new_cart_item)
+    <span class="hljs-keyword">return</span> {<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{new_cart_item.cart_id}</span><span class="hljs-string">,product:         </span><span class="hljs-subst">{new_cart_item.product_id}</span><span class="hljs-string">,quantity: </span><span class="hljs-subst">{new_cart_item.quantity}</span><span class="hljs-string">"</span>}
+<span class="hljs-comment"># tool, all products</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_all_products</span>() -&gt; [Product]:
+    <span class="hljs-string">"""Get all products"""</span>
+    <span class="hljs-keyword">return</span> [{<span class="hljs-string">"type"</span>: <span class="hljs-string">"</span><span class="hljs-string">text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{product.name}</span><span class="hljs-string">,price: </span><span class="hljs-subst">{product.        </span><span class="hljs-subst">price}</span><span class="hljs-string">,description: </span><span class="hljs-subst">{product.description}</span><span class="hljs-string">"</span>} <span class="hljs-keyword">for</span> product <span class="hljs-keyword">in</span> products]
+<span class="hljs-comment"># tool, product by id</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_product</span>(<span class="hljs-params">product_id: </span><span class="hljs-built_in">int</span>) -&gt; Product:
+    <span class="hljs-string">"""Get product by ID"""</span>
+    <span class="hljs-keyword">for</span> product <span class="hljs-keyword">in</span> products:
+        <span class="hljs-keyword">if</span> product.name == product_id:
+            <span class="hljs-keyword">return</span> {<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{product.name}</span><span class="hljs-string">,price:                 </span><span class="hljs-subst">{product.price}</span><span class="hljs-string">,description: </span><span class="hljs-subst">{product.description}</span><span class="hljs-string">"</span>}
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">None</span>
+<span class="hljs-comment"># tool, all categories</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_all_categories</span>() -&gt; [Category]:
+    <span class="hljs-string">"""Get all categories"""</span>
+    <span class="hljs-keyword">return</span> [{<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{category.name}</span><span class="hljs-string">,description:         </span><span class="hljs-subst">{category.description}</span><span class="hljs-string">"</span>} <span class="hljs-keyword">for</span> category <span class="hljs-keyword">in</span> categories]
+<span class="hljs-comment"># tool, all customers</span>
+<span class="hljs-meta">@mcp.tool()</span>
+<span class="hljs-keyword">def</span> <span class="hljs-title">get_all_customers</span>() -&gt; [Customer]:
+    <span class="hljs-string">"""Get all customers"""</span>
+    <span class="hljs-keyword">return</span> [{<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"name"</span>: <span class="hljs-string">f"ID: </span><span class="hljs-subst">{customer.</span><span class="hljs-built_in">id</span><span class="hljs-subst">}</span><span class="hljs-string">,name: </span><span class="hljs-subst">{customer.        name}</span><span class="hljs-string">,email: </span><span class="hljs-subst">{customer.email}</span><span class="hljs-string">"</span>} <span class="hljs-keyword">for</span> customer <span class="hljs-keyword">in</span> customers]
+</code></pre>
+    <h1 class="heading-1" id="_idParaDest-118"><a id="_idTextAnchor206"/>Solution</h1>
+    <p class="normal">You can access the solution at <a href="https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter0﻿6/solutions/README.md"><span class="url">https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter0<span id="_idTextAnchor207"/>6/solutions/README.md</span></a>.</p>
+    <h1 class="heading-1" id="_idParaDest-119"><a id="_idTextAnchor208"/>Quiz</h1>
+    <p class="normal">What are some benefits of using a low-level server?</p>
+    <ul>
+      <li class="bulletList">A: You use less memory</li>
+      <li class="bulletList">B: You have better control over how requests are processed</li>
+      <li class="bulletList">C: You can define your own transports</li>
+    </ul>
+    <p class="normal">You can access the solution at <a href="https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter06/solutions/solution-quiz.md"><span class="url">https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter06/solutions/solution-quiz.md</span></a>.</p>
+    <div class="unlock">
+      <table class="table-container" id="table001-5">
+        <tbody>
+          <tr>
+            <td class="table-cell">
+              <h4 class="heading-4">Unlock this book’s exclusive benefits now</h4>
+              <p class="normal">Scan this QR code or go to <a href="https://packtpub.com/unlock"><span class="url">https://packtpub.com/unlock</span></a>, then search this book by name. </p>
+            </td>
+            <td class="table-cell" rowspan="2">
+              <figure class="mediaobject"><img alt="" src="../Images/Unlock-01.png"/></figure>
+              <p class="center"><img alt="" src="../Images/Unlock1.png"/></p>
+            </td>
+          </tr>
+          <tr>
+            <td class="table-cell">
+              <p class="normal"><strong class="bold-italic" style="font-style: italic;">Note</strong><em class="italic">: Keep your purchase invoice ready before you start.</em></p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body></html>
