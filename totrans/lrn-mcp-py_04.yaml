@@ -1,704 +1,1069 @@
 - en: '4'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '4'
 - en: Building SSE Servers
+  id: totrans-1
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 构建 SSE 服务器
 - en: So far, you’ve seen how you can build MCP servers using STDIO as transport.
     That’s a great choice of transport for servers meant to run locally. However,
     if you want to connect to servers remotely via HTTP or if you want responses from
     LLMs streamed, then there’s another transport called **Server-Sent Events** (**SSE**)
     better suited to this scenario.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，你已经看到了如何使用 STDIO 作为传输构建 MCP 服务器。这是一个为本地运行的服务器而选择的优秀传输方式。然而，如果你想要通过 HTTP
+    远程连接到服务器，或者如果你想要从 LLM 流式传输响应，那么还有一种称为 **Server-Sent Events** （**SSE**）的传输方式更适合这种情况。
 - en: In this chapter, we’ll focus on building and testing MCP servers using SSE as
     transport.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将专注于使用 SSE 作为传输构建和测试 MCP 服务器。
 - en: 'The chapter covers the following topics:'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章涵盖了以下主题：
 - en: SSE concepts
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: SSE 概念
 - en: Creating an SSE server as a web app
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 创建一个作为 web 应用的 SSE 服务器
 - en: Testing with SSE
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 SSE 进行测试
 - en: Creating an SSE server
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 创建 SSE 服务器
 - en: Let’s dive into the details of SSE and how to build a server using it.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们深入了解 SSE 的细节以及如何使用它构建服务器。
 - en: SSE concepts
+  id: totrans-10
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: SSE 概念
 - en: There are some concepts we need to understand before we can start building our
     server. First off, a server using SSE as transport is a server that can be accessed
     via HTTP. That means, even if it can run locally, it can also be accessed remotely.
     The implications of this are that this is a server that we need to expose using
     a web server.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们开始构建服务器之前，有一些概念我们需要理解。首先，使用 SSE 作为传输的服务器是一个可以通过 HTTP 访问的服务器。这意味着，即使它可以在本地运行，也可以远程访问。这一点的含义是，这是一个我们需要通过
+    web 服务器公开的服务器。
 - en: 'SSE is a standard for unidirectional communication from server to client over
     a single, long-lived HTTP connection. It allows servers to push real-time updates
     to clients without requiring the client to poll for changes. Here are some more
     details:'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: SSE 是一个标准，用于在单个长连接上从服务器到客户端的单向通信。它允许服务器在不要求客户端轮询更改的情况下向客户端推送实时更新。以下是一些更详细的说明：
 - en: '**Protocol**: SSE uses standard HTTP with the MIME type text/event-stream'
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**协议**：SSE 使用标准的 HTTP，MIME 类型为 text/event-stream'
 - en: '**Client API**: The browser uses the EventSource API to receive events'
+  id: totrans-14
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**客户端 API**：浏览器使用 EventSource API 接收事件'
 - en: '**Format**: Messages are sent as plain text with fields such as `event`, `data`,
     and `id`, each terminated by two endlines'
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**格式**：消息以纯文本形式发送，字段如 `event`、`data` 和 `id`，每个字段由两个换行符终止'
 - en: It’s typically used for dashboard-like applications where real-time updates
     are crucial.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 它通常用于需要实时更新的仪表板类应用程序。
 - en: 'In MCP, SSE is split up into two parts: the part where we connect to the server
     and perform initialization (e.g., *handshake*), and a message part where we apply
     messages to the server that ends up reading or writing data. So, we need to implement
     the following endpoints:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 MCP 中，SSE 被分为两部分：我们连接到服务器并执行初始化（例如，*握手*）的部分，以及一个消息部分，我们将消息应用到服务器，最终读取或写入数据。因此，我们需要实现以下端点：
 - en: '**SSE endpoint**: This endpoint is used as a way to handshake the connection
     between the client and the server. By sending a request to this endpoint, the
     client will receive a response that will keep the connection open.'
+  id: totrans-18
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**SSE 端点**：这个端点用作客户端和服务器之间建立连接握手的方式。通过向这个端点发送请求，客户端将收到一个响应，这将保持连接打开。'
 - en: '**Message endpoint**: This endpoint is what’s used to route messages to the
     MCP server and its features.'
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**消息端点**：这个端点用于将消息路由到 MCP 服务器及其功能。'
 - en: It should be said that, depending on the chosen runtime and SDK, you may need
     to implement these endpoints yourself, but for some runtimes, it happens under
     the hood. Regardless, it’s good to know how it works and what the endpoints are
     doing.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 应该指出的是，根据选择的运行时和 SDK，你可能需要自己实现这些端点，但对于某些运行时，这些操作是在幕后完成的。无论如何，了解它是如何工作的以及端点在做什么是很好的。
 - en: Creating an SSE server as a web app
+  id: totrans-21
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建一个作为 web 应用的 SSE 服务器
 - en: The big difference compared to using the STDIO transport is that we need to
     expose an SSE server as a web application. Depending on whether we use Python
     or TypeScript, that means we need to implement the necessary HTTP endpoints.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 与使用 STDIO 传输相比，最大的不同之处在于我们需要将 SSE 服务器公开为 web 应用程序。根据我们是否使用 Python 或 TypeScript，这意味着我们需要实现必要的
+    HTTP 端点。
 - en: Specifically for Python, we need to leverage a framework supporting **Asynchronous
     Server Gateway Interface** (**ASGI**). ASGI is a specification that allows Python
     web frameworks to handle asynchronous and synchronous code, making it ideal for
     modern web applications. Let us look at Starlette.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 特别对于 Python 来说，我们需要利用支持 **异步服务器网关接口**（**ASGI**）的框架。ASGI 是一个规范，它允许 Python 网络框架处理异步和同步代码，使其非常适合现代网络应用程序。让我们看看
+    Starlette。
 - en: Starlette
+  id: totrans-24
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Starlette
 - en: '**Starlette** is a lightweight ASGI framework that we will use to build our
     SSE server. Previously, we mentioned endpoints that needed to be implemented,
     and Starlette will help us with that. It provides a simple way to create an ASGI
     application and handle routing, middleware, and other features.'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Starlette** 是一个轻量级的 ASGI 框架，我们将用它来构建我们的 SSE 服务器。之前我们提到了需要实现端点，Starlette 将帮助我们实现这些。它提供了一个简单的方法来创建
+    ASGI 应用程序并处理路由、中间件和其他功能。'
 - en: Let’s look at how Starlette works and then explain in more detail how to build
     an SSE server using it.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看 Starlette 的工作原理，然后更详细地解释如何使用它构建 SSE 服务器。
 - en: 'A typical application using Starlette will look like this:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 Starlette 的典型应用程序将看起来像这样：
 - en: '[PRE0]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'In the preceding code, we’ve done the following:'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的代码中，我们做了以下操作：
 - en: Imported the necessary modules from Starlette
+  id: totrans-30
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 Starlette 导入了必要的模块
 - en: Defined a simple `homepage` function that returns a JSON response
+  id: totrans-31
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 定义了一个简单的 `homepage` 函数，它返回一个 JSON 响应
 - en: 'The next step is to run it. We can use a server such as `uvicorn` to run our
     Starlette application:'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是运行它。我们可以使用 `uvicorn` 这样的服务器来运行我们的 Starlette 应用程序：
 - en: '[PRE1]'
+  id: totrans-33
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Here, we are using `uvicorn` to run the application. The syntax is `uvicorn
     <filename>:<name of app instance>`. In this case, the filename is `main.py` and
     the app instance is `app`.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们使用 `uvicorn` 来运行应用程序。语法是 `uvicorn <filename>:<name of app instance>`。在这种情况下，文件名是
+    `main.py`，应用程序实例是 `app`。
 - en: Starlette and MCP
+  id: totrans-35
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Starlette 和 MCP
 - en: 'To use Starlette with MCP, we can create the following application:'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用 Starlette 与 MCP，我们可以创建以下应用程序：
 - en: '[PRE2]'
+  id: totrans-37
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'In the preceding code, we are doing the following:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的代码中，我们正在做以下操作：
 - en: Importing the necessary modules from Starlette and MCP.
+  id: totrans-39
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 Starlette 和 MCP 导入必要的模块。
 - en: Creating an instance of `FastMCP` with the name of the application. Note especially
     the `mcp.sse_app()` method. This is the method that creates the SSE server and
     mounts it to the existing ASGI server. What happens under the hood is that it
     creates the SSE endpoint and the message endpoint for you.
+  id: totrans-40
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 `FastMCP` 创建应用程序的实例。请注意 `mcp.sse_app()` 方法。这是创建 SSE 服务器并将其挂载到现有 ASGI 服务器的方法。幕后发生的事情是，它为您创建了
+    SSE 端点和消息端点。
 - en: 'If you’re interested in diving into the Python SDK to see how this is done,
     you can check [https://github.com/modelcontextprotocol/python-sdk/blob/e80c0150e1c2e45f66195d3cf7d209be31ce6e5d/src/mcp/server/fastmcp/server.py#L747](https://github.com/modelcontextprotocol/python-sdk/blob/e80c0150e1c2e45f66195d3cf7d209be31ce6e5d/src/mcp/server/fastmcp/server.py#L747),
     and you will see the following code as part of the `sse_app()` method:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您想深入了解 Python SDK 来查看这是如何实现的，您可以查看 [https://github.com/modelcontextprotocol/python-sdk/blob/e80c0150e1c2e45f66195d3cf7d209be31ce6e5d/src/mcp/server/fastmcp/server.py#L747](https://github.com/modelcontextprotocol/python-sdk/blob/e80c0150e1c2e45f66195d3cf7d209be31ce6e5d/src/mcp/server/fastmcp/server.py#L747)，您将看到以下代码作为
+    `sse_app()` 方法的一部分：
 - en: '[PRE3]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: As you can see, both the SSE endpoint and the message endpoint are created for
     you by calling the `sse_app()` method.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，通过调用 `sse_app()` 方法，为您创建了 SSE 端点和消息端点。
 - en: What about features using SSE, do they work the same way as STDIO? Yes, they
     do. You can use the same decorators and methods to create features. The only difference
     is that you need to use the `mcp.sse_app()` method to create the SSE server and
     mount it to the existing ASGI server.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 那么，使用 SSE 的功能是否与 STDIO 的工作方式相同？是的，它们是相同的。您可以使用相同的装饰器和方法来创建功能。唯一的区别是您需要使用 `mcp.sse_app()`
+    方法来创建 SSE 服务器并将其挂载到现有的 ASGI 服务器。
 - en: Testing with SSE
+  id: totrans-45
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 SSE 进行测试
 - en: 'There are differences, though, when it comes to how testing tools using SSE
     work. Let’s list the differences:'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，当涉及到使用 SSE 的测试工具时，它们之间还是存在一些差异。让我们列出这些差异：
 - en: '**Inspector tool**: The **Inspector** tool is a command-line tool that allows
     you to test your server using both a visual interface and a command-line interface.
     The difference between STDIO and SSE is that you need to specify **Transport Type**
     as **SSE** and **URL** as `http://<address>:<port>/sse`. This is something you
     need to do when using the visual interface.'
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**检查工具**：**检查工具**是一个命令行工具，允许您使用视觉界面和命令行界面测试您的服务器。STDIO和SSE之间的区别在于您需要将**传输类型**指定为**SSE**，将**URL**指定为`http://<address>:<port>/sse`。这是在使用视觉界面时需要做的事情。'
 - en: 'For the CLI mode, you need to specify a URL instead of how to run the server.
     So, the following command will work, provided you have the server running at `localhost:8000`:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于CLI模式，您需要指定一个URL而不是运行服务器的方式。因此，以下命令将有效，前提是您的服务器正在`localhost:8000`上运行：
 - en: '[PRE4]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'Let’s see the difference in the visual interface:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看视觉界面中的区别：
 - en: '![Figure 4.1 – Inspector tool, visual mode, SSE](img/B31121_04_01.png)'
+  id: totrans-51
   prefs: []
   type: TYPE_IMG
+  zh: '![图4.1 – 检查工具，视觉模式，SSE](img/B31121_04_01.png)'
 - en: Figure 4.1 – Inspector tool, visual mode, SSE
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 图4.1 – 检查工具，视觉模式，SSE
 - en: '![A magnifying glass on a black background  AI-generated content may be incorrect.](img/1.png)**Quick
     tip**: Need to see a high-resolution version of this image? Open this book in
     the next-gen Packt Reader or view it in the PDF/ePub copy.'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: '![黑色背景上的放大镜  AI生成的内容可能不正确。](img/1.png)**快速提示**：需要查看此图像的高分辨率版本吗？在下一代Packt Reader中打开此书或在其PDF/ePub副本中查看。'
 - en: '![](img/21.png)**The next-gen Packt Reader** and a **free PDF/ePub copy** of
     this book are included with your purchase. Scan the QR code OR visit [https://packtpub.com/unlock](https://packtpub.com/unlock),
     then use the search bar to find this book by name. Double-check the edition shown
     to make sure you get the right one.'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: '![](img/21.png)**下一代Packt Reader**以及本书的**免费PDF/ePub副本**包含在您的购买中。扫描二维码或访问[https://packtpub.com/unlock](https://packtpub.com/unlock)，然后使用搜索栏通过名称查找此书。请仔细核对显示的版本，以确保您获得正确的版本。'
 - en: '![](img/Unlock1.png)'
+  id: totrans-55
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/Unlock1.png)'
 - en: Note how **Transport Type** is set to `SSE` and **URL** is set to `http://localhost:8000/sse`.
     Remember with STDIO how we didn’t have a **URL** field and rather a field to specify
     how to run the server? This is the difference between STDIO and SSE when it comes
     to the Inspector tool.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意**传输类型**设置为`SSE`，**URL**设置为`http://localhost:8000/sse`。记住，在使用STDIO时我们没有**URL**字段，而是有一个指定如何运行服务器的字段？这是STDIO和SSE在检查工具中的区别。
 - en: '**Web client**: Because the SSE server is running on HTTP, you can use any
     HTTP client to test it. This includes tools such as Postman, cURL, or even your
     web browser. To use cURL, you can use the following command:'
+  id: totrans-57
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Web客户端**：因为SSE服务器运行在HTTP上，您可以使用任何HTTP客户端来测试它。这包括Postman、cURL或甚至您的网络浏览器。要使用cURL，您可以使用以下命令：'
 - en: 'Get the session ID:'
+  id: totrans-58
   prefs:
   - PREF_IND
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 获取会话ID：
 - en: '[PRE5]'
+  id: totrans-59
   prefs:
   - PREF_IND
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'This will produce a response like this:'
+  id: totrans-60
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 这将产生如下响应：
 - en: '[PRE6]text'
+  id: totrans-61
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: '[PRE6]文本'
 - en: 'event: endpoint'
+  id: totrans-62
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 'event: endpoint'
 - en: 'data: http://localhost:5001/messages?session_id=<my session   id>'
+  id: totrans-63
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 'data: http://localhost:5001/messages?session_id=<my session id>'
 - en: '[PRE7]'
+  id: totrans-64
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: Use the session ID to send a message to the server on the message endpoint.
+  id: totrans-65
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用会话ID向消息端点的服务器发送消息。
 - en: Ensure you send this in another terminal instance. The answer to this request
     will appear in the first terminal though.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 确保您在另一个终端实例中发送此命令。此请求的答案将出现在第一个终端中。
 - en: '[PRE8]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Send a message to the server, such as listing tools, in a separate terminal
     from the one that you sent the initialize request to.
+  id: totrans-68
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在发送初始化请求的不同终端中发送消息到服务器，例如列出工具。
 - en: '[PRE9]'
+  id: totrans-69
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: So, yes, it’s possible to do this using cURL, but it’s a bit cumbersome, which
     makes the inspector tool a great choice for testing your server – also for SSE.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，是的，使用cURL可以做到这一点，但操作略显繁琐，这使得检查工具成为测试服务器的绝佳选择——同样也适用于SSE。
 - en: Creating an SSE server
+  id: totrans-71
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建SSE服务器
 - en: 'Okay, so we understand the concepts of SSE and how to build a server, and even
     how our testing tools work and are different from STDIO. Now it’s time to build
     our own SSE server. We’ll learn how to do the following:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 好的，所以我们理解了SSE的概念以及如何构建服务器，甚至测试工具的工作原理以及与STDIO的不同之处。现在是我们构建自己的SSE服务器的时候了。我们将学习如何做以下事情：
 - en: Set up a project
+  id: totrans-73
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 设置项目
 - en: Add the server code
+  id: totrans-74
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 添加服务器代码
 - en: Test the server
+  id: totrans-75
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 测试服务器
 - en: Create the project
+  id: totrans-76
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 创建项目
 - en: 'Let’s create a new project like so:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们创建一个新项目，如下所示：
 - en: 'Create a virtual environment:'
+  id: totrans-78
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建虚拟环境：
 - en: '[PRE10]'
+  id: totrans-79
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'Activate the virtual environment:'
+  id: totrans-80
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 激活虚拟环境：
 - en: '[PRE11]'
+  id: totrans-81
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Install the dependencies:'
+  id: totrans-82
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 安装依赖项：
 - en: '[PRE12]'
+  id: totrans-83
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: There, you should be all set up to start building your SSE server.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 在那里，您应该已经准备好开始构建您的SSE服务器。
 - en: Add the server code
+  id: totrans-85
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 添加服务器代码
 - en: 'Now add the following code to your project:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在将以下代码添加到您的项目中：
 - en: 'In `server.py`, add the following code:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 `server.py` 中添加以下代码：
 - en: '[PRE13]'
+  id: totrans-88
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'In the preceding code, we’ve done the following:'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的代码中，我们做了以下操作：
 - en: Imported the necessary modules from Starlette and MCP.
+  id: totrans-90
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 Starlette 和 MCP 导入了必要的模块。
 - en: Created an instance of `FastMCP` with the name of the application. Note especially
     the `mcp.sse_app()` method helping us mount the endpoints for SSE handshake and
     message routing.
+  id: totrans-91
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用应用程序的名称创建了一个 `FastMCP` 实例。特别注意 `mcp.sse_app()` 方法帮助我们挂载 SSE 握手和消息路由的端点。
 - en: Add features
+  id: totrans-92
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 添加功能
 - en: The next step is about adding features to your server. As mentioned, there’s
     no difference between STDIO and SSE when it comes to features. You can use the
     same decorators and methods to create features.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是向你的服务器添加功能。如前所述，当涉及到功能时，STDIO 和 SSE 之间没有区别。你可以使用相同的装饰器和方法来创建功能。
 - en: 'In the same file, add the following code:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 在同一文件中添加以下代码：
 - en: '[PRE14]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: You’ll get the chance to add more features later in the assignment, but for
     now, you have a working server with a feature that adds two numbers.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 你将有机会在作业的后期添加更多功能，但到目前为止，你有一个具有添加两个数字功能的工作服务器。
 - en: Run it
+  id: totrans-97
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 运行它
 - en: The next step is to run the server.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是运行服务器。
 - en: 'Start the server using the command line:'
+  id: totrans-99
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用命令行启动服务器：
 - en: '[PRE15]'
+  id: totrans-100
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The syntax is `uvicorn <filename>:<app>`, where `<filename>` is the name of
     your Python file and `<app>` is the name of your ASGI app.
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 语法是 `uvicorn <filename>:<app>`，其中 `<filename>` 是你的 Python 文件名，而 `<app>` 是你的
+    ASGI 应用程序名。
 - en: 'Start the **Inspect** tool using the command line:'
+  id: totrans-102
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用命令行启动 **检查** 工具：
 - en: '[PRE16]'
+  id: totrans-103
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'Set the following fields in the UI:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 UI 中设置以下字段：
 - en: '**Transport Type**: **SSE**'
+  id: totrans-105
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**传输类型**：**SSE**'
 - en: '**URL**: `http://localhost:3000/sse`'
+  id: totrans-106
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**URL**：`http://localhost:3000/sse`'
 - en: Try your features as usual, but now using the SSE server.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 按照常规尝试你的功能，但现在使用 SSE 服务器。
 - en: Test it
+  id: totrans-108
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 测试它
 - en: We will test our server in three different ways.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将以三种不同的方式测试我们的服务器。
 - en: '**Inspector tool, as a visual interface**: This is a good way to test your
     server and see how it works'
+  id: totrans-110
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**检查工具，作为可视化界面**：这是一种测试服务器并查看其工作方式的好方法'
 - en: '**Inspector tool with the CLI option**: The CLI option provides a response
     directly in the command line. This is a good way to test your servers in, for
     example, CI/CD pipelines.'
+  id: totrans-111
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**带有 CLI 选项的检查工具**：CLI 选项直接在命令行中提供响应。这是一种在例如 CI/CD 管道中测试服务器的好方法。'
 - en: '**Using a client**: Here, we’ll use cURL to test that our server responds to
     requests. This is a good way to quickly test your server.'
+  id: totrans-112
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**使用客户端**：在这里，我们将使用 cURL 来测试我们的服务器是否能够响应请求。这是一种快速测试服务器的好方法。'
 - en: Inspector tool
+  id: totrans-113
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 检查工具
 - en: 'Let’s try the Inspector tool using the visual interface. Start the Inspector
     tool using the command line:'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们尝试使用可视化界面使用检查工具。使用命令行启动检查工具：
 - en: Run the following command in a new terminal window with the server running.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 在运行服务器的新的终端窗口中运行以下命令。
 - en: '[PRE17]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Set the following fields in the UI:'
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 UI 中设置以下字段：
 - en: '**Transport Type**: **SSE**'
+  id: totrans-118
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**传输类型**：**SSE**'
 - en: '**URL**: `http://localhost:3000/sse`'
+  id: totrans-119
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**URL**：`http://localhost:3000/sse`'
 - en: 'In the **Tools** section, select **add** and type the input for **a** and **b**:'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 **工具** 部分中选择 **添加** 并输入 **a** 和 **b** 的值：
 - en: '[PRE18]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: Inspector tool as a CLI option
+  id: totrans-122
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 检查工具作为 CLI 选项
 - en: 'For this option, we’ll use the Inspector tool like before, but with the added
     `--cli` option to run it in CLI mode. Remember, we will get the response directly
     in the command line as opposed to the UI:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于这个选项，我们将像之前一样使用检查工具，但这次添加了 `--cli` 选项以在 CLI 模式下运行。记住，我们将直接在命令行中获取响应，而不是在 UI
+    中：
 - en: '[PRE19]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'You should see the following output:'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该会看到以下输出：
 - en: '[PRE20]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: curl command
+  id: totrans-127
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: cURL 命令
 - en: 'To test with cURL, there are three calls we need to make:'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用 cURL 进行测试，我们需要进行三个调用：
 - en: 'A call to `/sse`. This should give us a session ID back:'
+  id: totrans-129
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 对 `/sse` 的调用。这应该会返回一个会话 ID：
 - en: '[PRE21]'
+  id: totrans-130
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'You should see an output similar to the following:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该会看到类似于以下输出的内容：
 - en: '[PRE22]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: A call to `/messages` with the session ID also containing the initialized MCP
     message.
+  id: totrans-133
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 对 `/messages` 的调用，其中包含初始化的 MCP 消息和会话 ID。
 - en: The following command should be run in a *separate terminal*.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 应在运行服务器的单独终端中运行以下命令。
 - en: '[PRE23]'
+  id: totrans-135
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: This will tell the server we’re ready to communicate.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将告诉服务器我们已准备好进行通信。
 - en: '**Feature ask**: the following `curl` command is asking to list tools on the
     MCP Server.'
+  id: totrans-137
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '**功能请求**：以下 `curl` 命令是请求列出 MCP 服务器上的工具。'
 - en: The following command should be run in the *same terminal as the previous command*.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下命令应在与上一个命令相同的终端中运行。
 - en: '[PRE24]'
+  id: totrans-139
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'You should now see a response in the *first terminal* you used when you initialized
     the connection. It should look similar to the following:'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，你应该会在初始化连接时使用的第一个终端中看到响应。它应该看起来类似于以下内容：
 - en: '[PRE25]'
+  id: totrans-141
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: As a recommendation, I prefer to use the Inspector tool as it provides a better
     experience and is easier to use. The `curl` command is more of a low-level approach
     and could be nice to use to get an initial session ID. It does tell you how the
     underlying protocol works, which can be helpful for debugging.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为建议，我更喜欢使用检查器工具，因为它提供了更好的体验并且更容易使用。`curl` 命令更像是低级方法，可以用来获取初始会话 ID。它确实告诉你底层协议是如何工作的，这对于调试可能很有帮助。
 - en: Summary
+  id: totrans-143
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 摘要
 - en: In this chapter, we learned about SSE and how to build a server using it.
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们学习了 SSE 以及如何使用它构建服务器。
 - en: We also learned about the differences between STDIO and SSE when it comes to
     testing tools and how to use the Inspector tool with SSE. The difference is that
     STDIO listens to `stdin` and `stdout` while SSE listens to HTTP requests. SSE
     can also be used to stream responses from LLMs.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还学习了在测试工具方面 STDIO 和 SSE 的区别，以及如何使用检查器工具与 SSE 一起使用。区别在于 STDIO 监听 `stdin` 和
+    `stdout`，而 SSE 监听 HTTP 请求。SSE 还可以用来从 LLMs 流式传输响应。
 - en: Finally, we built our own SSE server and tested it using the Inspector tool
     and cURL.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，我们构建了自己的 SSE 服务器，并使用检查器工具和 cURL 进行了测试。
 - en: In the next chapter, we will look into another transport called Streamable HTTP,
     which is the preferred transport to use when exposing a server via a URL.
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨另一种名为可流式 HTTP 的传输方式，这是通过 URL 公开服务器时首选的传输方式。
 - en: Assignment – SSE server
+  id: totrans-148
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 任务 – SSE 服务器
 - en: 'In this assignment, you will build out an SSE server with some features to
     support the following use cases:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个任务中，你将构建一个具有一些功能的 SSE 服务器，以支持以下用例：
 - en: List products by category
+  id: totrans-150
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 按类别列出产品
 - en: Add products to cart
+  id: totrans-151
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将产品添加到购物车
 - en: List products in cart
+  id: totrans-152
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 列出购物车中的产品
 - en: You can use the code provided in this chapter as a starting point.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以使用本章提供的代码作为起点。
 - en: Solution
+  id: totrans-154
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 解决方案
 - en: "You can access the solution at [https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter04/solutions/README.md.](https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/m\uFEFF\
     ain/Chapter04/solutions/README.md )"
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在 [https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter04/solutions/README.md](https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter04/solutions/README.md)
+    访问解决方案。
 - en: Quiz
+  id: totrans-156
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 测验
 - en: What is the SSE transport used for?
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: SSE 传输用于什么？
 - en: 'A: To expose a server via HTTP'
+  id: totrans-158
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'A: 通过 HTTP 公开服务器'
 - en: 'B: To expose a server via STDIO'
+  id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'B: 通过 STDIO 公开服务器'
 - en: 'C: To enable streaming of responses from LLMs'
+  id: totrans-160
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'C: 启用从 LLMs 的响应流'
 - en: Which routes are used for SSE?
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 哪些路由用于 SSE？
 - en: 'A: `/mcp`'
+  id: totrans-162
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'A: `/mcp`'
 - en: 'B: `/sse`'
+  id: totrans-163
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'B: `/sse`'
 - en: 'C: `/messages`'
+  id: totrans-164
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'C: `/messages`'
 - en: "You can access the solution at [https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter04/solutions/solution-quiz.md.](https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Cha\uFEFF\
     pter04/solutions/solution-quiz.md )"
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在 [https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter04/solutions/solution-quiz.md](https://github.com/PacktPublishing/Learn-Model-Context-Protocol-with-Python/blob/main/Chapter04/solutions/solution-quiz.md)
+    访问解决方案。
 - en: References
+  id: totrans-166
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 参考文献
 - en: "Lifecycle: [https://modelcontextprotocol.info/specification/draft/basic/lifecycle/](https://modelcontextprotocol.info/spe\uFEFF\
     cification/draft/basic/lifecycle/ )"
+  id: totrans-167
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: "生命周期: [https://modelcontextprotocol.info/specification/draft/basic/lifecycle/](https://modelcontextprotocol.info/spe\uFEFF\
+    cification/draft/basic/lifecycle/ )"
 - en: 'Starlette: [https://www.starlette.io/](https://www.starlette.io/ )'
+  id: totrans-168
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'Starlette: [https://www.starlette.io/](https://www.starlette.io/ )'
 - en: 'Transports: [https://modelcontextprotocol.io/docs/concepts/transports](https://modelcontextprotocol.io/docs/concepts/transports
     )'
+  id: totrans-169
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '传输方式: [https://modelcontextprotocol.io/docs/concepts/transports](https://modelcontextprotocol.io/docs/concepts/transports
+    )'
 - en: '|'
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: '|'
 - en: Unlock this book’s exclusive benefits now
+  id: totrans-171
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 现在解锁此书的独家优惠
 - en: Scan this QR code or go to [https://packtpub.com/unlock](https://packtpub.com/unlock),
     then search this book by name. | ![](img/Unlock-01.png)![](img/Unlock1.png) |
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 扫描此二维码或访问 [https://packtpub.com/unlock](https://packtpub.com/unlock)，然后通过名称搜索此书。
+    | ![](img/Unlock-01.png)![](img/Unlock1.png) |
 - en: '| **Note***: Keep your purchase invoice ready before you start.* |'
+  id: totrans-173
   prefs: []
   type: TYPE_TB
+  zh: '| **注意**：在开始之前准备好您的购买发票。|'
