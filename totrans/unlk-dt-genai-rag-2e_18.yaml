@@ -1,0 +1,1471 @@
+- en: '15'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Semantic Caches
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Semantic caches represent an evolution of RAG concepts, forming a critical component
+    in modern production-grade generative AI applications. They are particularly useful
+    in agent-based RAG, to help offset the extra reasoning steps an agent typically
+    takes. By leveraging vector search and intelligent query matching, semantic caches
+    ensure users receive correct, consistent information while dramatically reducing
+    latency and computational costs. This chapter explores how to build, optimize,
+    and deploy semantic caches as an advanced control flow mechanism in your AI systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding semantic caches with the long-tail pattern
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What is a semantic cache? The interceptor layer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Why use a semantic cache?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Proper semantic cache planning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Retrieval, population, and eviction policies
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Code lab 15.1 – using the semantic cache for retrieval
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Population – query expansion strategies
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Eviction – keeping a clean cache
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you’ll be able to design and implement semantic
+    caches that can reduce latency and inference costs by 10–100x while maintaining
+    high accuracy and user satisfaction in your AI applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To complete the hands-on exercises in this chapter, you’ll need the following
+    software and resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Software requirements:**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Python 3.9 or higher**: Required for running the code labs'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Jupyter Notebook or JupyterLab**: For executing the interactive code examples'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A text editor or IDE**: VS Code, PyCharm, or similar for reviewing code'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Hardware requirements:**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Minimum 4 GB RAM (8 GB recommended for smooth performance)
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 500 MB free disk space for embedding models and ChromaDB storage
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Internet connection for downloading libraries and pre-trained models
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Chapter resources:**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**GitHub repository**: [https://github.com/PacktPublishing/Unlocking-Data-with-Generative-AI-and-RAG-Second-Edition/tree/main/CHAPTER_15](https://github.com/PacktPublishing/Unlocking-Data-with-Generative-AI-and-RAG-Second-Edition/tree/main/CHAPTER_15)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Before starting the code lab, ensure your Python environment is properly configured;
+    you can install the packages using `pip`. The `sentence-transformers` library
+    will automatically download the embedding models on first use, so an internet
+    connection is required during initial setup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding semantic caches with the long-tail pattern
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Consider all of the queries that come into your application. If your query data
+    is like the majority of RAG-based application query data out there, you will likely
+    see a distinct pattern emerge. A small percentage of your queries will likely
+    have significantly higher frequency than all the others. Often, there is a single
+    query that comprises more than 20% of *all* traffic! On the other side of this
+    spectrum, you will have a very significant number of queries, probably 60–70%
+    of them, that are only requested a handful of times. This is called the **long-tail
+    pattern**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.1: Example of long-tail pattern applied to queries](img/B34736_15_1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 15.1 – Example of long-tail pattern applied to queries
+  prefs: []
+  type: TYPE_NORMAL
+- en: The long-tail pattern (or the related Pareto index) is a statistical concept
+    that is widely studied and applied across numerous fields. Still, in this case,
+    we want to focus on the “head” of the data, the queries that represent the bulk
+    of the queries passed to your RAG application. Ideally, you want to handle 100%
+    of the queries gracefully, right? But at the very least, aim for the “head” of
+    this chart, the top 20%, which gives you 80% coverage in terms of query usage
+    in your application. That is already better than the best applications out there,
+    where the top-performing agent companies (I won’t name names!) brag in their advertising
+    about the successful processing of 68% of queries! Given that, even aiming for
+    complete coverage of the top 20% is daunting in all but the smallest applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But wait, if we have a well-designed agent, can’t it just determine the right
+    response path for each query dynamically? Isn’t the whole point of an agent to
+    be able to instantly handle 100% of the queries? Yes, you could say that, but
+    let’s speak plainly. Beyond the extra latency and cost, designing an agent to
+    be that effective is very difficult and just not very likely. The reality is that
+    the more effective your agent is at processing the most random query, the trade-off
+    is always in the form of higher latency and inference costs. The agent literally
+    has to “reason” its way through a new query every time. That means multiple LLM
+    calls. The typical response time for a single LLM call, especially in complex
+    situations such as uncommon queries, is already 2–20+ seconds, which is often
+    unacceptable for most consumer-facing applications. But we are likely looking
+    at several of these calls to have a well-designed agent that handles all scenarios
+    gracefully. There are all kinds of techniques that we talk about in this book
+    and that you can read about in more detail elsewhere to reduce the cost and latency
+    of these individual calls, reduce the number of them required for a final response,
+    or reduce the amount of data retrieved and passed to the generation stage to improve
+    inference times. There are numerous techniques that you will want to exhaust in
+    addition to implementing a semantic cache. But ultimately, you are going to find
+    that in attempting to have an agent handle the large variation in queries you
+    will experience, while also keeping the latency and costs to an acceptable level
+    on a production scale, you will run out of solutions. Maybe you are lucky and
+    you have the budget to put all of this on a billion-dollar array of quantum computers
+    that can process all of this in a fraction of a second (this scenario is likely
+    only possible for those of you reading 5–10 years after this book’s publication,
+    but I digress!), but for the rest of us, there are semantic caches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s get into the details of what a semantic cache really is, so you can better
+    understand why it is so effective in an AI agent environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Fun fact**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We mentioned that the long-tail pattern is a statistical concept. If you want
+    to dive into the statistical mathematics around this, then you will want to learn
+    more about the Pareto index. The Pareto index comes from the Pareto distribution,
+    which is a mathematical model used to describe data with a “power-law” relationship,
+    where a small number of items account for most of the effect. The Pareto index
+    basically measures how “heavy” or “fat” the long tail is. The lower the Pareto
+    index, the more pronounced the long-tail pattern. A statistician would use the
+    Pareto index to quantify the long-tail pattern. A closely related concept is the
+    Pareto principle (80/20 rule), which states that 20% of causes lead to 80% of
+    effects, which is considered a special case of Pareto distributions. The Pareto
+    index directly informs resource allocation decisions. For instance, with α = 1.0,
+    optimizing the top 20% of query types covers ~80% of volume, while α = 2.0 might
+    require handling 40% of query types for the same coverage. This mathematical relationship
+    helps set realistic targets for chatbot performance metrics and development priorities.
+    Additionally, tracking changes in the Pareto index over time reveals whether your
+    chatbot’s usage is consolidating around core functions or diversifying into new
+    areas, which is critical intelligence for product roadmap decisions and capability
+    planning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Semantic cache – the interceptor layer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When I say “interceptor” layer, I am talking about using the same vector search
+    we spent multiple chapters on earlier in this book and aiming it at intercepting
+    queries to replace the reasoning steps of the agent with super-fast, LLM inference-free
+    semantic matches. Consider that the first step for most agents is not to respond
+    to the user query but to come up with a plan for responding, typically involving
+    a selection of tools that will enable them to answer the query effectively. We
+    will call this tool selection a solution path. The most basic implementation involves
+    intercepting an incoming query and using vector similarity search to match it
+    to queries you have cached with existing solution paths, basically skipping the
+    planning step of the agent and saving all the time and inference costs that that
+    involves!
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the top 20% of queries at the very least, and as far down the long tail
+    as we can go, we want to intercept them and make sure they get the right data.
+    The statistics on semantic caches change daily, so I encourage you to look up
+    the freshest numbers. Also, as I’ve preached here many times, the most important
+    numbers are what you get from your own system, so set up trials to determine the
+    best approach and measure the potential impact of this. But, generally, recent
+    reports from AWS, OpenAI, and Intercom indicate that the most successful implementations
+    maintained 600-millisecond-to-2-second responses with semantic cache-based “full-scale
+    reasoning agents,” compared to 5–6 seconds for responses that were not handled
+    by the semantic cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is important to clarify that a semantic cache does not *typically* remove
+    inference completely. It just replaces the planning stage of the agent. The proportion
+    of the full response that this replaces varies significantly across different
+    applications, but in a simple scenario, where you call the LLM once to reason
+    (ultimately determining what data needs to get pulled for the RAG process), then
+    that would be half of the processing. The other half is sending that data retrieved
+    to the LLM in the traditional RAG sense.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, in that scenario, you are reducing latency and inference costs for that
+    first stage. The second stage still exists, with whatever latency and costs it
+    incurs. The reason I said “typically” in a previous statement is that there are
+    scenarios where all you need is the semantic cache, or where the semantic cache
+    can improve the generation stage. For example, with “static” content, such as
+    with a FAQ-type response, if you know exactly what you want the response to be,
+    you can store that in the semantic cache, and it can just return that response
+    with no inference needed at all. You can also store database-optimized SQL (or
+    whatever you use for retrieval) that is specific to a query in the semantic cache,
+    which reduces the speed of retrieval and the amount of data passed to the LLM
+    in the generation stage, which helps improve that stage as well. But generally,
+    it is important to understand that the primary benefit of the semantic cache is
+    in improving the reasoning stage of the response process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With a semantic cache, we are anticipating the queries the user is going to
+    ask, and we are pre-determining the data we want to provide for that query. We
+    are intercepting these queries with this “interceptor” layer. Next, we will discuss
+    why we want to do this interception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Core components of semantic caches
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At their foundation, semantic caches consist of several essential components
+    that work together to provide intelligent query matching. **Query embeddings**
+    form the heart of the system, capturing semantic meaning in a high-dimensional
+    vector space. These dense vector representations encode not just the words but
+    the underlying concepts and relationships within each query.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Similarity thresholds** serve as the decision boundaries for determining
+    matches. Unlike binary exact-match systems, semantic caches operate on a continuum
+    of similarity, requiring careful calibration to balance catching valid paraphrases
+    and avoiding false matches.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Metadata** acts like a detailed label on each cached item, providing crucial
+    context that helps the system make smarter decisions. Think of it as attaching
+    a comprehensive information card to every cached query-response pair. This metadata
+    typically includes three key types of information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Provenance information** tracks where the cached answer came from, which
+    data sources were consulted, which version of the model generated it, and what
+    specific retrieval methods were used. This helps determine whether a cached answer
+    is still trustworthy or whether it came from outdated sources.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Timestamps** record when the cache entry was created and last accessed. For
+    example, a cached answer about “current stock prices” from last week would be
+    flagged as potentially stale, while an answer about “the capital of France” from
+    months ago remains valid. These timestamps enable automatic cache invalidation
+    for time-sensitive information.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Relevance scoring** assigns quality metrics to each cache entry based on
+    factors such as how well it answered the original query, user feedback, or how
+    often it’s been successfully reused. A cache entry that consistently satisfies
+    users might have a score of 0.95, while a partially relevant answer might score
+    0.70.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This rich metadata enables sophisticated filtering and management strategies.
+    For instance, the system could prioritize recent, high-scoring cache entries from
+    authoritative sources, or automatically purge entries older than a certain threshold
+    for specific topic areas. It transforms the cache from a simple storage system
+    into an intelligent knowledge repository that understands the quality, freshness,
+    and reliability of its contents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Perhaps most importantly, semantic caches store solution paths that map queries
+    to appropriate agent actions. Rather than simply caching responses, modern implementations
+    cache the route to generate correct answers, ensuring freshness while maintaining
+    efficiency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The intelligence layer between the query and the response
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Semantic caches represent more than just a performance optimization. They constitute
+    an intelligent decision layer that understands user intent. This intelligence
+    manifests in several ways. The cache must distinguish between queries that appear
+    similar but have different meanings, such as “What are Roth IRA tax benefits?”
+    versus “What are Roth IRA withdrawal rules?” Both queries concern Roth IRAs, but
+    they seek fundamentally different information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system must also handle the nuanced variations in how users express themselves.
+    A financial advisor and a young investor might ask about the same concept using
+    entirely different vocabulary, levels of formality, and assumed knowledge. The
+    semantic cache must recognize these as equivalent while maintaining boundaries
+    between distinct concepts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This intelligence extends to understanding context and managing the temporal
+    aspects of information. Some cached responses remain valid indefinitely (such
+    as explanations of financial concepts), while others require real-time data (such
+    as current stock prices). Modern semantic caches incorporate this understanding,
+    routing appropriate queries to cached responses while ensuring time-sensitive
+    requests receive fresh information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why use a semantic cache?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let’s start with an example to illustrate the power of the semantic cache.
+    This assumes you have set up automated population, which we will cover in step
+    7 of *Code lab 15.1* later in this chapter. Without a semantic cache, every time
+    an agent reasons through what to do with a query, that inference is conducted
+    and then lost. Think about the value of that inference; let’s say it is $1\. So,
+    you spend $1 to get that inference, and then the next time a similar query comes
+    in, you spend $1 again. Let’s say this is a popular query on a popular website,
+    and you see that query 1,000 times a day. That’s $1,000 spent for all of that
+    inference. Now, let’s introduce a semantic cache with that query and its solution
+    path already stored. Here are the benefits you are getting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Inference utilization**: You only have to run the inference once, the first
+    time you see the unique query. Compare this to the 1,000 times you have to run
+    it without the semantic cache. Your utilization of the LLM inference in your system
+    just went through the roof! This “utilization” is important as it reduces the
+    strain on your entire AI infrastructure, which has numerous benefits, particularly
+    in larger-scale implementations where you have to start balancing server loads.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Inference cost reduction**: You still spend that first $1, but after that,
+    you are reusing the same solution path. So, that 1,000 times a day still only
+    costs $1 in inference with a semantic cache. With each agentic RAG query potentially
+    costing significant compute resources for embedding, retrieval, and generation,
+    serving repeated conceptual queries becomes prohibitively expensive at scale.
+    Semantic caches can reduce these costs dramatically by recognizing when a new
+    query is essentially asking something that already has a known solution path from
+    an agent perspective. The more popular the query, the more you save!'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Latency reduction**: Now, add in the fact that the planning inference without
+    a semantic cache might take 2–20 seconds, whereas the retrieval from the semantic
+    cache takes maybe 0.03–0.3 seconds. This speed improvement transforms the user
+    experience, making AI assistants feel more responsive and natural in conversation.
+    This is a huge reduction in latency!'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Broader semantic coverage**: It isn’t just the one query that you are saving
+    money and time on; anything that is semantically above the similarity threshold
+    you use with your semantic cache is covered too! This means that one inference
+    you did for query “A,” where queries “B,” “C,” “D,” and “E” all match 85% or higher
+    to query “A,” only has to be carried out once for all of those queries.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**More consistent experience**: Consistency is a crucial requirement, particularly
+    in domains such as finance or healthcare, where conflicting answers to similar
+    questions could have serious consequences. By mapping semantically equivalent
+    queries to the same solution path, these systems ensure users receive consistent,
+    vetted information regardless of how they phrase their questions. Consistency
+    is also a key aspect of quality, supporting the effort to deliver the same high-quality
+    response every time. Let’s not forget, these LLMs are not deterministic and there
+    is always a chance that a response might be different in a future inference iteration.
+    That sort of surprise can wreak havoc in a professional agent-based application
+    and can be avoided with a semantic cache!'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**More granular control**: Semantic caches are often curated beyond just what
+    the agent originally comes up with in their solution path planning. It is not
+    uncommon for a company to look at certain queries in their semantic cache, determine
+    some new tools that will answer the query even better, and then add that tool
+    to the semantic cache solution path without having to change anything else. This
+    gives you increased control that allows you to curate your user experience and
+    how you want to enhance query handling.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, semantic caches give you better inference utilization, reduce latency, decrease
+    costs, improve consistency, and give you more control over your user experience.
+    Is there anything a semantic cache can’t do? Not really, they are pretty amazing!
+    But the biggest challenge of a semantic cache is setting it up properly so that
+    it intercepts the right queries and doesn’t intercept the wrong ones. We will
+    talk about that next as we discuss how to plan out your semantic cache implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proper semantic cache planning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What happens when you don’t find a match with your semantic cache? It will not
+    take long for a query to come into your system that does not match anything in
+    the semantic cache (above the threshold you set). At some level, you might consider
+    this a failure, as you did not correctly anticipate every possible query that
+    could come in. Don’t be too hard on yourself! This is a natural part of the semantic
+    cache process. What happens next is just as important as the semantic cache itself,
+    and there is a wide variety of approaches that companies take to handle what happens
+    next. Here are a few of the options that are implemented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Orchestrator/planner systems
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Implement hierarchical decision frameworks that evaluate multiple response
+    pathways simultaneously:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Key-value stores (50–60 milliseconds)**: Carry out exact-match lookups in
+    key-value stores, which are essentially direct/exact matches, but with some important
+    nuances. Consider that in many systems, the most popular queries (the “head” of
+    the long tail described earlier) are often the same or very similar. It is common
+    for applications to artificially ensure certain queries are exactly the same.
+    For example, you might see a company send out an email with a link that triggers
+    a query once it enters the application. This query has to go through the same
+    process as every other query, but you know exactly what it is, so why use a process
+    that will take significantly longer than a key-value match? We won’t cover this
+    in the code lab, but it is common to add a key-valuestore layer in front of the
+    semantic cache, similar to what we build in the code lab.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Semantic vector searches fallback (100 milliseconds to 2 seconds)**: If there
+    are no key-value matches, we fall back to the most popular type of semantic cache
+    implementation, where we use vector embeddings to represent cached queries, vectorize
+    incoming queries, and use vector similarity search to find matches. This is a
+    very common pattern that we have discussed in depth in previous chapters, only
+    in this case, it is applied specifically to the queries so that we can match them
+    to the solution path that would normally be provided by the planning agent. This
+    step will be the primary focus of what we build in the code lab.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Full agent planning fallback (2–10 seconds)**: If all else fails, we are
+    probably dealing with a new query that is not captured yet in our semantic cache.
+    Our planning agent is the final fallback here. This is essentially where we are
+    before we add a semantic cache, with a planning agent simply determining a path,
+    and we follow it to gather the data and answer the user query. But now that we
+    know how valuable a semantic cache is, we want to capture this plan for the next
+    time we get that query, rather than just throwing it out. So, we still want to
+    add this memory. We will review this type of mechanism in the code lab as well!'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Before we get into the code lab, let’s talk about a few other approaches you
+    can try on your own, such as the multi-tier fallback architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rule-based fallback systems
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Provide deterministic fallback paths through natural language understanding
+    models that detect intent and route to decision trees. Production implementations
+    such as the Rasa framework’s Two-Stage Fallback combine intent classification
+    with confidence thresholds to determine escalation paths. Dialogflow CX extends
+    this pattern with generative fallback using custom prompt templates, effectively
+    bridging rule-based and generative approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Intent classification pathways
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Create predefined response protocols by categorizing queries into distinct handling
+    paths. FAQ queries route to structured templates, technical support triggers diagnostic
+    trees, general conversation maintains personality consistency, and escalation
+    protocols determine human handoff triggers based on complexity scores. This systematic
+    approach ensures consistent handling across query types.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But handling cache misses is only half the equation. You also need smart policies
+    for managing the cache itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retrieval, population, and eviction policies
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The effectiveness of a semantic cache depends not just on its architecture but
+    on the intelligent strategies used to retrieve matches efficiently, populate it
+    with queries, and maintain cache quality over time. These three interconnected
+    policies, namely retrieval, population, and eviction, form the operational heart
+    of any semantic caching system, determining both its coverage and precision.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the code lab, we will primarily address the retrieval step. Then, after the
+    code lab, we will talk more about how to populate and evict from your semantic
+    cache. Let’s start with the retrieval-oriented code lab.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Code lab 15.1 – using semantic cache for retrieval
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this code lab, we’ll implement a semantic cache with vector search that intelligently
+    catches similar queries even when phrased differently. We’ll start with a basic
+    ChromaDB-backed cache using sentence transformers, then progressively enhance
+    it with entity masking to generalize across specific values (such as dates or
+    tickers), cross-encoder verification to reduce false positives, adaptive thresholds
+    for different match types, and auto-population that learns from cache misses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By the end, you’ll have a production-ready semantic cache that can recognize
+    when queries such as “What’s Apple’s stock price?” and “Tell me the current AAPL
+    share value” are asking the same thing, allowing you to return the cached result
+    instantly instead of making another expensive call to your LLM or agent. This
+    means if your agent takes five seconds and costs $0.10 to answer the first query,
+    the second query returns in milliseconds at virtually no cost, even though the
+    user used completely different words.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s get started!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 1 – installing dependencies
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s install the two key libraries we’ll need for semantic caching:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: ChromaDB provides a vector database for storing and searching embeddings efficiently,
+    while `sentence-transformers` gives us pre-trained models to convert text into
+    meaningful semantic vectors. These two libraries form the foundation of our semantic
+    cache. ChromaDB handles the storage and retrieval of vector embeddings, and `sentence-transformers`
+    ensures that similar queries (such as “What’s my balance?” and “Show account balance”)
+    produce similar vectors even with different wording. As we’ve shown in previous
+    chapters, we have a lot of options for how to generate our embeddings. We are
+    using `sentence-transformers` to keep it simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With our dependencies installed, let’s set up the basic infrastructure for our
+    cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 2 – setting up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now we’ll import our libraries and create a single shared ChromaDB collection
+    that every step in the notebook will reuse:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what’s happening in the preceding code block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`uuid` is imported so we can generate unique IDs for cache entries instead
+    of manually incrementing counters.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We define `COLLECTION_NAME` once (`"semantic_cache"`) and create one global
+    client and collection that all later cache classes will reuse.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: On rerun, the code first tries to delete the collection so we start fresh, which
+    is useful during iterative development. But be careful as this deletes any previous
+    caches!
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, using `get_or_create_collection`, we ensure the collection exists in a
+    safe, idempotent way, no accidental duplicate creation or errors if it already
+    exists.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `_new_id()` helper function gives each cache entry a unique, collision-free
+    identifier.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This way, each subsequent step (masked cache, verified cache, adaptive cache,
+    etc.) builds on the same underlying collection, rather than trying to create and
+    delete new ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s now build our first semantic cache class that can store and retrieve similar
+    queries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 3 – basic semantic cache
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s build our foundation with a simple semantic cache that uses embeddings
+    to find similar queries. This cache will convert text into vectors using a lightweight
+    model (`all-MiniLM-L6-v2`), store them in ChromaDB with cosine similarity search,
+    and retrieve cached responses when similar queries are detected. This cache response
+    has a solution path associated with it, which is used when there is a match. The
+    magic happens because semantically similar text produces similar vectors, even
+    with different wording:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This code creates a semantic cache that stores query-solution path pairs and
+    retrieves them based on semantic similarity using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Initialization**: The cache uses `SentenceTransformer` to convert text into
+    embeddings and stores them in the ChromaDB collection we created earlier.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Adding entries**: The `add` method encodes queries into vectors and stores
+    them with their corresponding solution paths (such as `lookup_fact()` or `get_help_article()`)
+    rather than direct answers.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Searching**: The `search` method finds the most similar cached query and
+    returns its solution path only if the similarity score exceeds the threshold (default
+    0.75).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Here is the code to run tests and see how this works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: For each test query, we calculate the similarity score to show why matches succeed
+    or fail, helping you understand and tune the threshold. Notice how the cache successfully
+    matches queries with different phrasings but the same intent. For example, “What’s
+    the capital of France?” (0.99 score) nearly perfectly matches our cached “What
+    is the capital of France?” query, while “Password reset instructions” (0.80 score)
+    successfully matches “How do I reset my password?” because their embeddings are
+    close in vector space. The queries that fail (“When are you open?” at 0.51 and
+    “What’s the weather today?” at 0.27) fall below our 0.75 threshold, preventing
+    false positives. The threshold of 0.75 provides a good balance between catching
+    related queries and avoiding incorrect matches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This basic implementation already saves us from redundant API calls for semantically
+    similar questions. However, it still struggles with queries that contain different
+    specific values (such as different years, tickers, or amounts). We don’t want
+    to treat each of those as separate cache entries, so in the next step, we’ll introduce
+    entity masking to generalize them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4 – entity masking for better generalization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now we’ll tackle a common limitation of the basic semantic cache, which relate
+    to queries that are semantically identical except for specific values, such as
+    years, stock tickers, dollar amounts, or percentages. For example, “What was AAPL
+    stock price in 2023?” and “What was TSLA stock price in 2024?” should route to
+    the same tool; the only difference is which ticker and year get passed along.
+    Without normalization, these would generate separate embeddings and fragment the
+    cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Entity masking fixes this by replacing variable values with generic placeholders
+    before embedding. For instance, AAPL and TSLA both become `[TICKER]`, while 2023
+    and 2024 both become `[YEAR]`. This way, all variations collapse into the same
+    masked query, “What was `[TICKER]` stock price in `[YEAR]`?”, and map to a single
+    cached solution path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s the updated implementation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Testing it shows how variations now resolve to the same cached entry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output should look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When you call `cache.add("What was AAPL stock price in 2023?", ...)`, `mask_entities`
+    turns it into “What was `[TICKER]` stock price in `[YEAR]`?”, embeds the masked
+    text, and stores it in Chroma with metadata that keeps both the original and masked
+    forms. Later, `cache.search("What was TSLA stock price in 2024?")` masks the query
+    to the same “What was `[TICKER]` stock price in `[YEAR]`?”, embeds it, and runs
+    a vector search. Because the masked forms are identical, the nearest neighbor
+    has a high similarity score (≥ 0.75), so the cache returns that entry’s metadata
+    and response. The print block then shows `Original: from the stored original_query
+    ("What was AAPL stock price in 2023?")`, `Masked: from masked_query ("What was
+    [TICKER] stock price in [YEAR]?")`, and the cached `Response: ("Use stock_price_tool")`.
+    The `"My budget is $5000"` entry is unrelated and doesn’t affect this match.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this approach, one cache entry can cover hundreds of variations, dramatically
+    improving hit rates while reducing redundant calls. The regex patterns cover common
+    entities out of the box, and you can expand them for your domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While entity masking improves generalization, it also increases the risk of
+    false positives, queries that look similar once masked but don’t actually share
+    the same intent. To mitigate this, the next step adds a cross-encoder verification
+    layer to confirm semantic matches before returning cached results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 5 – cross-encoder verification
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Up until now, our semantic cache has been good at recall, that is, catching
+    queries that look different but mean the same thing. However, this comes at a
+    cost: sometimes two queries may be close in vector space but do not actually have
+    the same intent. For example, “What’s my balance?” and “What’s my account number?”
+    could be considered “similar” by embeddings, but clearly require different responses.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is where cross-encoder verification comes in. Unlike sentence embeddings
+    (which independently encode each query), a cross-encoder takes both the candidate
+    query and the cached query together and scores their similarity. It essentially
+    re-reads the pair as if answering “Are these two queries asking the same thing?”
+    This allows us to dramatically cut down false positives by applying a second,
+    stricter filter after the vector search has narrowed down candidates.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The two-stage process looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Fast retrieval (stage 1)**: Use the embedding-based vector search to quickly
+    find the top-k similar queries.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Careful verification (stage 2)**: Pass each candidate through a cross-encoder
+    to re-rank them based on intent-level similarity and only keep matches above a
+    higher confidence threshold.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'By combining these methods, we get the best of both worlds: speed from embeddings
+    and precision from cross-encoders. This ensures our cache doesn’t just retrieve
+    similar-looking queries but truly equivalent-intent ones. Here is one example
+    of how to do this in code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what happens in the preceding code block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Class**: `CrossEncoderSemanticCache` extends the masked cache with a cross-encoder
+    verifier.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Init**: The initialization method loads `CrossEncoder(''ms-marco-MiniLM-L-6-v2'')`
+    to score query-candidate pairs.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Stage 1**: Vector search quickly finds the top three candidates.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Stage 2**: The cross-encoder re-scores them for intent-level similarity.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Result**: The best match is returned only if both vector and verify thresholds
+    are met.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Let’s add some code to test this class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, the vector scores (0–1) show semantic closeness from embeddings, while
+    the verify scores (raw numbers such as 4.01, 5.62, and 6.35) come from the cross-encoder
+    judging intent similarity. We set the cutoff to 3.5: anything below that is rejected
+    as too weak, while anything above it is considered a strong match. This way, both
+    stages work together, vectors for recall and the cross-encoder for precision,
+    without mixing scales.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With verification in place, we’ve reduced the chances of pulling the wrong response.
+    But depending on the model and the type of query, we may still need to tune how
+    strict we are when calling something a “match.” That’s where adaptive thresholds
+    come in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6 – adaptive thresholds
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Here, we’re addressing the fact that not all scenarios demand the same strictness.
+    For mission-critical queries (such as financial transactions), we want a high
+    threshold as it is better to miss a match than return the wrong one. For exploratory
+    or “fuzzy” searches, we can lower the bar and allow more lenient matches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The adaptive threshold system lets us dynamically adjust match criteria depending
+    on the model, query type, or user preference. This prevents us from using a one-size-fits-all
+    threshold that might be too strict in some cases and too loose in others. One
+    way to do this in code is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the preceding code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Class**: The AdaptiveSemanticCache class extends `CrossEncoderSemanticCache`
+    with model-specific base thresholds.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Thresholds**: The `get_threshold()` method adjusts the vector cutoff to be
+    stricter for exact match types and looser for fuzzy/exploratory match types. Fuzzy
+    and exploratory matches use lower similarity thresholds to allow more lenient
+    matching, which is useful for broader searches where finding related content is
+    more important than ensuring a precise match.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Adaptive search**: The adaptive_search method uses both the adjusted vector
+    threshold and a raised verify cutoff (3.5 on a raw scale).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Result**: The same query can be tested under different strictness levels
+    to balance recall versus precision.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We can test this code as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we see adaptive thresholds in action. The first query, “yearly revenue,”
+    is semantically very close to our cached “What is the annual revenue?”, so it
+    passes all three strictness levels. The second query, “customer demographic,”
+    is similar enough to “Show me customer demographics” to pass the `NORMAL` and
+    `FUZZY` modes, but falls short of the high bar set by the `EXACT` mode (0.90 threshold).
+    This demonstrates how you can implement graduated matching: start with strict
+    `EXACT` matching for high-confidence scenarios, then fall back to `NORMAL` or
+    `FUZZY` mode when you need broader coverage. This approach ensures appropriate
+    response strategies match confidence levels while preventing over-reliance on
+    expensive LLM generation when a good-enough match exists.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a key step in building resilient response hierarchies with graduated
+    similarity thresholds at each level. This approach ensures appropriate response
+    strategies match confidence levels while preventing over-reliance on expensive
+    LLM generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, our cache retrieves smarter and filters better. But what happens when
+    a query is completely new and not yet in the cache? We don’t want to stop there;
+    we want the cache to learn automatically from its misses. That’s the motivation
+    for auto-population with fallback.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 7 – auto-population with fallback
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Caching is only powerful if it grows with experience. Instead of relying on
+    manual population, we can hook the cache up to a fallback mechanism, such as calling
+    an agent, an LLM, or a custom function, whenever there’s a cache miss. The result
+    of that fallback call is then immediately added back into the cache, so the next
+    time a similar query comes in, it’s served instantly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This makes the cache self-learning: every miss today becomes a hit tomorrow.
+    Over time, the hit rate improves dramatically, saving even more calls to expensive
+    backends. The stats tracker we added helps you see this evolution in real time,
+    showing hits, misses, and auto-added entries.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Briefly, here’s what the preceding code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Class**: `SmartSemanticCache` extends `AdaptiveSemanticCache` and tracks
+    `hits`, `misses`, and `auto_added`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Query path**: Try cache via `adaptive_search(..., match_type=''normal'')`;
+    on `miss`, call `fallback_fn`, then auto-add the new `query→response`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Stats**: `print_stats()` shows the hit rate and counts so you can see improvement
+    over time.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Note: Verification still uses the raw cross-encoder cutoff you set earlier
+    (e.g., 3.5) through the inherited `adaptive_search`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can test this code and see how it works with this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s the expected output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s trace through what happens on this first run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**“What is my account balance?”**: Cache hit! This matches “What is my checking
+    account balance?”, which we added back in step 5, returning `"checking_balance_tool"`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**“Show me my account balance”**: This is a cache miss because the phrasing
+    is notge close enough to existing entries. The system calls `mock_agent`, receives
+    `"balance_tool"`, and auto-adds the entry to the cache.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**“Account balance please”**: Cache hit! This now matches the entry we just
+    added in step 2.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**“Recent transactions”**: This is a cache miss because it introduces a new
+    topic. The system calls `mock_agent`, receives `"transaction_tool"`, and auto-adds
+    the entry to the cache.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**“Show my transactions”**: This is a cache miss because the query is not similar
+    enough to existing entries yet. The system calls `mock_agent`, receives `"transaction_tool"`,
+    and auto-adds the entry to the cache.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Notice how the cache already contains entries from our previous steps (such
+    as the checking account balance query), which is why the first query hits. The
+    cache is building on what we’ve learned before while continuing to illustrate
+    new patterns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But 40.0%? That isn’t a great hit, is it? Run the cell again. You should see
+    this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The cache learned! On the first run, the cache had no entries, so most queries
+    were missed and had to be computed by the fallback agent. Each of those results
+    was then auto-added to the cache. When you run the cell again, the same queries
+    now find strong matches immediately, so every request is served from cache instead
+    of calling the fallback. The hit rate jumps from 40% to 100%, showing how the
+    system continuously improves: every miss enriches the cache, and repeated queries
+    are instantly answered in future runs. This is the self-learning loop in action.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, we’ve built a cache that doesn’t just store and recall. In fact,
+    it verifies, adapts, and learns continuously. In the next section, let’s recap
+    the key features of semantic caches and why they matter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Putting it all together
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This semantic cache provides the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Vector similarity search**: Finds semantically similar queries even with
+    different wording'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Entity masking**: Generalizes queries by replacing specific values with placeholders'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Cross-encoder verification**: Reduces false positives with a second verification
+    step'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Adaptive thresholds**: Adjusts matching strictness based on use case'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Auto-population**: Learns from cache misses to improve over time'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The cache dramatically reduces calls to expensive LLMs or agents by recognizing
+    when users ask essentially the same question in different ways. Start with the
+    basic semantic cache and add features as needed for your use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Population – query expansion strategies
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that we’ve explored how semantic caches retrieve matches, let’s return
+    to the second of our three core policies: population. While retrieval determines
+    how well we match incoming queries to cached entries, population strategies determine
+    what queries enter the cache in the first place, and more critically, how we expand
+    that initial set to achieve comprehensive coverage.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To achieve high cache coverage, semantic caches must anticipate the myriad ways
+    users express the same underlying need. Query expansion transforms a limited set
+    of cached queries into a comprehensive semantic net that can catch most variations
+    users might produce. In the upcoming sections, we discuss some of the more popular
+    techniques for expanding your semantic cache. But watch out! Check out the following
+    pro tip and make sure you take the proper precautions when expanding your semantic
+    cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Pro tip!**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For all of these techniques, be sure to check your new queries against existing
+    queries in the semantic cache (by running the same vector search you would run
+    for the semantic cache matches). If the query matches above the threshold for
+    an existing query, and (importantly) both queries have the same solution path,
+    then you do not need to add that particular query to the semantic cache, as it
+    is already well semantically represented. It is important to understand that adding
+    a query to the semantic cache could cause issues with your queries eventually,
+    conflicting with queries that have other solution paths, significantly undermining
+    the effectiveness of your semantic cache. If the solution paths are different,
+    though, then you definitely do want to include the query, or your users will end
+    up matching to the wrong solution through that query.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LLM-based paraphrasing
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Modern semantic caches leverage LLMs to generate natural paraphrases of queries.
+    This approach produces diverse rewordings while preserving the original intent.
+    For a financial query such as “How do I invest in bonds?”, an LLM might generate
+    variations such as “What’s the process for purchasing bonds?”, “How can I buy
+    bonds?”, and “What steps are involved in bond investment?” Each paraphrase maintains
+    the core intent while varying the linguistic expression.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Back-translation for natural variation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Back-translation remains one of the most effective techniques for generating
+    semantically equivalent queries with natural linguistic variation. By translating
+    a query through one or more intermediate languages and back to the source language,
+    the system produces paraphrases that maintain meaning while varying structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**English** **→** **German** **→** **English**: Produces structural variations
+    due to German’s different word order'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**English** **→** **Japanese** **→** **English**: Generates high semantic diversity
+    due to fundamental linguistic differences'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**English** **→** **French** **→** **Russian** **→** **English**: Compound
+    transformations that yield significant rephrasing'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Different language families contribute unique transformation patterns. For example,
+    romance languages (Spanish, French, and Italian) excel at stylistic variation,
+    while Sino-Tibetan languages introduce high paraphrase diversity. The key is selecting
+    language pairs that maximize useful variation while maintaining semantic fidelity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Synonym and lexical expansion
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'At the word level, semantic caches expand coverage through systematic synonym
+    replacement and abbreviation handling. This is particularly crucial in specialized
+    domains such as finance, where technical terms, acronyms, and colloquialisms abound:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: “401(k) contribution” ![](img/Icon13.png) “retirement plan contribution”
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: “EPS” ![](img/Icon13.png) “earnings per share”
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: “Treasurys” ![](img/Icon13.png) “US government bonds”
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: “municipal bonds” ![](img/Icon13.png) “munis”
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These lexical expansions prove invaluable when users approach the same concept
+    from different angles or expertise levels. For example, a novice investor might
+    search for “retirement savings,” while a financial advisor queries “qualified
+    plan allocations,” yet both seek similar underlying information. By maintaining
+    comprehensive synonym mappings and domain-specific abbreviation dictionaries,
+    semantic caches can recognize these equivalent expressions without requiring separate
+    processing for each variation. This word-level understanding forms the foundation
+    for more sophisticated query matching, but true semantic comprehension requires
+    moving beyond simple substitutions to generating entirely new query formulations
+    that anticipate user needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Synthetic query generation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Modern semantic caches don’t simply wait for users to provide query variations,
+    they proactively generate likely questions before they’re asked. This anticipatory
+    approach recognizes that users often struggle to formulate the exact query that
+    will retrieve the information they need, especially in technical domains where
+    multiple phrasings might express the same intent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These systems employ several generation strategies. Document-based generation
+    analyzes existing content to derive questions that the material could answer.
+    Pattern-based generation identifies query sequences from user behavior; for example,
+    when hundreds of users who search for “IRA contribution limits” subsequently ask
+    about “catch-up contributions,” the system learns to pre-generate and cache that
+    logical follow-up. Some implementations use domain models to generate technically
+    relevant variations, understanding that a query about “portfolio rebalancing”
+    likely relates to “asset allocation” and “risk adjustment.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Morgan Stanley’s evolution from 7,000 fixed queries to handling “effectively
+    any question” demonstrates the power of this approach. Their system didn’t just
+    memorize more question-answer pairs; it learned to generate thousands of plausible
+    financial queries by understanding the relationships between concepts, common
+    user needs, and the structure of financial inquiries. However, this systematic
+    expansion of query space introduces a critical problem: without domain-specific
+    constraints, these systems risk generating plausible-sounding but fundamentally
+    incorrect equivalences. The next section examines how specialized domains such
+    as finance must carefully restrict which semantic connections their caches are
+    allowed to make.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Domain-specific constraints
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The flexibility that makes semantic caches powerful also creates risks in specialized
+    domains. For example, with financial systems, you must recognize critical distinctions
+    that general-purpose models might overlook. While “EBITDA” and “earnings” both
+    relate to company profitability, they represent fundamentally different metrics.
+    EBITDA excludes interest, taxes, depreciation, and amortization to show operational
+    performance, while “earnings” might refer to net income, EPS, or other specific
+    measures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These constraints require semantic caches to implement domain-aware boundaries.
+    The system needs enough intelligence to recognize that “Fed” means “Federal Reserve”
+    and “munis” means “municipal bonds,” and it must also maintain strict distinctions
+    between terms such as “gross” and “net,” or “realized” and “unrealized” gains.
+    Financial semantic caches typically enforce these boundaries through multiple
+    mechanisms: automated validation checks that assess whether substitutions preserve
+    query intent, hardcoded rules that prevent specific dangerous conflations, and
+    expert review processes during training phases.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These are examples from the financial industry, which serves as a good example
+    because it has many unique “rules” that can be applied. But all domains have similar
+    unique aspects that need to be accounted for. Think through your domain and what
+    unique rules apply there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The challenge lies in finding the right balance. If it is too restrictive,
+    the cache misses valid connections; if it is too permissive, it serves incorrect
+    or misleading results. As caches accumulate these carefully validated entries
+    over time, they face another critical challenge: determining which information
+    remains valuable and which has outlived its usefulness. Even the most accurately
+    cached financial answer becomes a liability when market conditions change or regulations
+    update, making intelligent eviction policies essential for maintaining cache integrity.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Eviction – keeping a clean cache
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With our cache now equipped with robust retrieval mechanisms and populated
+    through various expansion strategies, we face the third critical policy challenge
+    introduced at the beginning of this chapter: eviction. Unlike traditional caches,
+    where eviction simply frees up space, semantic cache eviction must balance multiple
+    concerns, maintaining coverage of the semantic space, preserving high-value entries,
+    removing outdated information, and eliminating redundancies that accumulate through
+    aggressive population strategies.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Maintaining cache quality requires intelligent eviction policies that navigate
+    these competing demands. The challenge is particularly acute in semantic caches
+    because the relationships between entries are complex and multidimensional. Removing
+    one query might leave a gap in semantic coverage that affects dozens of related
+    queries. Conversely, keeping everything leads to bloated caches filled with outdated,
+    redundant, or poor-performing entries that degrade overall system performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The eviction strategies that follow represent increasingly sophisticated approaches
+    to this challenge, from simple time-based rules to complex semantic analysis that
+    identifies and eliminates redundancy while preserving essential coverage. Each
+    approach offers different trade-offs between computational complexity, cache quality,
+    and coverage maintenance. We will start with time-based eviction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time-based eviction
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The simplest eviction strategy uses **time-to-live** (**TTL**) values, removing
+    entries older than a specified duration. However, semantic caches benefit from
+    more nuanced temporal handling:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evergreen content (definitions and procedures) may have no expiration
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Periodic content (quarterly reports) expires on a known schedule
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Dynamic content (market conditions) requires short TTLs or real-time validation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While time-based eviction provides a straightforward baseline, it fails to account
+    for actual usage patterns or the semantic value of cached entries. This limitation
+    drives the need for more intelligent approaches that consider how entries are
+    actually used. The next approach, **least recently used** (**LRU**) with semantic
+    decay, addresses this by combining usage statistics with temporal factors and
+    semantic drift measurements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Least recently used with semantic decay
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: LRU is a classic cache eviction strategy that removes the entries that haven’t
+    been accessed for the longest time, based on the principle that recently used
+    items are more likely to be needed again soon. In traditional caching, LRU simply
+    tracks when each entry was last accessed and evicts the oldest ones when space
+    is needed. However, for semantic caches, we can enhance this approach by adding
+    “semantic decay”, which is a measure of how the meaning and relevance of cached
+    content degrades over time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Traditional LRU eviction can be enhanced with semantic decay factors. Entries
+    lose relevance not just through disuse but through semantic drift as language
+    and domain knowledge evolve. This is what a function might look like that handles
+    these various aspects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This combined scoring recognizes that cache entries exist in a changing semantic
+    landscape. Yet even sophisticated scoring may not catch all problems; some entries
+    might be frequently accessed but consistently fail to satisfy user needs. Performance-based
+    pruning tackles this disconnect by tracking not just how often entries are used
+    but how well they actually serve users when retrieved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Performance-based pruning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Sophisticated eviction policies track not just usage but effectiveness. Entries
+    with high retrieval rates but poor user satisfaction scores may indicate semantic
+    drift or inappropriate matches. These problematic entries represent a particular
+    challenge; they appear successful by traditional metrics (high hit rate and recent
+    usage) but actually degrade the user experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Modern implementations collect various performance signals to identify these
+    troubled entries. User feedback mechanisms such as thumbs up/down ratings provide
+    direct quality signals. Indirect metrics such as query reformulation rates (when
+    users immediately rephrase a query after receiving a cached response) or session
+    abandonment patterns also indicate cache quality issues. Some systems even track
+    downstream task completion: Did the cached response actually help the user accomplish
+    their goal?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system can handle underperforming entries through multiple strategies. Immediate
+    pruning removes clearly problematic entries that consistently fail quality thresholds.
+    Graduated decay accelerates the eviction timeline for borderline performers. Manual
+    review queues flag ambiguous cases for human evaluation, which is particularly
+    valuable in specialized domains where automated metrics might miss nuance. This
+    performance-based approach ensures the cache evolves based on real-world effectiveness
+    rather than theoretical metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While performance-based pruning eliminates poor-quality entries, it doesn’t
+    address another growing problem in semantic caches: redundancy. The final eviction
+    strategy we’ll examine uses semantic clustering to identify and consolidate duplicate
+    entries that waste resources and create inconsistency.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Semantic clustering for redundancy elimination
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As the cache grows, redundant entries covering the same semantic space waste
+    resources and can cause inconsistent responses. Periodic clustering identifies
+    groups of highly similar entries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This consolidation maintains coverage while reducing the cache size and improving
+    consistency. With these eviction strategies working in concert, time-based, usage-aware,
+    performance-driven, and redundancy-eliminating, semantic caches can maintain high
+    quality even as they scale. Let’s now step back and consider what we’ve learned
+    about semantic caching as a whole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Semantic caches are no longer just an optimization trick. They are an essential
+    control layer for production-grade AI systems. By intercepting common queries
+    and reusing solution paths, they offset the cost and latency of agent-based reasoning
+    while enforcing consistency in responses. Whether it’s skipping the planning phase
+    for repeated queries, generalizing with entity masking, or ensuring correctness
+    through verification, the cache becomes a force multiplier that transforms how
+    agents operate under real-world scale.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What makes semantic caches particularly powerful is how adaptable they are.
+    From long-tail coverage strategies to adaptive thresholds, from auto-population
+    to redundancy elimination, they evolve with your application’s needs and your
+    users’ behaviors. They aren’t static lookup tables, but dynamic systems that balance
+    speed, precision, and freshness. When designed well, they don’t just reduce compute;
+    in fact, they shape the user experience, delivering answers that are fast, reliable,
+    and consistent, even as query patterns shift.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The real takeaway is that semantic caches are living infrastructure. Their value
+    grows as they learn, refine, and integrate more deeply into your agent pipelines.
+    The most successful implementations are the ones that continuously monitor cache
+    health, tune thresholds, and update eviction strategies to keep responses sharp
+    and trustworthy. In practice, a well-tuned semantic cache fades into the background.
+    It’s invisible to the user but indispensable to the system, ensuring that your
+    AI application is not only efficient but also dependable at scale.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But caching only takes you so far. A semantic cache is about remembering how
+    to answer common queries, not what else the agent has already seen and done. To
+    handle richer conversations, long-term context, and more dynamic reasoning, we
+    need to move beyond caching into memory. That’s where the next chapter takes us,
+    as it deals with agentic memory. It is the system of working, episodic, semantic,
+    and procedural memories that lets agents learn from past interactions, recall
+    the right information at the right time, and ultimately operate more like intelligent
+    collaborators than stateless tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Get This Book’s PDF Version and Exclusive Extras
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Scan the QR code (or go to [packtpub.com/unlock](http://packtpub.com/unlock)).
+    Search for this book by name, confirm the edition, and then follow the steps on
+    the page. | ![](img/Unlock-01.png)![](img/Unlock.png) |
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Note***: Keep your invoice handy. Purchases made directly from Packt don’t
+    require an invoice.* |'
+  prefs: []
+  type: TYPE_TB

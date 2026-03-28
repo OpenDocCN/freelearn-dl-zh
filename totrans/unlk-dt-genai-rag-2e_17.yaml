@@ -1,0 +1,1890 @@
+- en: '14'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Graph-Based RAG
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Having built a robust ontology in [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299),
+    we now turn to implementing it as a functioning **knowledge graph** (**KG**).
+    KGs have the potential to be the “brain” behind effective agentic RAG systems.
+    Graph-based **retrieval-augmented generation** (**RAG**) involves querying a KG
+    data source and presenting that data to the LLM for responding to queries. By
+    using a KG, you can give your RAG results richer semantics and more explicit links
+    between facts, enabling multi-hop reasoning that traditional retrieval methods
+    cannot achieve.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll take the financial ontology you created in Protégé and
+    implement it in Neo4j, demonstrating how to build a graph-based RAG system that
+    combines the formal reasoning of ontologies with the practical power of graph
+    databases. In this chapter, we’ll cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduction to graph-based RAG
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Code Lab 14.1 – building and querying a financial ontology KG in Neo4j
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These topics will equip you with the practical skills to transform your ontology
+    into a production-ready knowledge graph that can power sophisticated AI agents.
+    Let’s begin by exploring what makes graph-based RAG such a powerful evolution
+    beyond traditional retrieval methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Terminology: Graph-based RAG vs. GraphRAG**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The name of this chapter is *Graph-Based RAG*, where we are intentionally avoiding
+    calling it GraphRAG. “GraphRAG” is the name of a project that is related to what
+    we will talk about here, but also has some key differences, and so we wanted to
+    make sure we maintained the distinction between the two. Microsoft Research’s
+    GraphRAG implementation is a full pipeline that uses LLMs to build, structure,
+    and query KGs. It is a much more robust implementation of KGs than the simpler
+    graph-based RAG we will outline here. It also has a specific way it groups entities
+    and relationships, and a specific way that it conducts searches, which is different
+    from the approach we outline in this chapter. It uses two modes of search: a global
+    search that looks at high-level clusters of the graph to get an overview, and
+    a local search that zooms in on specific related nodes for detail. At this point,
+    it takes similar steps to what we outline in this chapter; the graph-based retrieval
+    results are fed into the LLM to generate a final answer, and it has the same benefit
+    of results that are structured and inherently relational, helping the LLM synthesize
+    an answer that’s coherent and covers all necessary parts of the question. The
+    experiments they ran show that GraphRAG could answer complex, multi-hop questions
+    with greater accuracy than a standard RAG pipeline, helping to support how powerful
+    KGs can be when used in RAG. Learn more about GraphRAG here: [https://arxiv.org/abs/2404.16130](https://arxiv.org/abs/2404.16130).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The GitHub repo can be found here: [https://github.com/microsoft/graphrag](https://github.com/microsoft/graphrag).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduction to graph-based RAG
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we talked about RAG in previous chapters, we relied on vector stores (semantic
+    embeddings) and, at times, keyword (sparse) search to retrieve context for LLMs.
+    While this hybrid semantic plus keyword approach improves relevance, it can still
+    struggle whenever you need precise reasoning, explainability, or tight factual
+    grounding. The next evolutionary leap is graph-based RAG, which leverages KGs
+    to provide a structured, navigable context that dramatically enhances reliability,
+    factuality, and multi-step inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are key advantages of combining KGs with RAG in AI agents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Enhanced retrieval precision and relevance**: By traversing explicit graph
+    edges rather than relying solely on vector proximity, graph-based RAG filters
+    out noise and returns highly targeted subgraphs that closely match the query intent.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Deeper semantic and contextual understanding**: KGs encode entities, synonyms,
+    and disambiguation paths, preserving nuanced meaning and preventing misinterpretation
+    of polysemous terms. They can go far beyond what flat embeddings alone can capture.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Multi-hop reasoning and complex query handling**:Agents can traverse relation
+    chains (A→B→C…) to join disparate facts logically, supporting complex, multi-step
+    inferences that traditional retrieval misses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Explainability and traceability**: Every retrieved node and edge comes with
+    provenance metadata, enabling clear audit trails that are vital for regulated
+    domains like healthcare and finance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Holistic summarization and cohesive responses**: Instead of disjointed snippets,
+    graph-based RAG can extract and summarize connected subgraphs—yielding coherent
+    overviews that respect the domain’s underlying structure.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Integration of heterogeneous data sources**:KGs unify structured tables,
+    ontologies, and unstructured text under one schema, letting agents query across
+    silos without bespoke prompt engineering for each format.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Improved data freshness and updatability**: Because graphs can be incrementally
+    updatable, agents have the ability to always query the latest facts. If done properly,
+    this can lead to cutting down hallucinations and eliminating the need for costly
+    model retraining.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With those advantages in mind, let’s clarify the differences between how we’ve
+    used KGs in previous chapters and how we use them in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cyclical graphs versus ontology-based KGs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In [*Chapter 12*](B34736_12_ePub.xhtml#_idTextAnchor284), we introduced cyclical
+    graphs using LangGraph. These are structures where entities and relationships
+    form feedback loops that enable recursive, context-dependent reasoning. They excel
+    in domains with mutual influence, such as financial modeling, where a parent company’s
+    decisions affect a subsidiary’s performance, which, in turn, shapes future strategy.
+    Ontology-based KGs, which we’ll implement in this chapter, take a fundamentally
+    different approach. They’re predominantly static, schema-driven structures built
+    on **directed acyclic graphs** (**DAGs**), meaning you can’t follow edges and
+    return to where you started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At their core lies a taxonomy encoding “is-a” and “part-of” relationships, where
+    the type hierarchy enforces acyclicity (no class becomes its own ancestor) while
+    supporting clear inheritance patterns. For instance, task dependencies where Task
+    A must complete before Task B, and Task B before Task C, form a DAG.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.1 – Unidirectional information flow in DAGs](img/B34736_14_1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.1 – Unidirectional information flow in DAGs
+  prefs: []
+  type: TYPE_NORMAL
+- en: In contrast, cyclical graphs embrace loops. Consider a financial scenario where
+    a parent company’s strategic decisions influence a subsidiary’s performance, which,
+    in turn, shapes the parent’s future strategy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.2 – Cyclical graphs](img/B34736_14_2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.2 – Cyclical graphs
+  prefs: []
+  type: TYPE_NORMAL
+- en: These cycles emerge through conditional edges, mutual dependencies, or temporal
+    feedback, enriching expressiveness but requiring cycle-detection and traversal
+    strategies to prevent infinite loops.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This architectural difference matters for implementation. Cyclical graphs create
+    active exploration loops where agents propose hypothesis-driven traversals and
+    revisit nodes until reasoning converges. This is powerful for simulation but requires
+    cycle-detection strategies. Ontology-based KGs enable straightforward lookups:
+    the agent queries for definitions or constraints and incorporates them directly
+    into prompts or post-processing. In RAG systems, they excel at filtering retrieval
+    with precise type checks, ensuring that only valid, schema-compliant facts reach
+    the LLM. Your financial ontology from [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299),
+    with its clear class hierarchies (`Stock`, `Bond`, `Organization`) and relationships
+    (`issuedBy`, `isRegulatedBy`), is exactly this kind of stable backbone that grounds
+    LLM responses in verified domain knowledge.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this conceptual foundation in place, we’re ready to put theory into practice.
+    In the following code lab, we’ll take the financial ontology you built in [*Chapter
+    13*](B34736_13_ePub.xhtml#_idTextAnchor299) and transform it into a functioning
+    Neo4j knowledge graph. You’ll see firsthand how the static, schema-driven nature
+    of ontology-based KGs provides the stable foundation needed for reliable graph-based
+    RAG, while still maintaining the flexibility to answer complex, multi-hop queries
+    about financial instruments and their relationships.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Code lab 14-1 – building and querying a financial ontology KG in Neo4j (from
+    Protégé)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this comprehensive hands-on lab, we’ll transform the financial ontology you
+    created in [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299) into a fully
+    functional knowledge graph running in Neo4j. This practical exercise will demonstrate
+    how to bridge the gap between formal ontology design and production-ready graph
+    databases, enabling you to build powerful graph-based RAG systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing and implementing ontology-driven KGs in Neo4j
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You just built an ontology in [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299),
+    and when you do this with Protégé, you have what is essentially a KG already.
+    But we need to take a few more steps to take it from the current format to putting
+    it into Neo4J, a popular KG service. Let’s first talk about KGs in general, and
+    then we will be in a good position to put your new ontology into one!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Core graph concepts refresher
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A KG fundamentally relies on a clear, structured representation of entities
+    and their relationships. The primary components of a graph are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Nodes (vertices)**: Nodes are entities or objects such as people, places,
+    events, or concepts'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Relationships (edges)**: Relationships describe the connections or interactions
+    between nodes'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Properties (attributes)**: Properties provide detailed context or attributes
+    to nodes and relationships, such as names, descriptions, and timestamps'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Social networks are often used to explain graph theory, where the people are
+    the nodes, and the “connections” between them are the edges. These connections
+    can be given values, such as a number representing how many times two people who
+    are connected interact with each other. The implication is that people who interact
+    more have a “stronger” bond, and this can be used in the analysis of the social
+    network. But the most important aspect of graph theory, in my opinion, is that
+    it isn’t just social networks. Anything can be represented by a graph. Any relationship
+    between two things can be represented by an edge. As a result, KGs can really
+    represent the hidden knowledge world that exists across pretty much everything
+    out there that can’t just be captured in a traditional flat database. The more
+    you work with graphs, the more you will realize how incredibly powerful they are
+    in representing data, going way beyond rows and columns. This also helps to explain
+    why they are so ideal to represent “knowledge” to your LLM in a RAG approach!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important graph metrics include distance (shortest path between nodes), path
+    length (number of hops in a connection), degree (number of connections a node
+    has), neighborhood (adjacent nodes and relationships), and the relative “strength”
+    of the edge/relationship properties. These metrics are crucial for efficiently
+    translating user queries into meaningful graph retrieval operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve covered the essential graph theory, it’s time to put these concepts
+    into practice by building your knowledge graph step by step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1 – a recap: what you have in Protégé'
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The ontology generated in [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299)
+    describes financial instruments, organizations, and regulatory authorities, with
+    relationships such as `ownedBy`, `issuedBy`, `hasTicker`, and `isRegulatedBy`,
+    plus labels, comments, and individuals such as AAPL, MSFT, USTB, Apple Inc., Microsoft
+    Corp., and SEC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end of [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299), you exported
+    your ontology from Protégé as a Turtle (`.ttl`) file called `FinancialOntology.ttl`.
+    We will start with that file for this code lab. We have provided an example of
+    the file in GitHub if you do not currently have access to the one you generated
+    in [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 2 – preparing your notebook environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We’ll be working locally with Neo4j Desktop so you can easily run and inspect
+    your ontology-driven KG.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 2.1 – install and launch Neo4j Desktop
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Here are the steps to install Neo4j Desktop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Go to [https://neo4j.com/download/](https://neo4j.com/download/) and download
+    Neo4j Desktop for your operating system.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Install the application and launch it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In Neo4j Desktop, do the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click **Create instance** and give it a name (e.g., `FinancialOntologyKG`).
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Choose a password you’ll remember and click **Create**.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It should be running, but if not, click **Start** to turn it on.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the interface, you will see a connection URI; copy that and add it to the
+    `env.txt` described next.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Step 2.2 – save your credentials in a local file
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: We’ll store these credentials in an `env.txt` file in the same directory as
+    your notebook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Add the following content to `env.txt`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This allows your notebook to load credentials without hardcoding them into the
+    code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 2.3 – install required Python packages
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In the first cell of your Jupyter/Colab notebook, install the packages we’ll
+    need:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: If prompted, restart the notebook kernel after installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These libraries are used for the following purposes in this code lab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`neo4j`: Official Python driver used to connect to your local Neo4j instance,
+    run Cypher (create the uniqueness constraint, import nodes/edges/properties),
+    and query the graph in *Steps 4*–*7*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`rdflib`:Parses the Protégé Turtle (`.ttl`) ontology and iterates triples to
+    build the three CSVs (nodes, edges, data) and the `rdf:type` pairs used for `:IS_A`
+    edges (*Steps 3* and *5*)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pandas`: Holds extracted RDF as DataFrames, writes/reads the CSVs for import,
+    and formats small tabular results from searches/queries'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`sentence-transformers`: Generates local text embeddings for the “hybrid” descriptions
+    of graph entities to power semantic search (*Step 6*)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`faiss-cpu`: In-memory vector index (CPU-only) wrapped by LangChain to run
+    fast similarity search over those embeddings (*Steps 6*–*7*)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`python-dotenv`: Loads `env.txt` so the notebook can read `NEO4J_URI/USER/PASS`
+    and `OPENAI_API_KEY` without hardcoding secrets (*Step 2.2*).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`langchain`,`langchain-openai`,`langchainhub`,`langchain-community`, and `langchain-experimental`:
+    Glue for the RAG flow: documents, FAISS vector store wrapper, retriever, prompt
+    templates, runnable chains, output parsing, and the OpenAI chat model; `hub`/`experimental`
+    are included for templates/utilities you can optionally use later (*Steps 6*–*8*)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With our environment fully configured and all necessary libraries installed,
+    we’re ready to begin the transformation process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 3 – converting your Protégé ontology for Neo4j import
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this step, we’ll take the ontology file you saved at the end of *Code lab
+    13.1* (`FinancialOntology.ttl`) and prepare it for import into Neo4j. We’ll do
+    this by parsing the Turtle file into three CSVs –one for nodes, one for edges,
+    and one for data properties –so Neo4j can load them easily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 3.1 – place the ontology file in your notebook folder
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Locate `FinancialOntology.ttl` from *Code lab 13.1*. Copy or move it into the
+    same directory as the notebook you are working in now.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This ensures that the notebook can read the file without needing extra file
+    paths.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 3.2 – set up imports
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In a new cell, import the libraries we’ll use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code in this cell block does, top to bottom:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Imports the libraries you’ll use later: RDF parsing (`rdflib`, `RDF/RDFS/OWL`),
+    tabular work (`pandas`), Neo4j driver, local embedder (`SentenceTransformer`),
+    typing hints, LangChain bits for docs/embeddings/vector store/prompts/runnables/parsers,
+    OpenAI chat wrapper, `dotenv` for `env` files, and `textwrap`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Loads secrets/config from `env.txt` with `load_dotenv(...)`. Then, it pulls
+    `OPENAI_API_KEY` from the environment and assigns it to `openai.api_key`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Reads Neo4j connection settings from `env` with sensible defaults, if missing:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`NEO4J_URI` (defaults to `neo4j://127.0.0.1:7687`)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`NEO4J_USER` (defaults to `neo4j`)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`NEO4J_PASS` (defaults to `password`)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sets up the LLM by choosing a chat model (`gpt-4o-mini`) and creates a LangChain
+    `ChatOpenAI` client with `temperature=0.2` (more deterministic outputs).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Silences LangSmith tracing by setting `LANGCHAIN_TRACING_V2=false` to avoid
+    the “tracing” warning in notebooks.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creates a Neo4j database driver using the connection URI, username, and password
+    loaded earlier.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defines a `reset_neo4j_database()` function that clears all nodes and relationships
+    from your Neo4j instance using `DETACH DELETE`, which removes nodes and their
+    relationships in a single query.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Executes the `reset` function to start with a clean database (note: in production,
+    you’d typically comment this out after initial setup to preserve your data).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Confirms the Neo4j connection by printing the connection details.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we have all our dependencies loaded and configurations set, let’s parse
+    the ontology file and extract its structure into a format Neo4j can understand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 3.3 – parse the Turtle file into CSVs (new cell)
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Neo4j doesn’t directly import RDF/Turtle files, so we need to transform our
+    ontology into a format it understands: CSV files that clearly separate nodes (entities),
+    edges (relationships), and properties (attributes). This intermediate step also
+    gives us a chance to inspect and validate our data before loading it into the
+    graph database, making debugging much easier if something goes wrong.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Run this cell to read your ontology and create `ontology_nodes.csv` and `ontology_edges.csv`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s an explanation of what we’re doing here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loads the exported Turtle ontology file into an in-memory RDF graph.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defines a small helper to fetch the first value of a given RDF property, such
+    as a label or comment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Iterates over all ontology classes and individuals, capturing their IRIs, human-readable
+    labels, optional comments, and type, then writes them to a nodes CSV:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Nodes CSV** (`ontology_nodes.csv`): Every class and individual in the ontology
+    gets a row with its ID (IRI), label (human-friendly name), optional comment, and
+    whether it’s a `Class` or `Individual` type'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Iterates over all object property triples (links between resources), skipping
+    metadata and OWL schema terms, and writes them to an edges CSV:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Edges CSV** (`ontology_edges.csv`): Every object property assertion (links
+    between two nodes) becomes a row with source, target, and type (the property name)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Iterates over all data property triples (literal values attached to resources),
+    recording the property name, value, and datatype, and writes them to a data properties
+    CSV:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data properties CSV** (`ontology_data.csv`): Every data property assertion
+    (a literal value assigned to a node, such as `hasTicker = "AAPL"`) is captured
+    with the subject node’s IRI, the property name, the literal value, and its datatype'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These three CSVs together describe the nodes, relationships, and literal attributes
+    your Neo4j import will use.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With our ontology successfully transformed into CSV format, we’re now ready
+    to load this structured data into Neo4j and bring our KG to life.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4 – importing nodes, edges, and data properties into Neo4j
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this step, you’ll connect from the notebook to your Neo4j instance, create
+    a uniqueness constraint on node IDs, and then import the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ontology_nodes.csv` → nodes'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ontology_edges.csv` → relationships (`issuedBy`, `isRegulatedBy`, `ownedBy`)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ontology_data.csv` → data properties (we’ll set `hasTicker`)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This approach avoids the need to copy CSVs into Neo4j’s `import` folder and
+    works great for small-to-medium demos.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4.1 – configure your Neo4j connection
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'First, we’ll establish a connection to your Neo4j database using the credentials
+    we loaded from the environment file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defines a helper function to run a Cypher query within its own session and immediately
+    consume the results
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Prints a confirmation message showing the connection details to verify that
+    the database is reachable
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'When run, this should output the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: With our database connection established and verified, we need to set up the
+    proper constraints to ensure data integrity during the import process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4.2 – create schema constraint
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We’ll import all resources with a generic label such as `:Resource` and `unique
+    ID`. Later (optional steps), you can add more specific labels such as `:Stock`
+    or `:Bond`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When run, this should output the following (where `id` is represented by `{id}`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Step 4.3 – load nodes from ontology_nodes.csv
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'This step reads the exported ontology nodes from CSV and inserts them into
+    Neo4j as graph resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loads the `ontology_nodes.csv` file into a DataFrame and previews the first
+    few rows
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defines a Cypher query to merge each node into the graph with a `:Resource`
+    label, keyed by its unique ID
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Sets additional properties on each node: human-readable label, comment, and
+    type (`Class` or `Individual`)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Iterates over all rows in the CSV, passing their values into the Cypher query
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Prints a confirmation message showing how many nodes were imported
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'At this point, it will list the nodes and output:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now that all nodes are in the graph, we need to connect them according to the
+    relationships defined in our ontology.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4.4 – load relationships from ontology_edges.csv
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'When we bring the relationships from your ontology into Neo4j, each one needs
+    to be assigned a concrete relationship type (such as `:ISSUED_BY` or `:OWNED_BY`).
+    In Cypher, you can’t just drop in a variable for the relationship type. It has
+    to be written out directly in the query. Neo4j’s **Awesome Procedures On Cypher**
+    (**APOC**) library has advanced tools for making that dynamic, but since we’re
+    keeping this lab self-contained and simple, we’ll take a straightforward approach:
+    we’ll only focus on the three edge types that matter for our financial ontology
+    (`issuedBy`, `isRegulatedBy`, and `ownedBy`) and create a small Cypher query for
+    each of them. Then, when we loop through the edges from the CSV, we’ll choose
+    the right query depending on the edge’s name. This way, our ontology edges map
+    cleanly into Neo4j’s relationship types without adding extra complexity:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reads the `ontology_edges.csv` file into a DataFrame and previews the first
+    few rows
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defines a mapping from ontology property names to the uppercase relationship
+    types to be created in Neo4j
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Prepares separate Cypher queries for each relationship type (`ISSUED_BY`, `IS_REGULATED_BY`,
+    and `OWNED_BY`)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Iterates through each edge record, filtering out any relationships not in the
+    mapping
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Runs the appropriate Cypher query to connect the source and target nodes with
+    the correct relationship type
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Counts the total number of relationships created and prints a summary message
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'At this point, it will list the relationships and output:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: With our nodes now properly connected through their relationships, we need to
+    add the data properties that provide specific attributes to our financial instruments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4.5 – load data properties from ontology_data.csv
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We’ll set `hasTicker` on the `subject` node. You can extend this block later
+    to handle more properties or cast datatypes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attempts to read the `ontology_data.csv` file; if it doesn’t exist, it creates
+    an empty DataFrame with the expected columns
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Displays the first few rows of the data for inspection
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defines a Cypher query to set the `hasTicker` property on a node identified
+    by its ID
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Iterates through each record, filtering to only those where the property name
+    is `hasTicker`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Runs the query to update matching nodes with the `ticker` value
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Counts how many nodes were updated and prints a summary message
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'At this point, it will output the followng:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now that we’ve imported all nodes, relationships, and data properties from our
+    ontology, let’s verify that everything is loaded correctly by running a quick
+    test query.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 4.6 – quick smoke test
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Run the following code as a test:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you see rows for `AAPL`, `MSFT`, and `USTB` with their tickers, you’re in
+    great shape.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It will look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: With our basic graph structure confirmed and working, we can now enhance it
+    by adding navigational elements that will make querying more intuitive and enable
+    class-based retrieval of our financial instruments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 5 – add navigational anchor nodes (stocks, bonds, and so on)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this step, you’ll do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Import rdf:type` (class membership) from your `Turtle` into Neo4j.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create **concept** nodes (e.g., `All Stocks`, `All Bonds`) and connect them
+    to their members.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why this change? Earlier snippets assumed that nodes already had labels such
+    as `:Stock/:Bond`. Our import uses a generic `:Resource`, so we add explicit membership
+    edges (`(:Resource)-[:IS_A]->(:Resource {rdfs_label:'Stock'})`) and use those
+    to build the anchors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 5.1 – add class membership edges from the TTL
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Build `rdf:type` (class membership) edges from the Turtle file and push to
+    Neo4j:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creates an empty list to store (individual IRI, class IRI) pairs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Iterates through all triples where the predicate is `rdf:type` (type assignments)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Skips ontology meta-information such as `"is a Class"`, `"is a NamedIndividual"`,
+    or `RDFS.Class`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Keeps only cases where both the subject and object are IRIs (not literals),
+    meaning an individual is linked to a class
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adds these valid (individual, class) pairs to the list
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns the total number of pairs found
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The output is `12`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now we need to materialize these class memberships as explicit relationships
+    in Neo4j. By creating `:IS_A` edges between individuals and their classes (e.g.,
+    `AAPL :IS_A Stock`), we enable powerful class-based queries and lay the groundwork
+    for the navigational anchor nodes we’ll build in the next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Push `[:IS_A]` edges into Neo4j between the resource (individual) and the class
+    node:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Opens a Neo4j session for database operations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defines a Cypher query to connect an individual node to its class node with
+    an `:IS_A` relationship
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Iterates through all (individual IRI, class IRI) pairs collected earlier
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Executes the query for each pair, creating the relationship if it doesn’t already
+    exist
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Counts how many relationships were created or matched and returns the total
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With the class membership relationships now established in our graph, we can
+    create navigational anchor nodes that group related entities together for easier
+    querying and exploration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 5.2 – create All X concept nodes and wire members
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We’ll create concept hubs and connect them to members by following the `:IS_A`
+    edge to the corresponding class by human label (`rdfs_label`). Adjust or add more
+    anchors as you expand the ontology:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defines a list of “anchor” concept nodes, each representing a category (e.g.,
+    `All Stocks`, `All Bonds`) linked to a specific ontology class label
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Opens a Neo4j session to process each anchor definition
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ensures that each anchor concept node exists in the graph, creating it with
+    a descriptive text if it’s new
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Removes any existing `INCLUDES` relationships from that anchor node to avoid
+    duplicates
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finds all resources of the matching class (via `:IS_A` relationships) and links
+    them to the anchor node with new `INCLUDES` relationships
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Prints a confirmation message when all anchors have been created or updated
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The output will be as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Let’s verify that our anchor nodes are properly connected to their members and
+    that the categorization is working as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 5.3 – quick checks
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Let’s verify the anchor nodes by counting how many members each one includes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is the expected output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, let’s inspect which specific stocks are connected to the `All Stocks`
+    anchor to verify that the relationships were created correctly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is the expected output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our graph now has a solid structural foundation with proper class hierarchies
+    and navigational anchors, but to enable powerful semantic search capabilities,
+    we need to enrich our nodes with textual representations that capture both their
+    properties and their relationships.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6 – enable hybrid embeddings (text + structure) and multi-hop support
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'So far, your Neo4j graph is already powerful: it knows about classes (`Stock`,
+    `Bond`, `Organization`, `RegulatoryAuthority`), individuals (AAPL, USTB, Apple
+    Inc., SEC), their relationships (`ISSUED_BY`, `IS_REGULATED_BY`, `OWNED_BY`),
+    and properties (such as `hasTicker`). This makes it excellent for precise queries
+    with Cypher. For example, you could ask “Which stocks are issued by Apple?” and
+    Neo4j would give you an exact answer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But here’s the challenge: users often ask questions in natural language without
+    knowing the schema, the Cypher query language, or the exact labels in your ontology.
+    If someone types `equities regulated by the SEC`, your graph might not return
+    a result directly because the node is labeled `Stock`, not `Equity`, and the user
+    doesn’t know the `IS_REGULATED_BY` edge name. This is where hybrid embeddings
+    come in, and this is why they are so powerful.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, what are hybrid embeddings?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Text embeddings** capture the language side of an entity (labels, descriptions,
+    comments).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Graph embeddings** capture the structural side (how nodes are connected,
+    which relationships they have).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Hybrid embeddings** combine both. They take the entity’s own information
+    plus its connected context and flatten it into a natural-language string that
+    represents the knowledge in that part of the graph. That string is then embedded
+    into a vector space for semantic search.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This means each entity isn’t just represented by its name; it’s represented
+    by a context-rich description that already encodes relationships and facts from
+    the graph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s an example: `AAPL`. Instead of just embedding the `AAPL` label, we generate
+    a hybrid description like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice what happened:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We combined the class (`Stock`), the label (`AAPL`), the ticker (`[AAPL]`),
+    the issuer (`Apple Inc.`), the regulator (`SEC`), and even multi-hop information
+    (the issuer itself is regulated by the SEC)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This creates a richer, semantically meaningful snapshot of AAPL that covers
+    not only its direct properties but also its connected context
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Why does it matter for RAG?
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'This technique is the secret sauce for making KGs dramatically more effective
+    in RAG pipelines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Improved recall**: Queries such as *equities regulated by SEC* will find
+    AAPL, even though the word “equity” doesn’t exist in the raw graph labels. The
+    embedding captures the meaning.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Graph and vector synergy**: Semantic search helps discover the right entities,
+    and then Neo4j’s Cypher queries bring back the exact structured facts. It’s the
+    best of both worlds.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Multi-hop reasoning baked in**: By embedding enriched descriptions (up to
+    *N* hops away), the system already *knows* second-order relationships before the
+    search. That means when someone asks about an issuer’s regulator, the embedding
+    has a good chance of surfacing the right entity even before Cypher expansion.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In short, hybrid embeddings transform your graph from a static database into
+    a semantically aware retrieval engine. They bridge the gap between natural language
+    queries and structured graph facts, giving your RAG pipeline the ability to understand
+    both intent and ground answers in precise relationships.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is one of the biggest reasons why KG-based RAG often outperforms traditional
+    vector-only RAG.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6.1 – build an enriched hybrid text (with multi-hop)
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'This step builds *hybrid* text descriptions for ontology entities, combining
+    their own properties with related facts from connected nodes, so they can be embedded
+    for semantic search:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defines a function that takes a class label (e.g., `"Stock"`, `"Bond"`) and
+    queries Neo4j for all `:Resource` nodes belonging to that class via an `:IS_A`
+    relationship
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optionally matches related nodes connected through `ISSUED_BY`, `IS_REGULATED_BY`,
+    and the issuer’s own `IS_REGULATED_BY` relationships to capture multi-hop context
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Uses Cypher string concatenation and conditional logic to combine the class
+    label, node label, ticker, issuer, regulator, comments, and issuer’s regulator
+    into a single descriptive text string (`hybridText`)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns a DataFrame containing each node’s ID, class label, and generated hybrid
+    text
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Calls the function for `"Stock"` and `"Bond"` to produce enriched descriptions
+    for those classes and displays the first few results in each
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The output will be the DataFrames
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now let’s extend this approach to include all entity types in our ontology,
+    creating a comprehensive dataset of enriched descriptions for semantic search.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6.2 – include more entity types
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'The following code generates hybrid text entries for the `Organization` and
+    `RegulatoryAuthority` classes, then combines them with the previously created
+    `Stock` and `Bond` entries into a single DataFrame. It prints the total number
+    of entries and displays the first 10 rows for inspection:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: The output of this code will also be the DataFrames.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6.3 – export for embedding service
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now that we’ve generated enriched hybrid text for all our entities, let’s save
+    this data to a CSV file. This creates a clean record of our hybrid descriptions
+    and makes it easy to regenerate embeddings later if needed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s the output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s how this fits in your graph-based RAG pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generate enriched hybrid text (this step).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Embed these strings with a semantic embedding model (e.g., OpenAI text-embedding-3-large).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Store the vectors in a vector DB or Neo4j’s native vector index.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Query flow:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Embed the user’s question.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Search the vector index for similar hybrid text entries.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Take the matched IDs back to Neo4j.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Expand via Cypher for structured facts and multi-hop reasoning.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Pass both the hybrid text and structured facts into the LLM for answer generation.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Step 6.4 – embeddings and vectorstore
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'This step converts the hybrid text descriptions into numerical embeddings and
+    stores them in a FAISS vector index so they can be quickly retrieved by semantic
+    similarity:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the preceding code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defines a custom `STEmbeddings` class that uses a local `SentenceTransformer`
+    model to generate normalized embeddings for both documents and queries, avoiding
+    any external API calls
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Instantiates the embedder with the `"all-MiniLM-L6-v2"` model for lightweight,
+    fast vector generation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creates a list of LangChain `Document` objects from the `hybrid_df` DataFrame,
+    storing each entity’s hybrid text and associated metadata (`id` and `class_label`)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Uses LangChain’s FAISS integration to build an in-memory vector store from these
+    documents using the custom embedder
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creates a retriever from the vector store, configured to return the top five
+    most similar documents for a given query
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With our hybrid text descriptions now embedded and indexed for fast similarity
+    search, let’s create helper functions that combine semantic search with graph
+    traversal to provide rich, contextual results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6.5 – semantic search helper and graph expansion using LangChain FAISS
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Use the LangChain FAISS vector store to search the hybrid text. The `search_hybrid()`
+    function returns a DataFrame with `id`, `class_label`, `hybridText`, and `score`
+    (`score` is the distance from FAISS; lower is better). We also add the `expand_in_graph()`
+    function to give a list of Neo4j node IDs and fetch a small neighborhood (uses
+    the driver from earlier steps):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`search_hybrid`:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Runs a similarity search over the FAISS vector store to find the top *k* hybrid
+    text entries most relevant to a query
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Collects each match’s ID, class label, hybrid text, and similarity score into
+    a list
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns the matches as a pandas DataFrame for easier viewing and filtering
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`expand_in_graph`:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Connects to Neo4j and retrieves nodes whose IDs are in the given list
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optionally matches neighboring nodes up to the specified number of hops (depth)
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns each node’s ID, label, ticker, comment, and a list of its neighbors’
+    labels (or IDs if no label exists)
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Outputs the results as a list of dictionaries for further processing or display
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s test these helper functions with some real queries to see how well our
+    hybrid embedding approach captures semantic meaning and retrieves relevant financial
+    entities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 6.6 – try it out
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Here are example natural language queries to test:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what the code does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defines a list of example natural language search queries to test the hybrid
+    search and graph expansion workflow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Loops through each query, printing it with a search icon for clarity
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Uses `search_hybrid` to retrieve the top five most semantically similar hybrid
+    text entries from the vector store
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Displays a table of the top matches showing class label, ID, hybrid text, and
+    similarity score
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Selects the top three matches by ID and calls `expand_in_graph` to fetch their
+    connected nodes up to two hops away
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Prints a concise view of each expanded node’s label, ticker (if available),
+    and a sample of up to six neighboring node labels
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This enables the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Local embedding and search**: No cloud services; fast iteration in your notebook'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**RAG-ready**: For a user query, you can now do the following:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Embed the query and retrieve the most similar graph entities via FAISS
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Expand those entities in Neo4j with Cypher to collect precise, multi-hop facts
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Assemble that context and pass it to your LLM for grounded answers
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we’ve validated that our semantic search and graph expansion capabilities
+    work effectively, let’s integrate these components into a complete retrieval pipeline
+    that produces context ready for LLM consumption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 7 – vector search and graph expansion (ready-to-prompt context)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We’ll wire the pieces together so that a natural language query is able to
+    do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gets embedded and matched against your hybrid text vectors.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Pulls back the top entities.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Expands each hit in Neo4j to fetch related facts.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Returns a compact, LLM-ready context block (plus simple citations) you can drop
+    into a prompt.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Step 7.1 – helper: vector search and graph expansion'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We conduct a semantic search over the LangChain FAISS vector store built in
+    *Step 6*, and return a DataFrame with `id`, `class_label`, `hybridText`, and `score`
+    columns:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There is a lot going on in this code, so let’s try to break it down succinctly,
+    starting with the `vector_search` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Performs a semantic similarity search in the FAISS vector store for the given
+    query, returning the top *k* matches
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Extracts each match’s ID, class label, hybrid text, and similarity score into
+    a list
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns the matches as a pandas DataFrame for easy viewing and further processing
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This is similar to what we’ve seen many times now, setting up the code to do
+    a vector search. We then add the `graph_expand` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Connects to Neo4j and retrieves all nodes whose IDs match the provided list
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Expands each node’s neighborhood up to the specified number of hops (depth)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Returns each node’s ID, label, ticker, comment, and a list of its neighbors’
+    labels or IDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This introduces newer concepts that are more specific to working with KGs, but
+    fundamentally, we are conducting the data retrieval in this function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next function is probably the most interesting function, though: `build_llm_context()`.
+    This function orchestrates the pipeline by searching, expanding, and formatting
+    the results. But what is this format? This may seem different than anything we’ve
+    seen in the past. This function converts our KG relationships output into Python
+    static dictionaries. You have different options for how you want to present your
+    KG data to your LLM:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Natural language**: This is where you take the structured format from the
+    KG output and turn it into natural language sentences. So, you might have text
+    that says “AAPL is a Stock that is issued by Apple Inc. and is regulated by the
+    SEC.” This approach is intuitive and easy to read, but can become verbose for
+    complex multi-hop relationships and may introduce ambiguity that the LLM has to
+    parse.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**JSON**: It is very common to see KG output in JSON format, where you have
+    the nodes in one list and the edges in another list. The LLM naturally understands
+    this format because it is so common and standardized, and it has seen a lot of
+    the same kind of format in its training and fine-tuning.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: However, we are introducing a third format – Python static dictionaries, based
+    on recent research by Wu and Tsioutsiouliklis (2024) – which demonstrates that
+    this representation significantly outperforms other formats for LLM reasoning.
+    You will likely need to introduce dynamic elements to your data as well, which
+    we do not do here, but in that case, you can add this right into this format because
+    it is Python code already! See the information box for more information on this
+    paper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Thinking with KGs – enhancing LLM reasoning through structured data**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Wu and Tsioutsiouliklis (2024) conducted comprehensive experiments comparing
+    how different KG representations affect LLM reasoning performance. Their groundbreaking
+    finding: programming language representations – specifically Python static dictionaries
+    –dramatically outperform both natural language and JSON formats for multi-hop
+    reasoning tasks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The researchers tested three representation formats across multiple datasets.
+    Natural language representation achieved modest improvements (44.6% accuracy),
+    while JSON actually decreased performance (26.1% accuracy) compared to the baseline.
+    However, the Python static dictionary format achieved 67.9% accuracy, which is
+    a 78% improvement over the baseline. Even more impressive, when LLMs were fine-tuned
+    with Python representations, accuracy jumped to 91.5%, surpassing much larger
+    models. The study attributes this success to Python’s unambiguous structure and
+    the fact that LLMs are extensively pretrained on code, allowing them to mentally
+    “execute” dictionary lookups as explicit reasoning steps rather than ambiguous
+    pattern matching.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This research fundamentally changes how we should approach KG integration with
+    LLMs. By representing relationships as `relationships[''property''][''entity'']`
+    rather than prose or JSON arrays, we transform vague semantic relationships into
+    precise computational operations. The LLM doesn’t just read about relationships—it
+    can traverse them like executing code. This is why our `build_llm_context()` function
+    outputs Python dictionaries: it’s not just a formatting choice, it’s a scientifically-proven
+    method for enhancing LLM reasoning accuracy by treating knowledge retrieval as
+    program execution rather than text comprehension.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Reference: Wu, Z., and Tsioutsiouliklis, K. (2024). *Thinking with Knowledge
+    Graphs: Enhancing LLM Reasoning Through Structured Data*. Available at [https://arxiv.org/abs/2412.10654](https://arxiv.org/abs/2412.10654).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s see this complete retrieval pipeline in action with a practical example
+    that demonstrates how our system transforms a natural language query into a structured,
+    citable context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 7.2 – example usage
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Let’s test the retrieval pipeline with a real query to see how it transforms
+    natural language into a structured context ready for the LLM:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should see a compact, human-readable context block that includes the hybrid
+    text, notes, and related entities for each hit, with simple citation keys such
+    as `[E1]` and `[E2]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 7.3 – return a prompt template
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'If you want a ready-to-use prompt for an LLM, this helper creates a standard
+    instruction, context, and question format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: With our prompt template defined, let’s summarize what we’ve built and the capabilities
+    it enables for production-ready graph-based RAG systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s what this enables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Runnable graph-based RAG retrieval**:Semantic search → graph expansion →
+    Python dictionary context'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Grounded reasoning**: The Python dictionary format provides unambiguous entity-relationship
+    mappings that reduce hallucination'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Traceability**: Citation keys map to concrete graph node IDs for verification'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Swap-in flexibility**:You can later replace FAISS or the embedding model
+    without changing the flow'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With our retrieval pipeline fully operational and producing structured, citable
+    context, we’re ready to complete the RAG cycle by adding the generation component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Step 8 – generate with LangChain and OpenAI
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To complete our graph-based RAG implementation, let’s add the generation component
+    that transforms our retrieved context into natural language answers. This final
+    step demonstrates how all the pieces—ontology, KG, hybrid embeddings, and semantic
+    search—come together to answer the competency questions we defined back in [*Chapter
+    13*](B34736_13_ePub.xhtml#_idTextAnchor299).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s build a complete LangChain pipeline that combines our retriever
+    with the prompt template and LLM to generate answers to user queries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this “pipeline” code, we see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`make_context`: Calls `build_llm_context` to retrieve and format the knowledge
+    graph context'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`RunnableLambda`: Wraps the context function for use in the LangChain pipeline'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`chat_prompt`: Applies the prompt template to guide the LLM’s response style'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`llm`: Generates the answer using the structured context'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`StrOutputParser`: Extracts the plain text response'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The expected output is individual results for each of the five queries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s bring this all the way back to *Step 1* of *Code lab 13.1*, where we
+    defined our initial competency questions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Is AAPL a stock or a bond?`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`What type of instrument is USTB?`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Which authority regulates MSFT?`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Which equities are regulated by the SEC, and who issues them?`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`What stocks do you know? What bonds?`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'These answers directly address our original competency questions from [*Chapter
+    13*](B34736_13_ePub.xhtml#_idTextAnchor299), demonstrating that the graph-based
+    RAG system successfully:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Identifies instrument types (stock vs. bond)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Retrieves regulatory relationships
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Performs multi-hop reasoning (finding issuers of SEC-regulated equities)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Summarizes available knowledge from the graph
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Python dictionary format ensures that the LLM grounds its answers in the
+    structured KG rather than relying on potentially outdated or hallucinated information
+    from its training data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With our graph-based RAG system now complete and successfully answering complex
+    queries, you have a powerful foundation for domain-specific AI applications. The
+    combination of formal ontology design, KG implementation, hybrid embeddings, and
+    Python dictionary representation creates a system that can handle everything from
+    simple lookups to multi-hop reasoning tasks. As your knowledge requirements grow
+    and evolve, the following best practices will help you maintain and scale this
+    architecture effectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Best practices and next steps
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Continue to use Protégé for ontology evolution and annotation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Periodically export and re-import the updated ontology to Neo4j using the preceding
+    steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use constraints, indexing, and anchor nodes to keep your KG clean and fast.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Layer on full-text, semantic, and path queries for agent retrieval.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a summary of what we did in this code lab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Built ontology in Protégé
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Export as RDF/XML or OWL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Converted CSVs to Neo4j using Python/RDFLib
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Imported nodes/edges, and added schema constraints and anchor nodes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Leveraged both keyword and semantic graph queries in our RAG pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not uncommon for data scientists to generate much larger ontologies using
+    either off-the-shelf ontologies or custom ontologies developed in-house. If the
+    ontology is already generated, you can write code to convert it into a format
+    that you can upload to Neo4j.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we successfully transformed the financial ontology from [*Chapter
+    13*](B34736_13_ePub.xhtml#_idTextAnchor299) into a functioning knowledge graph
+    within Neo4j, demonstrating the power of graph-based RAG. Through our implementation,
+    we showed how to convert RDF triples into a property graph, create navigational
+    structures with anchor nodes, and implement hybrid embeddings that combine textual
+    descriptions with graph topology. The resulting system can answer our original
+    competency questions, from simple classifications such as “Is AAPL a stock or
+    bond?” to complex multi-hop queries such as “Which equities are regulated by the
+    SEC?”, by traversing explicit relationships rather than relying solely on vector
+    similarity. This approach grounds AI agents in verified domain knowledge while
+    maintaining the flexibility to handle natural language queries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The combination of the ontological structure from [*Chapter 13*](B34736_13_ePub.xhtml#_idTextAnchor299)
+    with the graph implementation in this chapter creates a powerful foundation for
+    domain-specific AI agents. By enriching entities with multi-hop context and enabling
+    both semantic search and precise graph traversal, we’ve built a system that grounds
+    LLM responses in verified, structured knowledge while maintaining the flexibility
+    to handle natural language queries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Be sure not to limit yourself to ontologies when it comes to the content in
+    your KGs! While we used ontology as our example across these two chapters because
+    it really is something most RAG applications can benefit from, there are so many
+    other ways to effectively use KGs with RAG. Now that you have the basics, think
+    through other parts of your data infrastructure that could benefit from the same
+    approach and implement them as well!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With your graph-based RAG foundation in place, you’re ready to tackle the next
+    critical challenge in production AI systems: performance optimization. [*Chapter
+    15*](B34736_15_ePub.xhtml#_idTextAnchor346) introduces semantic caches, which
+    are an evolution of RAG concepts that dramatically reduce latency and computational
+    costs by intelligently storing and retrieving previous query results. Just as
+    knowledge graphs gave your agent deeper reasoning capabilities, semantic caches
+    will make those capabilities practical at scale, potentially improving response
+    times by 10–100x while maintaining accuracy. This combination of rich knowledge
+    representation and efficient caching forms the backbone of production-grade agentic
+    AI systems.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Subscribe for a free eBook
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: New frameworks, evolving architectures, research drops, production breakdowns
+    – AI_Distilled filters the noise into a weekly briefing for engineers and researchers
+    working hands-on with LLMs and generative AI systems. Subscribe now and receive
+    a free eBook, along with weekly insights that help you stay focused and informed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Subscribe at [https://packt.link/8Oz6Y](https://packt.link/8Oz6Y) or scan the
+    QR code below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A qr code on a white background  AI-generated content may be incorrect.](img/B34736_Free_eBook.png)'
+  prefs: []
+  type: TYPE_IMG
