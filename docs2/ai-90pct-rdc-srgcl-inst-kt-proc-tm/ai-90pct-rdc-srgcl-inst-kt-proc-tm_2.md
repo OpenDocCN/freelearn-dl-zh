@@ -1,3 +1,5 @@
+# 第三章
+
 执行摘要
 
 在 COVID-19 大流行期间，医疗供应链被推向全球舞台([thrust onto the global stage](https://www.oecd.org/en/publications/2024/02/securing-medical-supply-chains-in-a-post-pandemic-world_3c8cef7c.html))，当时 PPE 短缺影响了世界许多地区。这份报告探讨了佛罗里达州的一家名为 Medloaner 的初创公司，由乌克兰人吉普·波格列布科领导，如何在这个碎片化和高度监管的医疗保健领域中导航([Medloaner](https://www.medloaner.com/))。

@@ -1,6 +1,6 @@
-# 8
 
-# 数字化转型解决方案的 Power Platform
+
+# 第八章：数字化转型解决方案的 Power Platform
 
 在数字化转型动态环境中，组织越来越认识到 Power Platform 在促进创新和推动增长中的关键作用。Power Platform 由 Power BI、Power Apps 和 Power Automate 等 Microsoft 技术组成，为解决复杂商业挑战提供了无与伦比的可能性。然而，有效集成和利用 Power Platform 需要战略方法，考虑到组织的成熟度水平和不同利益相关者的协调一致。在本章中，我们将探讨以下内容：
 

@@ -1,6 +1,6 @@
-# 9
 
-# 在 MS Copilot 和 Microsoft Dynamics 的背景下，“客户服务虚拟代理”
+
+# 第八章：在 MS Copilot 和 Microsoft Dynamics 的背景下，“客户服务虚拟代理”
 
 在当今的客户服务领域，虚拟代理的出现，尤其是在 MS Copilot 和 Microsoft Dynamics 的生态系统中，正在设定客户参与和支持的新标准。本章深入探讨了这项尖端技术，突出了其与微软著名商业解决方案集成时的变革性作用。
 

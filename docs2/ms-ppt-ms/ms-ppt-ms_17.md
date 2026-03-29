@@ -1,6 +1,6 @@
-# 14
 
-# Microsoft Teams 中的 PowerPoint Live 和交互式功能
+
+# 第十四章：Microsoft Teams 中的 PowerPoint Live 和交互式功能
 
 如果您进行虚拟演示，在尝试确定最佳方式来共享您的 PowerPoint 演示文稿时可能会遇到挑战。是的，您可以直接共享整个屏幕并使用**演示者视图**，如前一章所述。但这样您可能很难看到会议控制，尤其是如果您只使用一台显示器。
 

@@ -1,6 +1,6 @@
-# 5
 
-# 使用 Copilot 启动 Power App
+
+# 第六章：使用 Copilot 启动 Power App
 
 Copilot 已经开始进入 Microsoft 365 平台。然而，正如你在上一章中看到的，如果你只是像对待 ChatGPT 一样寻求 Copilot 的帮助，你可能会感到沮丧。
 

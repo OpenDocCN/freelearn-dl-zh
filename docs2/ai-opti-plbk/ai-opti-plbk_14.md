@@ -1,6 +1,6 @@
-# 10
 
-# 理解 GenAI 运营
+
+# 第十章：理解 GenAI 运营
 
 **大型语言模型**（**LLMs**）在 2018 年随着 BERT 的推出而受到关注。尽管“GPT”自 2019 年以来就已存在，但它被用于名为“ChatGPT”的应用中，并于 2022 年推出。这就是互联网爆炸的时候，在可用五天内就获得了 100 万用户（[yahoo.com/news/chatgpt-gained-1-million-followers-224523258.html](https://yahoo.com/news/chatgpt-gained-1-million-followers-224523258.html)）。这表明市场中有正确的兴奋情绪。然而，在企业和应用中构建类似的东西，其中你期望用户进行商业化，完全是另一回事。
 

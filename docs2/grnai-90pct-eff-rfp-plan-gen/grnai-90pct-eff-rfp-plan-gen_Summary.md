@@ -1,3 +1,5 @@
+# 第五章
+
 执行摘要
 
 政府合同长期以来一直效率低下，近年来劳动力增长没有跟上采购支出的增长。在 2022 财年，一名联邦合同官员平均每年执行 2000 次合同行动，而 2013 年仅 300 次 ([Deloitte](https://www2.deloitte.com/us/en/insights/industry/public-sector/automation-and-generative-ai-in-government/generative-ai-to-transform-government-procurement.html))。AI 驱动的自动化有巨大的潜力重塑这一格局。

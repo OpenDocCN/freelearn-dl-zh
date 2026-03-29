@@ -1,6 +1,6 @@
-# 2
 
-# Azure AI 入门：工作室、管道和容器化
+
+# 第二章：Azure AI 入门：工作室、管道和容器化
 
 在本章中，我们将探讨在 Azure 中构建和部署 AI 模型的不同开发环境。您将了解四个关键工作室——Azure AI Foundry、Azure OpenAI、Machine Learning Studio 和 Copilot Studio——每个工作室都针对不同的 AI 和机器学习服务进行了定制。此外，我们还将介绍 Visual Studio Code 作为**集成开发环境**（**IDE**）的使用，以帮助您了解这些工具如何支持 AI 开发。目标是帮助您根据项目的具体需求选择合适的工作室。
 

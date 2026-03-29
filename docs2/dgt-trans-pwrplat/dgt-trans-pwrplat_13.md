@@ -1,6 +1,6 @@
-# 13
 
-# 从指标到里程碑：衡量 Power Platform 初始化项目的成功
+
+# 第十三章：从指标到里程碑：衡量 Power Platform 初始化项目的成功
 
 本章将指导您定义和衡量您的 Power Platform 初始化项目的成功。Power Platform 是一个低代码平台，使您能够为组织的需求创建解决方案。您将学习如何使用 **卓越中心**（**CoE**）入门套件来创建 Power Platform 转型的战略路线图。您还将学习如何选择和调整 **关键绩效指标**（**KPIs**）以跟踪您的 Power Platform 解决方案的采用和影响。
 

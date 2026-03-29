@@ -1,6 +1,6 @@
-# 11
 
-# 使用 LangChain 从 RAG 中获取更多
+
+# 第十一章：使用 LangChain 从 RAG 中获取更多
 
 我们已经多次提到 **LangChain**，并且已经向您展示了大量的 LangChain 代码，包括实现 LangChain 特定语言的代码：**LangChain 表达语言**（**LCEL**）。现在您已经熟悉了使用 LangChain 实现检索增强生成（**RAG**）的不同方法，我们认为现在是深入了解 LangChain 的各种功能的好时机，这些功能可以帮助您使您的 RAG 管道更加完善。
 
