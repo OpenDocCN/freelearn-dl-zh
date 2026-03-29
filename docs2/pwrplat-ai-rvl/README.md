@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# PowerPlatform 人工智能革命
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/8a2133f455f8ab8510fb3501a9ac74c8`](https://zh.annas-archive.org/md5/8a2133f455f8ab8510fb3501a9ac74c8)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

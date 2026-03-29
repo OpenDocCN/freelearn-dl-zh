@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 人工智能就绪的企业架构
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/4382d0c4958494d8ebc128b0ef02aef6`](https://zh.annas-archive.org/md5/4382d0c4958494d8ebc128b0ef02aef6)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 人工智能软件系统架构
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/1f0d1bff86d2f2af2df861b3169ffa55`](https://zh.annas-archive.org/md5/1f0d1bff86d2f2af2df861b3169ffa55)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

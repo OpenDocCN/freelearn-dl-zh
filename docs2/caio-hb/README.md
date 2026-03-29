@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 首席人工智能官手册
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/cc348b688e0a984b030d2edb3b008b2a`](https://zh.annas-archive.org/md5/cc348b688e0a984b030d2edb3b008b2a)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

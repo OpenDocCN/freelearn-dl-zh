@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 构建多智能体系统的智能体架构模式
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/142146213e058c41e51d851292512a58`](https://zh.annas-archive.org/md5/142146213e058c41e51d851292512a58)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

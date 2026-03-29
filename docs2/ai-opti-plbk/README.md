@@ -1,6 +1,6 @@
-# Go 编程蓝图
+# 人工智能优化攻略书
 
-> 原文：[`zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66`](https://zh.annas-archive.org/md5/AC9839247134C458206EE3BE6D404A66)
+> 原文：[`zh.annas-archive.org/md5/adc40aefc9222bdda00094c90e1bb9e5`](https://zh.annas-archive.org/md5/adc40aefc9222bdda00094c90e1bb9e5)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
